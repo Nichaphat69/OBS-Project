@@ -1,0 +1,49 @@
+/**
+ * การปัดเศษเงินของระบบนี้ต้องตรงกับ FlowAccount และใบแจ้งหนี้ตัวอย่าง INV2026020006
+ * ตรวจแล้วว่า 52943.93 / 20 = 2647.1965 → 2647.20 และ 173716.73 * 7% = 12160.17
+ */
+
+export function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
+export function money(value) {
+  return round2(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+const THAI_MONTHS = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+];
+
+const THAI_MONTHS_SHORT = [
+  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+];
+
+/** '2026-01-31' → '31 มกราคม 2569' */
+export function thaiDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} ${THAI_MONTHS[m - 1]} ${y + 543}`;
+}
+
+/** '2026-01-29' → '29 ม.ค. 69' — รูปแบบที่ใช้ใน Remark ของใบแจ้งหนี้ */
+export function thaiDateShort(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} ${THAI_MONTHS_SHORT[m - 1]} ${String(y + 543).slice(-2)}`;
+}
+
+/** '2026-01' → 'มกราคม 2569' */
+export function thaiMonth(period) {
+  const [y, m] = period.split('-').map(Number);
+  return `${THAI_MONTHS[m - 1]} ${y + 543}`;
+}
+
+export function addDays(iso, days) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}

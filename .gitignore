@@ -1,0 +1,20 @@
+node_modules/
+
+# ฐานข้อมูลและไฟล์ชั่วคราวของ sqlite — เป็นข้อมูลรันจริง ไม่ใช่ซอร์ส
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# ความลับทั้งหมด — API key · client secret · refresh token
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+
+# เอกสารต้นฉบับของลูกค้า — ห้ามขึ้น repo
+docs/*.pdf
+docs/*.xlsx
+docs/*.docx
