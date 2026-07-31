@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>สรุประบบวางบิล Outsource (OBS)</title>
+<style>
+  :root{
+    --blue:#0078D4; --blue-d:#00548F; --body:#1A2030; --gray:#605E5C;
+    --card:#F2F1F1; --feature:#E8F4F8; --lbg:#EAF4FB; --border:#CCCCCC;
+    --amber:#B54708; --amberbg:#FFFAEB; --ok:#067647; --okbg:#ECFDF3;
+  }
+  @page{ size:A4; margin:18mm 17mm 16mm 17mm; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:"Sukhumvit Set","Thonburi",Calibri,-apple-system,sans-serif;
+    color:var(--body); font-size:10pt; line-height:1.65; -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  h1,h2,h3{ color:var(--blue); margin:0; font-weight:700; }
+  h2{ font-size:15pt; border-bottom:2px solid var(--blue); padding-bottom:5px;
+      margin:0 0 12px; page-break-after:avoid; }
+  h3{ font-size:12pt; margin:16px 0 7px; page-break-after:avoid; }
+  p{ margin:0 0 9px; }
+  .page-break{ page-break-before:always; }
+  section{ page-break-inside:auto; margin-bottom:20px; }
+  h2{ page-break-before:auto; }
+
+  /* ── ปก ── */
+  .cover{ height:252mm; display:flex; flex-direction:column; }
+  .band{ background:var(--blue); color:#fff; padding:13px 20px; font-weight:700; font-size:11pt;
+         letter-spacing:.3px; }
+  .cover-mid{ flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .cover h1{ font-size:30pt; line-height:1.25; margin:0 0 6px; }
+  .cover .sub{ font-size:13pt; color:var(--body); font-weight:400; margin-bottom:30px; }
+  .meta{ width:100%; border-collapse:collapse; max-width:420px; }
+  .meta td{ padding:5px 0; font-size:10pt; color:var(--gray); vertical-align:top; }
+  .meta td:first-child{ width:120px; font-weight:700; }
+  .cover-foot{ border-top:1px solid var(--border); padding-top:10px; font-size:9pt; color:var(--gray); }
+
+  /* ── ตาราง ── */
+  table.t{ width:100%; border-collapse:collapse; margin:8px 0 14px; page-break-inside:auto; }
+  table.t thead th{ background:var(--blue); color:#fff; font-weight:700; font-size:9.5pt;
+    text-align:left; padding:7px 9px; }
+  table.t tbody td{ padding:6px 9px; font-size:9.5pt; vertical-align:top;
+    border-bottom:1px solid #E4E4E4; }
+  table.t tbody tr:nth-child(even) td{ background:var(--card); }
+  table.t tbody tr{ page-break-inside:avoid; }
+  table.t td.k{ font-weight:700; width:26%; }
+  .nowrap{ white-space:nowrap; }
+
+  /* ── กล่องขั้นตอน ── */
+  .step{ display:flex; gap:12px; margin-bottom:9px; page-break-inside:avoid; }
+  .badge{ flex:none; width:26px; height:26px; border-radius:50%; background:var(--blue);
+    color:#fff; font-weight:700; font-size:11pt; display:flex; align-items:center;
+    justify-content:center; margin-top:2px; }
+  .step-body{ flex:1; background:var(--card); padding:9px 13px; }
+  .step-body .t{ font-weight:700; font-size:11pt; color:var(--body); margin-bottom:3px; }
+  .lane{ font-size:9.5pt; margin:2px 0; }
+  .lane b{ display:inline-block; min-width:44px; }
+  .lane.h b{ color:var(--amber); }
+  .lane.s b{ color:var(--blue-d); }
+
+  /* ── callout ── */
+  .callout{ background:var(--lbg); border-left:4px solid var(--blue); padding:9px 14px;
+    color:var(--blue-d); font-size:9.5pt; margin:10px 0 14px; page-break-inside:avoid; }
+  .warn{ background:var(--amberbg); border-left:4px solid var(--amber); padding:9px 14px;
+    color:var(--amber); font-size:9.5pt; margin:10px 0 14px; page-break-inside:avoid; }
+
+  /* ── การ์ด ── */
+  .cards{ display:flex; gap:10px; margin:10px 0 14px; page-break-inside:avoid; }
+  .card{ flex:1; background:var(--feature); border-top:3px solid var(--blue); padding:10px 12px; }
+  .card .ct{ color:var(--blue); font-weight:700; font-size:10pt; margin-bottom:4px; }
+  .card .cb{ font-size:9pt; line-height:1.55; }
+
+  .tag{ display:inline-block; padding:1px 7px; border-radius:10px; font-size:8.5pt;
+    font-weight:700; white-space:nowrap; }
+  .tag.h{ background:var(--amberbg); color:var(--amber); }
+  .tag.s{ background:var(--lbg); color:var(--blue-d); }
+  .tag.no{ background:#F5F5F5; color:var(--gray); }
+  .tag.ok{ background:var(--okbg); color:var(--ok); }
+  code{ font-family:"SF Mono",Menlo,Consolas,monospace; font-size:8.5pt;
+    background:#F5F5F5; padding:1px 4px; border-radius:3px; }
+  ul{ margin:4px 0 10px; padding-left:20px; }
+  li{ margin-bottom:3px; font-size:9.5pt; }
+  .foot{ margin-top:26px; border-top:1px solid var(--border); padding-top:9px;
+    font-size:8.5pt; color:var(--gray); }
+</style>
+</head>
+<body>
+
+<!-- ══════════ ปก ══════════ -->
+<div class="cover">
+  <div class="band">iPassion Co., Ltd.</div>
+  <div class="cover-mid">
+    <h1>ระบบวางบิล Outsource<br>อัตโนมัติ (OBS)</h1>
+    <div class="sub">เอกสารสรุประบบ — สถานะปัจจุบัน โหมด Manual</div>
+    <table class="meta">
+      <tr><td>จัดทำเพื่อ</td><td>ทีมพัฒนา และฝ่ายบัญชี iPassion</td></tr>
+      <tr><td>ลูกค้านำร่อง</td><td>บมจ. ไทยประกันชีวิต — โครงการ Outsource for BAU Project</td></tr>
+      <tr><td>วันที่</td><td>31 กรกฎาคม 2569</td></tr>
+      <tr><td>เวอร์ชัน</td><td>1.0 · ใช้ภายในบริษัท</td></tr>
+      <tr><td>ที่เก็บโค้ด</td><td>gitlab.ipassion.co.th/rinrada.n/outsource-auto (branch Develop)</td></tr>
+    </table>
+  </div>
+  <div class="cover-foot">
+    เอกสารนี้เขียนจากโค้ดที่รันได้จริง ไม่ใช่จากแผนที่ตั้งใจจะทำ
+    สิ่งที่ยังทำไม่ได้จะเขียนกำกับไว้ตรงๆ ทุกจุด
+  </div>
+</div>
+
+<!-- ══════════ สรุประบบ ══════════ -->
+<div class="page-break"></div>
+<section>
+  <h2>สรุประบบ</h2>
+
+  <h3>ระบบนี้คืออะไร</h3>
+  <p>
+    เครื่องมือภายในของฝ่ายบัญชี iPassion สำหรับ<b>วางบิลค่าบริการพนักงาน Outsource</b>
+    ที่ไปประจำอยู่ที่ออฟฟิศลูกค้า ระบบรับช่วงงานตั้งแต่ได้ใบบันทึกเวลา (Timesheet)
+    ที่ลูกค้าอนุมัติแล้ว ไปจนถึงร่างใบแจ้งหนี้ในระบบบัญชีและร่างอีเมลวางบิล
+  </p>
+  <div class="callout">
+    หลักการที่คุมทั้งระบบ — ระบบเตรียมเอกสารให้เสร็จ แต่ไม่ตัดสินใจแทนคน
+    ทุกใบยังต้องมีคนตรวจและกดเอง และระบบไม่ส่งอีเมลออกหาลูกค้าเองเด็ดขาด
+  </div>
+
+  <h3>ใช้ทำอะไร</h3>
+  <table class="t">
+    <thead><tr><th style="width:34%">งานที่แทนคนได้</th><th>เดิมทำยังไง</th></tr></thead>
+    <tbody>
+      <tr><td class="k">อ่าน Timesheet</td>
+          <td>คนเปิดไฟล์ PDF อ่านตาราง 28–31 แถวเอง แล้วพิมพ์ตัวเลขลง Excel</td></tr>
+      <tr><td class="k">ตรวจ Manday</td>
+          <td>คนไล่นับวันทำงาน หักเสาร์–อาทิตย์และวันหยุดเอง แล้วเทียบกับที่พนักงานกรอกมา</td></tr>
+      <tr><td class="k">คิดเงินและออกใบแจ้งหนี้</td>
+          <td>คนคูณเรท หักส่วนลดวันลา คิด VAT และภาษีหัก ณ ที่จ่าย แล้วคีย์เข้า FlowAccount ทีละช่อง</td></tr>
+      <tr><td class="k">ร่างอีเมลวางบิล</td>
+          <td>คนพิมพ์อีเมลใหม่ทุกเดือน พร้อมไล่ตัวเลขจากใบแจ้งหนี้มาใส่</td></tr>
+    </tbody>
+  </table>
+
+  <h3>ใครใช้บ้าง และใช้ส่วนไหน</h3>
+  <table class="t">
+    <thead><tr>
+      <th style="width:22%">ผู้เกี่ยวข้อง</th>
+      <th style="width:26%">ใช้ส่วนไหนของระบบ</th>
+      <th>ทำอะไร</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">เจ้าหน้าที่ Back-office / บัญชี</td>
+        <td>ทุกหน้า — เป็นผู้ใช้หลักและคนเดียวของระบบตอนนี้</td>
+        <td>อัปโหลด Timesheet → ตรวจและยืนยัน Manday → กดอนุมัติวางบิล → ส่งอีเมลและปิดงาน</td>
+      </tr>
+      <tr>
+        <td class="k">พนักงาน Outsource<br><span class="tag no">ไม่ได้ใช้ระบบ</span></td>
+        <td>—</td>
+        <td>กรอก Timesheet ประจำเดือน เซ็นชื่อ แล้วส่งให้ผู้จัดการโครงการฝั่งลูกค้าอนุมัติ</td>
+      </tr>
+      <tr>
+        <td class="k">ผู้จัดการโครงการฝั่งลูกค้า<br><span class="tag no">ไม่ได้ใช้ระบบ</span></td>
+        <td>—</td>
+        <td>ตรวจและอนุมัติ Timesheet แล้วส่งอีเมลแจ้งอนุมัติกลับมาให้ iPassion</td>
+      </tr>
+      <tr>
+        <td class="k">ผู้ดูแลระบบ / ทีมพัฒนา</td>
+        <td>หน้าข้อมูลหลัก และไฟล์ตั้งค่า <code>.env</code></td>
+        <td>ตั้งค่า API key · ต่อ Gmail · เพิ่มพนักงานและเรทค่าบริการ · ปรับปฏิทินวันหยุด · เพิ่มชื่อพ้อง</td>
+      </tr>
+      <tr>
+        <td class="k">n8n <span class="tag s">โหมด Auto</span></td>
+        <td>เรียกผ่าน API ไม่เข้าหน้าเว็บ</td>
+        <td>ตัวจุดชนวนและตั้งเวลา — ดึงอีเมลเข้าระบบ และถามทุกเช้าว่ารอบไหนพร้อมวางบิล</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="warn">
+    <b>ข้อจำกัดเรื่องผู้ใช้ที่ต้องรู้</b> — ตอนนี้ระบบมี <b>สิทธิ์เดียว ไม่มีระบบล็อกอิน</b>
+    ใครเปิดหน้าเว็บได้ก็ทำได้ทุกอย่าง ชื่อผู้กดมาจากค่า <code>ACTOR</code> ในไฟล์ตั้งค่า
+    ถ้าจะใช้กันหลายคนจริง ต้องต่อกับ SSO ของบริษัทก่อน
+  </div>
+</section>
+
+<!-- ══════════ 1 ══════════ -->
+
+<section>
+  <h2>1. การทำงานของระบบปัจจุบัน</h2>
+  <p>
+    ทำงานเป็น 4 ขั้นเรียงกัน แต่ละขั้นแยกชัดว่า<b>คนต้องกดอะไร</b>
+    และ<b>ระบบทำอะไรให้</b> ข้ามขั้นไม่ได้
+  </p>
+
+  <div class="step">
+    <div class="badge">1</div>
+    <div class="step-body">
+      <div class="t">รับ Timesheet เข้าระบบ</div>
+      <div class="lane h"><b>คน</b> เลือกทางเข้า 3 ทาง — ดึงจาก Gmail · ลากไฟล์ PDF มาวาง · กรอกเอง
+        แล้วตรวจสิ่งที่ AI อ่านมา แก้ได้ทุกช่อง จากนั้นกดยืนยันบันทึก</div>
+      <div class="lane s"><b>ระบบ</b> Claude อ่านไฟล์ PDF และเนื้ออีเมล → จับคู่ชื่อพนักงานกับฐานข้อมูล
+        → คำนวณ Manday · <b>ยังไม่บันทึกจนกว่าคนจะกดยืนยัน</b></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="badge">2</div>
+    <div class="step-body">
+      <div class="t">ตรวจ Manday</div>
+      <div class="lane h"><b>คน</b> เปิดดูปฏิทินรายเดือนและผลตรวจ แล้วเลือก — กดยืนยันว่าตรวจแล้ว ·
+        ตีกลับให้แก้ · หรือแก้ที่ต้นเหตุ (ชื่อพ้อง เรท วันหยุด) แล้วสั่งคำนวณใหม่</div>
+      <div class="lane s"><b>ระบบ</b> ตรวจ 8 เงื่อนไขเทียบกับปฏิทิน เช่น วันทำงานรวมกับวันลาตรงกับเดือนนั้นไหม
+        ลาตรงวันหยุดหรือเสาร์–อาทิตย์หรือเปล่า · <b>ไม่ผ่าน = ไปขั้น 3 ไม่ได้</b></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="badge">3</div>
+    <div class="step-body">
+      <div class="t">วางบิลใน FlowAccount</div>
+      <div class="lane h"><b>คน</b> เปิดรอบบิล ดูใบแจ้งหนี้จำลองคู่กับข้อมูลที่จะยิงเข้า API
+        แล้วกดอนุมัติและสร้างร่าง</div>
+      <div class="lane s"><b>ระบบ</b> รอ Timesheet ครบทุกคนในรอบก่อน → ประกอบใบแจ้งหนี้ใบเดียวรวมทุกคน
+        → สร้างเอกสารใน FlowAccount <b>เป็นร่างเท่านั้น</b></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="badge">4</div>
+    <div class="step-body">
+      <div class="t">ร่างอีเมลถึงลูกค้า</div>
+      <div class="lane h"><b>คน</b> คัดลอกร่าง หรือเปิดกล่องเมล หรือให้ระบบวางร่างไว้ใน Gmail →
+        แนบเอกสารและกดส่งเอง → กลับมากดบันทึกว่าส่งแล้วเพื่อปิดงาน</div>
+      <div class="lane s"><b>ระบบ</b> Claude เรียบเรียงอีเมลจากตัวเลขที่คำนวณไว้ พร้อมอธิบายว่าเดือนนี้
+        ต่างจากเดือนก่อนเพราะอะไร · <b>ระบบไม่ส่งเมลเอง</b></div>
+    </div>
+  </div>
+
+  <h3>สองประตูที่ข้ามไม่ได้</h3>
+  <table class="t">
+    <thead><tr><th style="width:30%">ประตู</th><th>ถ้าไม่ผ่านจะเกิดอะไร</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ตรวจ Manday ไม่ผ่าน</td>
+        <td>ปุ่มอนุมัติถูกปิด และ API ตอบกลับพร้อมบอกว่าติดที่ใครและติดเรื่องอะไร</td></tr>
+      <tr><td class="k">ยังไม่มีคนกดยืนยัน</td>
+        <td>รอบบิลค้างที่สถานะ “รอคนตรวจ” · ตัวตั้งเวลาของ n8n จะไม่เห็นรอบนี้เลย</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    ตราที่ประทับว่า “คนตรวจแล้ว” ผูกกับ<b>ยอดชุดที่คนเห็นตอนกด</b>
+    ถ้ายอดเปลี่ยนทีหลัง เช่น ลูกค้าส่ง Timesheet ฉบับแก้มาทับ หรือมีคนเพิ่มวันหยุด
+    ตราจะหมดอายุเอง และรอบบิลกลับไปติดที่ขั้น 2 อีกครั้ง
+  </div>
+
+  <h3>กฎการคิดเงิน</h3>
+  <p>
+    สัญญานี้คิดแบบ<b>เหมาเดือน แล้วหักส่วนลดวันลา</b> ไม่ใช่จำนวนวันคูณอัตราต่อวัน
+    ในใบแจ้งหนี้ช่องจำนวนจึงเป็น 1 Months เสมอ และวันลาไปโผล่ในช่องส่วนลด
+  </p>
+  <table class="t">
+    <thead><tr><th style="width:62%">ลำดับการคิด</th><th>ตัวอย่างจริง รอบ ม.ค. 2569</th></tr></thead>
+    <tbody>
+      <tr><td>ค่าบริการรวมทุกคน ตามเรทรายเดือนเต็ม</td><td class="nowrap">176,363.93</td></tr>
+      <tr><td>หัก ส่วนลดวันลา 1 วัน</td><td class="nowrap">− 2,647.20</td></tr>
+      <tr><td><b>ยอดหลังหักส่วนลด (ฐานภาษี)</b></td><td class="nowrap"><b>173,716.73</b></td></tr>
+      <tr><td>บวก ภาษีมูลค่าเพิ่ม 7%</td><td class="nowrap">+ 12,160.17</td></tr>
+      <tr><td>รวมทั้งสิ้น</td><td class="nowrap">185,876.90</td></tr>
+      <tr><td>หัก ภาษีหัก ณ ที่จ่าย 3% — คิดจากยอดหลังหักส่วนลด ไม่ใช่จากยอดรวม</td>
+          <td class="nowrap">− 5,211.50</td></tr>
+      <tr><td><b>ยอดที่ลูกค้าต้องชำระ</b></td><td class="nowrap"><b>180,665.40</b></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:9pt;color:var(--gray)">
+    ตัวเลขชุดนี้ตรงกับใบแจ้งหนี้จริง INV2026020006 ทุกบรรทัด และมีชุดทดสอบอัตโนมัติ 27 ข้อคุมไว้
+  </p>
+</section>
+
+<!-- ══════════ 2 ══════════ -->
+<section>
+  <h2>2. เปรียบเทียบการทำงาน Manual กับ Auto</h2>
+  <p>
+    กฎการคิดเงินและการตรวจเป็น<b>ชุดเดียวกันทั้งสองโหมด</b> ต่างกันแค่ใครเป็นคนกดปุ่ม
+    สลับโหมดด้วยค่าตั้งค่าตัวเดียวคือ <code>requireHumanCheck</code>
+  </p>
+
+  <table class="t">
+    <thead><tr>
+      <th style="width:15%">ขั้น</th>
+      <th style="width:31%">Manual (ใช้อยู่ตอนนี้)</th>
+      <th style="width:31%">Auto (เป้าหมาย)</th>
+      <th style="width:23%">ใครเป็นคนทำ</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">1 · รับ Timesheet</td>
+        <td>คนเลือกอีเมลในระบบ หรือโหลดไฟล์มาอัปโหลดเอง พร้อมกรอกเลขที่เอกสาร</td>
+        <td>Gmail trigger จับหัวข้อ “แจ้งอนุมัติเอกสาร TimeSheet” ทุก 30 นาที แล้วดึงไฟล์แนบเอง</td>
+        <td>Manual: <span class="tag h">คน</span><br>Auto: <span class="tag s">n8n</span></td>
+      </tr>
+      <tr>
+        <td class="k">1.1 · อ่านไฟล์</td>
+        <td colspan="2">Claude อ่าน PDF ตัวเดียวกัน โมเดลเดียวกัน ทั้งสองโหมด</td>
+        <td><span class="tag s">ระบบ (LLM)</span></td>
+      </tr>
+      <tr>
+        <td class="k">1.2 · ตรวจสิ่งที่ AI อ่าน</td>
+        <td>แสดงบนจอให้คนดูก่อน แก้ได้ทุกช่อง กดยืนยันจึงบันทึก</td>
+        <td><b>ไม่มีขั้นนี้</b> — อ่านแล้วบันทึกทันที</td>
+        <td>Manual: <span class="tag h">คน</span><br>Auto: <span class="tag no">ข้าม</span></td>
+      </tr>
+      <tr>
+        <td class="k">2 · ตรวจ Manday</td>
+        <td colspan="2">เครื่องตรวจ 8 เงื่อนไขเทียบปฏิทินให้อัตโนมัติ เหมือนกันทั้งสองโหมด</td>
+        <td><span class="tag s">ระบบ</span></td>
+      </tr>
+      <tr>
+        <td class="k">2.1 · ยืนยันผลตรวจ</td>
+        <td>คนเปิดดูปฏิทินแล้วกดยืนยัน ไม่กดคืออนุมัติวางบิลไม่ได้</td>
+        <td><b>ไม่มีขั้นนี้</b> — ตรวจผ่านแล้วไหลไปขั้น 3 เอง</td>
+        <td>Manual: <span class="tag h">คน</span><br>Auto: <span class="tag no">ข้าม</span></td>
+      </tr>
+      <tr>
+        <td class="k">2.2 · เจอปัญหา</td>
+        <td>คนเลือกเอง — ตีกลับ เพิ่มชื่อพ้อง แก้เรท หรือเพิ่มวันหยุด แล้วคำนวณใหม่</td>
+        <td>แจ้ง LINE ทีมแอดมิน แล้วรอคนเข้ามาทำเหมือนโหมด Manual</td>
+        <td><span class="tag h">คน</span> ทั้งสองโหมด</td>
+      </tr>
+      <tr>
+        <td class="k">3 · วางบิล</td>
+        <td>คนเปิดรอบบิล ดูใบจำลอง แล้วกดอนุมัติสร้างร่าง</td>
+        <td>n8n ถามระบบทุกวันทำการ 09:00 ว่ารอบไหนพร้อม แล้วสั่งสร้างเอง</td>
+        <td>Manual: <span class="tag h">คน</span><br>Auto: <span class="tag s">n8n</span></td>
+      </tr>
+      <tr>
+        <td class="k">3.1 · สร้างเอกสาร</td>
+        <td colspan="2">ยิงเข้า FlowAccount ได้เป็น<b>ร่างเท่านั้น</b> เหมือนกันทั้งสองโหมด</td>
+        <td><span class="tag s">ระบบ</span></td>
+      </tr>
+      <tr>
+        <td class="k">4 · ร่างอีเมล</td>
+        <td colspan="2">Claude เรียบเรียงจากตัวเลขที่ระบบคำนวณไว้ ห้ามคิดเลขเอง</td>
+        <td><span class="tag s">ระบบ (LLM)</span></td>
+      </tr>
+      <tr>
+        <td class="k">4.1 · ส่งอีเมล</td>
+        <td colspan="2"><b>ระบบไม่ส่งเองทั้งสองโหมด</b> — คนแนบเอกสารและกดส่งเสมอ</td>
+        <td><span class="tag h">คน</span> ทั้งสองโหมด</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>จุดที่ใช้ AI และจุดที่จงใจไม่ใช้</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="ct">ใช้ AI 3 จุด</div>
+      <div class="cb">
+        อ่าน Timesheet PDF · อ่านเนื้ออีเมลแจ้งอนุมัติเพื่อหาเลขที่เอกสารและสถานะ ·
+        เรียบเรียงอีเมลวางบิล
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">ไม่ใช้ AI เด็ดขาด</div>
+      <div class="cb">
+        คิดเงิน · นับวันทำงาน · ตัดสินว่าผ่านหรือไม่ผ่าน · ประกอบข้อมูลส่งเข้า FlowAccount
+        ทั้งหมดเป็นโค้ดที่มีชุดทดสอบคุม เพราะเรื่องเงินต้องทวนย้อนกลับได้ว่าทำไมถึงได้ตัวเลขนั้น
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 3 ══════════ -->
+
+<section>
+  <h2>3. อีเมลถูกยิงตรงไหนบ้าง</h2>
+  <p>อีเมลในระบบมี 3 จุด แยกตามทิศทาง ทั้งโหมด Manual และ Auto</p>
+
+  <table class="t">
+    <thead><tr>
+      <th style="width:20%">จุด</th>
+      <th style="width:14%">ทิศทาง</th>
+      <th style="width:33%">โหมด Manual</th>
+      <th style="width:33%">โหมด Auto</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">ขาเข้า — ลูกค้าแจ้งอนุมัติ Timesheet</td>
+        <td>ลูกค้า → เรา</td>
+        <td>ต่อ Gmail แล้ว กด “ดึงรายการเมล” แล้วเลือกฉบับที่จะเอาเข้าระบบเอง ·
+            ยังไม่ต่อ Gmail ก็โหลดไฟล์แนบมาอัปโหลดเอง</td>
+        <td>Gmail trigger ดึงเองทุก 30 นาที ตามหัวข้อที่กำหนด แล้วเช็คว่าสถานะเป็น “อนุมัติ” จริง</td>
+      </tr>
+      <tr>
+        <td class="k">แจ้งเตือนทีมเมื่อตรวจไม่ผ่าน</td>
+        <td>ระบบ → ทีมเรา</td>
+        <td>ไม่มีการยิงอีเมล — คนเห็นจากป้ายตัวเลขบนเมนูขั้นที่ 2 และการ์ดงานที่ต้องทำบนแดชบอร์ด</td>
+        <td>แจ้งผ่าน LINE Business ตามที่เอกสารออกแบบระบุ <span class="tag no">ยังไม่ได้ทำ</span></td>
+      </tr>
+      <tr>
+        <td class="k">ขาออก — วางบิลถึงลูกค้า</td>
+        <td>เรา → ลูกค้า</td>
+        <td>เลือกได้ 3 ทาง — คัดลอกร่าง · เปิดโปรแกรมอีเมลพร้อมเนื้อความ ·
+            ให้ระบบวางร่างไว้ในกล่อง Drafts ของ Gmail แล้วคนกดส่งเอง</td>
+        <td>สร้างร่างใน Gmail ให้เลยหลังสร้างเอกสารเสร็จ แต่<b>ยังไม่กดส่งเหมือนกัน</b></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>หลักที่ไม่เปลี่ยนทั้งสองโหมด</b> — ระบบไม่ส่งอีเมลออกหาลูกค้าเอง และไม่กดอนุมัติเอกสารในระบบบัญชีเอง
+    หลักประกันข้อนี้อยู่ที่ตัวโค้ด ไม่ใช่ที่การตั้งค่า คือในไฟล์ตัวเชื่อม Gmail
+    ไม่มีคำสั่งส่งอีเมลอยู่เลย และในไฟล์ตัวเชื่อม FlowAccount ก็ไม่มีคำสั่งอนุมัติเอกสารเช่นกัน
+  </div>
+
+  <h3>สิทธิ์ที่ระบบขอจาก Gmail</h3>
+  <table class="t">
+    <thead><tr><th style="width:26%">สิทธิ์</th><th>ใช้ทำอะไร</th></tr></thead>
+    <tbody>
+      <tr><td class="k">อ่านอีเมลและไฟล์แนบ</td>
+        <td>ดึงอีเมลแจ้งอนุมัติและไฟล์ Timesheet เข้าระบบ (ขั้นที่ 1)</td></tr>
+      <tr><td class="k">สร้างและแก้ร่าง</td>
+        <td>วางร่างอีเมลวางบิลไว้ในกล่อง Drafts (ขั้นที่ 4)</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:9pt;color:var(--gray)">
+    หมายเหตุตรงไปตรงมา — Google ไม่มีสิทธิ์แบบ “สร้างร่างได้แต่ส่งไม่ได้”
+    สิทธิ์สร้างร่างจึงแถมสิทธิ์ส่งมาด้วยโดยเลี่ยงไม่ได้
+    หลักประกันว่าระบบจะไม่ส่งจึงอยู่ที่โค้ดที่ไม่มีคำสั่งส่ง ไม่ใช่ที่ตัวสิทธิ์
+  </p>
+</section>
+
+<!-- ══════════ 4 ══════════ -->
+
+<section>
+  <h2>4. หน้าจอในระบบ</h2>
+  <p>มี 6 หน้า เรียงตามลำดับงานที่คนต้องเดิน หน้าแรกที่เปิดขึ้นมาคือแดชบอร์ด</p>
+
+  <table class="t">
+    <thead><tr>
+      <th style="width:22%">หน้า</th><th style="width:12%">อยู่ขั้นไหน</th><th>ทำอะไรได้ที่นี่</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">แดชบอร์ด</td>
+        <td><span class="tag no">ไว้ดู</span></td>
+        <td>ภาพรวมว่าเงินค้างอยู่ขั้นไหน — จำนวนใบที่รอคนตรวจ ใบที่ยืนยันแล้วรอวางบิล
+            และยอดที่วางบิลไปแล้ว · กราฟมูลค่ารายเดือนเทียบกับเรทตามสัญญา ·
+            สัดส่วนสถานะรอบบิล · การ์ดงานที่ต้องทำที่กดเข้าไปทำต่อได้ทันที ·
+            ความคืบหน้าสัญญา · เหตุการณ์ล่าสุดในระบบ</td>
+      </tr>
+      <tr>
+        <td class="k">1 · อัปโหลด Timesheet</td>
+        <td><span class="tag h">ขั้น 1</span></td>
+        <td>เลือกทางเข้า 3 แท็บ — ดึงจาก Gmail · ลากไฟล์ PDF มาวาง · กรอกเอง
+            จากนั้นระบบแสดงสิ่งที่ AI อ่านได้ให้ตรวจ แก้ได้ทุกช่อง
+            พร้อมบอกว่าจับคู่กับพนักงานคนไหนและสัญญาไหน แล้วจึงกดยืนยันบันทึก</td>
+      </tr>
+      <tr>
+        <td class="k">2 · ตรวจ Manday</td>
+        <td><span class="tag h">ขั้น 2</span></td>
+        <td>กล่องงานแสดง Timesheet เป็นการ์ด พร้อมตารางคำนวณย่อในตัว
+            มีตัวกรอง 5 หมวด เรียงลำดับ 5 แบบ และช่องค้นหา</td>
+      </tr>
+      <tr>
+        <td class="k">— หน้าตรวจ Timesheet</td>
+        <td><span class="tag h">ขั้น 2</span></td>
+        <td>หน้าย่อยของกล่องงาน แบ่ง 4 แท็บ — ภาพรวมการคำนวณและผลจับคู่ชื่อ ·
+            ที่มาของไฟล์และข้อมูลดิบที่ AI อ่าน · ปฏิทินรายเดือนแบบภาพแยกสีวันทำงาน
+            วันลา วันหยุด และเสาร์–อาทิตย์ · ผลตรวจทุกข้อพร้อมเหตุผล
+            ปุ่มที่นี่คือ ยืนยันว่าตรวจแล้ว · ตีกลับ · คำนวณใหม่</td>
+      </tr>
+      <tr>
+        <td class="k">3 · วางบิล &amp; ร่างอีเมล</td>
+        <td><span class="tag h">ขั้น 3–4</span></td>
+        <td>กางทุกเดือนตามช่วงสัญญา รวมเดือนที่ยังไม่ได้เอกสาร
+            แสดงสถานะรอบบิล 5 แบบ — รอ Timesheet · ได้ไม่ครบ · รอคนตรวจ · รออนุมัติ · วางบิลแล้ว
+            พร้อมมูลค่าและกำหนดเวลาของแต่ละรอบ</td>
+      </tr>
+      <tr>
+        <td class="k">— หน้าอนุมัติรอบบิล</td>
+        <td><span class="tag h">ขั้น 3–4</span></td>
+        <td>หน้าสำคัญที่สุด แบ่งสองคอลัมน์ ซ้ายเป็นการ์ดรายคนพร้อมการคำนวณ
+            และแท็บข้อมูลที่จะยิงเข้า FlowAccount กับร่างอีเมล
+            ขวาเป็นใบแจ้งหนี้เสมือนจริงที่ค้างไว้ตลอดเวลาเลื่อน
+            ปุ่มอนุมัติอยู่แถบล่าง และถูกปิดไว้ถ้ายังมีอะไรค้าง</td>
+      </tr>
+      <tr>
+        <td class="k">ใบแจ้งหนี้</td>
+        <td><span class="tag no">ไว้ดู</span></td>
+        <td>ทะเบียนเอกสารที่ระบบสร้างเข้า FlowAccount กางยอดหลังส่วนลด VAT
+            ภาษีหัก ณ ที่จ่าย และยอดรับชำระของทุกรอบไว้เทียบกันในตารางเดียว พร้อมแถวรวม</td>
+      </tr>
+      <tr>
+        <td class="k">ข้อมูลหลัก</td>
+        <td><span class="tag no">ตั้งค่า</span></td>
+        <td>รวม 3 แท็บ — พนักงานและชื่อพ้องที่ยอมรับ (แก้เรทได้) ·
+            ลูกค้าและเงื่อนไขสัญญา · ปฏิทินวันหยุดและสถานะการเชื่อมต่อ
+            เข้ามาที่นี่เมื่อขั้นที่ 2 แจ้งว่าจับคู่ชื่อไม่ได้หรือเรทไม่ตรง</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>สิ่งที่ช่วยให้ไม่ต้องคอยกดรีเฟรช</h3>
+  <ul>
+    <li>ป้ายตัวเลขแดงบนเมนูขั้นที่ 2 และ 3 บอกจำนวนงานค้างของขั้นนั้น และขยับเองเมื่อมีของใหม่</li>
+    <li>กระดิ่งบนแถบบนบอกว่ามีอะไรเพิ่งเกิดขึ้นในระบบ พร้อมนับรายการที่ยังไม่ได้อ่าน</li>
+    <li>แถบบนบอกสองอย่างตลอดเวลา — โหมดของ FlowAccount และโหมดของระบบ (Manual หรือ Auto)</li>
+    <li>เมนูข้างย่อเหลือแต่ไอคอนได้ เพื่อคืนพื้นที่ให้หน้าที่มีตารางกว้าง</li>
+  </ul>
+</section>
+
+<!-- ══════════ ภาคผนวก ══════════ -->
+
+<section>
+  <h2>ภาคผนวก — สถานะและสิ่งที่ยังต้องทำ</h2>
+
+  <h3>ยังไม่ได้ทำ 4 เรื่อง</h3>
+  <table class="t">
+    <thead><tr><th style="width:32%">เรื่อง</th><th>ผลตอนนี้</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ดึงไฟล์ PDF ใบแจ้งหนี้จาก FlowAccount</td>
+        <td>ร่างอีเมลที่สร้างมีแต่ข้อความ ไม่มีไฟล์แนบ คนต้องไปโหลดใบมาแนบเอง</td></tr>
+      <tr><td class="k">แจ้ง LINE เมื่อตรวจไม่ผ่าน</td>
+        <td>คนต้องเปิดหน้าเว็บมาดูป้ายตัวเลขเอง</td></tr>
+      <tr><td class="k">ยิง FlowAccount ของจริง</td>
+        <td>ยังเป็นโหมดทดสอบ เลขที่เอกสารเป็นค่าเสมือน และยังไม่เคยรู้ว่าชื่อฟิลด์ถูกต้องจริงหรือไม่</td></tr>
+      <tr><td class="k">กรณีพิเศษของสัญญา</td>
+        <td>สัญญาเริ่มหรือจบกลางเดือน · ทำงานล่วงเวลา · ลาครึ่งวัน ·
+            Timesheet ที่แก้ไขหลังอนุมัติ — ยังไม่มีกฎรองรับ</td></tr>
+    </tbody>
+  </table>
+
+  <h3>ข้อมูลที่ต้องได้ก่อนใช้กับของจริง</h3>
+  <table class="t">
+    <thead><tr><th style="width:32%">ต้องการ</th><th>ทำไม</th></tr></thead>
+    <tbody>
+      <tr><td class="k">อัตราต่อวันหารด้วยอะไร</td>
+        <td>เดือน ม.ค. มีวันทำงาน 20 วันพอดี ทำให้ “หาร 20 คงที่” กับ “หารด้วยวันทำงานจริง”
+            ให้ผลเท่ากัน ยังแยกไม่ออกจากตัวอย่างเดียว — ขอใบแจ้งหนี้อีกเดือนมาเทียบ</td></tr>
+      <tr><td class="k">ประเภทวันลาที่หักเงิน</td>
+        <td>ตอนนี้หักทุกประเภทเท่ากัน ยังไม่ยืนยันว่าลาป่วย ลากิจ ลาพักร้อน หักเหมือนกันหรือไม่</td></tr>
+      <tr><td class="k">ปฏิทินวันหยุดของลูกค้า</td>
+        <td>กระทบจำนวนวันทำงานมาตรฐานโดยตรง จึงกระทบอัตราต่อวันและยอดเงิน</td></tr>
+      <tr><td class="k">ชนิดเอกสารและผังบัญชี</td>
+        <td>ออกเป็น Billing Note หรือ Tax Invoice และใช้ผังบัญชีรายได้ตัวไหน</td></tr>
+      <tr><td class="k">อีเมลผู้ประสานงานฝั่งลูกค้า</td>
+        <td>ไม่มีแล้วสร้างร่างอีเมลถึงลูกค้าไม่ได้</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    เอกสารนี้สรุปจากระบบที่รันได้จริง ณ 31 กรกฎาคม 2569 · ชุดทดสอบอัตโนมัติ 27 ข้อผ่านทั้งหมด<br>
+    iPassion Co., Ltd. — www.ipassion.co.th
+  </div>
+</section>
+
+</body>
+</html>
