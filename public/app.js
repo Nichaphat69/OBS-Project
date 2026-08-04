@@ -9,6 +9,11 @@ const api = async (path, options) => {
     headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
   });
   const data = await response.json();
+  /* session หลุด (หมดอายุ/ยังไม่ login) กลางทาง — พาไปหน้า login ทันที ยกเว้นตอนกำลัง
+     ล็อกอินอยู่แล้ว (401 ตรงนั้นคือ "รหัสผ่านผิด" ต้องโชว์ในฟอร์ม ไม่ใช่เด้งไปไหน) */
+  if (response.status === 401 && path !== '/auth/login') {
+    showLoginScreen();
+  }
   if (!response.ok) {
     const error = new Error(data.error ?? `เรียก ${path} ไม่สำเร็จ`);
     error.blockers = data.blockers;
@@ -94,7 +99,14 @@ const state = {
   queueFilter: 'action', queueSearch: '', queuePage: 1,
   queueSort: 'urgent', expanded: null,
   cycleFilter: 'all',
-  masterTab: 1, uploadTab: 1,
+  masterTab: 1, uploadTab: 1, sysTab: 1,
+  /** role ของคนที่ login อยู่ — เติมจาก /pulse ทุกครั้งที่ syncBadges() คุยกับเซิร์ฟเวอร์ */
+  role: null,
+  /* แถวชื่อพ้อง/ตำแหน่งพ้องที่กำลังเพิ่มหรือแก้อยู่ — เปิดทีละอันเท่านั้น
+     { empId, kind: 'name'|'position', mode: 'add'|'edit', original } (original ใช้ตอน mode 'edit') */
+  aliasEdit: null,
+  /** สัญญาจ้างที่กำลังแก้เรทอยู่ — เปิดทีละอันเท่านั้น: assignmentId หรือ null */
+  rateEdit: null,
   /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด — ยังไม่ได้บันทึกลงฐานข้อมูล
      อยู่ในหน่วยความจำหน้าจอจนกว่าคนจะกดยืนยัน รีเฟรชแล้วหาย ซึ่งถูกต้อง
      เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง */
@@ -789,13 +801,29 @@ async function openSheet(id) {
     </div>
 
     <div class="prog">
-      <div class="pstep dn"><span class="cir">${icon('chk')}</span><span class="pl">อัปโหลด · AI อ่านไฟล์</span></div>
+      <div class="pstep dn">
+        <span class="cir">${icon('chk')}</span>
+        <span class="cap">Step 01</span>
+        <span class="pl">อัปโหลด · AI อ่านไฟล์</span>
+      </div>
       <div class="pline dn"></div>
-      <div class="pstep ${step >= 3 ? 'dn' : 'cu'}"><span class="cir">${step >= 3 ? icon('chk') : '2'}</span><span class="pl">ตรวจ Manday · คนยืนยัน</span></div>
+      <div class="pstep ${step >= 3 ? 'dn' : 'cu'}">
+        <span class="cir">${step >= 3 ? icon('chk') : icon('list-chk')}</span>
+        <span class="cap">Step 02</span>
+        <span class="pl">ตรวจ Manday · คนยืนยัน</span>
+      </div>
       <div class="pline ${step >= 3 ? 'dn' : ''}"></div>
-      <div class="pstep ${step === 3 ? 'cu' : step > 3 ? 'dn' : ''}"><span class="cir">${step > 3 ? icon('chk') : '3'}</span><span class="pl">วางบิล FlowAccount</span></div>
+      <div class="pstep ${step === 3 ? 'cu' : step > 3 ? 'dn' : ''}">
+        <span class="cir">${step > 3 ? icon('chk') : icon('money')}</span>
+        <span class="cap">Step 03</span>
+        <span class="pl">วางบิล FlowAccount</span>
+      </div>
       <div class="pline ${step > 3 ? 'dn' : ''}"></div>
-      <div class="pstep ${step === 4 ? 'cu' : ''}"><span class="cir">4</span><span class="pl">ร่างอีเมลถึงลูกค้า</span></div>
+      <div class="pstep ${step === 4 ? 'cu' : ''}">
+        <span class="cir">${icon('mail')}</span>
+        <span class="cap">Step 04</span>
+        <span class="pl">ร่างอีเมลถึงลูกค้า</span>
+      </div>
     </div>
 
     <div class="tabs" role="tablist">
@@ -1193,6 +1221,7 @@ async function openCycle(contractId, period) {
                 <button class="btn sm" id="aiDraftBtn">${icon('rf')} ให้ AI เรียบเรียงใหม่</button>
                 <button class="btn sm" id="copyMailBtn">${icon('doc')} คัดลอกร่าง</button>
                 <button class="btn sm" id="openMailBtn">${icon('mail')} เปิดในโปรแกรมอีเมล</button>
+                <button class="btn sm" id="gmailDraftBtn">${icon('mail')} สร้างร่างใน Gmail</button>
               </div>
               ${data.emailDraft.highlights?.length ? `<div class="note info">${icon('info')}<span>
                 <strong>ข้อสังเกตจาก AI</strong><br>${data.emailDraft.highlights.map(esc).join('<br>')}
@@ -1219,16 +1248,24 @@ async function openCycle(contractId, period) {
         <div class="card">
           <div class="hd"><h3>ใบแจ้งหนี้ที่จะสร้าง</h3>
             <span class="rt">${billed
-              ? `สร้างแล้ว — ${esc(data.existing.document_no)}`
+              ? `สร้างแล้ว — ${esc(data.existing.document_no)}${data.existing.share_link
+                  ? ` · <a href="${esc(data.existing.share_link)}" target="_blank" rel="noopener">เปิดดูเอกสาร</a>`
+                  : ''}`
               : 'เลขเอกสารจะได้จาก FlowAccount'}</span></div>
-          ${billed ? `<div class="bd sendbar">${data.existing.email_sent_at
-            ? `<span class="tg ok">${icon('chk')} ส่งเมลแล้ว</span>
-               <span class="sub" style="margin:0">${esc(data.existing.email_sent_by ?? '')}
-                 · ${dt(data.existing.email_sent_at)}</span>`
-            : `<span class="sub" style="margin:0">ระบบไม่ส่งเมลเอง — ก๊อปร่างด้านซ้ายไปส่งจาก Gmail
-                 ของคุณ แล้วกดปิดงานที่นี่</span>
-               <button class="btn pri sm" id="sentBtn" data-inv="${esc(data.existing.id)}">
-                 ${icon('send')} บันทึกว่าส่งเมลแล้ว</button>`}</div>` : ''}
+          ${billed ? `<div class="bd">${data.existing.email_sent_at
+            ? `<div class="sentok">
+                 <span class="ic">${icon('chk')}</span>
+                 <div>
+                   <div class="ttl">ส่งเมลแล้ว</div>
+                   <div class="meta">ถึง <b>${esc(data.emailDraft?.to || 'ไม่พบอีเมลผู้รับในร่าง')}</b><br>
+                     บันทึกโดย ${esc(data.existing.email_sent_by || '—')} · ${dt(data.existing.email_sent_at)}</div>
+                 </div>
+               </div>`
+            : `<div class="sendbar">
+                 <span class="sub" style="margin:0">ระบบไม่ส่งเมลเอง — ก๊อปร่างด้านซ้ายไปส่งจาก Gmail
+                   ของคุณ แล้วกดปิดงานที่นี่</span>
+                 <button class="btn pri sm" id="sentBtn" data-inv="${esc(data.existing.id)}">
+                   ${icon('send')} บันทึกว่าส่งเมลแล้ว</button></div>`}</div>` : ''}
         <div class="bd">
           <div class="doc">
             <div class="dh">
@@ -1324,8 +1361,10 @@ async function openCycle(contractId, period) {
     }
   });
 
-  /* ขั้นที่ 4 — ระบบไม่ต่อกล่องเมลใคร คนคัดลอกร่างไปส่งจาก Gmail ของตัวเอง
-     สามปุ่มนี้คือทั้งหมดที่ระบบช่วยได้โดยไม่แตะสิทธิ์ส่งอีเมลแทนคน */
+  /* ขั้นที่ 4 — ระบบไม่ส่งอีเมลเองไม่ว่าทางไหน (ไม่มีโค้ดเรียก send สักจุด)
+     คัดลอก/เปิดโปรแกรมเมล คือทางที่ไม่ต้องเชื่อมต่อ Gmail เลย
+     "สร้างร่างใน Gmail" ใช้สิทธิ์ gmail.compose ที่ขอไว้ตอนเชื่อมต่อ (createDraft) — วางร่างไว้ใน
+     กล่อง Drafts ให้ ยังต้องกดส่งเองอยู่ดี ไม่ต่างจากสองปุ่มแรกในเรื่องนี้ */
   el('aiDraftBtn')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
@@ -1358,6 +1397,21 @@ async function openCycle(contractId, period) {
       + `&body=${encodeURIComponent(data.emailDraft.body)}`;
     window.open(url, '_blank');
     if (!to) toast('ยังไม่มีอีเมลผู้ประสานงานในระบบ — ใส่ผู้รับเองในโปรแกรมเมล');
+  });
+
+  el('gmailDraftBtn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'กำลังสร้างร่างใน Gmail…';
+    try {
+      const r = await api(`/cycles/${encodeURIComponent(contractId)}/${period}/gmail-draft`, { method: 'POST' });
+      toast(`สร้างร่างใน Gmail แล้ว — ถึง ${r.to} (${r.note})`);
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `${icon('mail')} สร้างร่างใน Gmail`;
+    }
   });
 
   /* ปิดงาน — ขั้นสุดท้ายของรอบบิล ระบบไม่ส่งเมลเอง คนส่งแล้วมายืนยันที่นี่
@@ -1397,32 +1451,23 @@ function fileToBase64(file) {
 }
 
 async function renderUpload() {
-  const [contracts, sheets, settings] = await Promise.all([
-    api('/contracts'), api('/timesheets'), api('/settings'),
+  const [contracts, settings] = await Promise.all([
+    api('/contracts'), api('/settings'),
   ]);
   const ct = contracts[0];
-  const used = sheets.map((s) => s.id);
-  const hasKey = settings.env.hasAnthropicKey;
   const read = state.read;
 
   main.innerHTML = `
   <div class="page">
     <div class="phd">
-      <div><span class="ey">ขั้นที่ 1 จาก 4</span><h1>อัปโหลด Timesheet</h1>
-        <p>โหลดไฟล์จากอีเมลแจ้งอนุมัติของลูกค้ามาไว้ในเครื่อง แล้วอัปโหลดที่นี่ —
-           AI จะอ่านให้ดูก่อน ยังไม่บันทึกจนกว่าคุณจะกดยืนยัน</p></div>
+      <div><span class="ey">ขั้นที่ 1 จาก 4</span><h1>อัปโหลด Timesheet</h1></div>
     </div>
 
-    ${hasKey ? '' : `<div class="note wn">${icon('alt')}<span>
-      <strong>ยังไม่ได้ตั้ง ANTHROPIC_API_KEY</strong> — อัปโหลดไฟล์แล้ว AI จะอ่านไม่ได้
-      ใส่ค่าในไฟล์ <code>.env</code> แล้วรันเซิร์ฟเวอร์ใหม่ · ระหว่างนี้ใช้แท็บ "กรอกเอง" แทนได้
-    </span></div>`}
-
     <div class="tabs" role="tablist">
-      <button class="tab ${state.uploadTab === 1 ? 'on' : ''}" data-utab="1">อัปโหลดไฟล์ (AI อ่าน)</button>
+      <button class="tab ${state.uploadTab === 1 ? 'on' : ''}" data-utab="1">อัปโหลดไฟล์</button>
       <button class="tab ${state.uploadTab === 3 ? 'on' : ''}" data-utab="3">ดึงจาก Gmail
         ${settings.env.hasGmail ? '' : '<span class="tg mu">ยังไม่ต่อ</span>'}</button>
-      <button class="tab ${state.uploadTab === 2 ? 'on' : ''}" data-utab="2">กรอกเอง (ไม่ใช้ AI)</button>
+      <button class="tab ${state.uploadTab === 2 ? 'on' : ''}" data-utab="2">กรอกเอง</button>
     </div>
 
     <!-- ── ดึงจาก Gmail ── -->
@@ -1434,9 +1479,8 @@ async function renderUpload() {
           <div class="bd">
             <div class="mailacts">
               <button class="btn sm" id="gmailRefresh">${icon('rf')} ดึงรายการเมล</button>
-              <span class="sub" style="margin:0">ค้นด้วย: <code>${esc(settings.env.gmailQuery)}</code></span>
             </div>
-            <div id="gmailList"><div class="empty">กด "ดึงรายการเมล" เพื่อดูอีเมลในกล่อง</div></div>
+            <div id="gmailList"></div>
           </div>
         </div>` : `
         <div class="card"><div class="bd">
@@ -1486,7 +1530,7 @@ async function renderUpload() {
               </div>
             </div>
             <div class="ft">
-              <button class="btn pri" id="readBtn" disabled>${icon('srch')} ให้ AI อ่านไฟล์นี้</button>
+              <button class="btn pri" id="readBtn" disabled>${icon('srch')} อ่านไฟล์นี้</button>
             </div>
           </div>
         </div>
@@ -1500,14 +1544,6 @@ async function renderUpload() {
               <dt>ช่วงสัญญา</dt><dd>${dateOnly(ct.start_date)} – ${dateOnly(ct.end_date)}</dd>
               <dt>พนักงานในสัญญา</dt><dd>${int(ct.headcount)} คน</dd>
             </dl>` : '<div class="empty">ยังไม่มีสัญญาในระบบ</div>'}
-            <div class="note info">${icon('info')}<span>
-              เรทค่าบริการและตำแหน่งที่ขึ้นบนใบแจ้งหนี้มาจากฐานข้อมูลเสมอ
-              ไม่ได้มาจากสิ่งที่เขียนในไฟล์ Timesheet
-            </span></div>
-            ${used.length ? `<div class="note wn">${icon('alt')}<span>
-              เลขเอกสารที่มีในระบบแล้ว: ${used.map(esc).join(' · ')}
-              — ใช้เลขเดิมคือเขียนทับใบนั้นและคำนวณใหม่
-            </span></div>` : ''}
           </div>
         </div>
       </div>
@@ -1543,14 +1579,7 @@ async function renderUpload() {
               <small class="fhint">ไม่มีวันลาก็เว้นว่างไว้</small>
             </div>
           </div>
-          <div class="ft"><button class="btn pri" id="eSave">${icon('chk')} บันทึกเข้าระบบ</button></div>
-        </div>
-        <div class="card">
-          <div class="hd"><h3>ใช้เมื่อไหร่</h3></div>
-          <div class="bd"><div class="note info">${icon('info')}<span>
-            ทางนี้ไว้ใช้ตอนไม่มี API key หรือไฟล์อ่านไม่ออก (สแกนเอียง ลายเซ็นทับตาราง)
-            ผลลัพธ์ที่ได้ผ่านการตรวจ Manday ชุดเดียวกับทางที่ AI อ่าน ต่างกันแค่ที่มาของข้อมูล
-          </span></div></div>
+          <div class="ft"><button class="btn pri" id="eSave">บันทึกเข้าระบบ</button></div>
         </div>
       </div>
     </div>
@@ -1597,7 +1626,7 @@ function bindGmailTab() {
               ${m.alreadyIngested
                 ? '<span class="tg ok">เอาเข้าระบบแล้ว</span>'
                 : `<button class="btn sm pri" data-mail="${esc(m.id)}"
-                     data-att="${esc(m.attachments[0]?.attachmentId ?? '')}">
+                     data-att="${esc(m.attachments[0]?.filename ?? '')}">
                      ${icon('srch')} ให้ AI อ่าน</button>`}
             </li>`).join('')}</ul>`
         : `<div class="empty">${icon('mail', 'i')}<div>ไม่พบอีเมลที่ตรงกับคำค้น —
@@ -1612,7 +1641,7 @@ function bindGmailTab() {
               method: 'POST',
               body: JSON.stringify({
                 messageId: btn.dataset.mail,
-                attachmentId: btn.dataset.att || null,
+                attachmentFilename: btn.dataset.att || null,
               }),
             });
             state.read = result;
@@ -1638,7 +1667,12 @@ function bindGmailTab() {
 /** ผลที่ AI อ่านได้ — แก้ได้ทุกช่องก่อนกดยืนยัน */
 function readResultHtml(read) {
   const d = read.data;
-  const blocked = read.blockers.length > 0;
+  /* บล็อกจากช่องสรุปวันลาไม่ตรงกับรายการ ("ช่องสรุประบุวันลา...แต่รายการวันลามี...")
+     แก้ในหน้านี้ได้เองแล้ว (ตารางวันลาด้านล่างแก้ไขได้) จึงไม่ต้องล็อกปุ่มไว้ตาย —
+     ปุ่มยืนยันจะเช็คจำนวนแถวล่าสุดเทียบกับช่องสรุปอีกทีตอนกด ไม่ใช่ใช้ค่าจากตอนอ่านไฟล์ครั้งแรก
+     บล็อกอื่น (จับคู่ชื่อไม่ได้/ไม่มีสัญญา/รอบเดือนผิด) ยังคงล็อกปุ่มไว้เหมือนเดิม แก้ในหน้านี้ไม่ได้ */
+  const hardBlockers = read.blockers.filter((b) => !b.startsWith('ช่องสรุประบุวันลา'));
+  const blocked = hardBlockers.length > 0;
 
   return `
   <div class="card">
@@ -1695,16 +1729,18 @@ function readResultHtml(read) {
 
       <div class="fsec">
         <div class="fsec-h"><b>วันลาที่อ่านได้</b>
-          <span class="rt">${(d.leaveDays ?? []).length} รายการ — ตัวเลขนี้คือตัวที่ใช้หักส่วนลด</span></div>
-        ${(d.leaveDays ?? []).length
-          ? `<div class="tw"><table style="min-width:420px">
-              <thead><tr><th>วันที่</th><th>ประเภท</th><th>ป้ายในไฟล์</th></tr></thead>
-              <tbody>${d.leaveDays.map((l) => `<tr>
-                <td class="n">${esc(l.date)}</td>
-                <td>${esc(LEAVE_OPTIONS[l.type] ?? l.type)}</td>
-                <td>${esc(l.rawLabel ?? '—')}</td></tr>`).join('')}</tbody>
-            </table></div>`
-          : '<div class="empty">ไม่พบวันลาในไฟล์นี้</div>'}
+          <button class="btn sm" id="rAddLeave">+ เพิ่มวันลา</button></div>
+        <small class="fhint">ตัวเลขนี้คือตัวที่ใช้หักส่วนลด — ถ้า AI อ่านไม่ครบ (เช่นช่องสรุปบอกว่ามีวันลา
+          แต่รายการด้านล่างไม่มี) แก้ไขในตารางนี้ได้ตรงๆ ก่อนกดยืนยัน</small>
+        <div id="rLeaveRows">${(d.leaveDays ?? []).map((l) => `
+          <div class="lrow">
+            <input type="date" class="ldate" value="${esc(l.date)}">
+            <select class="ltype">
+              ${Object.entries(LEAVE_OPTIONS).map(([v, label]) =>
+                `<option value="${v}" ${l.type === v ? 'selected' : ''}>${label}</option>`).join('')}
+            </select>
+            <button class="btn sm dgr lrm">ลบ</button>
+          </div>`).join('')}</div>
       </div>
 
       <div class="fsec">
@@ -1761,7 +1797,7 @@ function bindUploadTab() {
     if (!picked) return;
     const btn = el('readBtn');
     btn.disabled = true;
-    btn.textContent = 'AI กำลังอ่านไฟล์… (ราว 20–40 วินาที)';
+    btn.textContent = 'AI กำลังอ่านไฟล์… (อ่านทีละหน้า อาจใช้เวลาหลายนาทีถ้าไฟล์มีหลายหน้า)';
     try {
       const result = await api('/timesheets/read', {
         method: 'POST',
@@ -1776,7 +1812,7 @@ function bindUploadTab() {
       renderUpload();
     } catch (error) {
       btn.disabled = false;
-      btn.innerHTML = `${icon('srch')} ให้ AI อ่านไฟล์นี้`;
+      btn.innerHTML = `${icon('srch')} อ่านไฟล์นี้`;
       toast(error.message, true);
     }
   });
@@ -1786,10 +1822,29 @@ function bindUploadTab() {
     renderUpload();
   });
 
+  el('rAddLeave')?.addEventListener('click', () => addLeaveRow('rLeaveRows'));
+  main.querySelectorAll('#rLeaveRows .lrm').forEach((btn) => {
+    btn.addEventListener('click', () => btn.closest('.lrow').remove());
+  });
+
   el('confirmBtn')?.addEventListener('click', async () => {
     const btn = el('confirmBtn');
     const documentNo = el('uDoc').value.trim();
     if (!documentNo) { toast('ต้องกรอกเลขที่เอกสารก่อนบันทึก', true); return; }
+
+    // เก็บวันลาจากตารางในหน้านี้ — ยึดตามที่เห็นบนจอ ไม่ใช่ผลดิบตอน AI อ่านครั้งแรก
+    // (คนอาจแก้ไปแล้วถ้า AI อ่านตกหรือเกิน — ดูคอมเมนต์เหตุผลที่ hardBlockers ด้านบน)
+    const leaveDays = [...main.querySelectorAll('#rLeaveRows .lrow')]
+      .map((r) => ({ date: r.querySelector('.ldate').value, type: r.querySelector('.ltype').value }))
+      .filter((l) => l.date);
+    const totalLeaveDays = Number(el('rLeave').value);
+    if (leaveDays.length !== totalLeaveDays) {
+      toast(
+        `ช่องสรุประบุวันลา ${totalLeaveDays} วัน แต่รายการวันลาในตารางมี ${leaveDays.length} รายการ — แก้ให้ตรงกันก่อน`,
+        true,
+      );
+      return;
+    }
 
     btn.disabled = true;
     const edited = {
@@ -1798,7 +1853,8 @@ function bindUploadTab() {
       position: el('rPos').value.trim(),
       period: el('rPeriod').value,
       totalWorkDays: Number(el('rWork').value),
-      totalLeaveDays: Number(el('rLeave').value),
+      totalLeaveDays,
+      leaveDays,
     };
 
     try {
@@ -1863,9 +1919,9 @@ function bindManualTab(contracts) {
   });
 }
 
-/** แถววันลา — เพิ่มได้เรื่อยๆ ลบทีละแถวได้ */
-function addLeaveRow() {
-  const box = el('eLeaves');
+/** แถววันลา — เพิ่มได้เรื่อยๆ ลบทีละแถวได้ — ใช้ทั้งแท็บ "กรอกเอง" และหน้าแก้ผลที่ AI อ่านได้ */
+function addLeaveRow(boxId = 'eLeaves') {
+  const box = el(boxId);
   const row = document.createElement('div');
   row.className = 'lrow';
   row.innerHTML = `
@@ -1882,6 +1938,64 @@ function addLeaveRow() {
    ไม่ใช่ขั้นตอนการทำงาน แต่เป็นที่แก้เมื่อขั้นที่ 2 บอกว่าจับคู่ไม่ได้หรือเรทไม่ตรง
    ถ้าไม่มีหน้านี้ พนักงานคนใหม่เข้ามาทีต้องเรียกโปรแกรมเมอร์มาแก้ฐานข้อมูล */
 
+/**
+ * แท็กชื่อพ้อง/ตำแหน่งพ้อง — คลิกที่แท็กเพื่อแก้ไข (ลบของเดิม+เพิ่มของใหม่ให้ในคลิกเดียว)
+ * มีปุ่ม "+" ต่อท้ายเพื่อเพิ่มรายการใหม่ — ทั้งสองอย่างเปิดเป็น input ในหน้า ไม่ใช้ prompt()
+ * เพราะคนใช้จริงมองว่าปุ่มเดิม "กดแล้วไม่มีอะไรเกิดขึ้น" (popup ของเบราว์เซอร์ไม่เด่นพอ)
+ */
+function renderAliasCell(e, kind, aliases) {
+  const edit = state.aliasEdit;
+  const addingHere = edit?.mode === 'add' && edit.empId === e.id && edit.kind === kind;
+  const label = kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง';
+
+  const tags = aliases.map((a) => {
+    const editingThis = edit?.mode === 'edit' && edit.empId === e.id && edit.kind === kind && edit.original === a.alias;
+    if (editingThis) {
+      return `<span class="tg alias editing">
+        <input type="text" class="aliasInput" value="${esc(a.alias)}" data-emp="${esc(e.id)}"
+          data-kind="${kind}" data-mode="edit" data-original="${esc(a.alias)}">
+        <button class="ax save" data-emp="${esc(e.id)}" data-kind="${kind}" title="บันทึก">✓</button>
+        <button class="ax cancel" title="ยกเลิก">×</button>
+      </span>`;
+    }
+    return `<span class="tg mu alias aliastag" title="${esc(a.source ?? '')} — คลิกเพื่อแก้ไข"
+        data-emp="${esc(e.id)}" data-kind="${kind}" data-alias="${esc(a.alias)}">${esc(a.alias)}<button
+        class="ax rm" data-emp="${esc(e.id)}" data-kind="${kind}"
+        data-alias="${esc(a.alias)}" title="ลบ${label}นี้">×</button></span>`;
+  }).join(' ');
+
+  const addRow = addingHere
+    ? `<span class="tg alias editing">
+        <input type="text" class="aliasInput" placeholder="${label}ใหม่" data-emp="${esc(e.id)}" data-kind="${kind}" data-mode="add">
+        <button class="ax save" data-emp="${esc(e.id)}" data-kind="${kind}" title="บันทึก">✓</button>
+        <button class="ax cancel" title="ยกเลิก">×</button>
+      </span>`
+    : `<button class="lk addal" data-emp="${esc(e.id)}" data-kind="${kind}">+ ${label}</button>`;
+
+  return `${tags || (addingHere ? '' : '<span class="sub">ไม่มี</span> ')}${tags ? ' ' : ''}<div class="arow">${addRow}</div>`;
+}
+
+/**
+ * เรทต่อเดือน — คลิก "แก้เรท" เพื่อแก้ในหน้าได้ทันที แทน prompt() แบบเดิม
+ * จำเป็นต้องมี เพราะเป็นทางเดียวที่แก้เรทได้จากหน้าเว็บ (ไม่งั้นต้องรัน SQL ตรง)
+ */
+function renderRateCell(e) {
+  if (!e.assignment_id) return money(e.monthly_rate);
+
+  if (state.rateEdit === e.assignment_id) {
+    return `<div class="rateEditRow">
+      <input type="number" step="0.01" min="0" class="rateInput" value="${e.monthly_rate}"
+        data-asg="${esc(e.assignment_id)}" data-name="${esc(e.name_th)}">
+      <button class="ax save" title="บันทึก">✓</button>
+      <button class="ax cancel" title="ยกเลิก">×</button>
+    </div>`;
+  }
+
+  return `${money(e.monthly_rate)}
+    <button class="lk edrate" data-asg="${esc(e.assignment_id)}"
+      data-name="${esc(e.name_th)}">แก้เรท</button>`;
+}
+
 async function renderMaster() {
   const [employees, contracts, settings] = await Promise.all([
     api('/employees'), api('/contracts'), api('/settings'),
@@ -1894,39 +2008,23 @@ async function renderMaster() {
       <p>ฐานข้อมูลที่ทั้ง 3 ขั้นใช้ร่วมกัน — จับคู่ชื่อ · หาเรทค่าบริการ · นับวันทำงานของเดือน</p></div></div>
 
     <div class="tabs" role="tablist">
-      ${['พนักงาน & ชื่อพ้อง', 'ลูกค้า & สัญญา', 'วันหยุด & การเชื่อมต่อ'].map((t, i) =>
+      ${['พนักงาน & ชื่อพ้อง', 'ลูกค้า & สัญญา', 'วันหยุด'].map((t, i) =>
         `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-mtab2="${i + 1}">${t}</button>`).join('')}
     </div>
 
     <div class="tp ${tab === 1 ? 'on' : ''}" data-mpane="1">
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ชื่อพ้องที่ยอมรับ</th>
-          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>ลูกค้า</th></tr></thead>
+        <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ชื่อพ้อง</th><th>ตำแหน่งพ้อง</th>
+          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th></tr></thead>
         <tbody>${employees.map((e) => `
           <tr><td class="n">${esc(e.id)}</td>
             <td><span class="nm">${esc(e.name_th)}</span><span class="sub">${esc(e.name_en ?? '')}</span></td>
-            <td>${[
-                ...e.nameAliases.map((a) => ({ ...a, kind: 'name' })),
-                ...e.positionAliases.map((a) => ({ ...a, kind: 'position' })),
-              ].map((a) =>
-                `<span class="tg mu alias" title="${esc(a.source ?? '')}">${esc(a.alias)}<button
-                   class="ax" data-emp="${esc(e.id)}" data-kind="${a.kind}"
-                   data-alias="${esc(a.alias)}" title="ลบชื่อพ้องนี้">×</button></span>`).join(' ') || '—'}
-              <div class="arow">
-                <button class="lk addal" data-emp="${esc(e.id)}" data-kind="name">+ ชื่อพ้อง</button>
-                <button class="lk addal" data-emp="${esc(e.id)}" data-kind="position">+ ตำแหน่งพ้อง</button>
-              </div></td>
+            <td>${renderAliasCell(e, 'name', e.nameAliases)}</td>
+            <td>${renderAliasCell(e, 'position', e.positionAliases)}</td>
             <td>${esc(e.invoice_position)}</td>
-            <td class="r n">${money(e.monthly_rate)}
-              ${e.assignment_id ? `<button class="lk edrate" data-asg="${esc(e.assignment_id)}"
-                data-rate="${e.monthly_rate}" data-name="${esc(e.name_th)}">แก้เรท</button>` : ''}</td>
+            <td class="r n">${renderRateCell(e)}</td>
             <td>${esc(e.customer_name ?? '—')}<span class="sub">${esc(e.quotation_no ?? '')}</span></td></tr>`).join('')}</tbody>
       </table></div></div>
-      <div class="note">${icon('info')}<span>
-        <strong>ทำไมต้องมีชื่อพ้อง</strong> — เอกสารแต่ละใบเขียนชื่อคนและตำแหน่งไม่เหมือนกัน
-        (ใบว่าจ้าง "Dev" · ใบเสนอราคา "Developer" · Timesheet "Java Programmer")
-        ระบบเทียบผ่านตารางนี้ ไม่ใช่เทียบข้อความตรงตัว
-      </span></div>
     </div>
 
     <div class="tp ${tab === 2 ? 'on' : ''}" data-mpane="2">
@@ -1950,55 +2048,22 @@ async function renderMaster() {
               <dt>หัก ณ ที่จ่าย</dt><dd class="n">${Math.round(c.wht_rate * 100)}%</dd>
               <dt>เครดิต</dt><dd class="n">${int(c.credit_days)} วัน</dd>
               <dt>ผู้ประสานงาน</dt><dd>${esc(c.contact_name ?? '—')} ${esc(c.contact_phone ?? '')}</dd>
+              ${c.billing_place ? `<dt>สถานที่วางบิล</dt><dd>${esc(c.billing_place)}</dd>` : ''}
             </dl>
           </div>
-          ${c.billing_place ? `<div class="note" style="margin-top:16px">${icon('info')}<span>
-            <strong>สถานที่วางบิล</strong> ${esc(c.billing_place)}</span></div>` : ''}
           </div>
         </div>`).join('')}
     </div>
 
     <div class="tp ${tab === 3 ? 'on' : ''}" data-mpane="3">
-      <div class="g2">
-        <div class="card">
-          <div class="hd"><h3>การเชื่อมต่อ</h3></div>
-          <div class="bd"><dl class="kv">
-            <dt>FlowAccount</dt><dd><span class="tg ${settings.env.flowAccountMode === 'dry-run' ? 'wn' : 'ok'}">${esc(settings.env.flowAccountMode)}</span></dd>
-            <dt>Credential</dt><dd>${settings.env.hasFlowAccountCredentials
-                ? '<span class="tg ok">ตั้งค่าแล้ว</span>' : '<span class="tg wn">ยังไม่ตั้ง</span>'}</dd>
-            <dt>ชนิดเอกสาร</dt><dd>${esc(settings.flowaccount?.documentType ?? '—')}</dd>
-            <dt>Claude API</dt><dd>${settings.env.hasAnthropicKey
-                ? '<span class="tg ok">พร้อมใช้</span>' : '<span class="tg wn">ยังไม่ตั้ง ANTHROPIC_API_KEY</span>'}</dd>
-            <dt>โมเดล</dt><dd class="n">${esc(settings.env.claudeModel)}</dd>
-          </dl></div>
-        </div>
-        <div class="card">
-          <div class="hd"><h3>เงื่อนไขวางบิล</h3></div>
-          <div class="bd"><dl class="kv">
-            <dt>วันที่ลงเอกสาร</dt><dd>วันที่ ${int(settings.billingRules?.billOnDayOfNextMonth)} ของเดือนถัดไป</dd>
-            <dt>ต้องได้ครบทุกคน</dt><dd>${settings.billingRules?.requireAllTimesheets ? 'ใช่' : 'ไม่'}</dd>
-            <dt>ต้องมีคนกดยืนยัน</dt><dd><span class="tg ${settings.billingRules?.requireHumanCheck === false ? 'mu' : 'ok'}">
-              ${settings.billingRules?.requireHumanCheck === false ? 'ไม่ (โหมด auto)' : 'ใช่ (โหมด manual)'}</span></dd>
-            <dt>ส่งอีเมลอัตโนมัติ</dt><dd><span class="tg ok">ไม่ส่ง — สร้างร่างเท่านั้น</span></dd>
-          </dl>
-          <div class="note info">${icon('info')}<span>
-            สลับเป็นโหมด auto ได้ด้วยการตั้ง <code>billing_rules.requireHumanCheck = false</code>
-            แล้วขั้นที่ 1 กับ 2 จะไหลเองจาก n8n โดยไม่มีคนคั่น
-          </span></div></div>
-        </div>
-      </div>
-
       <div class="card">
-        <div class="hd"><h3>ปฏิทินวันหยุด</h3>
-          <span class="rt">ใช้คำนวณวันทำงานมาตรฐานของแต่ละเดือน</span></div>
+        <div class="hd"><h3>ปฏิทินวันหยุด</h3></div>
         <div class="bd">
           <div class="hadd">
             <input type="date" id="hDate">
             <input type="text" id="hName" placeholder="ชื่อวันหยุด" autocomplete="off">
             <button class="btn sm pri" id="hAdd">+ เพิ่มวันหยุด</button>
           </div>
-          <small class="fhint">แก้ปฏิทินแล้วต้องสั่งคำนวณ Timesheet ของเดือนนั้นใหม่
-            จำนวนวันทำงานจึงจะเปลี่ยนตาม (และตราที่คนเคยกดยืนยันจะหมดอายุเอง)</small>
         </div>
         <div class="bd flush"><div class="tw"><table style="min-width:520px">
           <thead><tr><th style="width:140px">วันที่</th><th>ชื่อวันหยุด</th><th>ขอบเขต</th>
@@ -2011,6 +2076,7 @@ async function renderMaster() {
         </table></div></div>
       </div>
     </div>
+
   </div>`;
 
   main.querySelectorAll('[data-mtab2]').forEach((btn) => {
@@ -2020,26 +2086,32 @@ async function renderMaster() {
     });
   });
 
-  /* เพิ่ม/ลบชื่อพ้องและแก้เรท — ใช้ prompt เพราะเป็นเครื่องมือหลังบ้านของคนไม่กี่คน
-     ไม่คุ้มกับการทำ modal เต็มรูปแบบ และ prompt บล็อกจนกดเสร็จ ไม่มีสถานะครึ่งๆ */
+  /* เพิ่ม/แก้/ลบชื่อพ้องและตำแหน่งพ้อง — เปิดเป็น input ในหน้าแทน prompt()
+     (คนใช้จริงมองว่าปุ่มเดิม "กดแล้วไม่มีอะไรเกิดขึ้น" เพราะ popup ของเบราว์เซอร์ไม่เด่นพอ)
+     "แก้" ทำโดยเพิ่มค่าใหม่ก่อนแล้วค่อยลบค่าเดิม — ถ้าเพิ่มค่าใหม่ไม่สำเร็จ ค่าเดิมจะไม่หาย */
+
   main.querySelectorAll('.addal').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const kind = btn.dataset.kind;
-      const alias = prompt(`เพิ่ม${kind === 'name' ? 'ชื่อพ้องของพนักงาน' : 'ชื่อตำแหน่งพ้อง'} (ตามที่เขียนในเอกสารจริง):`);
-      if (!alias?.trim()) return;
-      try {
-        await api(`/employees/${encodeURIComponent(btn.dataset.emp)}/aliases`, {
-          method: 'POST', body: JSON.stringify({ kind, alias }),
-        });
-        toast(`เพิ่ม "${alias.trim()}" แล้ว`);
-        renderMaster();
-      } catch (error) { toast(error.message, true); }
+    btn.addEventListener('click', () => {
+      state.aliasEdit = { empId: btn.dataset.emp, kind: btn.dataset.kind, mode: 'add' };
+      renderMaster();
     });
   });
 
-  main.querySelectorAll('.ax').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!confirm(`ลบชื่อพ้อง "${btn.dataset.alias}" ?`)) return;
+  main.querySelectorAll('.aliastag').forEach((tag) => {
+    tag.addEventListener('click', (event) => {
+      if (event.target.closest('.rm')) return; // ปุ่มลบมีตัวจัดการของตัวเองแยกไว้ด้านล่าง
+      state.aliasEdit = {
+        empId: tag.dataset.emp, kind: tag.dataset.kind, mode: 'edit', original: tag.dataset.alias,
+      };
+      renderMaster();
+    });
+  });
+
+  main.querySelectorAll('.ax.rm').forEach((btn) => {
+    btn.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const label = btn.dataset.kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง';
+      if (!confirm(`ลบ${label} "${btn.dataset.alias}" ?`)) return;
       try {
         const q = new URLSearchParams({ kind: btn.dataset.kind, alias: btn.dataset.alias });
         await api(`/employees/${encodeURIComponent(btn.dataset.emp)}/aliases?${q}`, { method: 'DELETE' });
@@ -2049,17 +2121,82 @@ async function renderMaster() {
     });
   });
 
+  const saveAlias = async (input) => {
+    const alias = input.value.trim();
+    const { emp, kind, mode, original } = input.dataset;
+    if (!alias) return;
+    if (mode === 'edit' && alias === original) { state.aliasEdit = null; renderMaster(); return; }
+    try {
+      await api(`/employees/${encodeURIComponent(emp)}/aliases`, {
+        method: 'POST', body: JSON.stringify({ kind, alias }),
+      });
+      if (mode === 'edit') {
+        const q = new URLSearchParams({ kind, alias: original });
+        await api(`/employees/${encodeURIComponent(emp)}/aliases?${q}`, { method: 'DELETE' });
+      }
+      toast(mode === 'edit' ? `แก้เป็น "${alias}" แล้ว` : `เพิ่ม "${alias}" แล้ว`);
+      state.aliasEdit = null;
+      renderMaster();
+    } catch (error) { toast(error.message, true); }
+  };
+
+  main.querySelectorAll('.aliasInput').forEach((input) => {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') saveAlias(input);
+      if (event.key === 'Escape') { state.aliasEdit = null; renderMaster(); }
+    });
+  });
+
+  main.querySelectorAll('.tg.editing .save').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = btn.parentElement.querySelector('.aliasInput');
+      if (input) saveAlias(input);
+    });
+  });
+
+  main.querySelectorAll('.tg.editing .cancel').forEach((btn) => {
+    btn.addEventListener('click', () => { state.aliasEdit = null; renderMaster(); });
+  });
+
   main.querySelectorAll('.edrate').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const next = prompt(`เรทต่อเดือนของ ${btn.dataset.name} (บาท):`, btn.dataset.rate);
-      if (next === null) return;
-      try {
-        const r = await api(`/assignments/${encodeURIComponent(btn.dataset.asg)}`, {
-          method: 'PATCH', body: JSON.stringify({ monthlyRate: next }),
-        });
-        toast(`${r.employeeName}: ${money(r.from)} → ${money(r.to)} · ${r.note}`);
-        renderMaster();
-      } catch (error) { toast(error.message, true); }
+    btn.addEventListener('click', () => {
+      state.rateEdit = btn.dataset.asg;
+      renderMaster();
+    });
+  });
+
+  main.querySelectorAll('.rateEditRow .cancel').forEach((btn) => {
+    btn.addEventListener('click', () => { state.rateEdit = null; renderMaster(); });
+  });
+
+  const saveRate = async (input) => {
+    const next = input.value.trim();
+    if (!next) return;
+    try {
+      const r = await api(`/assignments/${encodeURIComponent(input.dataset.asg)}`, {
+        method: 'PATCH', body: JSON.stringify({ monthlyRate: next }),
+      });
+      toast(`${r.employeeName}: ${money(r.from)} → ${money(r.to)} · ${r.note}`);
+      state.rateEdit = null;
+      renderMaster();
+    } catch (error) { toast(error.message, true); }
+  };
+
+  main.querySelectorAll('.rateInput').forEach((input) => {
+    input.focus();
+    input.select();
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') saveRate(input);
+      if (event.key === 'Escape') { state.rateEdit = null; renderMaster(); }
+    });
+  });
+
+  main.querySelectorAll('.rateEditRow .save').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = btn.closest('.rateEditRow').querySelector('.rateInput');
+      if (input) saveRate(input);
     });
   });
 
@@ -2083,6 +2220,270 @@ async function renderMaster() {
         await api(`/holidays?${q}`, { method: 'DELETE' });
         toast('ลบแล้ว');
         renderMaster();
+      } catch (error) { toast(error.message, true); }
+    });
+  });
+}
+
+/* ══ จัดการระบบ ══════════════════════════════════════════════
+   เห็นเฉพาะ admin (nav ซ่อนไว้ + server ตรวจ 403 อีกชั้น) — รวมการเชื่อมต่อ (ย้ายมาจาก
+   ข้อมูลหลัก), จัดการผู้ใช้ (เพิ่ม/เปลี่ยน role/ปิดใช้งาน), และบันทึกทุกการเปลี่ยนแปลงในระบบ */
+async function renderSystemAdmin() {
+  const tab = state.sysTab;
+  const [settings, users, recipients, lineUsers, log] = await Promise.all([
+    api('/settings'),
+    tab === 2 ? api('/users') : Promise.resolve(null),
+    tab === 3 ? api('/notification-recipients') : Promise.resolve(null),
+    tab === 3 ? api('/line/known-users') : Promise.resolve(null),
+    tab === 4 ? api('/audit-log?limit=200') : Promise.resolve(null),
+  ]);
+
+  main.innerHTML = `
+  <div class="page">
+    <div class="phd"><div><span class="ey">ผู้ดูแลระบบ</span><h1>จัดการระบบ</h1>
+      <p>ผู้ใช้ในระบบ · การเชื่อมต่อกับบริการภายนอก · บันทึกทุกการเปลี่ยนแปลง</p></div></div>
+
+    <div class="tabs" role="tablist">
+      ${['ภาพรวม', 'ผู้ใช้', 'ผู้รับแจ้งเตือน', 'บันทึกระบบ'].map((t, i) =>
+        `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-systab="${i + 1}">${t}</button>`).join('')}
+    </div>
+
+    <div class="tp ${tab === 1 ? 'on' : ''}" data-spane="1">
+      <div class="g2">
+        <div class="card">
+          <div class="hd"><h3>การเชื่อมต่อ</h3></div>
+          <div class="bd"><dl class="kv">
+            <dt>FlowAccount</dt><dd><span class="tg ${settings.env.flowAccountMode === 'dry-run' ? 'wn' : 'ok'}">${esc(settings.env.flowAccountMode)}</span></dd>
+            <dt>Credential FlowAccount</dt><dd>${settings.env.hasFlowAccountCredentials
+                ? '<span class="tg ok">ตั้งค่าแล้ว</span>' : '<span class="tg wn">ยังไม่ตั้ง</span>'}</dd>
+            <dt>ชนิดเอกสาร</dt><dd>${esc(settings.flowaccount?.documentType ?? '—')}</dd>
+            <dt>Gmail</dt><dd>${settings.env.hasGmail
+                ? '<span class="tg ok">เชื่อมต่อแล้ว</span>' : '<span class="tg wn">ยังไม่เชื่อม</span>'}</dd>
+            <dt>AI ในเครื่อง</dt><dd class="n">${esc(settings.env.localLlmBaseUrl)}</dd>
+            <dt>โมเดล (ข้อความ)</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>
+            <dt>โมเดล (อ่านไฟล์)</dt><dd class="n">${esc(settings.env.localVisionModel)}</dd>
+          </dl></div>
+        </div>
+        <div class="card">
+          <div class="hd"><h3>เงื่อนไขวางบิล</h3></div>
+          <div class="bd"><dl class="kv">
+            <dt>วันที่ลงเอกสาร</dt><dd>วันที่ ${int(settings.billingRules?.billOnDayOfNextMonth)} ของเดือนถัดไป</dd>
+            <dt>ต้องได้ครบทุกคน</dt><dd>${settings.billingRules?.requireAllTimesheets ? 'ใช่' : 'ไม่'}</dd>
+            <dt>ต้องมีคนกดยืนยัน</dt><dd><span class="tg ${settings.billingRules?.requireHumanCheck === false ? 'mu' : 'ok'}">
+              ${settings.billingRules?.requireHumanCheck === false ? 'ไม่ (โหมด auto)' : 'ใช่ (โหมด manual)'}</span></dd>
+            <dt>ส่งอีเมลอัตโนมัติ</dt><dd><span class="tg ok">ไม่ส่ง — สร้างร่างเท่านั้น</span></dd>
+          </dl></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tp ${tab === 2 ? 'on' : ''}" data-spane="2">
+      <div class="card">
+        <div class="hd"><h3>เพิ่มผู้ใช้ใหม่</h3></div>
+        <div class="bd">
+          <div class="frm">
+            <label>Username / อีเมล<input id="uUsername" type="text" autocomplete="off"></label>
+            <label>ชื่อ<input id="uName" type="text" autocomplete="off"></label>
+            <label>รหัสผ่าน <small>(อย่างน้อย 8 ตัวอักษร)</small><input id="uPassword" type="password" autocomplete="new-password"></label>
+            <label>Role<span class="selectchip"><select id="uRole">
+              <option value="operator">operator</option>
+              <option value="admin">admin</option>
+            </select>${icon('cd')}</span></label>
+          </div>
+        </div>
+        <div class="ft"><button class="btn pri" id="uAdd">+ เพิ่มผู้ใช้</button></div>
+      </div>
+
+      <div class="card"><div class="tw"><table>
+        <thead><tr><th>Username</th><th>ชื่อ</th><th>Role</th><th>สถานะ</th><th>สร้างเมื่อ</th><th></th></tr></thead>
+        <tbody>${(users ?? []).map((u) => {
+          const isSelf = u.username === state.username;
+          return `
+          <tr><td class="n">${esc(u.username)}</td>
+            <td>${esc(u.name_th)}</td>
+            <td><span class="selectchip"><select class="uRoleSel" data-user="${esc(u.username)}"
+                  ${isSelf ? 'disabled title="แก้ role ของตัวเองไม่ได้"' : ''}>
+                <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>operator</option>
+                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+              </select>${icon('cd')}</span></td>
+            <td><span class="tg ${u.active ? 'ok' : 'mu'}">${u.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</span></td>
+            <td>${dt(u.created_at)}</td>
+            <td><button class="lk uToggle" data-user="${esc(u.username)}" data-active="${u.active}"
+                ${isSelf ? 'disabled title="ปิดใช้งานบัญชีตัวเองไม่ได้"' : ''}>
+                ${u.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</button></td></tr>`;
+        }).join('')}</tbody>
+      </table></div></div>
+    </div>
+
+    <div class="tp ${tab === 3 ? 'on' : ''}" data-spane="3">
+      <div class="card">
+        <div class="hd"><h3>เพิ่มผู้รับแจ้งเตือน</h3></div>
+        <div class="bd">
+          <div class="frm">
+            <label>ช่องทาง<span class="selectchip"><select id="nChannel">
+              <option value="line">LINE</option>
+              <option value="email">อีเมล</option>
+            </select>${icon('cd')}</span></label>
+            <label>ชื่อ (แสดงในรายการ)<input id="nLabel" type="text" placeholder="เช่น นิชา" autocomplete="off"></label>
+            <label>ปลายทาง
+              <span class="selectchip" id="nTargetLineWrap" style="${(lineUsers ?? []).length ? '' : 'display:none'}">
+                <select id="nTargetLine">
+                  <option value="">— เลือกคนที่เคยทักบอทมาแล้ว —</option>
+                  ${(lineUsers ?? []).map((u) => `
+                    <option value="${esc(u.userId)}" data-name="${esc(u.displayName ?? '')}">
+                      ${esc(u.displayName ?? 'ไม่พบชื่อ')} (${esc(u.userId.slice(0, 10))}…)
+                    </option>`).join('')}
+                  <option value="__manual">อื่นๆ — กรอก userId เอง</option>
+                </select>${icon('cd')}
+              </span>
+              <input id="nTarget" type="text" placeholder="LINE user ID หรืออีเมล" autocomplete="off"
+                ${(lineUsers ?? []).length ? 'style="display:none"' : ''}>
+            </label>
+          </div>
+        </div>
+        <div class="ft"><button class="btn pri" id="nAdd">+ เพิ่ม</button></div>
+      </div>
+
+      <div class="card"><div class="tw"><table>
+        <thead><tr><th>ช่องทาง</th><th>ชื่อ</th><th>ปลายทาง</th><th></th></tr></thead>
+        <tbody>${(recipients ?? []).map((r) => {
+          /* ชื่อที่โชว์ตรงนี้ต้องเป็นชื่อจริงในโปรไฟล์ LINE ของคนนั้น ไม่ใช่ป้ายที่พิมพ์ไว้ตอนเพิ่ม
+             (พิมพ์ผิด/เปลี่ยนชื่อในไลน์แล้วป้ายเดิมจะไม่ตรงคนอีกต่อไป) — ถ้าหาโปรไฟล์ไม่เจอ
+             (บล็อกบอท/เลิกเป็นเพื่อนไปแล้ว) ค่อยใช้ป้ายที่เก็บไว้เป็นสำรอง */
+          const liveName = r.channel === 'line'
+            ? (lineUsers ?? []).find((u) => u.userId === r.target)?.displayName : null;
+          const label = liveName ?? r.label;
+          return `
+          <tr><td><span class="tg ${r.channel === 'line' ? 'ok' : 'mu'}">${r.channel === 'line' ? 'LINE' : 'อีเมล'}</span></td>
+            <td>${esc(label)}</td>
+            <td class="n">${esc(r.target)}</td>
+            <td><button class="lk nrm" data-id="${r.id}" data-label="${esc(label)}">ลบ</button></td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      ${(recipients ?? []).length === 0 ? '<div class="empty">ยังไม่มีผู้รับแจ้งเตือน</div>' : ''}</div>
+    </div>
+
+    <div class="tp ${tab === 4 ? 'on' : ''}" data-spane="4">
+      <div class="card"><div class="tw"><table>
+        <thead><tr><th>เวลา</th><th>ผู้ทำ</th><th>การกระทำ</th><th>เป้าหมาย</th><th></th></tr></thead>
+        <tbody>${(log ?? []).map((l) => `
+          <tr><td class="n">${dt(l.at)}</td>
+            <td>${esc(l.actor)}</td>
+            <td>${esc(l.action)}</td>
+            <td>${l.entity_type ? `${esc(l.entity_type)} · ${esc(l.entity_id ?? '')}` : '—'}</td>
+            <td>${l.detail ? `<details class="raw"><summary>▶ รายละเอียด</summary>
+                <pre class="code">${esc(JSON.stringify(l.detail, null, 2))}</pre></details>` : ''}</td></tr>`).join('')}</tbody>
+      </table></div>
+      ${(log ?? []).length === 0 ? '<div class="empty">ยังไม่มีบันทึก</div>' : ''}</div>
+    </div>
+
+  </div>`;
+
+  main.querySelectorAll('[data-systab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.sysTab = Number(btn.dataset.systab);
+      renderSystemAdmin();
+    });
+  });
+
+  if (tab === 3) {
+    /* ปลายทาง LINE เลือกจากดรอปดาวน์คนที่เคยทักบอทมาแล้วได้ ไม่ต้องก็อป userId มาวางเอง
+       (LINE ไม่มีหน้าจอโชว์ userId ตรงๆ ให้ดู) — สลับกับช่องกรอกเองตอนเลือกอีเมล หรือกด "อื่นๆ" */
+    const hasLineUsers = (lineUsers ?? []).length > 0;
+    const syncTargetField = () => {
+      const wantsManual = el('nChannel').value !== 'line' || !hasLineUsers || el('nTargetLine').value === '__manual';
+      el('nTargetLineWrap').style.display = wantsManual ? 'none' : '';
+      el('nTarget').style.display = wantsManual ? '' : 'none';
+      if (wantsManual && el('nChannel').value === 'line' && el('nTargetLine').value === '__manual') {
+        el('nTarget').value = '';
+        el('nTarget').focus();
+      }
+    };
+    el('nChannel').addEventListener('change', () => {
+      if (el('nChannel').value !== 'line') { el('nLabel').readOnly = false; }
+      syncTargetField();
+    });
+    if (hasLineUsers) {
+      el('nTargetLine').addEventListener('change', () => {
+        const opt = el('nTargetLine').selectedOptions[0];
+        el('nTarget').value = opt.value === '__manual' ? '' : opt.value;
+        /* เลือกคนที่รู้จักแล้ว → ล็อกชื่อให้ตรงโปรไฟล์ LINE เสมอ พิมพ์ทับเองไม่ได้ กันชื่อเพี้ยน
+           จากที่คนพิมพ์เอง ส่วน "อื่นๆ" (ไม่รู้จักชื่อจริง) ปลดล็อกให้พิมพ์ป้ายเองได้ */
+        if (opt.value && opt.value !== '__manual') {
+          el('nLabel').value = opt.dataset.name || opt.value;
+          el('nLabel').readOnly = true;
+        } else {
+          el('nLabel').value = '';
+          el('nLabel').readOnly = false;
+        }
+        syncTargetField();
+      });
+    }
+
+    el('nAdd').addEventListener('click', async () => {
+      const channel = el('nChannel').value;
+      const label = el('nLabel').value.trim();
+      const target = el('nTarget').value.trim();
+      if (!target) { toast('ต้องระบุปลายทาง', true); return; }
+      try {
+        await api('/notification-recipients', { method: 'POST', body: JSON.stringify({ channel, label, target }) });
+        toast(`เพิ่ม "${label || target}" แล้ว`);
+        renderSystemAdmin();
+      } catch (error) { toast(error.message, true); }
+    });
+
+    main.querySelectorAll('.nrm').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm(`ลบผู้รับแจ้งเตือน "${btn.dataset.label}" ?`)) return;
+        try {
+          await api(`/notification-recipients/${encodeURIComponent(btn.dataset.id)}`, { method: 'DELETE' });
+          toast('ลบแล้ว');
+          renderSystemAdmin();
+        } catch (error) { toast(error.message, true); }
+      });
+    });
+  }
+
+  if (tab !== 2) return;
+
+  el('uAdd').addEventListener('click', async () => {
+    const username = el('uUsername').value.trim();
+    const nameTh = el('uName').value.trim();
+    const password = el('uPassword').value;
+    const role = el('uRole').value;
+    if (!username || !nameTh || !password) {
+      toast('ต้องกรอก username, ชื่อ, และรหัสผ่านให้ครบ', true);
+      return;
+    }
+    try {
+      await api('/users', { method: 'POST', body: JSON.stringify({ username, nameTh, password, role }) });
+      toast(`เพิ่มผู้ใช้ "${nameTh}" แล้ว`);
+      renderSystemAdmin();
+    } catch (error) { toast(error.message, true); }
+  });
+
+  main.querySelectorAll('.uRoleSel').forEach((sel) => {
+    sel.addEventListener('change', async () => {
+      try {
+        await api(`/users/${encodeURIComponent(sel.dataset.user)}`, {
+          method: 'PATCH', body: JSON.stringify({ role: sel.value }),
+        });
+        toast(`เปลี่ยน role ของ ${sel.dataset.user} เป็น ${sel.value} แล้ว`);
+        renderSystemAdmin();
+      } catch (error) { toast(error.message, true); renderSystemAdmin(); }
+    });
+  });
+
+  main.querySelectorAll('.uToggle').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const active = btn.dataset.active === 'true';
+      if (active && !confirm(`ปิดใช้งานผู้ใช้ "${btn.dataset.user}" ? เซสชันที่ล็อกอินอยู่ตอนนี้จะถูกเลิกทันที`)) return;
+      try {
+        await api(`/users/${encodeURIComponent(btn.dataset.user)}`, {
+          method: 'PATCH', body: JSON.stringify({ active: !active }),
+        });
+        toast(active ? `ปิดใช้งาน ${btn.dataset.user} แล้ว` : `เปิดใช้งาน ${btn.dataset.user} แล้ว`);
+        renderSystemAdmin();
       } catch (error) { toast(error.message, true); }
     });
   });
@@ -2123,19 +2524,13 @@ async function renderInvoices() {
             ${i.email_sent_at ? `<span class="sub">ส่งเมลแล้ว ${dt(i.email_sent_at)}</span>` : ''}</td></tr>`).join('')
         : '<tr><td colspan="8" class="empty">ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3</td></tr>'}</tbody>
       ${invoices.length ? `<tfoot><tr>
-        <td colspan="3" style="font-weight:600">รวมที่สร้างเข้า FlowAccount แล้ว</td>
+        <td colspan="3" style="font-weight:600">รวมยอดที่วางบิลแล้ว</td>
         <td class="r n">${money(sum('total_after_discount'))}</td>
         <td class="r n">${money(sum('vat'))}</td>
         <td class="r n" style="color:var(--cr)">−${money(sum('withholding_tax'))}</td>
         <td class="r n" style="font-weight:700;color:var(--brand-d)">${money(sum('payment_amount'))}</td>
         <td></td></tr></tfoot>` : ''}
     </table></div></div>
-
-    <div class="note">${icon('info')}<span>
-      <strong>ตารางนี้คือสิ่งที่ระบบส่งเข้าไป ไม่ใช่สถานะล่าสุดใน FlowAccount</strong> —
-      ถ้ามีคนไปแก้หรืออนุมัติเอกสารในระบบบัญชี ตารางนี้จะไม่รู้
-      และไม่มีข้อมูลการรับชำระเงิน เพราะระบบนี้ไม่ได้บันทึกส่วนนั้น · คลิกแถวเพื่อเปิดรอบบิล
-    </span></div>
   </div>`;
 
   bindRows();
@@ -2144,7 +2539,7 @@ async function renderInvoices() {
 const RENDER = {
   dash: renderDashboard,
   upload: renderUpload, queue: renderQueue, cycles: renderCycles,
-  invoices: renderInvoices, master: renderMaster,
+  invoices: renderInvoices, master: renderMaster, sysadmin: renderSystemAdmin,
 };
 
 /** แท็บที่ควรถูกไฮไลต์เมื่ออยู่ในหน้าย่อย */
@@ -2197,11 +2592,16 @@ async function syncBadges() {
   mode.className = `env mode ${p.manualMode ? 'dry' : 'live'}`;
   mode.innerHTML = `<i></i> โหมด ${p.manualMode ? 'Manual — คนกดเอง' : 'Auto'}`;
 
-  /* ชื่อบนแถบบนต้องเป็นชื่อเดียวกับที่ audit log บันทึก ไม่ใช่ป้ายตกแต่ง */
-  const unknown = p.actor === 'ยังไม่ได้ระบุผู้ใช้';
+  /* ชื่อบนแถบบนต้องเป็นชื่อเดียวกับที่ audit log บันทึก ไม่ใช่ป้ายตกแต่ง — มาจาก session ที่ login เข้ามา */
+  const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', operator: 'พนักงานบัญชี' };
   el('actorName').textContent = p.actor;
-  el('actorAvatar').textContent = unknown ? '?' : initials(p.actor);
-  el('actorRole').textContent = unknown ? 'ตั้ง ACTOR ใน .env' : 'ผู้ใช้ระบบ';
+  el('actorAvatar').textContent = initials(p.actor);
+  el('actorRole').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
+
+  /* เมนู "จัดการระบบ" (ผู้ใช้/บันทึกระบบ) เห็นเฉพาะ admin — server บล็อก 403 ไว้อีกชั้นอยู่แล้ว
+     แต่ operator ไม่ควรเห็นปุ่มที่กดแล้วเจอ error ตั้งแต่แรก */
+  state.role = p.role;
+  el('sysAdminTab').hidden = p.role !== 'admin';
 }
 
 /* หนึ่งการกระทำมักบันทึกหลายเหตุการณ์ติดกัน (เช่นอนุมัติรอบบิล)
@@ -2410,7 +2810,28 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeBell();
 });
 
-(async function boot() {
+/* ── login / logout ──────────────────────────────────────────
+   หน้า login เป็น overlay คลุมทับทุกอย่าง (ดู .login-screen ใน styles.css)
+   ไม่ต้องแยกหน้าจริง แค่โชว์/ซ่อนทับของเดิม เพราะ shell ที่เหลือไม่ทำอะไรถ้าไม่มี session อยู่แล้ว */
+
+function showLoginScreen(message) {
+  el('loginScreen').hidden = false;
+  if (message) {
+    el('loginErr').textContent = message;
+    el('loginErr').hidden = false;
+  }
+  clearInterval(pulseTimer);
+  changeStream?.close();
+}
+
+function hideLoginScreen() {
+  el('loginScreen').hidden = true;
+  el('loginErr').hidden = true;
+  el('loginForm').reset();
+}
+
+async function startApp() {
+  hideLoginScreen();
   applySideState(localStorage.getItem(SIDE_KEY) === '1');
 
   el('mastDate').textContent = new Date().toLocaleDateString('th-TH', {
@@ -2420,4 +2841,41 @@ document.addEventListener('keydown', (e) => {
   render();          // render() เรียก syncBadges() ให้ป้ายขึ้นรอบแรกอยู่แล้ว
   listenForChanges();
   startPulse();
+}
+
+el('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = el('loginBtn');
+  btn.disabled = true;
+  el('loginErr').hidden = true;
+  try {
+    await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: el('loginUser').value.trim(),
+        password: el('loginPass').value,
+      }),
+    });
+    await startApp();
+  } catch (error) {
+    el('loginErr').textContent = error.message;
+    el('loginErr').hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+el('logoutBtn').addEventListener('click', async () => {
+  if (!confirm('ออกจากระบบ?')) return;
+  try { await api('/auth/logout', { method: 'POST' }); } catch { /* ไม่ได้ก็เคลียร์ฝั่งเราไปเลย */ }
+  showLoginScreen();
+});
+
+(async function boot() {
+  let me;
+  try { me = await api('/auth/me'); } catch { me = { loggedIn: false }; }
+  if (me.loggedIn) {
+    state.username = me.username; // ใช้กันแก้ role/ปิดใช้งานบัญชีตัวเองในหน้าจัดการระบบ
+    await startApp();
+  } else showLoginScreen();
 })();

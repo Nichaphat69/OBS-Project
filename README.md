@@ -15,18 +15,37 @@
 npm install
 cp .env.example .env      # แก้ค่าตามต้องการ (รันได้เลยโดยไม่ต้องแก้)
 npm run seed              # ใส่ข้อมูลจากเอกสารจริงรอบ ม.ค. 2026
+npm run user:create       # สร้างบัญชี login ครั้งแรก — ไม่มีบัญชีเลยเปิดเว็บไม่ได้ (ดูหัวข้อ "เข้าสู่ระบบ")
 npm start                 # เปิด http://localhost:4300
 npm test                  # ทดสอบ core logic กับตัวเลขในใบแจ้งหนี้จริง
 ```
 
 ต้องใช้ **Node 22.5 ขึ้นไป** (ใช้ `node:sqlite` ที่มาพร้อม Node) มี dependency เดียวคือ
-`@anthropic-ai/sdk` ซึ่งใช้เฉพาะตอนอ่านไฟล์ Timesheet PDF — ส่วนอื่นของระบบรันได้โดยไม่ต้องมี API key
+`pdf-to-img` (แปลง Timesheet PDF เป็นรูปก่อนส่งให้โมเดล vision) — AI ทั้งหมดเรียกโมเดลที่รันในเครื่อง
+ผ่าน LM Studio/Ollama ไม่ต้องมี API key หรือพึ่งบริการ AI ภายนอกเลย
 
 คำสั่งอื่น
 ```bash
 npm run reset             # ล้างฐานข้อมูลแล้วใส่ข้อมูลใหม่
 npm run dev               # รันแบบ auto-reload
+npm run user:create       # เพิ่มบัญชี login คนใหม่ — ระบุ role ได้ (admin/operator)
 ```
+
+---
+
+## เข้าสู่ระบบ
+
+หน้าเว็บทุกหน้าต้อง login ก่อนใช้งาน — เก็บรหัสผ่านเอง (scrypt) ยังไม่ผูก SSO ของบริษัท
+สร้างบัญชีด้วย `npm run user:create` (ถามทีละคำ หรือใส่ค่าตรงในคำสั่งเดียวก็ได้ ดูใน
+`scripts/create-user.js`) มี 2 role:
+
+| Role | ทำอะไรได้ |
+|---|---|
+| `admin` | ทำได้ทุกอย่าง รวมถึงแก้ข้อมูลหลัก (เรทพนักงาน สัญญา ชื่อพ้อง วันหยุด) |
+| `operator` | งานประจำวันได้หมด (อัปโหลด Timesheet, ตรวจ Manday, อนุมัติวางบิล, ร่างอีเมล) แต่แก้ข้อมูลหลักไม่ได้ |
+
+n8n และ LINE webhook ไม่ต้อง login — ยืนยันตัวด้วยวิธีของตัวเอง (n8n ยิงตรงไม่มี cookie,
+LINE ตรวจลายเซ็น HMAC + รายชื่อ `LINE_APPROVER_USER_IDS`) รายละเอียดดู `src/auth.js`
 
 ---
 
@@ -49,7 +68,7 @@ npm run dev               # รันแบบ auto-reload
 
 | ขั้น | หน้าที่ | ไฟล์ |
 |---|---|---|
-| 1 | อ่านอีเมลแจ้งอนุมัติ + ดึงไฟล์ Timesheet มาอ่านด้วย Claude | `src/extract/timesheet.js` |
+| 1 | อ่านอีเมลแจ้งอนุมัติ + ดึงไฟล์ Timesheet มาอ่านด้วยโมเดล vision ในเครื่อง | `src/extract/timesheet.js` |
 | 2 | ตรวจและคำนวณ Manday เทียบปฏิทินวันหยุด | `src/domain/manday.js`, `src/domain/calendar.js` |
 | 3 | ประกอบใบแจ้งหนี้และส่งเข้า FlowAccount **เป็นร่างเท่านั้น** | `src/domain/invoice.js`, `src/integrations/flowaccount.js` |
 | 4 | ร่างอีเมลวางบิล — ระบบไม่ส่งเอง | `src/service.js` → `buildEmailDraft()` |
@@ -152,7 +171,8 @@ src/
 │   ├── invoice.js            ประกอบใบแจ้งหนี้ VAT WHT
 │   └── matching.js           จับคู่ชื่อและตำแหน่งข้ามเอกสาร
 ├── integrations/flowaccount.js  API client (มีโหมด dry-run)
-├── extract/timesheet.js      อ่าน Timesheet PDF ด้วย Claude + ตรวจซ้ำด้วยโค้ด
+├── extract/timesheet.js      อ่าน Timesheet PDF ด้วยโมเดล vision ในเครื่อง + ตรวจซ้ำด้วยโค้ด
+├── llm/localClient.js        เรียกโมเดลในเครื่อง (LM Studio/Ollama) — ใช้ร่วมกับ email.js
 ├── db/
 │   ├── schema.sql            โครงฐานข้อมูล
 │   ├── index.js              node:sqlite wrapper + audit log
@@ -221,10 +241,9 @@ Workflow พร้อม import อยู่ในโฟลเดอร์ [`n8n
 
 | Workflow | หน้าที่ |
 |---|---|
-| `01-ingest-timesheet.json` | Gmail Trigger จับอีเมลแจ้งอนุมัติ → ตรวจว่าสถานะเป็น "อนุมัติ" → ดึงไฟล์แนบ → `POST /ingest` → แตกทางตาม `nextAction` |
-| `02-daily-billing-check.json` | ทุกวันทำการ 09:00 เรียก `/cycles/ready` แล้วสร้างร่างใบแจ้งหนี้รอบที่พร้อม |
+| `01-obs-workflow.json` | ไฟล์เดียว 2 trigger — **Gmail Trigger**: จับอีเมลแจ้งอนุมัติ → ตรวจว่าสถานะเป็น "อนุมัติ" → ดึงไฟล์แนบ → `POST /ingest` → แตกทางตาม `nextAction` · **Schedule Trigger**: ทุกวันทำการ 09:00 เรียก `/cycles/ready` แล้วสร้างร่างใบแจ้งหนี้รอบที่พร้อม |
 
-`POST /api/timesheets/ingest` คือจุดต่อหลัก — อ่านไฟล์ด้วย Claude → จับคู่พนักงานผ่านตารางชื่อพ้อง
+`POST /api/timesheets/ingest` คือจุดต่อหลัก — อ่านไฟล์ด้วยโมเดล vision ในเครื่อง → จับคู่พนักงานผ่านตารางชื่อพ้อง
 → บันทึกลง DB → คำนวณ Manday → คืน `nextAction` บอกว่าต้องทำอะไรต่อ
 ใช้ `documentNo` เป็น primary key จึง**ยิงซ้ำได้ ไม่เกิดข้อมูลซ้ำ**
 

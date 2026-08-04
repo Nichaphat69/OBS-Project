@@ -138,7 +138,7 @@
 
 | # | เอกสารสั่ง | สถานะ |
 |---|---|---|
-| 1.1 | Gmail/IMAP Trigger จับ subject "แจ้งอนุมัติเอกสาร TimeSheet" | ✅ `n8n/01-ingest-timesheet.json` |
+| 1.1 | Gmail/IMAP Trigger จับ subject "แจ้งอนุมัติเอกสาร TimeSheet" | ✅ `n8n/01-obs-workflow.json` (Gmail Trigger — รวมกับ workflow ตรวจรอบบิลรายวันเป็นไฟล์เดียวแล้ว 4 ส.ค. 69) |
 | 1.2 | IF สถานะต้องเป็น "อนุมัติ" | ✅ |
 | 1.3 | ดึง Timesheet PDF | ✅ |
 | 1.4 | LLM Extract → JSON ตามสคีมาที่ระบุ | ✅ `extract/timesheet.js` |

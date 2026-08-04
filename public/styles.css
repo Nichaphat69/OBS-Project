@@ -269,6 +269,41 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 }
 .who .wt b { display: block; font-size: 12.5px; line-height: 1.3; color: var(--ink); }
 .who .wt span { display: block; font-size: 10.5px; color: var(--mut); line-height: 1.2; }
+.who .logout {
+  border: none; background: none; color: var(--mut); cursor: pointer;
+  padding: 6px; margin-left: 2px; border-radius: var(--r-ctl); display: grid; place-items: center;
+}
+.who .logout:hover { background: var(--hov); color: var(--cr); }
+
+/* ── หน้า login — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ───────── */
+.login-screen {
+  position: fixed; inset: 0; z-index: 100; background: var(--page);
+  display: grid; place-items: center; padding: 24px;
+}
+/* [hidden] มี specificity สูงกว่า .login-screen เฉยๆ (มีทั้ง class และ attribute) จึงชนะเสมอ
+   ถ้าไม่มีบรรทัดนี้ display:grid ข้างบนจะทับกฎ [hidden]{display:none} ของเบราว์เซอร์เอง
+   เพราะ CSS จาก author เหนือกว่า user-agent default ไม่ว่า specificity จะเท่ากันหรือไม่ */
+.login-screen[hidden] { display: none; }
+.login-card {
+  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
+  box-shadow: var(--sh1); padding: 36px 32px; width: 100%; max-width: 360px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.login-card .blogo { width: 180px; height: auto; margin-bottom: 6px; }
+.login-card h1 { font-size: 18px; color: var(--ink); margin: 0; }
+.login-card .lc-sub { font-size: 12.5px; color: var(--mut); margin: -8px 0 4px; line-height: 1.5; }
+.login-card label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
+  font-weight: 600; color: var(--ink2); }
+.login-card input {
+  font: inherit; font-size: 13.5px; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); height: var(--h-ctl); padding: 0 11px;
+}
+.login-card input:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: var(--brand); }
+.login-card .btn.pri { justify-content: center; margin-top: 4px; }
+.login-card .lc-err {
+  font-size: 12.5px; color: var(--cr); background: var(--crb); border: 1px solid var(--crl);
+  border-radius: var(--r-ctl); padding: 8px 11px;
+}
 
 .env {
   display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px;
@@ -345,6 +380,12 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 .card > .hd .rt { margin-left: auto; font-size: 12px; color: var(--mut); }
 .card > .bd { padding: 26px 24px; }
 .card > .bd.flush { padding: 0; }
+
+/* แถบปุ่มท้ายการ์ด (เช่น "บันทึกเข้าระบบ") — จัดกลาง ไม่ใช่ปล่อยชิดซ้ายตามค่าเริ่มต้นของ block */
+.card > .ft {
+  display: flex; justify-content: center; padding: 18px 24px;
+  border-top: 1px solid var(--hair);
+}
 
 /* ═══ ตัวกรองแบบ pill + ช่องค้นหา ═══ */
 .filterbar {
@@ -675,6 +716,10 @@ tbody td {
 tbody tr:last-child td { border-bottom: none; }
 tbody tr.rw { cursor: pointer; transition: background .1s; }
 tbody tr.rw:hover { background: var(--hov); }
+tfoot td {
+  padding: 14px 20px; font-size: 13.5px; color: var(--mut);
+  background: var(--sunk); border-top: 1px solid var(--rule);
+}
 .r { text-align: right; }
 /* คอลัมน์ตัวเลขเงิน — ให้น้ำหนักมากกว่าข้อความ */
 td.r.n, .amt {
@@ -720,26 +765,35 @@ td .nm { font-weight: 600; }
 .back:hover { text-decoration: underline; }
 
 .prog {
-  display: flex; align-items: center; padding: 18px 22px; background: var(--paper);
+  display: flex; align-items: flex-start; padding: 28px 26px 24px; background: var(--paper);
   border: 1px solid var(--rule); border-radius: var(--r-card); margin-bottom: 22px;
   overflow-x: auto; box-shadow: var(--sh1);
 }
-.pstep { display: flex; align-items: center; gap: 11px; white-space: nowrap; }
-.pstep .cir {
-  width: 30px; height: 30px; display: grid; place-items: center;
-  flex: none; font-size: 12px; font-weight: 700; background: var(--sunk);
-  border: 1.5px solid var(--rule); color: var(--fnt); font-variant-numeric: tabular-nums;
+.pstep {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 8px; flex: none; width: 150px;
 }
-.pstep.dn .cir { background: var(--okb); border-color: var(--okl); color: var(--ok); }
+.pstep .cir {
+  width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+  flex: none; background: var(--sunk); border: 1.5px solid var(--rule); color: var(--fnt);
+}
+.pstep .cir svg { width: 22px; height: 22px; }
+.pstep.dn .cir { background: var(--ok); border-color: var(--ok); color: #fff; }
 .pstep.cu .cir {
   background: var(--brand); border-color: var(--brand); color: #fff;
-  box-shadow: 0 0 0 4px var(--tint);
+  box-shadow: 0 0 0 6px var(--tint), 0 10px 20px -8px rgba(0,120,212,.55);
 }
-.pstep .pl { font-size: 12.5px; color: var(--mut); }
+.pstep .cap {
+  font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--fnt);
+}
+.pstep.dn .cap { color: var(--ok); }
+.pstep.cu .cap { color: var(--brand); }
+.pstep .pl { font-size: 13px; font-weight: 700; color: var(--mut); line-height: 1.3; }
 .pstep.dn .pl { color: var(--ink2); }
-.pstep.cu .pl { color: var(--brand-d); font-weight: 700; }
-.pline { flex: 1; min-width: 26px; height: 2px; background: var(--rule); margin: 0 14px; }
-.pline.dn { background: var(--okl); }
+.pstep.cu .pl { color: var(--brand-d); }
+.pline { flex: 1; min-width: 26px; height: 2px; background: var(--rule); margin: 25px 0 0; }
+.pline.dn { background: var(--ok); }
 
 .tabs {
   display: flex; gap: 4px; border-bottom: 1px solid var(--rule);
@@ -1195,6 +1249,7 @@ td.n, .docid { white-space: nowrap; }
   border:1px solid var(--rule); border-radius:var(--r-ctl); height:var(--h-ctl);
   padding:0 11px; width:100%; }
 .frm input:focus{ outline:2px solid var(--brand); outline-offset:-1px; border-color:var(--brand); }
+.frm input[readonly]{ background:var(--sunk); color:var(--mut); cursor:default; }
 .frm small{ font-weight:400; color:var(--mut); font-size:11.5px; line-height:1.45; }
 
 .fsec{ margin-top:18px; padding-top:14px; border-top:1px solid var(--hair); }
@@ -1219,7 +1274,32 @@ td.n, .docid { white-space: nowrap; }
 .tg.alias .ax{ border:none; background:none; cursor:pointer; padding:0 0 0 2px;
   color:var(--mut); font-size:13px; line-height:1; font-family:inherit; }
 .tg.alias .ax:hover{ color:var(--cr); }
+/* คลิกที่แท็กเพื่อแก้ไข — ต้องดูรู้ว่ากดได้ ไม่ใช่แค่ป้ายเฉยๆ */
+.tg.alias.aliastag{ cursor:pointer; }
+.tg.alias.aliastag:hover{ background:var(--sel); }
+/* โหมดแก้ไข/เพิ่ม — เปิด input ในหน้าแทน prompt() ของเบราว์เซอร์ */
+.tg.editing{ background:var(--paper); border:1px solid var(--brand); padding:2px 4px 2px 8px; }
+.aliasInput{ font:inherit; font-size:13px; color:var(--ink); background:transparent;
+  border:none; outline:none; min-width:110px; padding:2px 0; }
+.tg.editing .save, .tg.editing .cancel{ border:none; background:none; cursor:pointer;
+  font-size:13px; line-height:1; font-family:inherit; padding:0 3px; }
+.tg.editing .save{ color:var(--ok); font-weight:700; }
+.tg.editing .cancel{ color:var(--mut); }
+.tg.editing .save:hover{ color:var(--brand); }
+.tg.editing .cancel:hover{ color:var(--cr); }
 .arow{ display:flex; gap:10px; margin-top:6px; }
+
+/* แก้เรทต่อเดือน — input ตัวเลขในหน้าแทน prompt() เหมือนกัน */
+.rateEditRow{ display:inline-flex; align-items:center; gap:4px; background:var(--paper);
+  border:1px solid var(--brand); border-radius:var(--r-ctl); padding:2px 4px 2px 8px; }
+.rateInput{ font:inherit; font-size:13px; color:var(--ink); background:transparent;
+  border:none; outline:none; width:100px; padding:2px 0; text-align:right; }
+.rateEditRow .save, .rateEditRow .cancel{ border:none; background:none; cursor:pointer;
+  font-size:13px; line-height:1; font-family:inherit; padding:0 3px; }
+.rateEditRow .save{ color:var(--ok); font-weight:700; }
+.rateEditRow .cancel{ color:var(--mut); }
+.rateEditRow .save:hover{ color:var(--brand); }
+.rateEditRow .cancel:hover{ color:var(--cr); }
 .lk.edrate{ display:block; margin-top:3px; font-weight:400; }
 
 /* แถวเพิ่มวันหยุด */
@@ -1232,6 +1312,14 @@ td.n, .docid { white-space: nowrap; }
 /* แถบปิดงานในหน้าอนุมัติรอบบิล */
 .sendbar{ display:flex; align-items:center; justify-content:space-between; gap:12px;
   flex-wrap:wrap; border-bottom:1px solid var(--hair); }
+
+/* กล่องยืนยันว่าส่งเมลแล้ว — โชว์ว่าส่งถึงใคร ใครบันทึก เมื่อไหร่ ในกล่องเดียว อ่านง่ายกว่าแถบข้อความเปล่าๆ */
+.sentok{ display:flex; align-items:flex-start; gap:12px; padding:16px 18px;
+  border-radius:var(--r-card); background:var(--okb); border:1px solid var(--okl); }
+.sentok .ic{ color:var(--ok); flex:none; margin-top:1px; }
+.sentok .ttl{ font-weight:600; color:var(--ok); font-size:13.5px; }
+.sentok .meta{ font-size:12.5px; color:var(--ink2); margin-top:4px; line-height:1.7; }
+.sentok .meta b{ color:var(--ink); font-weight:600; }
 
 @media (max-width: 900px){
   .hadd{ grid-template-columns:1fr; }

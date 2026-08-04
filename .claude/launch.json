@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 4300
+    },
+    {
+      "name": "n8n",
+      "runtimeExecutable": "n8n",
+      "runtimeArgs": ["start"],
+      "port": 5678
     }
   ]
 }

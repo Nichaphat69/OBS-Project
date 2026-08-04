@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   contract_id         TEXT NOT NULL REFERENCES contracts(id),
   period              TEXT NOT NULL,
   document_no         TEXT,               -- เลขที่ FlowAccount ออกให้
+  share_link          TEXT,               -- ลิงก์ดูเอกสาร (พิมพ์เป็น PDF ได้) จาก FlowAccount — ข้อ 4.3
   document_date       TEXT NOT NULL,
   due_date            TEXT,
   total               REAL NOT NULL,
@@ -172,6 +173,43 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   amount         REAL NOT NULL,
   PRIMARY KEY (invoice_id, seq)
 );
+
+-- ── ประตูมนุษย์ก่อนสร้างร่างใน FlowAccount (ข้อ 4.2) ─────────
+-- n8n (01-ingest, 02-daily) ต้องเรียก /request-approval แทน /approve ตรงๆ
+-- สร้างร่างจริงเกิดขึ้นต่อเมื่อมีคนกด "อนุมัติ" ใน LINE เท่านั้น (ดู service.decideCycleApproval)
+CREATE TABLE IF NOT EXISTS cycle_approvals (
+  contract_id     TEXT NOT NULL REFERENCES contracts(id),
+  period          TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending',   -- pending → approved | rejected
+  requested_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  requested_by    TEXT,
+  decided_at      TEXT,
+  decided_by      TEXT,               -- LINE userId ของคนกด
+  line_message_id TEXT,
+  PRIMARY KEY (contract_id, period)
+);
+
+-- ── ผู้ใช้งานระบบ (login) ────────────────────────────────────
+-- เก็บรหัสผ่านเอง (scrypt) ยังไม่ผูก SSO — ดู src/auth.js
+-- role: 'admin' แก้ข้อมูลหลักได้ (เรท/สัญญา/ชื่อพ้อง/วันหยุด) · 'operator' ทำงานประจำวันได้แต่แก้ไม่ได้
+CREATE TABLE IF NOT EXISTS users (
+  username      TEXT PRIMARY KEY,
+  name_th       TEXT NOT NULL,        -- ชื่อที่จะไปโผล่ใน audit log ทุกครั้งที่กดยืนยัน/อนุมัติ
+  role          TEXT NOT NULL DEFAULT 'operator',
+  active        INTEGER NOT NULL DEFAULT 1,  -- ปิดใช้งานได้โดยไม่ลบ (ประวัติ audit log ยังอ้างชื่อนี้อยู่)
+  password_salt TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token      TEXT PRIMARY KEY,
+  username   TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
 
 -- ── บันทึกการทำงาน (Audit trail) ───────────────────────────
 CREATE TABLE IF NOT EXISTS audit_log (

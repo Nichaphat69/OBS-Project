@@ -669,8 +669,9 @@
     "FlowAccount — " ป้ายพื้นเหลืองอ่อนตัวอักษรน้ำตาลส้ม "dry-run"
     "Credential — " ป้ายพื้นเหลืองอ่อน "ยังไม่ตั้ง"
     "ชนิดเอกสาร — billing-note"
-    "Claude API — " ป้ายพื้นเขียวอ่อน "พร้อมใช้"
-    "โมเดล — claude-opus-5" (ตัวอักษร monospace)
+    "AI (ในเครื่อง) — http://localhost:1234/v1" (ตัวอักษร monospace)
+    "โมเดลข้อความ — gemma-2-2b-it" (ตัวอักษร monospace)
+    "โมเดล vision (อ่าน PDF) — gemma-3-4b-it" (ตัวอักษร monospace)
   การ์ดขวา หัวการ์ด "การรับอีเมลและเงื่อนไขวางบิล"
     รายการคู่ชื่อกับค่าหกบรรทัด
     "กล่องอีเมล — billing@ipassion.co.th"

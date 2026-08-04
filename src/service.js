@@ -3,7 +3,7 @@
  * route ทุกตัวเรียกผ่านที่นี่ ไม่แตะ SQL เอง
  */
 
-import { all, get, run, logAudit, getSetting, tx } from './db/index.js';
+import { all, get, run, logAudit, getSetting, setSetting, tx } from './db/index.js';
 import { calculateManday, SEVERITY } from './domain/manday.js';
 import { buildInvoice, toFlowAccountPayload } from './domain/invoice.js';
 import { matchEmployee, checkPosition, MATCH } from './domain/matching.js';
@@ -13,7 +13,11 @@ import { nextPeriod } from './domain/calendar.js';
 import { buildManualSheet, manualExtractor } from './domain/manual-sheet.js';
 import { extractTimesheet } from './extract/timesheet.js';
 import { draftBillingEmail, readApprovalEmail } from './llm/email.js';
+import { localLlmBaseUrl, localTextModel, localVisionModel } from './llm/localClient.js';
 import { GmailClient, hasGmailCredentials } from './integrations/gmail.js';
+import {
+  LineClient, isAuthorizedApprover, verifyLineSignature, parseApprovalPostback,
+} from './integrations/line.js';
 
 // ── master data ────────────────────────────────────────────
 
@@ -571,7 +575,7 @@ export function markInvoiceEmailSent({ invoiceId, actor }) {
  * ป้อน Timesheet ด้วยมือ — ทางเข้าของการใช้งานแบบ manual
  *
  * ระบบต้องใช้งานได้ครบวงจรด้วยคนก่อน แล้วค่อยต่อ n8n ทีหลัง ทางนี้จึงไม่พึ่ง
- * ทั้งอีเมลและ Claude แต่ไหลผ่าน ingestTimesheet() ตัวเดียวกับที่ n8n ใช้
+ * ทั้งอีเมลและ AI แต่ไหลผ่าน ingestTimesheet() ตัวเดียวกับที่ n8n ใช้
  * ผลลัพธ์จึงเหมือนกันทุกอย่าง — จับคู่ชื่อ ตรวจปฏิทิน ตรวจ Manday คิดส่วนลด
  *
  * ตารางรายวันทั้งเดือนสร้างจากปฏิทินวันหยุดของลูกค้ารายนั้น คนกรอกแค่วันที่ลา
@@ -750,7 +754,7 @@ export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client
  */
 export async function readTimesheetFromEmail({
   messageId,
-  attachmentId = null,
+  attachmentFilename = null,
   client,
   extractor = extractTimesheet,
   emailReader = readApprovalEmail,
@@ -760,8 +764,12 @@ export async function readTimesheetFromEmail({
   const gmail = client ?? new GmailClient();
   const message = await gmail.getMessage(messageId);
 
-  const target = attachmentId
-    ? message.attachments.find((a) => a.attachmentId === attachmentId)
+  /* จับคู่ด้วยชื่อไฟล์ ไม่ใช่ attachmentId — attachmentId ของ Gmail เป็นโทเค็นชั่วคราว
+     ต่อการเรียก API แต่ละครั้ง ไม่ใช่ id ถาวรของไฟล์แนบ (ยืนยันแล้วว่าเปลี่ยนค่าทุกครั้งที่
+     เรียก messages.get ใหม่กับอีเมลเดียวกัน) ถ้าเทียบด้วย attachmentId ที่ค้างมาจากตอนดึง
+     รายการอีเมล (คนละครั้งเรียก API) จะหาไม่เจอเสมอ แม้ไฟล์แนบยังอยู่จริง */
+  const target = attachmentFilename
+    ? message.pdfAttachments.find((a) => a.filename === attachmentFilename)
     : message.pdfAttachments[0];
 
   if (!target) {
@@ -917,6 +925,34 @@ export const NEXT_ACTION = {
 };
 
 /**
+ * ข้อ 2.6 — แจ้งทีมบัญชีทาง LINE ทันทีที่ Manday ไม่ผ่านตรวจตอนอ่านไฟล์เข้าระบบ
+ * ส่งให้ทุกคนในรายชื่อผู้รับแจ้งเตือนช่องทาง LINE (หรือ env ถ้ายังไม่มีใครเพิ่มไว้)
+ * ตั้งใจไม่ให้ error ของ LINE ไปพังการอ่านไฟล์ที่เพิ่งสำเร็จ จึงจับ error ไว้เอง ไม่โยนต่อ
+ * — แค่แจ้งเตือน ไม่ต้องมีปุ่มให้กดตอบเหมือนข้อ 4.2
+ */
+async function notifyCheckFailed({ documentNo, employeeName, period, failures, client }) {
+  const line = client ?? new LineClient({ approverTarget: null });
+  const targets = lineApproverTargets();
+  const text =
+    `⚠️ ตรวจ Manday ไม่ผ่าน\n${employeeName} · รอบ ${thaiMonth(period)} · เลขที่ ${documentNo}\n\n` +
+    failures.map((f) => `• ${f}`).join('\n') +
+    '\n\nเข้าไปดูที่หน้า "ตรวจ Manday" เพื่อแก้ไข';
+
+  try {
+    await line.pushPlainText(text, { targets });
+    logAudit({
+      actor: 'system', action: 'notify_line_check_failed',
+      entityType: 'timesheet', entityId: documentNo, detail: { failures },
+    });
+  } catch (error) {
+    logAudit({
+      actor: 'system', action: 'notify_line_check_failed_error',
+      entityType: 'timesheet', entityId: documentNo, detail: { message: error.message },
+    });
+  }
+}
+
+/**
  * รับไฟล์ Timesheet เข้าระบบแบบครบวงจร — อ่าน → จับคู่ → บันทึก → คำนวณ
  *
  * นี่คือจุดที่ n8n เรียกหลังดึงไฟล์แนบจากอีเมล
@@ -932,6 +968,7 @@ export const NEXT_ACTION = {
  * @param {string} [input.approvedBy]          ผู้อนุมัติฝั่งลูกค้า
  * @param {string} [input.expectedPeriod]      'YYYY-MM'
  * @param {Function} [input.extractor]         ฟังก์ชันอ่านไฟล์ — แทนได้เพื่อทดสอบ
+ * @param {object} [input.lineClient]          LineClient แทนได้เพื่อทดสอบ (ข้อ 2.6)
  */
 export async function ingestTimesheet({
   documentNo,
@@ -947,6 +984,7 @@ export async function ingestTimesheet({
   expectedPeriod,
   actor = 'n8n',
   extractor = extractTimesheet,
+  lineClient = null,
 }) {
   if (!documentNo) {
     throw Object.assign(new Error('ต้องระบุ documentNo (เลขเอกสารจากอีเมล)'), { status: 400 });
@@ -1112,6 +1150,11 @@ export async function ingestTimesheet({
   else if (cycle.complete) nextAction = NEXT_ACTION.APPROVE_CYCLE;
   else nextAction = NEXT_ACTION.WAIT_FOR_OTHERS;
 
+  const failures = manday.checks.filter((c) => c.severity === SEVERITY.FAIL).map((c) => c.title);
+  if (nextAction === NEXT_ACTION.FIX_MISMATCH) {
+    await notifyCheckFailed({ documentNo, employeeName: employee.nameTh, period, failures, client: lineClient });
+  }
+
   return {
     timesheetId: documentNo,
     created: !existing,
@@ -1134,7 +1177,7 @@ export async function ingestTimesheet({
       discount: manday.discount,
       lineAmount: manday.lineAmount,
     },
-    failures: manday.checks.filter((c) => c.severity === SEVERITY.FAIL).map((c) => c.title),
+    failures,
     warnings: manday.checks.filter((c) => c.severity === SEVERITY.WARN).map((c) => c.title),
     cycle,
   };
@@ -1343,6 +1386,18 @@ export function previewCycleInvoice(contractId, period) {
       .map((c) => ({ employee: entry.employee.nameTh, ...c })),
   );
 
+  /* ถ้าอนุมัติไปแล้ว ใช้ร่างอีเมลที่บันทึกไว้จริง (มี documentNo/shareLink ผูกอยู่แล้ว
+     และถ้าเคยกด "ให้ AI เรียบเรียงใหม่" ก็เป็นฉบับนั้น) ไม่ใช่คำนวณ template เปล่าใหม่ทุกครั้ง
+     ไม่งั้นร่างที่ AI ปรับไว้ (หรือลิงก์ดูเอกสาร) จะโผล่แค่แวบเดียวตอนกดปุ่ม แล้วหายไปตอนโหลดหน้าใหม่ */
+  const existing = get(
+    `SELECT id, document_no, share_link, status, created_at, email_sent_at, email_sent_by, email_draft
+       FROM invoices WHERE contract_id = $c AND period = $p`,
+    { c: contractId, p: period },
+  );
+  const emailDraft = existing?.email_draft
+    ? JSON.parse(existing.email_draft)
+    : buildEmailDraft({ contract, invoice });
+
   return {
     contract,
     period,
@@ -1353,19 +1408,15 @@ export function previewCycleInvoice(contractId, period) {
     blockers,
     warnings,
     payload: toFlowAccountPayload(invoice),
-    emailDraft: buildEmailDraft({ contract, invoice }),
-    existing: get(
-      `SELECT id, document_no, status, created_at, email_sent_at, email_sent_by
-         FROM invoices WHERE contract_id = $c AND period = $p`,
-      { c: contractId, p: period },
-    ),
+    emailDraft,
+    existing,
   };
 }
 
 /**
  * ร่างอีเมลวางบิล — สร้างเป็นร่างเท่านั้น ระบบไม่ส่งเอง
  */
-export function buildEmailDraft({ contract, invoice, documentNo = null }) {
+export function buildEmailDraft({ contract, invoice, documentNo = null, shareLink = null }) {
   const company = getSetting('company', { nameTh: 'บริษัท ไอ แพสชั่น จำกัด' });
   const t = invoice.totals;
   const monthLabel = thaiMonth(invoice.period);
@@ -1400,6 +1451,7 @@ export function buildEmailDraft({ contract, invoice, documentNo = null }) {
     contract.billing_place
       ? `ทั้งนี้ทางบริษัทจะนำเอกสารเข้าวางบิลที่ ${contract.billing_place} ตามรอบที่กำหนด`
       : null,
+    shareLink ? `ดูใบแจ้งหนี้ฉบับเต็ม (เปิดแล้วพิมพ์เป็น PDF ได้จากเบราว์เซอร์): ${shareLink}` : null,
     '',
     'จึงเรียนมาเพื่อโปรดพิจารณา ขอบพระคุณเป็นอย่างสูง',
   ]
@@ -1417,8 +1469,11 @@ export function buildEmailDraft({ contract, invoice, documentNo = null }) {
       `วางบิลค่าบริการ ${contract.project_name} ประจำเดือน${monthLabel}` +
       (documentNo ? ` (${documentNo})` : ''),
     body,
+    invoiceLink: shareLink,
+    /* ใบแจ้งหนี้ไม่อยู่ในรายการนี้แล้วถ้ามี shareLink — มีลิงก์เปิดได้จริงในเนื้อเมลแทน
+       ไม่มีลิงก์ (dry-run/sandbox ยังพลาด) ก็ยังเตือนให้แนบเองเหมือนเดิม เผื่อมีไฟล์จากที่อื่น */
     attachments: [
-      documentNo ? `ใบแจ้งหนี้ ${documentNo}.pdf` : 'ใบแจ้งหนี้ (รอเลขจาก FlowAccount).pdf',
+      ...(shareLink ? [] : [documentNo ? `ใบแจ้งหนี้ ${documentNo}.pdf` : 'ใบแจ้งหนี้ (รอเลขจาก FlowAccount).pdf']),
       ...invoice.items.map((i) => `Timesheet ${i.employeeName} ${invoice.period}.pdf`),
     ],
     note: 'ระบบสร้างเป็นร่างเท่านั้น การเซ็นเอกสารและการกดส่งยังเป็นงานของเจ้าหน้าที่',
@@ -1473,6 +1528,7 @@ export async function draftEmailWithAi(contractId, period, { actor, drafter = dr
       ยอดรายการ: i.amount,
     })),
     หมายเหตุวันลา: inv.remark || null,
+    ลิงก์ดูเอกสารเต็ม: preview.existing?.share_link ?? null,
     ยอดรวม: {
       รวมเป็นเงิน: t.total,
       ส่วนลดรวม: t.discountTotal,
@@ -1494,10 +1550,17 @@ export async function draftEmailWithAi(contractId, period, { actor, drafter = dr
 
   const draft = await drafter(facts);
 
+  // กันลิงก์หายจากตัวเมล — ถ้า AI ไม่ได้พูดถึงไว้เอง (เช่นไม่รู้ว่าต้องพูด) ต่อให้ท้ายเนื้อเมลเสมอ
+  const shareLink = template.invoiceLink;
+  const body =
+    shareLink && !draft.body.includes(shareLink)
+      ? `${draft.body}\n\nดูใบแจ้งหนี้ฉบับเต็ม (เปิดแล้วพิมพ์เป็น PDF ได้จากเบราว์เซอร์): ${shareLink}`
+      : draft.body;
+
   const merged = {
     ...template,
     subject: draft.subject,
-    body: draft.body,
+    body,
     highlights: draft.highlights ?? [],
     source: 'llm',
     model: draft.model,
@@ -1518,6 +1581,180 @@ export async function draftEmailWithAi(contractId, period, { actor, drafter = dr
   });
 
   return merged;
+}
+
+/** สถานะคำขออนุมัติของรอบบิลนี้ — null ถ้ายังไม่เคยขอ */
+export function getCycleApproval(contractId, period) {
+  return get(
+    `SELECT * FROM cycle_approvals WHERE contract_id = $contractId AND period = $period`,
+    { contractId, period },
+  );
+}
+
+/**
+ * ขั้น 4.2 — ประตูมนุษย์จริงก่อนสร้างร่างใน FlowAccount
+ *
+ * n8n (01-ingest ตอน nextAction = approve_cycle · 02-daily-billing-check ตอน canApprove)
+ * ต้องเรียกที่นี่ ไม่ใช่ /approve ตรงๆ — ที่นี่แค่ส่งสรุปเข้า LINE ให้คนกด ไม่สร้างเอกสารใดๆ
+ * ร่างใน FlowAccount จะเกิดขึ้นต่อเมื่อ decideCycleApproval() ได้รับ "approved" กลับมาเท่านั้น
+ *
+ * ปุ่มบนหน้าเว็บ "อนุมัติและสร้างร่างใน FlowAccount" ยังเรียก approveCycle() ตรงๆ ได้ตามเดิม —
+ * คนนั่งกดจากเบราว์เซอร์เองก็เป็นประตูมนุษย์อยู่แล้ว ประตู LINE นี้ปิดเฉพาะทางที่ n8n วิ่งเองโดยไม่มีคนคั่น
+ */
+export async function requestCycleApproval(contractId, period, { actor, client } = {}) {
+  const preview = previewCycleInvoice(contractId, period);
+  if (!preview.invoice) {
+    throw Object.assign(new Error('ยังไม่มีรายการที่วางบิลได้ในรอบนี้'), { status: 400 });
+  }
+  if (preview.blockers.length > 0) {
+    throw Object.assign(
+      new Error(`ยังส่งขออนุมัติไม่ได้: ${preview.blockers.join(' · ')}`),
+      { status: 409, blockers: preview.blockers },
+    );
+  }
+  if (preview.existing && preview.existing.status === 'sent_to_flowaccount') {
+    throw Object.assign(
+      new Error(`รอบบิลนี้สร้างเอกสารไปแล้ว (${preview.existing.document_no})`),
+      { status: 409 },
+    );
+  }
+  const current = getCycleApproval(contractId, period);
+  if (current?.status === 'pending') {
+    return current; // กันการส่งซ้ำ — ยังรอคนกดอยู่ ไม่ต้องยิง LINE ซ้ำ
+  }
+
+  const line = client ?? new LineClient({ approverTarget: null });
+  const t = preview.invoice.totals;
+  const sent = await line.pushApprovalRequest({
+    contractId,
+    period,
+    customerName: preview.contract.customer_name,
+    projectName: preview.contract.project_name,
+    periodLabel: preview.periodLabel,
+    headcount: preview.entries.length,
+    paymentAmount: t.paymentAmount,
+    targets: lineApproverTargets(),
+  });
+
+  run(
+    `INSERT INTO cycle_approvals (contract_id, period, status, requested_at, requested_by, line_message_id)
+     VALUES ($contractId, $period, 'pending', strftime('%Y-%m-%dT%H:%M:%SZ','now'), $actor, $messageId)
+     ON CONFLICT (contract_id, period) DO UPDATE SET
+       status = 'pending', requested_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+       requested_by = $actor, decided_at = NULL, decided_by = NULL, line_message_id = $messageId`,
+    { contractId, period, actor, messageId: Array.isArray(sent.sentTo) ? sent.sentTo.join(',') : (sent.sentTo ?? null) },
+  );
+
+  logAudit({
+    actor,
+    action: 'request_line_approval',
+    entityType: 'cycle',
+    entityId: `${contractId}-${period}`,
+    detail: { paymentAmount: t.paymentAmount, headcount: preview.entries.length },
+  });
+
+  return getCycleApproval(contractId, period);
+}
+
+/**
+ * ผลตัดสินจาก LINE (เรียกจาก processLineWebhook เมื่อคนกดปุ่ม) — เชื่อ lineUserId
+ * ที่ผ่านมาแล้วเท่านั้น ไม่ตรวจสิทธิ์ซ้ำที่นี่ (ตรวจที่ processLineWebhook ก่อนเรียกเข้ามา)
+ */
+export async function decideCycleApproval({ contractId, period, decision, lineUserId, flowAccount } = {}) {
+  const current = getCycleApproval(contractId, period);
+  if (!current) {
+    throw Object.assign(new Error(`ไม่พบคำขออนุมัติของรอบ ${contractId}/${period}`), { status: 404 });
+  }
+  if (current.status !== 'pending') {
+    return current; // กดปุ่มซ้ำ/ปุ่มเก่าที่ค้างอยู่ในแชท — เงียบๆ ไม่ทำซ้ำ ไม่ error
+  }
+
+  if (decision === 'approved') {
+    const result = await approveCycle(contractId, period, { actor: `line:${lineUserId}`, flowAccount });
+    run(
+      `UPDATE cycle_approvals SET status = 'approved',
+              decided_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), decided_by = $lineUserId
+        WHERE contract_id = $contractId AND period = $period`,
+      { contractId, period, lineUserId },
+    );
+    logAudit({
+      actor: `line:${lineUserId}`, action: 'approve_line', entityType: 'cycle',
+      entityId: `${contractId}-${period}`, detail: { documentNo: result.documentNo },
+    });
+    return { ...getCycleApproval(contractId, period), result };
+  }
+
+  run(
+    `UPDATE cycle_approvals SET status = 'rejected',
+            decided_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), decided_by = $lineUserId
+      WHERE contract_id = $contractId AND period = $period`,
+    { contractId, period, lineUserId },
+  );
+  logAudit({
+    actor: `line:${lineUserId}`, action: 'reject_line', entityType: 'cycle',
+    entityId: `${contractId}-${period}`, detail: {},
+  });
+  return getCycleApproval(contractId, period);
+}
+
+/**
+ * รับ webhook จาก LINE ตอนคนกดปุ่มอนุมัติ/ตีกลับ
+ *
+ * ตรวจ 2 ชั้นก่อนเชื่อ: (1) ลายเซ็น HMAC ยืนยันว่าข้อความนี้มาจาก LINE จริง
+ * (2) userId ของคนกดต้องอยู่ในรายชื่อผู้อนุมัติ (LINE_APPROVER_USER_IDS) — กันคนอื่นที่บังเอิญ
+ * อยู่ในแชทเดียวกันกดแทน เพราะปุ่มใน Flex Message กดได้ทุกคนที่เห็นข้อความ ไม่ใช่แค่เจ้าของ
+ */
+export async function processLineWebhook(rawBody, signature, { channelSecret, client } = {}) {
+  const secret = channelSecret ?? process.env.LINE_CHANNEL_SECRET ?? '';
+  if (!verifyLineSignature(rawBody, signature, secret)) {
+    throw Object.assign(new Error('LINE signature ไม่ถูกต้อง — ปฏิเสธ webhook นี้'), { status: 401 });
+  }
+
+  let body;
+  try {
+    body = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    throw Object.assign(new Error('รูปแบบ JSON ของ LINE webhook ไม่ถูกต้อง'), { status: 400 });
+  }
+
+  const results = [];
+  for (const event of body.events ?? []) {
+    const userId = event.source?.userId ?? null;
+
+    /* เหตุการณ์อื่นที่ไม่ใช่การกดปุ่ม (เช่นทักแชทธรรมดา) ไม่ทำอะไรกับรอบบิล แต่บันทึก userId ไว้
+       เป็นวิธีเดียวที่จะรู้ userId ของคนใหม่ก่อนเอาไปตั้งใน LINE_APPROVER_USER_IDS —
+       LINE ไม่มีหน้าจอที่โชว์ userId ตรงๆ ให้ดู ต้องอ่านจาก event นี้เท่านั้น */
+    if (event.type !== 'postback') {
+      if (userId) {
+        logAudit({
+          actor: `line:${userId}`, action: 'line_event_seen', entityType: 'line_user', entityId: userId,
+          detail: { eventType: event.type },
+        });
+      }
+      continue;
+    }
+
+    const parsed = parseApprovalPostback(event.postback?.data ?? '');
+    if (!parsed) continue;
+
+    if (!isAuthorizedApprover(userId)) {
+      logAudit({
+        actor: `line:${userId ?? 'unknown'}`, action: 'line_approval_denied', entityType: 'cycle',
+        entityId: `${parsed.contractId}-${parsed.period}`, detail: { decision: parsed.decision },
+      });
+      results.push({ ...parsed, userId, outcome: 'denied' });
+      continue;
+    }
+
+    try {
+      const outcome = await decideCycleApproval({ ...parsed, lineUserId: userId, flowAccount: client });
+      results.push({ ...parsed, userId, outcome });
+    } catch (error) {
+      results.push({ ...parsed, userId, outcome: { error: error.message } });
+    }
+  }
+
+  return { received: body.events?.length ?? 0, processed: results.length, results };
 }
 
 /**
@@ -1568,16 +1805,34 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
     throw error;
   }
 
+  /* ข้อ 4.3 — ขอลิงก์ดูเอกสาร (แทน "ดาวน์โหลด PDF" เพราะ FlowAccount ไม่มี endpoint ให้ไฟล์ตรงๆ)
+     ทำแบบ best-effort — พลาดขั้นนี้ไม่ควรทำให้การอนุมัติทั้งก้อนล้ม เพราะเอกสารสร้างไปแล้วจริง
+     ไม่มีใน dry-run (ไม่มี documentId ให้อ้าง) */
+  let shareLink = null;
+  if (result.documentId) {
+    try {
+      shareLink = (await client.getShareLink(result.documentId)).link;
+    } catch (error) {
+      logAudit({
+        actor, action: 'flowaccount_share_link_failed',
+        entityType: 'invoice', entityId: invoiceId,
+        detail: { message: error.message },
+      });
+    }
+  }
+
   const emailDraft = buildEmailDraft({
     contract: preview.contract,
     invoice: preview.invoice,
     documentNo: result.documentNo,
+    shareLink,
   });
 
   saveInvoice({
     invoiceId, contractId, period, preview,
     status: 'sent_to_flowaccount', actor,
     documentNo: result.documentNo,
+    shareLink,
     response: result,
     emailDraft,
   });
@@ -1598,6 +1853,7 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
   return {
     invoiceId,
     documentNo: result.documentNo,
+    shareLink,
     mode: result.mode,
     note: result.note ?? null,
     invoice: preview.invoice,
@@ -1607,7 +1863,7 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
 
 function saveInvoice({
   invoiceId, contractId, period, preview, status, actor,
-  documentNo = null, response = null, emailDraft = null,
+  documentNo = null, shareLink = null, response = null, emailDraft = null,
 }) {
   const t = preview.invoice.totals;
 
@@ -1617,11 +1873,11 @@ function saveInvoice({
 
     run(
       `INSERT INTO invoices
-         (id, contract_id, period, document_no, document_date, due_date,
+         (id, contract_id, period, document_no, share_link, document_date, due_date,
           total, discount_total, total_after_discount, vat, grand_total,
           withholding_tax, payment_amount, remark, payload, response,
           status, approved_by, approved_at, email_draft)
-       VALUES ($id, $contractId, $period, $documentNo, $documentDate, $dueDate,
+       VALUES ($id, $contractId, $period, $documentNo, $shareLink, $documentDate, $dueDate,
                $total, $discountTotal, $totalAfterDiscount, $vat, $grandTotal,
                $withholdingTax, $paymentAmount, $remark, $payload, $response,
                $status, $actor, strftime('%Y-%m-%dT%H:%M:%SZ','now'), $emailDraft)`,
@@ -1630,6 +1886,7 @@ function saveInvoice({
         contractId,
         period,
         documentNo,
+        shareLink,
         documentDate: preview.invoice.documentDate,
         dueDate: preview.invoice.dueDate,
         total: t.total,
@@ -1999,6 +2256,95 @@ export function listInvoices() {
   }));
 }
 
+/* ── ผู้รับแจ้งเตือน — จัดการระบบ → ผู้รับแจ้งเตือน ────────────────
+   เก็บใน settings เป็น JSON list เพราะเป็นรายชื่อเล็กๆ ที่ไม่ต้อง query ซับซ้อน
+   ช่องทาง LINE ตัวแรกในรายชื่อจะกลายเป็นปลายทางจริงที่ requestCycleApproval() ยิงคำขออนุมัติไปให้
+   (แทน LINE_APPROVER_TARGET ที่ env — env ยังใช้ได้เป็นค่าเริ่มต้นถ้ายังไม่มีใครเพิ่มในหน้านี้)
+   ส่วนอีเมลยังเก็บไว้เฉยๆ — ระบบยังไม่มีฟีเจอร์ส่งอีเมลแจ้งเตือนอัตโนมัติ */
+const NOTIFY_CHANNELS = ['line', 'email'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function listNotificationRecipients() {
+  return getSetting('notification_recipients', []);
+}
+
+export function addNotificationRecipient({ channel, label, target, actor = 'cli' }) {
+  if (!NOTIFY_CHANNELS.includes(channel)) {
+    throw Object.assign(new Error(`ช่องทางต้องเป็น ${NOTIFY_CHANNELS.join(' หรือ ')} เท่านั้น`), { status: 400 });
+  }
+  const cleanTarget = String(target ?? '').trim();
+  if (!cleanTarget) throw Object.assign(new Error('ต้องระบุปลายทาง (LINE user ID หรืออีเมล)'), { status: 400 });
+  if (channel === 'email' && !EMAIL_RE.test(cleanTarget)) {
+    throw Object.assign(new Error('รูปแบบอีเมลไม่ถูกต้อง'), { status: 400 });
+  }
+
+  const list = listNotificationRecipients();
+  const id = list.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+  const recipient = { id, channel, label: String(label ?? '').trim() || cleanTarget, target: cleanTarget };
+  setSetting('notification_recipients', [...list, recipient]);
+  logAudit({
+    actor, action: 'add_notification_recipient', entityType: 'notification_recipient',
+    entityId: String(id), detail: recipient,
+  });
+  return recipient;
+}
+
+export function removeNotificationRecipient(id, { actor = 'cli' } = {}) {
+  const list = listNotificationRecipients();
+  const found = list.find((r) => r.id === Number(id));
+  if (!found) throw Object.assign(new Error('ไม่พบผู้รับแจ้งเตือนนี้'), { status: 404 });
+
+  setSetting('notification_recipients', list.filter((r) => r.id !== Number(id)));
+  logAudit({
+    actor, action: 'remove_notification_recipient', entityType: 'notification_recipient',
+    entityId: String(id), detail: found,
+  });
+  return { removed: true };
+}
+
+/** ปลายทาง LINE ที่จะยิงคำขออนุมัติไปให้จริง — คนแรกในรายชื่อช่องทาง LINE ถ้ามี ไม่งั้นใช้ env เดิม
+ *  (เก็บไว้ให้โค้ดเก่า/เทสต์เดิมที่อ้างปลายทางเดียวยังใช้ได้ — งานใหม่ให้ใช้ lineApproverTargets() แทน) */
+export function lineApproverTarget() {
+  return listNotificationRecipients().find((r) => r.channel === 'line')?.target
+    ?? process.env.LINE_APPROVER_TARGET
+    ?? null;
+}
+
+/**
+ * ปลายทาง LINE **ทุกคน** ที่จะได้รับคำขออนุมัติ/แจ้งเตือน — ทุกคนในรายชื่อผู้รับแจ้งเตือน
+ * ช่องทาง LINE ไม่ใช่แค่คนแรกเหมือน lineApproverTarget() เดิม
+ * ยังไม่มีใครเพิ่มในหน้านี้เลย ถอยไปใช้ LINE_APPROVER_TARGET จาก env เป็นค่าเริ่มต้น (คนเดียว)
+ */
+export function lineApproverTargets() {
+  const list = listNotificationRecipients().filter((r) => r.channel === 'line').map((r) => r.target);
+  if (list.length) return list;
+  return process.env.LINE_APPROVER_TARGET ? [process.env.LINE_APPROVER_TARGET] : [];
+}
+
+/**
+ * รายชื่อ userId ของทุกคนที่เคยทักบอท LINE มาแล้ว (เห็นจาก webhook — ดู processLineWebhook)
+ * เอาไว้ให้เลือกในหน้า "เพิ่มผู้รับแจ้งเตือน" แทนการให้คนก็อป userId มาวางเอง เพราะ LINE
+ * ไม่มีหน้าจอไหนโชว์ userId ตรงๆ ให้ดู
+ * ดึงชื่อที่แสดง (displayName) มาด้วยถ้ายังเป็นเพื่อนกับบอทอยู่ — ถ้าบล็อก/เลิกเป็นเพื่อนไปแล้ว
+ * getProfile() จะคืน null ก็ยังโชว์แค่ userId ให้เลือกได้เหมือนเดิม
+ */
+export async function listKnownLineUsers({ client } = {}) {
+  const rows = all(
+    `SELECT entity_id AS userId, MAX(at) AS lastSeenAt
+       FROM audit_log
+      WHERE entity_type = 'line_user' AND action = 'line_event_seen'
+      GROUP BY entity_id
+      ORDER BY lastSeenAt DESC`,
+  );
+  if (!rows.length) return [];
+
+  const line = client ?? new LineClient({ approverTarget: null });
+  return Promise.all(rows.map(async (row) => {
+    const profile = await line.getProfile(row.userId).catch(() => null);
+    return { userId: row.userId, lastSeenAt: row.lastSeenAt, displayName: profile?.displayName ?? null };
+  }));
+}
+
 export function auditLog({ limit = 200 } = {}) {
   return all(
     'SELECT id, at, actor, action, entity_type, entity_id, detail FROM audit_log ORDER BY id DESC LIMIT $limit',
@@ -2116,8 +2462,9 @@ export function settingsSnapshot() {
       hasFlowAccountCredentials: Boolean(
         process.env.FLOWACCOUNT_CLIENT_ID && process.env.FLOWACCOUNT_CLIENT_SECRET,
       ),
-      hasAnthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
-      claudeModel: process.env.CLAUDE_MODEL ?? 'claude-opus-5',
+      localLlmBaseUrl: localLlmBaseUrl(),
+      localTextModel: localTextModel(),
+      localVisionModel: localVisionModel(),
       hasGmail: hasGmailCredentials(),
       gmailQuery: DEFAULT_GMAIL_QUERY,
     },
@@ -2203,7 +2550,7 @@ export function billingCycles() {
   };
 }
 
-export function pulse() {
+export function pulse({ actor = 'ยังไม่ได้ระบุผู้ใช้', role = null } = {}) {
   const sheets = listTimesheets();
   const byStatus = {};
   for (const sheet of sheets) {
@@ -2236,8 +2583,10 @@ export function pulse() {
     flowAccountMode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
     manualMode: getSetting('billing_rules', {})?.requireHumanCheck !== false,
     /* ชื่อที่จะถูกบันทึกว่าเป็นคนกด — ต้องโชว์บนหน้าจอให้ตรงกับที่บันทึกจริง
-       ไม่งั้นหน้าจอขึ้นชื่อหนึ่ง แต่ audit log เก็บอีกชื่อหนึ่ง */
-    actor: process.env.ACTOR?.trim() || 'ยังไม่ได้ระบุผู้ใช้',
+       ไม่งั้นหน้าจอขึ้นชื่อหนึ่ง แต่ audit log เก็บอีกชื่อหนึ่ง
+       มาจาก session ที่ login เข้ามา ไม่ใช่ env ค่าเดียวของทั้งเซิร์ฟเวอร์แบบเดิม */
+    actor,
+    role,
   };
 }
 

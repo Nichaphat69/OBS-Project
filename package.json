@@ -13,9 +13,11 @@
     "seed": "node src/db/seed.js",
     "reset": "node src/db/seed.js --reset",
     "test": "node --test \"test/**/*.test.js\"",
-    "gmail:auth": "node scripts/gmail-auth.js"
+    "gmail:auth": "node scripts/gmail-auth.js",
+    "user:create": "node scripts/create-user.js",
+    "user:reset-password": "node scripts/reset-password.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0"
+    "pdf-to-img": "^6.2.0"
   }
 }

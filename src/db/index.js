@@ -32,6 +32,9 @@ export function getDb() {
 const ADDED_COLUMNS = [
   ['invoices', 'email_sent_at', 'TEXT'],
   ['invoices', 'email_sent_by', 'TEXT'],
+  ['users', 'role', "TEXT NOT NULL DEFAULT 'operator'"],
+  ['invoices', 'share_link', 'TEXT'],
+  ['users', 'active', 'INTEGER NOT NULL DEFAULT 1'],
 ];
 
 function addMissingColumns(database) {

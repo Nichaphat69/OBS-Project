@@ -1,5 +1,5 @@
 /**
- * ร่างอีเมลวางบิลด้วย Claude
+ * ร่างอีเมลวางบิล + อ่านอีเมลแจ้งอนุมัติ ด้วยโมเดลภาษาที่รันในเครื่อง (LM Studio/Ollama)
  *
  * ทำไมต้องใช้โมเดลตรงนี้ ทั้งที่มี template อยู่แล้ว —
  * template เขียนได้แค่สิ่งที่เดาไว้ล่วงหน้า ส่วนอีเมลจริงต้องอธิบาย
@@ -7,11 +7,13 @@
  * โมเดลได้รับเฉพาะตัวเลขที่ระบบคำนวณมาแล้ว **ห้ามคิดเลขเอง** ทำแค่เรียบเรียงเป็นภาษาคน
  *
  * ตัวเลขทุกตัวในอีเมลจึงยังมาจาก domain/invoice.js เส้นเดียวกับที่ขึ้นบนใบแจ้งหนี้
+ *
+ * งานนี้เป็นข้อความล้วน ใช้โมเดลข้อความในเครื่อง (LOCAL_LLM_MODEL) ได้ —
+ * ต่างจากการอ่าน PDF Timesheet (src/extract/timesheet.js) ที่เป็นงาน vision
+ * ต้องใช้โมเดลที่รับภาพได้ (LOCAL_LLM_VISION_MODEL)
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-
-export const EMAIL_MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5';
+import { callLocalJSON, localTextModel } from './localClient.js';
 
 const EMAIL_SCHEMA = {
   type: 'object',
@@ -100,76 +102,40 @@ const APPROVAL_PROMPT = `คุณกำลังอ่านอีเมลแ�
 
 /**
  * @param {object} email  { subject, from, date, body }
+ * @param {object} [options]
+ * @param {typeof fetch} [options.fetchImpl]  ใช้แทนตอนเทสต์เท่านั้น
  */
-export async function readApprovalEmail(email) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw Object.assign(
-      new Error('ยังไม่ได้ตั้งค่า ANTHROPIC_API_KEY — ใส่ใน .env ก่อนใช้ AI อ่านอีเมล'),
-      { status: 400 },
-    );
-  }
-
-  const anthropic = new Anthropic();
-  const response = await anthropic.messages.create({
-    model: EMAIL_MODEL,
-    max_tokens: 2000,
+export async function readApprovalEmail(email, { fetchImpl } = {}) {
+  const { data, model, usage } = await callLocalJSON({
+    model: localTextModel(),
     system: APPROVAL_PROMPT,
-    output_config: { format: { type: 'json_schema', schema: APPROVAL_SCHEMA } },
-    messages: [
-      {
-        role: 'user',
-        content:
-          `จาก: ${email.from ?? '—'}\nวันที่: ${email.date ?? '—'}\n` +
-          `หัวข้อ: ${email.subject ?? '—'}\n\n${(email.body ?? '').slice(0, 12000)}`,
-      },
-    ],
+    userContent:
+      `จาก: ${email.from ?? '—'}\nวันที่: ${email.date ?? '—'}\n` +
+      `หัวข้อ: ${email.subject ?? '—'}\n\n${(email.body ?? '').slice(0, 12000)}`,
+    schema: APPROVAL_SCHEMA,
+    maxTokens: 2000,
+    fetchImpl,
   });
-
-  const textBlock = response.content.find((block) => block.type === 'text');
-  if (!textBlock) throw new Error('ไม่พบผลลัพธ์ที่เป็นข้อความในคำตอบของโมเดล');
-
-  return { ...JSON.parse(textBlock.text), model: response.model, usage: response.usage };
+  return { ...data, model, usage };
 }
 
 /**
  * @param {object} facts  ตัวเลขที่ระบบคำนวณแล้ว (ดู service.js → draftEmailWithAi)
+ * @param {object} [options]
+ * @param {typeof fetch} [options.fetchImpl]  ใช้แทนตอนเทสต์เท่านั้น
  * @returns {Promise<{subject:string, body:string, highlights:string[], model:string, usage:object}>}
  */
-export async function draftBillingEmail(facts) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw Object.assign(
-      new Error('ยังไม่ได้ตั้งค่า ANTHROPIC_API_KEY — ใส่ใน .env ก่อนใช้ AI ร่างอีเมล'),
-      { status: 400 },
-    );
-  }
-
-  const anthropic = new Anthropic();
-
-  const response = await anthropic.messages.create({
-    model: EMAIL_MODEL,
-    max_tokens: 4000,
+export async function draftBillingEmail(facts, { fetchImpl } = {}) {
+  const { data, model, usage } = await callLocalJSON({
+    model: localTextModel(),
     system: SYSTEM_PROMPT,
-    output_config: {
-      format: { type: 'json_schema', schema: EMAIL_SCHEMA },
-    },
-    messages: [
-      {
-        role: 'user',
-        content:
-          'ร่างอีเมลวางบิลจากข้อมูลชุดนี้\n\n```json\n' +
-          `${JSON.stringify(facts, null, 2)}\n` +
-          '```',
-      },
-    ],
+    userContent:
+      'ร่างอีเมลวางบิลจากข้อมูลชุดนี้\n\n```json\n' +
+      `${JSON.stringify(facts, null, 2)}\n` +
+      '```',
+    schema: EMAIL_SCHEMA,
+    maxTokens: 4000,
+    fetchImpl,
   });
-
-  if (response.stop_reason === 'refusal') {
-    throw new Error('โมเดลปฏิเสธที่จะร่างอีเมลฉบับนี้');
-  }
-
-  const textBlock = response.content.find((block) => block.type === 'text');
-  if (!textBlock) throw new Error('ไม่พบผลลัพธ์ที่เป็นข้อความในคำตอบของโมเดล');
-
-  const draft = JSON.parse(textBlock.text);
-  return { ...draft, model: response.model, usage: response.usage };
+  return { ...data, model, usage };
 }

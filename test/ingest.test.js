@@ -1,7 +1,7 @@
 /**
  * ทดสอบ pipeline รับ Timesheet เข้าระบบ — จุดที่ n8n เรียก
  *
- * ใส่ตัวอ่านไฟล์ปลอม (stub extractor) แทน Claude จึงรันได้โดยไม่ต้องมี ANTHROPIC_API_KEY
+ * ใส่ตัวอ่านไฟล์ปลอม (stub extractor) แทนโมเดล vision ในเครื่อง จึงรันได้โดยไม่ต้องเปิด LM Studio/Ollama
  * และไม่เสียค่า API — ทดสอบเฉพาะส่วนจับคู่ บันทึก คำนวณ และตัดสิน nextAction
  */
 
@@ -13,6 +13,13 @@ import { rmSync } from 'node:fs';
 
 const DB = join(tmpdir(), `obs-ingest-test-${process.pid}.sqlite`);
 process.env.DB_PATH = DB;
+
+/* กันไม่ให้ env.js โหลดค่า LINE จริงจาก .env เข้ามา — ingestTimesheet() เรียก LINE จริงถ้า Manday
+   ไม่ผ่านตรวจ (ข้อ 2.6) เทสต์ 'fix_mismatch' ด้านล่างจงใจทำให้ไม่ผ่าน ถ้าไม่กันไว้จะยิงเข้า LINE จริง
+   (เจอเองครั้งหนึ่งตอนเพิ่มฟีเจอร์นี้ — ต้องกันไว้ก่อน seed.js import env.js) */
+process.env.LINE_CHANNEL_ACCESS_TOKEN = '';
+process.env.LINE_CHANNEL_SECRET = '';
+process.env.LINE_APPROVER_TARGET = '';
 
 // seed.js ทำงานตอน import — ใส่ข้อมูลจากเอกสารจริงลงฐานข้อมูลชั่วคราว
 await import('../src/db/seed.js');
@@ -243,20 +250,48 @@ test('ชื่อที่ไม่มีในระบบ → ไม่บั
   assert.equal(svc.listTimesheets().length, before, 'ต้องไม่บันทึกอะไรลงฐานข้อมูล');
 });
 
-test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน → nextAction เป็น fix_mismatch', async () => {
+class FakeLineClient {
+  constructor() { this.sent = []; }
+  async pushPlainText(text) { this.sent.push(text); return { sentTo: 'fake-target' }; }
+}
+
+test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน → nextAction เป็น fix_mismatch และแจ้ง LINE (ข้อ 2.6)', async () => {
   const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
   data.totalWorkDays = 25;          // รายงานเกินจริง
 
+  const line = new FakeLineClient();
   const result = await svc.ingestTimesheet({
     documentNo: '2026020102',
     fileBase64: Buffer.from('x').toString('base64'),
     expectedPeriod: '2026-02',
     extractor: stubExtractor(data),
+    lineClient: line,
   });
 
   assert.equal(result.status, 'mismatch');
   assert.equal(result.nextAction, svc.NEXT_ACTION.FIX_MISMATCH);
   assert.ok(result.failures.length > 0, 'ต้องบอกด้วยว่าไม่ผ่านข้อไหน');
+
+  assert.equal(line.sent.length, 1, 'ต้องแจ้ง LINE ครั้งเดียวตอนตรวจไม่ผ่าน');
+  assert.match(line.sent[0], /พงศ์พันธ์ มามาก/, 'ต้องใช้ชื่อไทยที่จับคู่ได้ ไม่ใช่ชื่อดิบจากไฟล์');
+  assert.match(line.sent[0], /2026020102/);
+  for (const failure of result.failures) assert.ok(line.sent[0].includes(failure));
+});
+
+test('Timesheet ที่ตรวจผ่าน → ไม่แจ้ง LINE', async () => {
+  const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
+
+  const line = new FakeLineClient();
+  const result = await svc.ingestTimesheet({
+    documentNo: '2026020103',
+    fileBase64: Buffer.from('x').toString('base64'),
+    expectedPeriod: '2026-02',
+    extractor: stubExtractor(data),
+    lineClient: line,
+  });
+
+  assert.notEqual(result.nextAction, svc.NEXT_ACTION.FIX_MISMATCH);
+  assert.equal(line.sent.length, 0, 'ตรวจผ่านแล้ว ไม่ควรมีอะไรต้องแจ้ง');
 });
 
 test('เอกสารที่วางบิลแล้ว → ไม่เขียนทับ', async () => {

@@ -33,13 +33,14 @@
 | เว็บเซิร์ฟเวอร์ | `node:http` — ไม่ใช้ Express หรือ framework ใดๆ |
 | ชุดทดสอบ | `node:test` — 27 ชุด ผ่านหมด |
 | หน้าเว็บ | HTML + CSS + JavaScript ล้วน ไม่มี React/Vue/build step |
-| dependency | **มีตัวเดียว** — `@anthropic-ai/sdk` ใช้เฉพาะตอนอ่าน Timesheet PDF |
+| dependency | **มีตัวเดียว** — `pdf-to-img` แปลง Timesheet PDF เป็นรูปก่อนส่งให้โมเดล vision |
+| AI | โมเดลที่รันในเครื่องทั้งหมด (LM Studio/Ollama) — ไม่พึ่งบริการ AI ภายนอกเลย |
 
 รันที่ port **4300** (port 3000 มีแอป iPassion Recruit ใช้อยู่)
 
 ```bash
 npm start          # http://localhost:4300
-npm test           # 27 ชุดทดสอบ ไม่ต้องมี API key
+npm test           # 27 ชุดทดสอบ ไม่ต้องเปิด Local Server
 npm run reset      # ล้างฐานข้อมูลและใส่ข้อมูลตั้งต้นใหม่
 ```
 
@@ -54,7 +55,8 @@ src/
     manday.js                คำนวณ Manday + ตรวจความถูกต้อง — หัวใจของระบบ
     invoice.js               ประกอบใบแจ้งหนี้ + แปลงเป็น payload ของ FlowAccount
     matching.js              จับคู่ชื่อพนักงาน 3 ชั้น
-  extract/timesheet.js       อ่าน Timesheet PDF ด้วย Claude
+  extract/timesheet.js       อ่าน Timesheet PDF ด้วยโมเดล vision ในเครื่อง (LM Studio/Ollama)
+  llm/localClient.js         เรียกโมเดลในเครื่อง — ใช้ร่วมกับ llm/email.js
   integrations/flowaccount.js  ตัวเชื่อม FlowAccount API
   db/
     schema.sql               13 ตาราง
@@ -224,11 +226,10 @@ test/                        invoice.test.js (15) + ingest.test.js (9)
 
 | Workflow | หน้าที่ |
 |---|---|
-| `n8n/01-ingest-timesheet.json` | Gmail Trigger (poll 30 นาที) → IF สถานะ "อนุมัติ" → Code ดึงเลขเอกสาร + แปลงไฟล์เป็น base64 → `POST /ingest` → Switch ตาม `nextAction` แตก 3 ทาง |
-| `n8n/02-daily-billing-check.json` | Schedule ทุกวันทำการ 09:00 → `GET /cycles/ready` → splitOut → IF `canApprove` → `POST /approve` |
+| `n8n/01-obs-workflow.json` | ไฟล์เดียว 2 trigger (รวมเป็นไฟล์เดียว 4 ส.ค. 69 เพื่อกด Activate ที่เดียว) — **Gmail Trigger** (poll 30 นาที) → IF สถานะ "อนุมัติ" → Code ดึงเลขเอกสาร + แปลงไฟล์เป็น base64 → `POST /ingest` → Switch ตาม `nextAction` แตก 3 ทาง · **Schedule Trigger** ทุกวันทำการ 09:00 → `GET /cycles/ready` → splitOut → IF `canApprove` → `POST /request-approval` (ส่งเข้า LINE ให้คนกดก่อน ไม่เรียก `/approve` ตรงอีกต่อไป) |
 
-ต้องตั้งตัวแปร `OBS_BASE_URL` ใน n8n และผูก credential Gmail
-รายละเอียดอยู่ใน [`n8n/README.md`](../n8n/README.md)
+URL ของ OBS เขียนตรงไว้ในโหนดแล้ว (`http://localhost:4300`) แก้เองถ้าเครื่องรัน n8n คนละเครื่องกับ OBS
+ยังต้องผูก credential Gmail เอง — รายละเอียดอยู่ใน [`n8n/README.md`](../n8n/README.md)
 
 > ⚠️ พารามิเตอร์ของ node ใน JSON เป็นแบบ best-effort อาจต้องปรับในหน้า n8n เพราะรูปแบบต่างกันตามเวอร์ชัน
 > โครง workflow กับ HTTP call ถูกต้อง แต่ควรกด Execute ทีละ node ดูครั้งแรก
@@ -239,9 +240,9 @@ test/                        invoice.test.js (15) + ingest.test.js (9)
 
 `src/extract/timesheet.js`
 
-- โมเดล **`claude-opus-5`** (เปลี่ยนได้ด้วย env `CLAUDE_MODEL`)
-- ส่ง PDF เป็น base64 document block ตรงๆ ไม่ต้อง OCR ก่อน
-- บังคับรูปแบบคำตอบด้วย **json_schema structured output** จึงไม่ต้อง parse ข้อความอิสระ
+- โมเดล vision ที่รันในเครื่อง (เปลี่ยนได้ด้วย env `LOCAL_LLM_VISION_MODEL`) ผ่าน LM Studio/Ollama
+- แปลง PDF เป็นรูปภาพทีละหน้าด้วย `pdf-to-img` ก่อนส่งให้โมเดล "มองเห็น" ไม่ต้อง OCR ก่อน
+- ขอคำตอบเป็น JSON (`response_format: json_object`) + ฝัง schema ไว้ใน system prompt แล้วตรวจคีย์ที่ต้องมีซ้ำด้วยโค้ด
 - รับได้ทั้ง path ของไฟล์ และ Buffer (n8n ส่ง base64 มา)
 - มี `verifyExtraction()` ตรวจซ้ำว่าตัวเลขที่ AI สรุปมาตรงกับที่นับได้จากตารางรายวัน
 
@@ -321,5 +322,6 @@ test/                        invoice.test.js (15) + ingest.test.js (9)
 2. **ฟอร์มยืนยันผลจับคู่แบบ fuzzy** — ระบบเดาให้แล้วขอให้ยืนยัน แต่ยังไม่มีที่กดยืนยัน
 3. ฟอร์มจัดการพนักงาน เรท และสัญญา
 4. ฟอร์มจัดการปฏิทินวันหยุด (หรือ import จากไฟล์)
-6. ระบบผู้ใช้จริง — ตอนนี้ชื่อผู้ทำมาจาก env `ACTOR` ค่าเดียว ไม่มีการเข้าสู่ระบบ
+6. ~~ระบบผู้ใช้จริง~~ ✅ 31 ก.ค. 69 — มี login + role (admin/operator) แล้ว ดู `src/auth.js` และ
+   `docs/checklist.md` หัวข้อ 11
 7. บันทึกการรับเงิน หรือดึงสถานะชำระกลับจาก FlowAccount

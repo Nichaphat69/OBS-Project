@@ -1,0 +1,447 @@
+{
+  "name": "OBS — รับ Timesheet จากอีเมล + ตรวจรอบบิลรายวัน",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 30,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "subject:(แจ้งอนุมัติเอกสาร TimeSheet) has:attachment filename:pdf"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "gmail-trigger",
+      "name": "อีเมลแจ้งอนุมัติ Timesheet",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        300
+      ],
+      "notes": "ต้องตั้ง credential Gmail (OAuth2) ก่อนใช้ · ปรับ q ให้ตรงหัวข้อจริงของระบบ TLI"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.textPlain || $json.snippet || '' }}",
+              "rightValue": "อนุมัติ",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.textPlain || $json.snippet || '' }}",
+              "rightValue": "ไม่อนุมัติ",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "gate-approved",
+      "name": "สถานะเป็น อนุมัติ เท่านั้น",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        300
+      ],
+      "notes": "กันเอกสารที่ยังรออนุมัติหรือถูกปฏิเสธ ไม่ให้เข้าระบบ"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// ดึงเลขเอกสารจากหัวข้ออีเมล และแปลงไฟล์แนบเป็น base64\nconst subject = $json.subject ?? '';\nconst docNo = (subject.match(/(\\d{9,12})/) || [])[1];\nif (!docNo) {\n  throw new Error('หาเลขเอกสารในหัวข้อไม่เจอ: ' + subject);\n}\n\n// หาไฟล์แนบ .pdf ตัวแรก\nconst binaryKeys = Object.keys($binary ?? {});\nconst pdfKey = binaryKeys.find((k) => ($binary[k].fileName ?? '').toLowerCase().endsWith('.pdf'));\nif (!pdfKey) {\n  throw new Error('ไม่พบไฟล์แนบ .pdf ในอีเมลเลขที่ ' + docNo);\n}\n\nconst file = await this.helpers.getBinaryDataBuffer(0, pdfKey);\n\nreturn {\n  json: {\n    documentNo: docNo,\n    fileName: $binary[pdfKey].fileName,\n    fileBase64: file.toString('base64'),\n    sourceEmailId: $json.id ?? null,\n    receivedAt: $json.date ?? new Date().toISOString(),\n    approvedBy: 'Project Manager (TLI)',\n    actor: 'n8n'\n  }\n};"
+      },
+      "id": "prepare-payload",
+      "name": "เตรียมข้อมูลส่งเข้าระบบ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        220
+      ],
+      "notes": "เลขเอกสารใช้เป็น documentNo — ยิงซ้ำได้ ระบบจะเขียนทับไม่สร้างซ้ำ"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:4300/api/timesheets/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "obs-ingest",
+      "name": "ส่งเข้าระบบ OBS (อ่าน+ตรวจ+คำนวณ)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        220
+      ],
+      "notes": "URL เขียนตรงเป็น localhost:4300 ไว้แล้ว แก้เองถ้า OBS อยู่คนละเครื่องหรือ n8n รันใน Docker · timeout 3 นาที เพราะต้องรอโมเดล vision ในเครื่องอ่าน PDF"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.nextAction }}",
+                    "rightValue": "approve_cycle",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "ครบรอบ พร้อมวางบิล"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.nextAction }}",
+                    "rightValue": "wait_for_others",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "ยังไม่ครบ รอคนอื่น"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "ต้องให้คนแก้"
+        }
+      },
+      "id": "switch-next",
+      "name": "ระบบบอกว่าต้องทำอะไรต่อ",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        520,
+        220
+      ],
+      "notes": "อ่านค่า nextAction ที่ระบบคืนมา ไม่ต้องคำนวณเงื่อนไขเองใน n8n"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:4300/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "obs-request-approval",
+      "name": "ส่งขออนุมัติเข้า LINE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        100
+      ],
+      "notes": "ขั้น 4.2 — แค่ส่งสรุปเข้า LINE ให้คนกด ยังไม่สร้างร่างใน FlowAccount นะ · คนกดอนุมัติใน LINE แล้ว\nOBS เองเป็นคนสร้างร่าง (ดู /api/line/webhook ใน src/server.js) n8n ไฟล์นี้ไม่ต้องทำอะไรต่อ"
+    },
+    {
+      "parameters": {},
+      "id": "wait-noop",
+      "name": "รอ Timesheet คนที่เหลือ",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        780,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "notify-team",
+      "name": "แจ้งทีมให้เข้าไปแก้",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        780,
+        380
+      ],
+      "notes": "ข้อ 2.6 — 4 ส.ค. 69 OBS เองเป็นคนแจ้ง LINE ตอนเรียก /api/timesheets/ingest แล้ว (ดู notifyCheckFailed() ใน src/service.js เรียกจาก ingestTimesheet() ตอน nextAction=fix_mismatch) n8n ไฟล์นี้ไม่ต้องทำอะไรต่อ เหมือนกับโหนด \"ส่งขออนุมัติเข้า LINE\" ด้านบน"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "ทุกวันทำการ 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -320,
+        900
+      ],
+      "notes": "จับรอบบิลที่ครบแล้วแต่ยังไม่ได้วางบิล เผื่อกรณีที่ Timesheet คนสุดท้ายเข้ามาตอนกลางคืน"
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:4300/api/cycles/ready",
+        "options": {}
+      },
+      "id": "get-ready",
+      "name": "ถามระบบว่ารอบไหนพร้อมวางบิล",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        900
+      ],
+      "notes": "ระบบคำนวณเงื่อนไขให้แล้ว — n8n ไม่ต้องรู้กฎธุรกิจ"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "cycles",
+        "options": {}
+      },
+      "id": "split",
+      "name": "แยกทีละรอบบิล",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        120,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.canApprove }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "gate-can",
+      "name": "อนุมัติได้จริงไหม",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        340,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:4300/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "request-approval",
+      "name": "ส่งขออนุมัติเข้า LINE (จากตรวจรอบบิลรายวัน)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        800
+      ],
+      "notes": "ขั้น 4.2 — แค่ส่งสรุปเข้า LINE ให้คนกด ยังไม่สร้างร่างใน FlowAccount\nคนกดอนุมัติใน LINE แล้ว OBS เองเป็นคนสร้างร่าง (ดู /api/line/webhook) workflow นี้ไม่ต้องทำอะไรต่อ"
+    },
+    {
+      "parameters": {},
+      "id": "notify-blocked",
+      "name": "แจ้งทีมว่าติดอะไรอยู่",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        580,
+        1000
+      ],
+      "notes": "แทนด้วย Slack / Line node · ข้อมูลที่ควรส่ง: $json.periodLabel, $json.blockers"
+    }
+  ],
+  "connections": {
+    "อีเมลแจ้งอนุมัติ Timesheet": {
+      "main": [
+        [
+          {
+            "node": "สถานะเป็น อนุมัติ เท่านั้น",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "สถานะเป็น อนุมัติ เท่านั้น": {
+      "main": [
+        [
+          {
+            "node": "เตรียมข้อมูลส่งเข้าระบบ",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "เตรียมข้อมูลส่งเข้าระบบ": {
+      "main": [
+        [
+          {
+            "node": "ส่งเข้าระบบ OBS (อ่าน+ตรวจ+คำนวณ)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ส่งเข้าระบบ OBS (อ่าน+ตรวจ+คำนวณ)": {
+      "main": [
+        [
+          {
+            "node": "ระบบบอกว่าต้องทำอะไรต่อ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ระบบบอกว่าต้องทำอะไรต่อ": {
+      "main": [
+        [
+          {
+            "node": "ส่งขออนุมัติเข้า LINE",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "รอ Timesheet คนที่เหลือ",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "แจ้งทีมให้เข้าไปแก้",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ทุกวันทำการ 09:00": {
+      "main": [
+        [
+          {
+            "node": "ถามระบบว่ารอบไหนพร้อมวางบิล",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ถามระบบว่ารอบไหนพร้อมวางบิล": {
+      "main": [
+        [
+          {
+            "node": "แยกทีละรอบบิล",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "แยกทีละรอบบิล": {
+      "main": [
+        [
+          {
+            "node": "อนุมัติได้จริงไหม",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "อนุมัติได้จริงไหม": {
+      "main": [
+        [
+          {
+            "node": "ส่งขออนุมัติเข้า LINE (จากตรวจรอบบิลรายวัน)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "แจ้งทีมว่าติดอะไรอยู่",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

@@ -9,7 +9,8 @@ n8n จึงไม่ต้องรู้กฎเลย แค่ส่งไ
 | 1 · จับอีเมล ดึงไฟล์แนบ | **n8n** |
 | 1 · อ่านไฟล์ด้วย AI + บันทึก | OBS (`/api/timesheets/ingest`) |
 | 2 · ตรวจ Manday ทั้งหมด | OBS |
-| 3 · สร้างเอกสารใน FlowAccount | OBS (`/api/cycles/.../approve`) |
+| 4.2 · ขออนุมัติก่อนสร้างเอกสาร | OBS ส่งเข้า LINE (`/api/cycles/.../request-approval`) — n8n **ไม่เรียก** `/approve` ตรงๆ อีกแล้ว |
+| 3 · สร้างเอกสารใน FlowAccount | OBS หลังคนกด "อนุมัติ" ใน LINE (`/api/line/webhook` → `approveCycle()`) |
 | 4 · ร่างอีเมล | OBS |
 | ตั้งเวลาตรวจรายวัน | **n8n** |
 
@@ -19,8 +20,7 @@ n8n จึงไม่ต้องรู้กฎเลย แค่ส่งไ
 
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `01-ingest-timesheet.json` | จับอีเมลแจ้งอนุมัติ → ส่งไฟล์เข้า OBS → แตกทางตาม `nextAction` |
-| `02-daily-billing-check.json` | ทุกวันทำการ 09:00 ถามว่ารอบไหนพร้อมวางบิล แล้วสร้างร่าง |
+| `01-obs-workflow.json` | workflow เดียว มี 2 trigger คนละจุดกัน (n8n รองรับหลาย trigger ในไฟล์เดียว) — **Gmail Trigger**: จับอีเมลแจ้งอนุมัติ → ส่งไฟล์เข้า OBS → แตกทางตาม `nextAction` · **Schedule Trigger**: ทุกวันทำการ 09:00 ถามว่ารอบไหนพร้อมวางบิล แล้วสร้างร่าง — รวมเป็นไฟล์เดียว 4 ส.ค. 69 เพื่อกด Activate ได้ที่เดียว (เดิมแยก `01-ingest-timesheet.json` / `02-daily-billing-check.json`) |
 
 ---
 
@@ -32,27 +32,43 @@ n8n จึงไม่ต้องรู้กฎเลย แค่ส่งไ
 npm start          # http://localhost:4300
 ```
 
-ต้องมี `ANTHROPIC_API_KEY` ใน `.env` เพราะ `/ingest` ต้องเรียก Claude อ่าน PDF
+ต้องเปิด Local Server ใน LM Studio/Ollama ไว้ก่อน เพราะ `/ingest` ต้องเรียกโมเดล vision ในเครื่องมาอ่าน PDF
 
 ถ้า n8n รันใน Docker จะเรียก `localhost` ของเครื่อง host ไม่ได้ ให้ใช้
 `http://host.docker.internal:4300` แทน
 
-### 2. ตั้งตัวแปรใน n8n
+### 2. URL ของ OBS
 
-Settings → Variables → เพิ่ม
-
-| ตัวแปร | ค่า |
-|---|---|
-| `OBS_BASE_URL` | `http://localhost:4300` |
+โหนด HTTP Request ทุกตัวใน workflow เขียน URL ตรงเป็น `http://localhost:4300` ไว้แล้ว (แก้ 4 ส.ค. 69 —
+เดิมใช้ `{{ $vars.OBS_BASE_URL }}` แต่ฟีเจอร์ Variables เป็นของแพ็กเกจเสียเงินใน n8n รุ่นใหม่ จึงเขียนตรง
+ง่ายกว่า) **ถ้า n8n กับ OBS ไม่ได้อยู่เครื่องเดียวกัน หรือ n8n รันใน Docker ต้องแก้ URL ในแต่ละโหนดเอง**
+(Docker เรียก `localhost` ของเครื่อง host ไม่ได้ ต้องใช้ `http://host.docker.internal:4300` แทน)
 
 ### 3. Import workflow
 
-Workflows → Import from File → เลือกไฟล์ `.json` ทั้งสองไฟล์
+Workflows → Import from File → เลือก `01-obs-workflow.json`
 
 ### 4. ตั้ง credential และปรับ node
 
-- **Gmail Trigger** — ต้องผูก credential Gmail (OAuth2) และปรับ `q` ให้ตรงหัวข้ออีเมลจริงของระบบ TLI
-- **แจ้งทีมให้เข้าไปแก้ / แจ้งทีมว่าติดอะไรอยู่** — ตอนนี้เป็น NoOp เปล่า ให้แทนด้วย Slack / Line / Email node ที่ทีมใช้
+- **Gmail Trigger** — **ตัดสินใจไม่ผูก credential 4 ส.ค. 69** เพราะ OBS เชื่อมต่อ Gmail เองแล้ว (หน้า
+  "ดึงจาก Gmail" ในขั้นอัปโหลด Timesheet) คนกดดึงเมลเองจากหน้าเว็บแทนได้ครบ ไม่ต้องมี trigger อัตโนมัติซ้ำ
+  อีกจุด — โหนดนี้ปล่อยไว้เฉยๆ บน canvas ได้ ขึ้น error "Node does not have any credentials set" ตอนกด
+  Execute เป็นเรื่องปกติ ถ้าวันหลังอยากเปิดใช้จริงต้องสร้าง Gmail OAuth client แยกสำหรับ n8n (คนละตัวกับที่
+  OBS ใช้ใน `.env`) แล้วผูก credential ในหน้า n8n เอง + ปรับ `q` ให้ตรงหัวข้ออีเมลจริงของระบบ TLI
+- **แจ้งทีมให้เข้าไปแก้** — เป็น NoOp เปล่าไว้เฉยๆ ไม่ต้องแทนอะไร เพราะ OBS แจ้ง LINE เองอยู่แล้วตอนเรียก
+  `/api/timesheets/ingest` (ดู `notifyCheckFailed()` ใน `src/service.js` — ข้อ 2.6 ทำแล้ว 4 ส.ค. 69)
+- **แจ้งทีมว่าติดอะไรอยู่** — ยังเป็น NoOp เปล่าจริง ให้แทนด้วย Slack / Line / Email node ที่ทีมใช้ (จุดนี้คนละจุดกับ
+  ข้อ 2.6 — เป็นการแจ้งตอนรอบบิลที่ควรพร้อมแล้วแต่ยังติด blocker อื่นอยู่ ยังไม่มีใครทำ)
+- **LINE (ขั้น 4.2)** — ไม่ต้องตั้งอะไรใน n8n เพราะ OBS รับ webhook เอง แต่ต้องตั้งที่ฝั่ง LINE
+  Developers Console กับไฟล์ `.env` ของ OBS:
+  1. สร้าง Messaging API channel → คัดลอก Channel access token + Channel secret ลง
+     `LINE_CHANNEL_ACCESS_TOKEN` / `LINE_CHANNEL_SECRET`
+  2. ตั้ง Webhook URL เป็น `https://<โดเมนที่เข้าถึง OBS ได้จริง>/api/line/webhook` (ต้องเป็น HTTPS
+     ที่ LINE ยิงเข้ามาได้ — ngrok ก็ใช้ได้ตอนทดสอบ)
+  3. เพิ่มบัญชี/กลุ่มที่จะให้อนุมัติเป็นเพื่อนกับ channel แล้วใส่ userId/groupId ใน
+     `LINE_APPROVER_TARGET`
+  4. ใส่ userId ของคนที่มีสิทธิ์กดอนุมัติจริงใน `LINE_APPROVER_USER_IDS` (คั่นด้วยจุลภาค) —
+     ไม่ใส่ = ปิดรับทุกคน หา userId ได้จาก `event.source.userId` ในล็อกครั้งแรกที่มีคนกดปุ่ม
 
 > ⚠️ พารามิเตอร์ของ node บางตัวอาจต้องปรับในหน้า n8n เพราะรูปแบบต่างกันตามเวอร์ชัน
 > โครง workflow กับ HTTP call ถูกต้องแน่นอน แต่ควรกด Execute ทีละ node ดูครั้งแรก
@@ -63,7 +79,7 @@ Workflows → Import from File → เลือกไฟล์ `.json` ทั้
 
 ### `POST /api/timesheets/ingest`
 
-รับไฟล์เข้าระบบครบวงจร — อ่านด้วย Claude → จับคู่พนักงาน → บันทึก → คำนวณ Manday
+รับไฟล์เข้าระบบครบวงจร — อ่านด้วยโมเดล vision ในเครื่อง → จับคู่พนักงาน → บันทึก → คำนวณ Manday
 
 ใช้ `documentNo` เป็น primary key **ยิงซ้ำได้ ไม่เกิดข้อมูลซ้ำ** (ระบบเขียนทับ ยกเว้นที่วางบิลไปแล้ว)
 
@@ -85,7 +101,7 @@ Workflows → Import from File → เลือกไฟล์ `.json` ทั้
 
 | `nextAction` | ความหมาย | n8n ควรทำอะไร |
 |---|---|---|
-| `approve_cycle` | ครบทุกคนในสัญญาและตรวจผ่าน | เรียก `/approve` ได้เลย |
+| `approve_cycle` | ครบทุกคนในสัญญาและตรวจผ่าน | เรียก `/request-approval` (**ไม่ใช่** `/approve`) — ให้คนกดใน LINE ก่อน |
 | `wait_for_others` | ตรวจผ่านแต่ยังไม่ครบทุกคน | ไม่ทำอะไร รอ Timesheet คนที่เหลือ |
 | `fix_mismatch` | ตรวจไม่ผ่าน — ดู `failures` | แจ้งทีมให้เข้าไปแก้ในหน้าเว็บ |
 | `needs_match` | จับคู่พนักงานไม่ได้ — **ไม่ได้บันทึก** | แจ้งทีมให้ไปเพิ่มชื่อพ้อง |
@@ -132,16 +148,42 @@ Workflows → Import from File → เลือกไฟล์ `.json` ทั้
 }
 ```
 
+### `POST /api/cycles/:contractId/:period/request-approval`
+
+**ขั้น 4.2 — ประตูมนุษย์จริงก่อนสร้างร่าง** ส่ง Flex Message สรุปรอบบิล (ลูกค้า โครงการ จำนวนคน
+ยอดรับชำระ) พร้อมปุ่ม "อนุมัติ"/"ตีกลับ" เข้า LINE ตาม `LINE_APPROVER_TARGET` — **ยังไม่สร้าง
+เอกสารใดๆ ที่นี่** ยิงซ้ำได้ ถ้ายังมีคำขอ `pending` ค้างอยู่จะไม่ส่งซ้ำ
+
+ถ้ายังมีอะไรค้างจะได้ `409` พร้อม `blockers` บอกเหตุผล เช่นเดียวกับ `/approve`
+
+### `POST /api/line/webhook`
+
+ตั้งเป็น Webhook URL ของ LINE Messaging API channel — **OBS รับ webhook นี้เอง ไม่ผ่าน n8n**
+เพราะ OBS มีเซิร์ฟเวอร์ HTTP ของตัวเองอยู่แล้ว และตรวจลายเซ็น HMAC ของ LINE ในไฟล์เดียวกัน
+(`src/integrations/line.js`) ตรวจสองชั้นก่อนเชื่อ:
+
+1. ลายเซ็น `X-Line-Signature` — ยืนยันว่าข้อความมาจาก LINE จริง
+2. `userId` ของคนกดต้องอยู่ใน `LINE_APPROVER_USER_IDS` — กันคนอื่นในแชทเดียวกันกดแทน
+
+กดปุ่ม "อนุมัติ" → เรียก `approveCycle()` ตัวเดิม (สร้างร่างใน FlowAccount) ให้ทันที
+กดปุ่ม "ตีกลับ" → บันทึกว่า rejected ไม่สร้างเอกสารอะไร
+
+ทดสอบตอนที่ยังไม่มีเครื่อง public HTTPS ได้ด้วย `npm test` (ดูหัวข้อทดสอบด้านล่าง) หรือ ngrok
+ชี้เข้า `localhost:4300/api/line/webhook`
+
 ### `POST /api/cycles/:contractId/:period/approve`
 
-สร้างร่างใบแจ้งหนี้ใน FlowAccount + ร่างอีเมล **ไม่ส่งอีเมลออก**
+สร้างร่างใบแจ้งหนี้ใน FlowAccount + ร่างอีเมล **ไม่ส่งอีเมลออก** — เรียกตรงได้จากหน้าเว็บ (คนนั่งกด
+เองถือเป็นประตูมนุษย์อยู่แล้ว) แต่ **ห้ามให้ n8n เรียก endpoint นี้ตรงๆ อีก** ต้องผ่าน
+`/request-approval` เท่านั้น ไม่งั้นย้อนกลับไปเป็นปัญหาเดิม (ดู "ปัญหาเชิงโครงสร้าง" ใน
+[../docs/checklist.md](../docs/checklist.md))
 
 ถ้ายังมีอะไรค้างจะได้ `409` พร้อม `blockers` บอกเหตุผล
 
 ### โหมด Manual ปิดทางนี้ไว้อยู่
 
 ตอนนี้ระบบตั้งเป็นโหมด Manual (`billing_rules.requireHumanCheck = true`)
-รอบบิลที่ยังไม่มีคนกดยืนยันผลตรวจจะ **ไม่โผล่ใน `/cycles/ready`** และ `/approve` จะตอบ 409
+รอบบิลที่ยังไม่มีคนกดยืนยันผลตรวจจะ **ไม่โผล่ใน `/cycles/ready`** และ `/request-approval` จะตอบ 409
 workflow ตัวที่ 2 จึงยังไม่ทำอะไรจนกว่าจะตั้งค่าเป็น `false`
 
 ดู [../docs/manual-vs-auto.md](../docs/manual-vs-auto.md) ว่าสองโหมดต่างกันตรงไหน
@@ -154,7 +196,7 @@ workflow ตัวที่ 2 จึงยังไม่ทำอะไรจ�
 # 1. ทดสอบ pipeline ทั้งหมดโดยไม่ต้องมี API key (ใช้ตัวอ่านไฟล์ปลอม)
 npm test
 
-# 2. ทดสอบ ingest ด้วยไฟล์จริง (ต้องมี ANTHROPIC_API_KEY)
+# 2. ทดสอบ ingest ด้วยไฟล์จริง (ต้องเปิด Local Server ใน LM Studio/Ollama ไว้ก่อน)
 curl -s -X POST localhost:4300/api/timesheets/ingest \
   -H 'Content-Type: application/json' \
   -d "{\"documentNo\":\"TEST-001\",\"filePath\":\"$(pwd)/docs/Timesheet-Pongpun_012026.pdf\",\"expectedPeriod\":\"2026-01\"}" | jq
@@ -169,7 +211,7 @@ curl -s localhost:4300/api/cycles/ready | jq
 
 | งาน | ทำไมไม่อัตโนมัติ |
 |---|---|
-| กดอนุมัติรอบบิล | ตกลงกันไว้ว่าต้องมีคนตรวจก่อนออกเอกสาร — เอา node approve ออกจาก workflow 2 ถ้าต้องการให้คนกดเองทุกครั้ง |
+| กดอนุมัติรอบบิล | ตกลงกันไว้ว่าต้องมีคนตรวจก่อนออกเอกสาร — ตอนนี้เป็นปุ่ม "อนุมัติ"/"ตีกลับ" ใน LINE (ขั้น 4.2) ไม่ใช่ workflow 2 อีกแล้ว |
 | เซ็นเอกสาร | ทำใน FlowAccount |
 | กดส่งอีเมลหาลูกค้า | ระบบสร้างร่างให้ แต่ไม่ส่ง |
 | นำเอกสารไปวางบิลที่อาคารลูกค้า | งานของเจ้าหน้าที่ |
