@@ -155,18 +155,36 @@ const routes = [
    * ขั้นที่ 1 ของโหมด manual — อัปโหลดไฟล์เอง ให้ AI อ่านให้ดูก่อน ยังไม่บันทึก
    * แยกจาก /ingest เพราะคนต้องได้ตรวจสิ่งที่ AI อ่านมาก่อนเข้าระบบ
    */
-  ['POST', /^\/api\/timesheets\/read$/, async (_m, _url, body) => {
+  ['POST', /^\/api\/timesheets\/read$/, async (_m, _url, body, session) => {
     if (!body?.fileBase64) throw httpError(400, 'ยังไม่ได้แนบไฟล์ Timesheet');
-    return svc.readTimesheetFile({
+    const result = await svc.readTimesheetFile({
       fileBase64: body.fileBase64,
       fileName: body.fileName ?? null,
       expectedPeriod: body.expectedPeriod || null,
     });
+    const documentNo = svc.logAiRead({ source: 'upload', fileName: body.fileName ?? null, result, actor: session.nameTh });
+    const { fileBytes, ...clientResult } = result;
+    return { ...clientResult, documentNo };
   }],
 
   /** คนตรวจสิ่งที่ AI อ่านแล้วกดยืนยัน → บันทึกเข้าระบบด้วยเส้นเดียวกับ n8n */
   ['POST', /^\/api\/timesheets\/confirm$/, (_m, _url, body, session) =>
     svc.confirmTimesheet({ ...body, actor: session.nameTh })],
+
+  /** ประวัติที่ AI เคยอ่านแล้ว ทั้งจากอัปโหลดไฟล์เองและดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง */
+  ['GET', /^\/api\/ai-reads$/, () => svc.listAiReads()],
+
+  ['GET', /^\/api\/ai-reads\/([^/]+)$/, (m) => {
+    const row = svc.getAiRead(Number(m[1]));
+    if (!row) throw httpError(404, 'ไม่พบรายการนี้');
+    return row;
+  }],
+
+  ['POST', /^\/api\/ai-reads\/dismiss$/, (_m, _url, body, session) => {
+    if (!body?.id) throw httpError(400, 'ต้องระบุรายการที่จะลบ');
+    svc.dismissAiRead(Number(body.id), { actor: session.nameTh });
+    return { ok: true };
+  }],
 
   /* ── ขั้นที่ 1 ทางที่สอง: ดึงจากกล่อง Gmail ─────────────── */
 
@@ -178,22 +196,30 @@ const routes = [
     })],
 
   /** ดึงอีเมล 1 ฉบับ → AI อ่านทั้งเนื้อเมลและไฟล์แนบ → คืนให้คนตรวจ (ยังไม่บันทึก) */
-  ['POST', /^\/api\/gmail\/read$/, (_m, _url, body) => {
+  ['POST', /^\/api\/gmail\/read$/, async (_m, _url, body, session) => {
     if (!body?.messageId) throw httpError(400, 'ต้องระบุอีเมลที่จะดึง');
-    return svc.readTimesheetFromEmail({
+    const result = await svc.readTimesheetFromEmail({
       messageId: body.messageId,
       attachmentFilename: body.attachmentFilename ?? null,
     });
+    const documentNo = svc.logAiRead({ source: 'gmail', sourceEmailId: body.messageId, result, actor: session.nameTh });
+    const { fileBytes, ...clientResult } = result;
+    return { ...clientResult, documentNo };
+  }],
+
+  /** ซ่อนอีเมลฉบับนี้ทิ้งจากรายการ — ไม่ลบอีเมลจริงใน Gmail */
+  ['POST', /^\/api\/gmail\/dismiss$/, (_m, _url, body, session) => {
+    if (!body?.messageId) throw httpError(400, 'ต้องระบุอีเมลที่จะซ่อน');
+    return svc.dismissGmailMessage(body.messageId, { actor: session.nameTh });
   }],
 
   /**
    * ป้อน Timesheet ด้วยมือ — ทางเข้าของการใช้งานแบบ manual
    * ไม่ต้องมีอีเมล ไม่ต้องเรียก AI เลย แต่ผ่านการตรวจชุดเดียวกับ n8n
+   * เลขที่เอกสารระบบออกให้อัตโนมัติ (ดู nextDocumentNo) ไม่ต้องให้คนพิมพ์เองแล้ว
    */
-  ['POST', /^\/api\/timesheets\/manual$/, (_m, _url, body, session) => {
-    if (!body?.documentNo) throw httpError(400, 'ต้องระบุเลขที่เอกสารจากใบ Timesheet');
-    return svc.enterTimesheetManually({ ...body, actor: session.nameTh });
-  }],
+  ['POST', /^\/api\/timesheets\/manual$/, (_m, _url, body, session) =>
+    svc.enterTimesheetManually({ ...body, actor: session.nameTh })],
 
   /**
    * จุดต่อหลักกับ n8n — รับไฟล์ Timesheet เข้าระบบครบวงจร
@@ -475,6 +501,25 @@ const server = createServer(async (req, res) => {
     } catch (error) {
       sendJson(res, error.status ?? 500, { error: error.message });
     }
+    return;
+  }
+
+  /** ไฟล์ PDF ต้นฉบับของ Timesheet — ไม่ผ่าน sendJson เพราะต้องส่งเป็นไบต์ดิบให้เบราว์เซอร์เปิดดูได้ตรงๆ
+   *  (ใช้ตอนกดดูไฟล์แนบจากหน้าร่างอีเมล / แนบจริงเข้า Gmail draft) */
+  const fileMatch = url.pathname.match(/^\/api\/timesheets\/([^/]+)\/file$/);
+  if (fileMatch && req.method === 'GET') {
+    const file = svc.getTimesheetFile(decodeURIComponent(fileMatch[1]));
+    if (!file) {
+      sendJson(res, 404, { error: `ไม่พบไฟล์ต้นฉบับของ Timesheet ${decodeURIComponent(fileMatch[1])}` });
+      return;
+    }
+    res.writeHead(200, {
+      ...NO_CACHE,
+      'Content-Type': 'application/pdf',
+      'Content-Length': file.bytes.length,
+      'Content-Disposition': 'inline',
+    });
+    res.end(file.bytes);
     return;
   }
 

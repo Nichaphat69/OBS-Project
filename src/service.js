@@ -3,6 +3,7 @@
  * route ทุกตัวเรียกผ่านที่นี่ ไม่แตะ SQL เอง
  */
 
+import { readFileSync } from 'node:fs';
 import { all, get, run, logAudit, getSetting, setSetting, tx } from './db/index.js';
 import { calculateManday, SEVERITY } from './domain/manday.js';
 import { buildInvoice, toFlowAccountPayload } from './domain/invoice.js';
@@ -143,7 +144,11 @@ function checkStamp(row, computed) {
 
 export function listTimesheets({ status, period } = {}) {
   const rows = all(`
-    SELECT t.*, e.name_th, e.name_en, e.invoice_position,
+    SELECT t.id, t.contract_id, t.employee_id, t.period, t.source_email_id, t.source_file,
+           t.received_at, t.approved_by, t.approved_at, t.raw_employee_name, t.raw_position,
+           t.reported_workdays, t.reported_leave, t.extraction, t.status, t.status_reason,
+           t.computed, t.created_at, t.updated_at,
+           e.name_th, e.name_en, e.invoice_position,
            a.monthly_rate, a.quotation_no,
            c.po_no, c.contract_no, c.project_name,
            cu.name_th AS customer_name,
@@ -314,6 +319,13 @@ function buildMatchingReport(row) {
 }
 
 /** คำนวณ Manday ใหม่จากข้อมูลปัจจุบัน แล้วบันทึกกลับ */
+/** ไฟล์ PDF ต้นฉบับของ Timesheet ใบนี้ — คืน null ถ้าไม่มี (ไม่ได้อัปโหลดผ่านทางที่เก็บไฟล์ไว้) */
+export function getTimesheetFile(id) {
+  const row = get('SELECT id, source_file, source_file_bytes FROM timesheets WHERE id = $id', { id });
+  if (!row?.source_file_bytes) return null;
+  return { filename: row.source_file || `${row.id}.pdf`, bytes: row.source_file_bytes };
+}
+
 export function recomputeTimesheet(id, { actor = 'system' } = {}) {
   const row = get(
     `SELECT t.*, a.monthly_rate, c.divisor_mode, c.divisor_value, c.customer_id,
@@ -632,6 +644,9 @@ export async function readTimesheetFile({
     usage,
     data,
     verification,
+    // ไฟล์ต้นฉบับจริง — เก็บผ่านๆ ไปให้ logAiRead()/confirmTimesheet() แนบเป็น PDF จริงในร่างอีเมลได้
+    // ทีหลัง (ไม่ส่งกลับไปให้หน้าเว็บเห็น — server.js ตัดออกก่อนตอบกลับ client)
+    fileBytes: Buffer.isBuffer(source) ? source : null,
     matching: {
       kind: nameMatch.match,
       reason: nameMatch.reason,
@@ -692,10 +707,21 @@ export async function confirmTimesheet({
 
   const stamped = readModel ? `${readModel} · คนยืนยัน` : 'ป้อนด้วยมือ';
 
-  return ingestTimesheet({
+  /* ไฟล์ PDF ต้นฉบับที่ AI อ่านตอน logAiRead() เก็บไว้ให้แล้ว — ดึงกลับมาแนบเป็นไฟล์จริงใน
+     timesheets.source_file_bytes ตอนยืนยัน จะได้เปิด/ดาวน์โหลดได้จริงตอนแนบร่างอีเมล
+     (เดิมส่งแค่ marker "upload://..." ไม่มีไฟล์จริงเก็บไว้เลย ร่างอีเมลจึงไม่มี PDF แนบให้) */
+  const fileBytes = get(
+    `SELECT file_bytes FROM ai_reads WHERE document_no = $documentNo AND status = 'pending'
+       ORDER BY read_at DESC LIMIT 1`,
+    { documentNo },
+  )?.file_bytes;
+
+  const result = await ingestTimesheet({
     documentNo,
     fileName: fileName ?? `อัปโหลดด้วยมือ · ${data.period}`,
-    filePath: `upload://${documentNo}`,
+    ...(fileBytes
+      ? { fileBase64: Buffer.from(fileBytes).toString('base64') }
+      : { filePath: `upload://${documentNo}` }),
     sourceEmailId,
     approvedBy,
     approvedAt,
@@ -708,6 +734,115 @@ export async function confirmTimesheet({
       model: stamped,
     }),
   });
+  // บันทึกสำเร็จแล้ว (จับคู่ได้/ผ่านทุกด่าน) — ย้ายรายการในประวัติ AI อ่านให้ขึ้นว่า "บันทึกแล้ว"
+  if (result.timesheetId) markAiReadConfirmed(documentNo);
+  return result;
+}
+
+/* ── ประวัติที่ AI เคยอ่านแล้ว (ก่อนตัดสินใจว่าจะยืนยันหรือทิ้ง) ──────────
+   คนละแนวคิดจาก timesheets: ตารางนี้เก็บทุกครั้งที่กด "ให้ AI อ่าน" ไม่ว่าจะกดยืนยัน
+   หรือทิ้งผลนั้นในภายหลังหรือไม่ก็ตาม ใช้เป็นด่านแรกก่อนเข้าระบบวางบิลจริง */
+
+/**
+ * เลขเอกสารรันเอง OBS{ปี}{ลำดับ 2 หลัก} — เดิมให้คนพิมพ์เอง (หรือหวังพึ่งเลขจากอีเมล ซึ่งมักไม่มี)
+ * ตอนนี้ระบบออกเลขให้อัตโนมัติตามลำดับที่เอกสารเข้ามาในระบบ นับใหม่ทุกปี ใช้ตัวนับเดียวกัน
+ * ไม่ว่าเอกสารจะมาจากอ่านไฟล์ ดึงอีเมล หรือกรอกเองก็ตาม (เก็บตัวนับไว้ใน settings)
+ *
+ * ครั้งแรกที่เรียกในแต่ละปีจะกู้ค่าจากเลขสูงสุดที่เคยออกไปแล้วใน ai_reads ก่อน (ช่วงก่อนมีตัวนับนี้
+ * ใช้วิธีนับแถวในตารางแทน) กันไม่ให้ออกเลขซ้ำกับของเก่าที่มีอยู่แล้ว
+ */
+export function nextDocumentNo() {
+  const year = new Date().getFullYear();
+  const key = `doc_seq_${year}`;
+  const prefix = `OBS${year}`;
+  let seq = getSetting(key, null);
+  if (seq === null) {
+    const rows = all(`SELECT document_no FROM ai_reads WHERE document_no LIKE $pattern`, { pattern: `${prefix}%` });
+    seq = rows.reduce((max, r) => {
+      const n = Number(r.document_no.slice(prefix.length));
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+  }
+  seq += 1;
+  setSetting(key, seq);
+  return `${prefix}${String(seq).padStart(2, '0')}`;
+}
+
+export function logAiRead({ source, sourceEmailId = null, fileName = null, result, actor = null }) {
+  const data = result?.data ?? {};
+  const documentNo = nextDocumentNo();
+  // ไฟล์ต้นฉบับเก็บแยกไว้ในคอลัมน์ file_bytes ของตัวเอง — ห้ามปนไปกับ extraction (JSON.stringify
+  // ของ Buffer จะกลายเป็น {"type":"Buffer","data":[...]} ตัวเลขนับพันตัว ทำให้คอลัมน์นี้บวมเปล่าๆ)
+  const { fileBytes, ...resultWithoutBytes } = result ?? {};
+  run(
+    `INSERT INTO ai_reads
+       (source, source_email_id, file_name, employee_name, period, document_no, model, extraction,
+        file_bytes, read_by)
+     VALUES ($source, $sourceEmailId, $fileName, $employeeName, $period, $documentNo, $model, $extraction,
+        $fileBytes, $readBy)`,
+    {
+      source,
+      sourceEmailId,
+      fileName: fileName ?? result?.fileName ?? null,
+      employeeName: data.employeeName ?? null,
+      period: data.period ?? null,
+      documentNo,
+      model: result?.model ?? null,
+      extraction: JSON.stringify(resultWithoutBytes),
+      fileBytes: fileBytes ?? null,
+      readBy: actor,
+    },
+  );
+  return documentNo;
+}
+
+function markAiReadConfirmed(documentNo) {
+  run(
+    `UPDATE ai_reads SET status = 'confirmed' WHERE id = (
+       SELECT id FROM ai_reads WHERE document_no = $documentNo AND status = 'pending'
+       ORDER BY read_at DESC LIMIT 1
+     )`,
+    { documentNo },
+  );
+}
+
+export function listAiReads() {
+  // ไม่โชว์ฉบับที่ทิ้งแล้ว (status = 'discarded') — เหมือน gmail_dismissed: กดถังขยะแล้วต้องหายจากรายการ
+  // ยังเก็บแถวไว้ในตาราง (ไม่ hard-delete) เผื่อย้อนดูทีหลังผ่าน SQL ตรง ไม่มีช่องทางเรียกดูผ่านหน้าเว็บ
+  return all("SELECT * FROM ai_reads WHERE status != 'discarded' ORDER BY read_at DESC LIMIT 200").map((r) => ({
+    id: r.id,
+    source: r.source,
+    sourceEmailId: r.source_email_id,
+    fileName: r.file_name,
+    employeeName: r.employee_name,
+    period: r.period,
+    periodLabel: r.period ? thaiMonth(r.period) : null,
+    documentNo: r.document_no,
+    status: r.status,
+    model: r.model,
+    readAt: r.read_at,
+    readBy: r.read_by,
+  }));
+}
+
+export function getAiRead(id) {
+  // ไม่ select file_bytes มาด้วย — เป็น BLOB ไฟล์ PDF เต็มใบ ไม่มีประโยชน์กับหน้าเว็บที่ใช้ endpoint นี้
+  // (แค่เปิดดู/ยืนยันข้อมูลที่เคยอ่านไว้ ไฟล์จริงถูกดึงมาแนบใหม่ตอน confirmTimesheet() เอง)
+  const row = get(
+    `SELECT id, source, source_email_id, file_name, employee_name, period, document_no,
+            status, model, extraction, read_at, read_by
+       FROM ai_reads WHERE id = $id`,
+    { id },
+  );
+  if (!row) return null;
+  return { ...row, extraction: row.extraction ? JSON.parse(row.extraction) : null };
+}
+
+export function dismissAiRead(id, { actor } = {}) {
+  const row = get('SELECT id FROM ai_reads WHERE id = $id', { id });
+  if (!row) throw Object.assign(new Error('ไม่พบรายการนี้ในประวัติ'), { status: 404 });
+  run(`UPDATE ai_reads SET status = 'discarded' WHERE id = $id`, { id });
+  logAudit({ actor, action: 'discard_ai_read', entityType: 'ai_read', entityId: String(id) });
 }
 
 /* ── ขั้นที่ 1 ทางเลือกที่สอง: ดึงจากกล่องเมลโดยตรง ─────────
@@ -726,26 +861,58 @@ export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client
     gmail.searchMessages({ query, max }),
   ]);
 
-  const known = new Set(all('SELECT source_email_id FROM timesheets').map((r) => r.source_email_id));
+  /* เคยดึงไฟล์แนบไหนเข้าระบบไปแล้วบ้าง (key ด้วย source_email_id + source_file คู่กัน ไม่ใช่แค่ตัวอีเมล)
+     เพราะ 1 อีเมลอาจมีไฟล์แนบของหลายคน — คนละไฟล์กันต้องแยกสถานะกันคนละอัน ไม่งั้นแค่คนแรกที่
+     ยืนยันเข้าระบบไปแล้ว จะพาให้อีเมลทั้งฉบับ (รวมไฟล์ของคนที่ยังไม่ได้อ่านเลย) หายไปจากรายการที่ต้องทำ */
+  const known = new Map(
+    all(`SELECT source_email_id, source_file, period, id AS document_no
+           FROM timesheets WHERE source_email_id IS NOT NULL`)
+      .map((r) => [`${r.source_email_id}::${r.source_file}`, { period: r.period, documentNo: r.document_no }]),
+  );
+  // ฉบับที่กด "ซ่อน" ทิ้งไว้ — ไม่ให้โผล่ในรายการที่ต้องอ่านอีก (อีเมลจริงใน Gmail ไม่ถูกแตะ)
+  const dismissed = new Set(all('SELECT message_id FROM gmail_dismissed').map((r) => r.message_id));
+
+  const withAttachments = messages
+    .filter((m) => m.pdfAttachments.length > 0)
+    .map((m) => ({
+      id: m.id,
+      subject: m.subject,
+      from: m.from,
+      receivedAt: m.receivedAt,
+      snippet: m.snippet,
+      attachments: m.pdfAttachments.map((a) => ({
+        filename: a.filename, size: a.size, attachmentId: a.attachmentId,
+        ...known.get(`${m.id}::${a.filename}`),
+      })),
+    }));
 
   return {
     account: profile.email,
     query,
-    messages: messages
-      .filter((m) => m.pdfAttachments.length > 0)
-      .map((m) => ({
-        id: m.id,
-        subject: m.subject,
-        from: m.from,
-        receivedAt: m.receivedAt,
-        snippet: m.snippet,
-        attachments: m.pdfAttachments.map((a) => ({
-          filename: a.filename, size: a.size, attachmentId: a.attachmentId,
-        })),
-        /* เคยดึงฉบับนี้เข้าระบบไปแล้วหรือยัง — กันคนกดซ้ำโดยไม่ตั้งใจ */
-        alreadyIngested: known.has(m.id),
-      })),
+    // ยังต้องโผล่ในรายการที่ต้องทำถ้า "มีไฟล์แนบไหนสักไฟล์" ที่ยังไม่ได้อ่าน+ยืนยัน แม้ไฟล์อื่นในฉบับ
+    // เดียวกันจะเข้าระบบไปแล้วก็ตาม — ปุ่ม "ให้ AI อ่าน" แยกทีละไฟล์แนบอยู่แล้ว (ดูฝั่งหน้าเว็บ)
+    messages: withAttachments
+      .filter((m) => !dismissed.has(m.id) && m.attachments.some((a) => !a.documentNo))
+      .map((m) => ({ ...m, attachments: m.attachments.filter((a) => !a.documentNo) })),
+    ingested: withAttachments
+      .filter((m) => m.attachments.every((a) => a.documentNo))
+      .map((m) => {
+        const meta = m.attachments[0] ?? {};
+        return { ...m, ...meta, periodLabel: meta.period ? thaiMonth(meta.period) : null };
+      }),
   };
+}
+
+/** ซ่อนอีเมลฉบับนี้ทิ้งจากรายการที่ต้องอ่าน — ไม่แตะอีเมลจริงใน Gmail เลย กดยกเลิกได้ (ลบแถวใน gmail_dismissed) */
+export function dismissGmailMessage(messageId, { actor = 'cli' } = {}) {
+  if (!messageId) throw Object.assign(new Error('ต้องระบุอีเมลที่จะซ่อน'), { status: 400 });
+  run(
+    `INSERT INTO gmail_dismissed (message_id, dismissed_by) VALUES ($id, $actor)
+     ON CONFLICT (message_id) DO NOTHING`,
+    { id: messageId, actor },
+  );
+  logAudit({ actor, action: 'dismiss_gmail_message', entityType: 'gmail_message', entityId: messageId, detail: {} });
+  return { dismissed: true };
 }
 
 /**
@@ -792,11 +959,11 @@ export async function readTimesheetFromEmail({
   const blockers = [...sheet.blockers];
 
   /* เอกสารข้อ 1.2 บังคับว่าต้องเป็น "อนุมัติ" เท่านั้นจึงเอาเข้าระบบได้
-     ถ้าอีเมลไม่ได้บอกว่าอนุมัติ ต้องกันไว้ ไม่ใช่แค่ทัก */
-  if (emailMeta.approvalStatus && !emailMeta.approvalStatus.includes('อนุมัติ')) {
+     ถ้าอีเมลไม่ได้บอกว่าอนุมัติ ต้องกันไว้ ไม่ใช่แค่ทัก
+     เทียบตรงตัวเป๊ะๆ ห้ามใช้ .includes — "รออนุมัติ" ก็มีคำว่า "อนุมัติ" อยู่ในนั้นเหมือนกัน
+     ถ้าเทียบแบบ substring จะหลุดผ่านไปได้ทั้งที่ยังไม่อนุมัติจริง */
+  if (emailMeta.approvalStatus && emailMeta.approvalStatus !== 'อนุมัติ') {
     blockers.push(`อีเมลระบุสถานะ "${emailMeta.approvalStatus}" ไม่ใช่ "อนุมัติ"`);
-  } else if (emailMeta.approvalStatus?.includes('ไม่อนุมัติ')) {
-    blockers.push('อีเมลระบุว่า "ไม่อนุมัติ"');
   }
 
   // เดือนในอีเมลกับในไฟล์ไม่ตรงกัน = หยิบไฟล์ผิดฉบับ ต้องให้คนดูก่อน
@@ -855,14 +1022,22 @@ export async function createGmailDraft(contractId, period, { actor, client } = {
     ? JSON.parse(preview.existing.email_draft)
     : preview.emailDraft;
 
+  /* แนบไฟล์ Timesheet ตัวจริงเข้าร่างเลยถ้ามีเก็บไว้ในระบบ (ดู getTimesheetFile) — ใบแจ้งหนี้แนบ
+     เป็นไฟล์จริงไม่ได้ เพราะ FlowAccount ไม่มี endpoint ให้ไฟล์ PDF ตรงๆ (ดูหมายเหตุใน flowaccount.js)
+     มีแต่ shareLink ซึ่งอยู่ในเนื้อเมลให้กดเปิดเองอยู่แล้ว */
+  const attachments = (draft.attachments ?? [])
+    .filter((a) => a.timesheetId)
+    .map((a) => getTimesheetFile(a.timesheetId))
+    .filter(Boolean)
+    .map((f) => ({ filename: f.filename, mimeType: 'application/pdf', content: f.bytes }));
+
   const gmail = client ?? new GmailClient();
   const result = await gmail.createDraft({
     to,
     cc: getSetting('company', {})?.email ?? null,
     subject: draft.subject,
     body: draft.body,
-    // ไฟล์แนบยังไม่มี — PDF ใบแจ้งหนี้อยู่ใน FlowAccount ต้องทำข้อ 4.3 ก่อน
-    attachments: [],
+    attachments,
   });
 
   logAudit({
@@ -870,19 +1045,21 @@ export async function createGmailDraft(contractId, period, { actor, client } = {
     action: 'gmail_draft_created',
     entityType: 'invoice',
     entityId: preview.existing?.id ?? `${contractId}-${period}`,
-    detail: { draftId: result.draftId, to, period },
+    detail: { draftId: result.draftId, to, period, attachmentCount: attachments.length },
   });
 
   return {
     ...result,
     to,
     subject: draft.subject,
-    note: 'สร้างเป็นร่างในกล่อง Drafts แล้ว — ต้องแนบใบแจ้งหนี้กับ Timesheet เองก่อนกดส่ง',
+    note: attachments.length
+      ? `แนบไฟล์ Timesheet ${attachments.length} ใบให้แล้ว — ยังต้องแนบใบแจ้งหนี้เองก่อนกดส่ง (FlowAccount ยังไม่มีไฟล์ PDF ให้ดึงอัตโนมัติ)`
+      : 'สร้างเป็นร่างในกล่อง Drafts แล้ว — ต้องแนบใบแจ้งหนี้กับ Timesheet เองก่อนกดส่ง',
   };
 }
 
 export async function enterTimesheetManually({
-  documentNo,
+  documentNo = nextDocumentNo(),
   employeeName,
   position,
   period,
@@ -924,6 +1101,14 @@ export const NEXT_ACTION = {
   ALREADY_BILLED: 'already_billed',     // รอบนี้วางบิลไปแล้ว
 };
 
+/** ลิงก์กดเข้าหน้า "ตรวจ Manday" ตรงจากข้อความ LINE — ไม่ตั้ง APP_BASE_URL ไว้ก็คืนสตริงว่าง
+ *  (ข้อความ LINE ยังส่งได้ตามปกติ แค่ไม่มีลิงก์ให้กด) เพราะ localhost ที่เซิร์ฟเวอร์เห็นมือถือเข้าไม่ถึง
+ *  ต้องให้คนตั้งเป็น URL ที่มือถือเปิดได้จริงเอง (ดู .env.example) */
+function queueLink() {
+  const base = process.env.APP_BASE_URL;
+  return base ? `${base.replace(/\/+$/, '')}/?view=queue` : null;
+}
+
 /**
  * ข้อ 2.6 — แจ้งทีมบัญชีทาง LINE ทันทีที่ Manday ไม่ผ่านตรวจตอนอ่านไฟล์เข้าระบบ
  * ส่งให้ทุกคนในรายชื่อผู้รับแจ้งเตือนช่องทาง LINE (หรือ env ถ้ายังไม่มีใครเพิ่มไว้)
@@ -933,10 +1118,11 @@ export const NEXT_ACTION = {
 async function notifyCheckFailed({ documentNo, employeeName, period, failures, client }) {
   const line = client ?? new LineClient({ approverTarget: null });
   const targets = lineApproverTargets();
+  const link = queueLink();
   const text =
     `⚠️ ตรวจ Manday ไม่ผ่าน\n${employeeName} · รอบ ${thaiMonth(period)} · เลขที่ ${documentNo}\n\n` +
     failures.map((f) => `• ${f}`).join('\n') +
-    '\n\nเข้าไปดูที่หน้า "ตรวจ Manday" เพื่อแก้ไข';
+    `\n\nเข้าไปดูที่หน้า "ตรวจ Manday" เพื่อแก้ไข${link ? `\n${link}` : ''}`;
 
   try {
     await line.pushPlainText(text, { targets });
@@ -948,6 +1134,53 @@ async function notifyCheckFailed({ documentNo, employeeName, period, failures, c
     logAudit({
       actor: 'system', action: 'notify_line_check_failed_error',
       entityType: 'timesheet', entityId: documentNo, detail: { message: error.message },
+    });
+  }
+}
+
+/** เรียง "A, B และ C" แบบไทย — 2 ตัวก็ยังใช้ "และ" คั่นได้ปกติ (ไม่ใส่จุลภาคก่อน "และ" ตัวสุดท้าย) */
+function thaiList(items) {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} และ ${items[items.length - 1]}`;
+}
+
+/**
+ * แจ้งทีมบัญชีทาง LINE ว่าตอนนี้มี Timesheet รอตรวจ Manday อยู่กี่ใบ — สรุปทั้งคิว "ต้องตรวจ" ทุกครั้ง
+ * ที่มีใบใหม่ผ่านการตรวจอัตโนมัติเข้ามา (ไม่ใช่แจ้งแค่ใบล่าสุดใบเดียว) เพราะเปิดมาทีเดียวเห็นภาพรวม
+ * ทั้งหมดที่ยังค้างอยู่จริงในระบบ ไม่ต้องนับเองว่ามีกี่ใบ — ไม่ได้ตรวจไม่ผ่านแบบ notifyCheckFailed
+ * เดิมไม่มีการแจ้งเตือนจุดนี้เลย ทำให้ Timesheet ค้างอยู่ในคิวโดยไม่มีใครรู้จนกว่าจะเปิดเว็บมาดูเอง
+ */
+async function notifyNeedsCheck({ client } = {}) {
+  const pending = listTimesheets().filter((s) => s.status === 'verified' && !s.check?.checked);
+  if (!pending.length) return;
+
+  const line = client ?? new LineClient({ approverTarget: null });
+  const targets = lineApproverTargets();
+  const link = queueLink();
+
+  const periods = [...new Set(pending.map((s) => s.period))];
+  const periodText = periods.length === 1
+    ? `ประจำเดือน ${thaiMonth(periods[0])}`
+    : `รอบ ${thaiList(periods.map((p) => thaiMonth(p)))}`;
+  const docList = thaiList(pending.map((s) => s.id));
+  const entityId = pending.map((s) => s.id).join(',');
+
+  const text =
+    `📋 แจ้งเตือนจากระบบวางบิล OBS\n` +
+    `มีรายการรอตรวจ Manday ${pending.length} รายการ\n` +
+    `เลขเอกสาร ${docList} ${periodText}\n\n` +
+    `รอกดยืนยันในหน้า "ตรวจ Manday"${link ? `\n${link}` : ''}`;
+
+  try {
+    await line.pushPlainText(text, { targets });
+    logAudit({
+      actor: 'system', action: 'notify_line_needs_check',
+      entityType: 'timesheet', entityId, detail: { count: pending.length },
+    });
+  } catch (error) {
+    logAudit({
+      actor: 'system', action: 'notify_line_needs_check_error',
+      entityType: 'timesheet', entityId, detail: { message: error.message },
     });
   }
 }
@@ -994,6 +1227,21 @@ export async function ingestTimesheet({
   }
 
   const source = fileBase64 ? Buffer.from(fileBase64, 'base64') : filePath;
+  // เก็บไฟล์ต้นฉบับไว้ทั้งไฟล์ — ให้แนบจริงในร่างอีเมลได้ทีหลัง (ก่อนหน้านี้ไฟล์หายไปหลังอ่านเสร็จ
+  // เหลือแค่ชื่อไฟล์ใน source_file ทำให้ "เอกสารแนบ" ในหน้าร่างอีเมลเป็นแค่ชื่อ กดดูจริงไม่ได้)
+  // filePath บางเส้น (confirmTimesheet/enterTimesheetManually) ไม่ใช่ path ไฟล์จริง แค่ marker
+  // (upload://, manual://) ที่ส่งมาให้ผ่านเงื่อนไข "ต้องมีไฟล์" เท่านั้น — ถ้าไม่มีไฟล์จริงบนดิสก์
+  // ก็แค่ไม่มี source_file_bytes เก็บ (ที่อื่นในระบบรองรับกรณีนี้อยู่แล้ว) ไม่ควรทำให้ทั้งคำขอพัง
+  let fileBytes = null;
+  if (Buffer.isBuffer(source)) {
+    fileBytes = source;
+  } else {
+    try {
+      fileBytes = readFileSync(source);
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+  }
   const { data, verification, usage, model } = await extractor(source, { expectedPeriod });
 
   logAudit({
@@ -1076,11 +1324,11 @@ export async function ingestTimesheet({
 
     run(
       `INSERT INTO timesheets
-         (id, contract_id, employee_id, period, source_email_id, source_file, received_at,
-          approved_by, approved_at, raw_employee_name, raw_position,
+         (id, contract_id, employee_id, period, source_email_id, source_file, source_file_bytes,
+          received_at, approved_by, approved_at, raw_employee_name, raw_position,
           reported_workdays, reported_leave, extraction, status)
-       VALUES ($id, $contract, $emp, $period, $emailId, $file, $receivedAt,
-               $approvedBy, $approvedAt, $rawName, $rawPos,
+       VALUES ($id, $contract, $emp, $period, $emailId, $file, $fileBytes,
+               $receivedAt, $approvedBy, $approvedAt, $rawName, $rawPos,
                $workdays, $leave, $extraction, 'extracted')`,
       {
         id: documentNo,
@@ -1089,6 +1337,7 @@ export async function ingestTimesheet({
         period,
         emailId: sourceEmailId,
         file: fileName ?? (typeof filePath === 'string' ? filePath : null),
+        fileBytes,
         receivedAt,
         approvedBy,
         approvedAt: approvedAt ?? (data.signedByProjectManager ? `${period}-28` : null),
@@ -1153,6 +1402,8 @@ export async function ingestTimesheet({
   const failures = manday.checks.filter((c) => c.severity === SEVERITY.FAIL).map((c) => c.title);
   if (nextAction === NEXT_ACTION.FIX_MISMATCH) {
     await notifyCheckFailed({ documentNo, employeeName: employee.nameTh, period, failures, client: lineClient });
+  } else {
+    await notifyNeedsCheck({ client: lineClient });
   }
 
   return {
@@ -1471,12 +1722,23 @@ export function buildEmailDraft({ contract, invoice, documentNo = null, shareLin
     body,
     invoiceLink: shareLink,
     /* ใบแจ้งหนี้ไม่อยู่ในรายการนี้แล้วถ้ามี shareLink — มีลิงก์เปิดได้จริงในเนื้อเมลแทน
-       ไม่มีลิงก์ (dry-run/sandbox ยังพลาด) ก็ยังเตือนให้แนบเองเหมือนเดิม เผื่อมีไฟล์จากที่อื่น */
+       ไม่มีลิงก์ (dry-run/sandbox ยังพลาด) ก็ยังเตือนให้แนบเองเหมือนเดิม เผื่อมีไฟล์จากที่อื่น
+       ไฟล์ Timesheet แต่ละใบมี timesheetId ให้กดดู/ดาวน์โหลดของจริงได้ (ดู GET /api/timesheets/:id/file)
+       ไม่ใช่แค่ชื่อไฟล์เปล่าๆเหมือนก่อนหน้านี้ — หาไม่เจอ (ไฟล์เก่าก่อนมีคอลัมน์นี้) ก็ยังโชว์ชื่อไว้เฉยๆ */
     attachments: [
-      ...(shareLink ? [] : [documentNo ? `ใบแจ้งหนี้ ${documentNo}.pdf` : 'ใบแจ้งหนี้ (รอเลขจาก FlowAccount).pdf']),
-      ...invoice.items.map((i) => `Timesheet ${i.employeeName} ${invoice.period}.pdf`),
+      ...(shareLink ? [] : [{
+        label: documentNo ? `ใบแจ้งหนี้ ${documentNo}.pdf` : 'ใบแจ้งหนี้ (รอเลขจาก FlowAccount).pdf',
+        timesheetId: null,
+      }]),
+      ...invoice.items.map((i) => {
+        const sheet = get(
+          `SELECT id FROM timesheets WHERE contract_id = $c AND employee_id = $e AND period = $p
+             ORDER BY created_at DESC LIMIT 1`,
+          { c: contract.id, e: i.employeeId, p: invoice.period },
+        );
+        return { label: `Timesheet ${i.employeeName} ${invoice.period}.pdf`, timesheetId: sheet?.id ?? null };
+      }),
     ],
-    note: 'ระบบสร้างเป็นร่างเท่านั้น การเซ็นเอกสารและการกดส่งยังเป็นงานของเจ้าหน้าที่',
   };
 }
 
@@ -1779,7 +2041,15 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
     );
   }
 
-  const settings = getSetting('flowaccount', { mode: 'dry-run', documentType: 'billing-note' });
+  /* ค่าเริ่มต้นตอนยังไม่มีใครตั้ง 'flowaccount' ไว้ใน settings เลย ต้องตามค่า FLOWACCOUNT_MODE ใน .env
+     ไม่ใช่ตายตัวเป็น dry-run — ไม่งั้นคนตั้ง .env เป็น sandbox ไว้แล้ว แต่ระบบยังยิงแบบ dry-run
+     อยู่ดีเพราะไม่มีใครเคยบันทึกค่านี้ลง settings มาก่อน (ป้าย FlowAccount บนหัวเว็บอ่านจาก .env
+     ตรงๆ จึงจะบอกว่า sandbox ทั้งที่จริงยิงแบบ dry-run อยู่ — ตัวเลขเอกสารที่ได้จะเป็นค่าเสมือน
+     ไม่มีเอกสารจริงเกิดขึ้นใน FlowAccount เลย) */
+  const settings = getSetting('flowaccount', {
+    mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
+    documentType: 'billing-note',
+  });
   const client =
     flowAccount ??
     new FlowAccountClient({ mode: settings.mode, documentType: settings.documentType });
@@ -2186,14 +2456,6 @@ export function dashboard() {
         step: 3, level: 'info',
         title: 'รอบบิลพร้อมอนุมัติ',
         detail: `รอบ ${p.periodLabel} ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
-        link: { view: 'cycle', contractId: p.contractId, period: p.period },
-      })),
-    ...toChase
-      .filter((p) => p.overdueToBill)
-      .map((p) => ({
-        step: 1, level: 'warn',
-        title: 'ยังไม่ได้ Timesheet',
-        detail: `รอบ ${p.periodLabel} ควรวางบิล ${thaiDate(p.expectedBillDate)} — รอ ${p.missing.join(', ')}`,
         link: { view: 'cycle', contractId: p.contractId, period: p.period },
       })),
   ];

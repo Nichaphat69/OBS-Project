@@ -35,7 +35,9 @@ function fakeTimesheetData(period = '2026-01') {
     days: [{ date: `${period}-05`, timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: null }],
     leaveDays: [],
     signedByEmployee: true,
+    employeeSignatureName: 'Pongpun Mamak',
     signedByProjectManager: true,
+    projectManagerSignatureName: 'Somsri Jaidee',
     notes: [],
   };
 }
@@ -137,7 +139,8 @@ test('extractTimesheet อ่านทีละหน้าแล้วรวม
     totalWorkDays: 0, totalLeaveDays: 0,
     days: [{ date: '2026-01-05', timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: 'งาน A' }],
     leaveDays: [],
-    signedByEmployee: false, signedByProjectManager: false, notes: [],
+    signedByEmployee: false, employeeSignatureName: null,
+    signedByProjectManager: false, projectManagerSignatureName: null, notes: [],
   };
   // หน้า 2: เห็นแค่ชื่อพนักงาน/ตำแหน่ง/สรุปยอด/ลายเซ็น (ฝั่งขวา) — ไม่เห็นตารางวันที่เลย
   const page2 = {
@@ -145,7 +148,9 @@ test('extractTimesheet อ่านทีละหน้าแล้วรวม
     employeeName: 'Pongpun Mamak', position: 'Developer (Java)', period: null,
     totalWorkDays: 1, totalLeaveDays: 0,
     days: [], leaveDays: [],
-    signedByEmployee: true, signedByProjectManager: true, notes: ['ลายเซ็นชัดเจน'],
+    signedByEmployee: true, employeeSignatureName: 'Pongpun Mamak',
+    signedByProjectManager: true, projectManagerSignatureName: 'Somsri Jaidee',
+    notes: ['ลายเซ็นชัดเจน'],
   };
 
   const fetchImpl = fakeVisionFetchSequence([page1, page2]);
@@ -162,6 +167,9 @@ test('extractTimesheet อ่านทีละหน้าแล้วรวม
   // ลายเซ็นมาจากหน้า 2 — ต้องเป็น true แม้หน้า 1 จะรายงาน false
   assert.equal(result.data.signedByEmployee, true);
   assert.equal(result.data.signedByProjectManager, true);
+  // ชื่อที่เขียนกำกับข้างลายเซ็นก็ต้องรวมมาจากหน้า 2 ด้วยเหมือนกัน
+  assert.equal(result.data.employeeSignatureName, 'Pongpun Mamak');
+  assert.equal(result.data.projectManagerSignatureName, 'Somsri Jaidee');
   assert.equal(result.verification.ok, true);
 });
 

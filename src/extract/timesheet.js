@@ -92,9 +92,21 @@ const TIMESHEET_SCHEMA = {
       type: 'boolean',
       description: 'หน้านี้มีลายเซ็นหรือชื่อพนักงานในช่อง Employee\'s Signature หรือไม่ — ไม่มีช่องนี้ในหน้านี้ให้เป็น false',
     },
+    employeeSignatureName: {
+      type: ['string', 'null'],
+      description:
+        'ชื่อที่เขียน/พิมพ์อยู่ข้างลายเซ็นในช่อง Employee\'s Signature (คนละช่องจาก Employee Name ด้านบน '
+        + 'อาจเขียนชื่อไม่ตรงกันก็ได้) — อ่านลายเซ็นไม่ออกหรือไม่มีชื่อกำกับให้เป็น null ห้ามเดา',
+    },
     signedByProjectManager: {
       type: 'boolean',
       description: 'หน้านี้มีลายเซ็นในช่อง Project Manager\'s Signature (TLI) หรือไม่ — ไม่มีช่องนี้ในหน้านี้ให้เป็น false',
+    },
+    projectManagerSignatureName: {
+      type: ['string', 'null'],
+      description:
+        'ชื่อที่เขียน/พิมพ์อยู่ข้างลายเซ็นในช่อง Project Manager\'s Signature (TLI) — '
+        + 'อ่านลายเซ็นไม่ออกหรือไม่มีชื่อกำกับให้เป็น null ห้ามเดา',
     },
     notes: {
       type: 'array',
@@ -105,7 +117,7 @@ const TIMESHEET_SCHEMA = {
   required: [
     'vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period',
     'totalWorkDays', 'totalLeaveDays', 'days', 'leaveDays',
-    'signedByEmployee', 'signedByProjectManager', 'notes',
+    'signedByEmployee', 'employeeSignatureName', 'signedByProjectManager', 'projectManagerSignatureName', 'notes',
   ],
   additionalProperties: false,
 };
@@ -118,6 +130,9 @@ const SYSTEM_PROMPT = `คุณคือผู้ช่วยฝ่ายบั
 - เอกสารอาจถูกแบ่งส่งมาให้ดูทีละหน้า แต่ละหน้าอาจไม่มีข้อมูลบางช่องเลย —
   ช่องไหนไม่เห็นในหน้าที่กำลังดูอยู่ ให้ตอบ null (หรือ 0/false/[] ตามชนิดข้อมูล) ห้ามเดาห้ามแต่งขึ้นเอง
 - ชื่อพนักงานและตำแหน่ง ให้คัดตามที่เขียนในเอกสารทุกตัวอักษร ห้ามแปล ห้ามแก้การสะกด ห้ามเติมคำนำหน้า
+- ถ้าเห็นลายเซ็นและมีชื่อเขียน/พิมพ์กำกับข้างๆลายเซ็นนั้นด้วย (ไม่ใช่ลายมือเขียนอย่างเดียวที่อ่านไม่ออก)
+  ให้คัดชื่อนั้นมาใส่ employeeSignatureName / projectManagerSignatureName ตามช่อง — เห็นแต่ลายเซ็นอ่านไม่ออก
+  หรือไม่มีชื่อกำกับเลยให้เป็น null ห้ามเดาชื่อขึ้นมาเอง
 - totalWorkDays และ totalLeaveDays ให้อ่านจากช่องสรุปท้ายตารางที่เอกสารเขียนไว้เท่านั้น ห้ามนับแถวเอง
 - ระบุปีเป็น ค.ศ. เสมอ เอกสารอาจเขียนปีเป็น พ.ศ. ให้แปลงโดยลบ 543
 - วันที่ทุกช่องต้องเป็นรูปแบบ YYYY-MM-DD เท่านั้น (ปี 4 หลัก - เดือน 2 หลัก - วัน 2 หลัก เช่น 2026-01-18)
@@ -176,7 +191,8 @@ function normalizePeriod(raw) {
 const EMPTY_PAGE_DATA = {
   vendor: null, clientName: null, projectName: null, employeeName: null, position: null, period: null,
   totalWorkDays: 0, totalLeaveDays: 0, days: [], leaveDays: [],
-  signedByEmployee: false, signedByProjectManager: false, notes: [],
+  signedByEmployee: false, employeeSignatureName: null,
+  signedByProjectManager: false, projectManagerSignatureName: null, notes: [],
 };
 
 /**
@@ -196,7 +212,10 @@ function mergePageResults(pageResults) {
       continue;
     }
 
-    for (const key of ['vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period']) {
+    for (const key of [
+      'vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period',
+      'employeeSignatureName', 'projectManagerSignatureName',
+    ]) {
       if (!merged[key] && data[key]) merged[key] = data[key];
     }
     merged.totalWorkDays = Math.max(merged.totalWorkDays, data.totalWorkDays || 0);

@@ -40,7 +40,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "leftValue": "={{ $json.textPlain || $json.snippet || '' }}",
+              "leftValue": "={{ $json.text || $json.snippet || '' }}",
               "rightValue": "อนุมัติ",
               "operator": {
                 "type": "string",
@@ -48,7 +48,7 @@
               }
             },
             {
-              "leftValue": "={{ $json.textPlain || $json.snippet || '' }}",
+              "leftValue": "={{ $json.text || $json.snippet || '' }}",
               "rightValue": "ไม่อนุมัติ",
               "operator": {
                 "type": "string",

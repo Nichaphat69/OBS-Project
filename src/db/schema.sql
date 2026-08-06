@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS timesheets (
   period            TEXT NOT NULL,        -- 'YYYY-MM'
   source_email_id   TEXT,
   source_file       TEXT,
+  source_file_bytes BLOB,               -- ไฟล์ PDF ต้นฉบับ — เก็บไว้ให้แนบอีเมล/ดูย้อนหลังได้
   received_at       TEXT NOT NULL,
   approved_by       TEXT,                 -- ผู้อนุมัติฝั่งลูกค้า
   approved_at       TEXT,
@@ -107,6 +108,35 @@ CREATE TABLE IF NOT EXISTS timesheets (
 );
 
 CREATE INDEX IF NOT EXISTS idx_timesheets_period ON timesheets(period, status);
+
+-- ── อีเมล Gmail ที่กด "ซ่อน" ทิ้งจากรายการ (ไม่ใช่ลบอีเมลจริงใน Gmail) ──
+CREATE TABLE IF NOT EXISTS gmail_dismissed (
+  message_id   TEXT PRIMARY KEY,
+  dismissed_by TEXT,
+  dismissed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+-- ── ประวัติที่ AI เคยอ่านแล้ว (ทั้งอัปโหลดไฟล์เองและดึงจาก Gmail) ──
+-- คนละตารางจาก timesheets เพราะฉบับที่ AI อ่านแล้วแต่ยังไม่กดยืนยันก็ต้องโชว์ในนี้ได้
+-- (เป็นด่านแรกก่อนเข้าระบบวางบิลจริง — เห็นได้ว่าเคยอ่านอะไรไปแล้วบ้างก่อนตัดสินใจ)
+CREATE TABLE IF NOT EXISTS ai_reads (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  source          TEXT NOT NULL,                     -- 'upload' | 'gmail'
+  source_email_id TEXT,
+  file_name       TEXT,
+  employee_name   TEXT,
+  period          TEXT,
+  document_no     TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending',    -- pending → confirmed | discarded
+  model           TEXT,
+  extraction      TEXT,                               -- JSON: ผลที่ AI อ่านได้ทั้งชุด ใช้เปิดดูรายละเอียด
+  file_bytes      BLOB,                                -- ไฟล์ PDF ต้นฉบับ — ให้ confirmTimesheet ส่งต่อ
+                                                        -- เข้า timesheets.source_file_bytes ตอนยืนยัน
+  read_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  read_by         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_reads_period ON ai_reads(period, status);
 
 CREATE TABLE IF NOT EXISTS timesheet_days (
   timesheet_id TEXT NOT NULL REFERENCES timesheets(id) ON DELETE CASCADE,

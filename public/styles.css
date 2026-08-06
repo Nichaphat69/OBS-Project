@@ -72,6 +72,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--page); }
+
+/* ซ่อนแถบเลื่อนไปเลย — เดิมโชว์แท่งบางๆ แต่ยังดูเหมือนชิ้นส่วน UI หลุดมาค้างอยู่มุมจอ
+   ยังเลื่อนด้วยเมาส์/แทร็กแพด/คีย์บอร์ดได้ตามปกติ แค่ไม่โชว์แท่งให้เห็น */
+html { scrollbar-width: none; }
+::-webkit-scrollbar { display: none; }
 body {
   color: var(--ink);
   font-size: 14px;
@@ -119,6 +124,7 @@ svg.i {
   stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
 }
 svg.i.sm { width: 13px; height: 13px; }
+svg.i.solid { stroke: none; fill: currentColor; }
 
 /* ═══ โครงหน้า — เมนูข้างถาวร + เนื้อหาเลื่อนได้ ═══ */
 .shell { display: flex; align-items: flex-start; min-height: 100vh; }
@@ -162,6 +168,10 @@ svg.i.sm { width: 13px; height: 13px; }
 }
 /* ป้าย 0 ไม่ควรแดง — ไม่มีงานค้างไม่ใช่เรื่องต้องเตือน */
 .mtab .bdg.zero { background: var(--hair); color: var(--fnt); }
+/* ป้าย "ตรวจ Manday" กับ "วางบิล & ร่างอีเมล" ไม่ใช่ตัวนับรวม แต่บอกว่ามีงานใหม่ค้างรอ
+   (เข้ามารออนุมัติ/รอตรวจใหม่ล่าสุด) — ไม่มีงานค้างก็ไม่ต้องโชว์เลข 0 เลย ต่างจากตัวเลขสรุปอื่นๆ
+   ในหน้าเนื้อหา (เช่นแท็บ "ยืนยันแล้ว/วางบิลแล้ว/ตีกลับ") ที่ยังโชว์ 0 ตามปกติ */
+#queueBadge.zero, #cycleBadge.zero { display: none; }
 
 
 /* เลขขั้นมุมไอคอน — ลำดับงานยังอ่านออกแม้หุบเมนูจนเหลือแต่ไอคอน */
@@ -386,6 +396,15 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   display: flex; justify-content: center; padding: 18px 24px;
   border-top: 1px solid var(--hair);
 }
+/* แถบปุ่มยืนยันผลที่ AI อ่านได้ — แยกปุ่มรองกับปุ่มหลักให้ชัด ไม่แข่งกันแบบเดิม */
+.card > .ft.review-ft {
+  justify-content: space-between; background: var(--sunk); gap: 12px; flex-wrap: wrap;
+}
+.btn.ghost {
+  border-color: transparent; background: transparent; box-shadow: none; color: var(--mut);
+}
+.btn.ghost:hover:not(:disabled) { background: var(--hov); color: var(--cr); border-color: transparent; }
+.btn.lg { height: 46px; padding: 0 24px; font-size: 14.5px; }
 
 /* ═══ ตัวกรองแบบ pill + ช่องค้นหา ═══ */
 .filterbar {
@@ -703,6 +722,8 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 
 /* ── ตาราง ──────────────────────────────────────────────── */
 .tw { overflow-x: auto; }
+tr.clk { cursor: pointer; }
+tr.clk:hover { background: var(--hov); }
 table { border-collapse: collapse; width: 100%; min-width: 820px; }
 thead th {
   text-align: left; font-size: 12.5px; font-weight: 600; letter-spacing: 0;
@@ -888,6 +909,8 @@ dl.kv dd { margin: 0; font-weight: 600; }
 .cks li:last-child { border-bottom: none; padding-bottom: 0; }
 .cks .l { font-size: 13px; font-weight: 500; }
 .cks .l small { display: block; color: var(--mut); font-size: 11.5px; margin-top: 2px; font-weight: 400; }
+.cks .v { font-size: 13px; font-weight: 600; color: var(--ink); text-align: right; }
+.cks .v.mu { font-weight: 400; color: var(--mut); }
 
 /* ── เอกสารใบแจ้งหนี้ — ให้ดูเหมือนกระดาษจริง ─────────────── */
 .doc {
@@ -948,6 +971,12 @@ pre.code {
 .cmp .f .l { color: var(--mut); font-size: 12.5px; }
 .cmp .f.sj { background: var(--sunk); }
 .cmp .f.sj span:last-child { font-weight: 600; }
+.cmp .f input[type="text"] {
+  font: inherit; font-size: 13.5px; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 6px 10px; width: 100%;
+}
+.cmp .f input[type="text"]:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: var(--brand); }
+.cmp .f .fhint { display: block; margin-top: 6px; }
 .cmp .lt {
   padding: 26px 28px; font-size: 13.5px; line-height: 2;
   white-space: pre-line; color: var(--ink2);
@@ -965,6 +994,29 @@ pre.code {
   place-items: center; background: var(--crb); color: var(--cr);
   font-size: 8px; font-weight: 800; border: 1px solid var(--crl);
 }
+a.file { text-decoration: none; cursor: pointer; transition: background .1s, border-color .1s; }
+a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--ink); }
+
+/* ── รายการอีเมล (ดึงจาก Gmail) ─────────────────────────── */
+.maillist { list-style: none; }
+.maillist li {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding: 18px 4px; border-bottom: 1px solid var(--hair);
+}
+.maillist li:last-child { border-bottom: none; }
+.maillist li.done { opacity: .55; }
+.maillist li > .tg, .maillist li > button, .maillist li > .mailbtns { flex: none; margin-top: 2px; }
+.mailbtns { display: flex; gap: 8px; }
+.mi { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ms { font-weight: 600; font-size: 14px; color: var(--ink); }
+.mf { font-size: 12px; color: var(--mut); }
+.mq:empty { display: none; }
+.mq { font-size: 12.5px; color: var(--ink2); line-height: 1.6; }
+.mi .files { margin-top: 4px; }
+.attlist { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.attrow { display: flex; align-items: center; gap: 10px; }
+.attrow .file { flex: 1; min-width: 0; }
+.attrow .btn { flex: none; }
 
 /* ── แถบปุ่มล่าง ────────────────────────────────────────── */
 .fbar {
@@ -1068,20 +1120,32 @@ pre.code {
 
 .kpi {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
-  padding: 22px 24px 24px; box-shadow: var(--sh1); position: relative;
-  transition: box-shadow .16s, border-color .16s;
+  padding: 22px 24px 24px; box-shadow: var(--sh1); position: relative; overflow: hidden;
+  transition: box-shadow .18s, border-color .18s, transform .18s;
+}
+.kpi::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--rule);
+}
+.kpi.w::before { background: linear-gradient(90deg, var(--wn), var(--wnl)); }
+.kpi.g::before { background: linear-gradient(90deg, var(--ok), var(--okl)); }
+.kpi.c::before { background: linear-gradient(90deg, var(--cr), var(--crl)); }
+.kpi.a::before { background: linear-gradient(90deg, var(--brand), #5CB6F0); }
+.kpi.a {
+  background: linear-gradient(150deg, var(--tint) 0%, var(--paper) 55%);
 }
 .kpi.act { cursor: pointer; }
-.kpi.act:hover { box-shadow: var(--sh2); border-color: #D2D7E0; }
+.kpi.act:hover { box-shadow: var(--sh2); border-color: #D2D7E0; transform: translateY(-2px); }
 .kpi.act:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .kpi .kh { display: flex; align-items: center; gap: 10px; }
 .kpi .ic {
-  width: 30px; height: 30px; border-radius: var(--r-ctl); display: grid; place-items: center; flex: none;
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
   background: var(--tint); color: var(--brand-d); border: 1px solid var(--tint2);
 }
+.kpi .ic svg { width: 17px; height: 17px; }
 .kpi .kl { font-size: 13px; font-weight: 500; color: var(--mut); }
 .kpi .kv {
-  display: block; margin-top: 12px; font-size: 26px; font-weight: 700;
+  display: block; margin-top: 14px; font-size: 30px; font-weight: 800;
   letter-spacing: -.035em; line-height: 1.05; font-variant-numeric: tabular-nums;
 }
 .kpi .kv small { font-size: 13px; font-weight: 500; color: var(--mut); margin-left: 6px; letter-spacing: 0; }
@@ -1186,8 +1250,11 @@ pre.code {
 }
 .tasks .go:hover { text-decoration: underline; }
 /* แถบสัดส่วนสถานะรอบบิล — เดิมมี HTML แต่ไม่เคยมี CSS จึงไม่ขึ้นอะไรเลย */
-.split { display: flex; height: 10px; overflow: hidden; margin-bottom: 18px; background: var(--hair); }
-.split > span { display: block; min-width: 4px; }
+.split {
+  display: flex; height: 12px; overflow: hidden; margin-bottom: 18px; background: var(--hair);
+  border-radius: 999px; gap: 2px;
+}
+.split > span { display: block; min-width: 4px; border-radius: 999px; transition: flex .3s; }
 
 /* ── แถบความคืบหน้าสัญญา ────────────────────────────────── */
 .bar {
@@ -1251,6 +1318,12 @@ td.n, .docid { white-space: nowrap; }
 .frm input:focus{ outline:2px solid var(--brand); outline-offset:-1px; border-color:var(--brand); }
 .frm input[readonly]{ background:var(--sunk); color:var(--mut); cursor:default; }
 .frm small{ font-weight:400; color:var(--mut); font-size:11.5px; line-height:1.45; }
+.fixa-picker { display: flex; gap: 6px; margin-top: 6px; }
+.fixa-picker select {
+  flex: 1; min-width: 0; border: 1px solid var(--rule); border-radius: var(--r-ctl);
+  height: 30px; padding: 0 8px; font-size: 12.5px; color: var(--ink); background: var(--paper);
+}
+.fixa-picker button { flex: none; white-space: nowrap; }
 
 .fsec{ margin-top:18px; padding-top:14px; border-top:1px solid var(--hair); }
 .fsec-h{ display:flex; align-items:center; justify-content:space-between;
@@ -1310,7 +1383,7 @@ td.n, .docid { white-space: nowrap; }
 .hadd input:focus{ outline:2px solid var(--brand); outline-offset:-1px; }
 
 /* แถบปิดงานในหน้าอนุมัติรอบบิล */
-.sendbar{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+.sendbar{ display:flex; align-items:center; justify-content:flex-end; gap:12px;
   flex-wrap:wrap; border-bottom:1px solid var(--hair); }
 
 /* กล่องยืนยันว่าส่งเมลแล้ว — โชว์ว่าส่งถึงใคร ใครบันทึก เมื่อไหร่ ในกล่องเดียว อ่านง่ายกว่าแถบข้อความเปล่าๆ */
@@ -1413,8 +1486,6 @@ td.n, .docid { white-space: nowrap; }
 .drop b { font-size: 13.5px; color: var(--ink); word-break: break-all; }
 .drop span { font-size: 12px; color: var(--mut); }
 
-.frm.two { grid-template-columns: 1fr 1fr; }
-
 /* JSON ดิบ — ซ่อนไว้ ให้กดดูเมื่ออยากตรวจของที่ AI อ่าน */
 .raw { margin-top: 16px; }
 .raw summary {
@@ -1429,3 +1500,62 @@ td.n, .docid { white-space: nowrap; }
 
 /* ป้ายโหมดบนแถบบน — แยกสายตาจากป้าย FlowAccount ที่อยู่ติดกัน */
 .env.mode { font-weight: 700; }
+
+/* ═══ กล่องยืนยัน (แทน confirm() ของเบราว์เซอร์) ═══ */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(16, 24, 40, .5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+  animation: modal-fade .15s ease;
+}
+@keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+.modal-card {
+  background: var(--paper); border-radius: 18px; overflow: hidden;
+  width: 100%; max-width: 400px; box-shadow: 0 24px 60px -12px rgba(16,24,40,.35);
+  display: flex; flex-direction: column; align-items: center; position: relative;
+  animation: modal-pop .18s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes modal-pop { from { opacity: 0; transform: scale(.94) translateY(6px); } to { opacity: 1; transform: none; } }
+.modal-banner {
+  width: 100%; height: 104px; flex: none; position: relative; overflow: hidden;
+  /* ไล่สีฟ้าอมเขียว (cyan-blue) ตามภาพตัวอย่างที่ขอเทียบสี — ตั้งใจต่างจาก --brand หลักของแอป */
+  background: linear-gradient(160deg, #2bb3dd 0%, #1c7fc9 65%, #1a6fb8 100%);
+}
+.modal-banner::before {
+  /* คลื่นตกแต่งจางๆ ท้ายแบนเนอร์ ให้ดูมีมิติแบบภาพตัวอย่าง ไม่ใช่แถบสีเรียบๆ */
+  content: ''; position: absolute; left: -20%; width: 140%; bottom: -26px; height: 60px;
+  background: rgba(255, 255, 255, .18);
+  border-radius: 50%;
+}
+.modal-ic {
+  position: absolute; top: 104px; left: 50%; transform: translate(-50%, -50%);
+  width: 92px; height: 92px; border-radius: 50%; background: var(--paper);
+  display: grid; place-items: center; box-shadow: 0 8px 20px -6px rgba(16,24,40,.25);
+}
+.modal-ic-badge {
+  width: 68px; height: 68px; border-radius: 18px; background: #eaecef;
+  display: grid; place-items: center;
+}
+.modal-ic-badge.brand { background: var(--tint); }
+.modal-ic-badge svg { width: 38px; height: 38px; color: #f0a020; }
+.modal-ic-badge.brand svg { color: var(--brand); }
+.modal-body { padding: 56px 28px 6px; text-align: center; }
+.modal-body h3 { margin: 0 0 10px; font-size: 21px; font-weight: 800; color: #16233b; }
+.modal-body p { margin: 0; font-size: 14px; color: var(--ink2); line-height: 1.65; }
+.modal-body p b { color: var(--ink); font-weight: 600; }
+.modal-ft {
+  display: flex; gap: 10px; justify-content: flex-end; width: 100%;
+  padding: 22px 28px; border-top: 1px solid var(--hair); margin-top: 20px;
+}
+.modal-ft .btn { padding: 10px 18px; }
+/* ปุ่มยกเลิกแบบตัวอักษรเปล่า ไม่มีเส้นขอบ ตามภาพตัวอย่าง */
+.modal-ft .btn:not(.dgr):not(.pri) {
+  border-color: transparent; background: transparent; box-shadow: none; color: var(--ink2);
+}
+.modal-ft .btn:not(.dgr):not(.pri):hover:not(:disabled) { background: var(--hov); color: var(--ink); }
+/* ปุ่มลบตัน สีแดงสด ตัวหนังสือขาว ตามภาพตัวอย่าง (ต่างจาก .dgr ปกติของแอปที่เป็นแบบเส้นขอบ) */
+.modal-ft .btn.dgr {
+  background: #dc3545; border-color: #dc3545; color: #fff; box-shadow: none;
+}
+.modal-ft .btn.dgr:hover:not(:disabled) { background: #c62838; border-color: #c62838; }
+.modal-ft .btn.dgr svg { color: #fff; }

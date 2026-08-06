@@ -278,7 +278,7 @@ test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน 
   for (const failure of result.failures) assert.ok(line.sent[0].includes(failure));
 });
 
-test('Timesheet ที่ตรวจผ่าน → ไม่แจ้ง LINE', async () => {
+test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE สรุปทั้งคิวที่รอตรวจ (ไม่ใช่ข้อความตรวจไม่ผ่าน)', async () => {
   const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
 
   const line = new FakeLineClient();
@@ -291,7 +291,11 @@ test('Timesheet ที่ตรวจผ่าน → ไม่แจ้ง LINE
   });
 
   assert.notEqual(result.nextAction, svc.NEXT_ACTION.FIX_MISMATCH);
-  assert.equal(line.sent.length, 0, 'ตรวจผ่านแล้ว ไม่ควรมีอะไรต้องแจ้ง');
+  assert.equal(line.sent.length, 1, 'ตรวจผ่านแล้วก็ยังต้องแจ้งว่ามีของใหม่รอคนกดยืนยัน');
+  // ข้อความสรุปทั้งคิว "ต้องตรวจ" ไม่ใช่แค่ใบนี้ใบเดียว — เจ้าใบนี้ต้องอยู่ในรายการที่แจ้งด้วย
+  assert.match(line.sent[0], /มีรายการรอตรวจ Manday \d+ รายการ/);
+  assert.match(line.sent[0], /2026020103/);
+  assert.doesNotMatch(line.sent[0], /ไม่ผ่าน/, 'ต้องเป็นข้อความ "รอตรวจ" ไม่ใช่ข้อความตรวจไม่ผ่านของ notifyCheckFailed');
 });
 
 test('เอกสารที่วางบิลแล้ว → ไม่เขียนทับ', async () => {

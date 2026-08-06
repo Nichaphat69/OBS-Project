@@ -35,6 +35,8 @@ const ADDED_COLUMNS = [
   ['users', 'role', "TEXT NOT NULL DEFAULT 'operator'"],
   ['invoices', 'share_link', 'TEXT'],
   ['users', 'active', 'INTEGER NOT NULL DEFAULT 1'],
+  ['timesheets', 'source_file_bytes', 'BLOB'],
+  ['ai_reads', 'file_bytes', 'BLOB'],
 ];
 
 function addMissingColumns(database) {

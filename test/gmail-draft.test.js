@@ -125,11 +125,18 @@ test('createGmailDraft สร้างร่างจริงเมื่อม
   assert.equal(gmail.created[0].to, 'thanwarat@tli.example.com');
   assert.ok(gmail.created[0].subject.length > 0, 'ต้องมีหัวข้ออีเมล');
   assert.ok(gmail.created[0].body.length > 0, 'ต้องมีเนื้ออีเมล');
-  assert.deepEqual(gmail.created[0].attachments, [], 'ยังไม่มีไฟล์แนบตามที่ตั้งใจไว้ (รอ 4.3)');
+
+  // แนบไฟล์ Timesheet ตัวจริงของทั้งสองคนให้แล้ว (เก็บไว้ตอน ingestTimesheet) — ใบแจ้งหนี้ยังแนบเองไม่ได้ (รอ 4.3)
+  const attachments = gmail.created[0].attachments;
+  assert.equal(attachments.length, 2, 'ต้องแนบไฟล์ Timesheet ของทั้งสองคน');
+  for (const a of attachments) {
+    assert.equal(a.mimeType, 'application/pdf');
+    assert.equal(Buffer.from(a.content).toString('utf8'), 'x', 'เนื้อไฟล์ต้องตรงกับไฟล์ที่อัปโหลดไว้ตอน ingest');
+  }
 
   assert.equal(result.to, 'thanwarat@tli.example.com');
   assert.equal(result.draftId, 'draft-fake-1');
-  assert.match(result.note, /Drafts/);
+  assert.match(result.note, /แนบไฟล์ Timesheet 2 ใบให้แล้ว/);
 });
 
 test('createGmailDraft บันทึก audit log ทุกครั้งที่สร้างร่าง', async () => {

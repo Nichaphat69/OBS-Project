@@ -83,6 +83,28 @@ const dateOnly = (iso) => {
   return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
+/* ประวัติการดำเนินการ (audit_log.action) เก็บเป็นชื่อฟังก์ชันภาษาอังกฤษ — คนอ่านหน้าเว็บไม่ควรต้องรู้
+   ชื่อฟังก์ชันในโค้ด แปลงเป็นประโยคสั้นๆ บอกว่าระบบทำอะไรไปแทน ชื่อที่ไม่รู้จักยังโชว์ได้ (แทน _ ด้วยเว้นวรรค) */
+const AUDIT_ACTION_LABEL = {
+  extract_timesheet: 'AI อ่านไฟล์ Timesheet',
+  read_timesheet_file: 'AI อ่านไฟล์ Timesheet',
+  read_email_approval: 'AI อ่านอีเมลอนุมัติ',
+  ingest_timesheet: 'นำเข้าระบบวางบิล',
+  ingest_timesheet_replaced: 'นำเข้าระบบวางบิล (แทนที่ฉบับเดิม)',
+  ingest_failed_no_match: 'นำเข้าไม่ได้ — จับคู่ชื่อพนักงานไม่พบ',
+  ingest_failed_no_contract: 'นำเข้าไม่ได้ — ไม่พบสัญญาที่ครอบคลุมรอบนี้',
+  recompute_manday: 'คำนวณ Manday',
+  human_checked: 'คนตรวจแล้ว — ยืนยันผ่าน',
+  reject_timesheet: 'ตีกลับให้แก้ Timesheet',
+  notify_line_needs_check: 'แจ้ง LINE — มี Timesheet ใหม่รอตรวจ',
+  notify_line_needs_check_error: 'แจ้ง LINE ไม่สำเร็จ (รอตรวจ)',
+  notify_line_check_failed: 'แจ้ง LINE — ตรวจ Manday ไม่ผ่าน',
+  notify_line_check_failed_error: 'แจ้ง LINE ไม่สำเร็จ (ตรวจไม่ผ่าน)',
+};
+const auditActionLabel = (action) => AUDIT_ACTION_LABEL[action] ?? action.replace(/_/g, ' ');
+const AUDIT_ACTOR_LABEL = { llm: 'AI', system: 'ระบบอัตโนมัติ' };
+const auditActorLabel = (actor) => AUDIT_ACTOR_LABEL[actor] ?? actor;
+
 function toast(message, isError = false) {
   const node = el('tst');
   node.textContent = message;
@@ -90,6 +112,40 @@ function toast(message, isError = false) {
   node.classList.add('on');
   clearTimeout(node._timer);
   node._timer = setTimeout(() => node.classList.remove('on'), isError ? 8000 : 6000);
+}
+
+/**
+ * กล่องยืนยันแบบมีดีไซน์ — ใช้แทน confirm() ของเบราว์เซอร์ (หน้าตาเถื่อน ไม่ตรงกับธีมแอป)
+ * message รับ HTML ได้ตรงๆ (คนเรียกต้อง esc() ค่าที่แปรผันเองก่อนใส่)
+ * คืนค่าเป็น Promise<boolean> — true = กดปุ่มยืนยัน, false = ยกเลิกหรือกดนอกกล่อง
+ */
+function confirmModal({ iconName = 'trash-solid', danger = true, title, message, confirmLabel = 'ลบ', cancelLabel = 'ยกเลิก' } = {}) {
+  return new Promise((resolve) => {
+    const root = el('modalRoot');
+    root.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-banner"></div>
+          <span class="modal-ic"><span class="modal-ic-badge ${danger ? '' : 'brand'}">
+            ${icon(iconName, iconName.endsWith('-solid') ? 'i solid' : 'i')}</span></span>
+          <div class="modal-body">
+            <h3>${esc(title)}</h3>
+            <p>${message}</p>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" id="modalCancel">${esc(cancelLabel)}</button>
+            <button class="btn ${danger ? 'dgr' : 'pri'}" id="modalConfirm">
+              ${danger ? icon('trash', 'i sm') : ''} ${esc(confirmLabel)}</button>
+          </div>
+        </div>
+      </div>`;
+    const close = (result) => { root.innerHTML = ''; resolve(result); };
+    el('modalCancel').addEventListener('click', () => close(false));
+    el('modalConfirm').addEventListener('click', () => close(true));
+    root.querySelector('.modal-backdrop').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-backdrop')) close(false);
+    });
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -107,10 +163,12 @@ const state = {
   aliasEdit: null,
   /** สัญญาจ้างที่กำลังแก้เรทอยู่ — เปิดทีละอันเท่านั้น: assignmentId หรือ null */
   rateEdit: null,
-  /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด — ยังไม่ได้บันทึกลงฐานข้อมูล
+  /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด/ดึงจาก Gmail — ยังไม่ได้บันทึกลงฐานข้อมูล
      อยู่ในหน่วยความจำหน้าจอจนกว่าคนจะกดยืนยัน รีเฟรชแล้วหาย ซึ่งถูกต้อง
-     เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง */
-  read: null,
+     เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง
+     เป็น "รายการ" (array) ไม่ใช่ตัวเดียว เพราะ 1 อีเมลอาจมีไฟล์แนบของหลายคน ต้องเห็นครบทุกคน
+     พร้อมกันบนจอ ไม่ใช่แทนที่กันทีละคน — แต่ละรายการมี _key ไว้แยกกันเวลาแก้/ลบ/ยืนยัน */
+  reads: [],
 };
 
 const STATUS_CLASS = {
@@ -140,37 +198,6 @@ function trendPill(value, label) {
     ${up ? '↑' : '↓'} ${Math.abs(value).toFixed(1)}%</span>`;
 }
 
-/** กราฟแท่ง planned vs billed/pending — วาดด้วย CSS ไม่ใช้ไลบรารี */
-function chartHtml(series) {
-  if (!series.length) return '<div class="empty">ยังไม่มีข้อมูล</div>';
-  const max = Math.max(...series.map((s) => Math.max(s.planned, s.billed, s.pending))) || 1;
-
-  return `
-  <div class="chart">
-    ${series.map((s) => {
-      const actual = s.billed || s.pending;
-      const isPending = !s.billed && s.pending > 0;
-      const planH = Math.max((s.planned / max) * 100, 4);
-      const fillH = actual ? Math.max((actual / s.planned) * 100, 5) : 0;
-      return `
-      <div class="col ${actual ? 'on' : ''}">
-        <div class="stack">
-          <div class="plan" style="height:${planH}%">
-            ${actual ? `<div class="fill ${isPending ? 'pend' : ''}" style="height:${fillH}%">
-              <span class="cap">${money(actual)}</span></div>` : ''}
-          </div>
-        </div>
-        <span class="xl">${esc(s.monthShort)}</span>
-      </div>`;
-    }).join('')}
-  </div>
-  <div class="chart-legend">
-    <span><i style="background:linear-gradient(180deg,#2FA2EC,var(--brand-d))"></i> วางบิลแล้ว</span>
-    <span><i class="fill pend" style="border:1px solid var(--bline)"></i> ตรวจผ่าน ยังไม่วางบิล</span>
-    <span><i style="background:var(--hair);border:1px dashed var(--rule)"></i> เรทตามสัญญา</span>
-  </div>`;
-}
-
 const SPLIT_LABEL = {
   billed: 'วางบิลแล้ว', ready: 'รออนุมัติ', checking: 'รอคนตรวจ',
   mismatch: 'ข้อมูลไม่ตรง', partial: 'ได้ไม่ครบ', awaiting: 'รอ Timesheet',
@@ -179,8 +206,6 @@ const SPLIT_COLOR = {
   billed: 'var(--ok)', ready: 'var(--brand)', checking: 'var(--wn)',
   mismatch: 'var(--cr)', partial: 'var(--tint2)', awaiting: 'var(--rule)',
 };
-const STEP_TAG = { 1: 'ขั้น 1', 2: 'ขั้น 2', 3: 'ขั้น 3' };
-
 async function renderDashboard() {
   const data = await api('/dashboard');
   const contract = data.contracts[0];
@@ -207,40 +232,31 @@ async function renderDashboard() {
 
     <div class="kpis">
       <div class="kpi ${data.counts.waitingCheck ? 'w' : 'g'} act" data-go="queue" role="button" tabindex="0">
-        <div class="kh"><span class="ic">${icon('clock')}</span><span class="kl">ขั้น 2 · รอคนตรวจ</span></div>
+        <div class="kh"><span class="ic">${icon('list-chk')}</span><span class="kl">ขั้น 2 · รอตรวจสอบ</span></div>
         <span class="kv">${int(data.counts.waitingCheck)}<small>ใบ</small></span>
-        <span class="kf">${data.counts.waitingCheck
-          ? `มูลค่า ${money(data.waitingCheckValue)} บาท · กดเพื่อไปตรวจ`
-          : 'ตรวจและยืนยันครบทุกใบแล้ว'}</span>
+        ${data.counts.waitingCheck
+          ? `<span class="kf">มูลค่า ${money(data.waitingCheckValue)} บาท · กดเพื่อไปตรวจ</span>` : ''}
       </div>
 
       <div class="kpi ${data.counts.readyToBill ? 'w' : 'g'} act" data-go="cycles" role="button" tabindex="0">
-        <div class="kh"><span class="ic">${icon('send')}</span><span class="kl">ขั้น 3 · ยืนยันแล้ว รอวางบิล</span></div>
+        <div class="kh"><span class="ic">${icon('doc')}</span><span class="kl">ขั้น 3 · พร้อมวางบิล</span></div>
         <span class="kv">${int(data.counts.readyToBill)}<small>ใบ</small></span>
-        <span class="kf">${data.counts.readyToBill
-          ? `มูลค่า ${money(data.readyValue)} บาท · กดเพื่อไปอนุมัติ`
-          : 'ไม่มีใบที่รอวางบิล'}</span>
+        ${data.counts.readyToBill
+          ? `<span class="kf">มูลค่า ${money(data.readyValue)} บาท · กดเพื่อไปอนุมัติ</span>` : ''}
       </div>
 
       <div class="kpi a">
-        <div class="kh"><span class="ic">${icon('money')}</span><span class="kl">วางบิลแล้ว</span>
+        <div class="kh"><span class="ic">${icon('money')}</span><span class="kl">ยอดวางบิลแล้ว</span>
           ${trendPill(data.trends.billed, data.trends.previousPeriodLabel)}</div>
         <span class="kv">${money(data.billedAmount)}</span>
-        <span class="kf">${int(data.invoiceCount)} ใบ · ${data.trends.latestPeriodLabel
-          ? `รอบล่าสุด ${esc(data.trends.latestPeriodLabel)}`
-          : 'ยังไม่มีใบที่สร้าง'}</span>
+        ${data.invoiceCount
+          ? `<span class="kf">${int(data.invoiceCount)} ใบ · รอบล่าสุด ${esc(data.trends.latestPeriodLabel)}</span>` : ''}
       </div>
     </div>
 
-    <div class="mosaic c2">
+    <div class="mosaic c3">
       <div class="card">
-        <div class="hd"><h3>มูลค่าวางบิลรายเดือน</h3>
-          <span class="rt">เทียบกับเรทตามสัญญา ${money(contract?.monthlyTotal)} บาท/เดือน</span></div>
-        <div class="bd">${chartHtml(data.series)}</div>
-      </div>
-
-      <div class="card">
-        <div class="hd"><h3>สถานะรอบบิล</h3><span class="rt">${cycles.length} รอบตามสัญญา</span></div>
+        <div class="hd"><h3>สถานะรอบบิล</h3></div>
         <div class="bd">
           <div class="split">
             ${order.filter((k) => dist[k]).map((k) =>
@@ -254,18 +270,16 @@ async function renderDashboard() {
           </ul>
         </div>
       </div>
-    </div>
 
-    <div class="mosaic c3">
       <div class="card">
-        <div class="hd"><h3>งานที่ต้องทำ</h3><span class="rt">${data.tasks.length} เรื่อง</span></div>
+        <div class="hd"><h3>งานที่ต้องทำ</h3></div>
         <div class="bd">
           <ul class="tasks">${data.tasks.slice(0, 6).map((n, i) => `
             <li>
               <span class="tic ${n.level === 'critical' ? 'cr' : n.level === 'warn' ? 'wn' : 'info'}">
                 ${icon(n.level === 'info' ? 'info' : 'alt')}</span>
-              <span><span class="tt">${esc(STEP_TAG[n.step] ?? '')} · ${esc(n.title)}</span>
-                <span class="td">${esc(n.detail)}</span></span>
+              <span><span class="tt">${esc(n.title)}</span>
+                ${n.detail ? `<span class="td">${esc(n.detail)}</span>` : ''}</span>
               <button class="go" data-task="${i}">เปิด</button>
             </li>`).join('') || '<li class="empty">ไม่มีงานค้าง</li>'}</ul>
         </div>
@@ -293,20 +307,10 @@ async function renderDashboard() {
         </div>
       </div>
 
-      <div class="card">
-        <div class="hd"><h3>ล่าสุดในระบบ</h3></div>
-        <div class="bd">
-          <ul class="acts-l">${data.recentAudit.slice(0, 7).map((a) => `
-            <li><span class="tx">${esc(AUDIT_TH[a.action] ?? a.action)}<small>${esc(a.actor)}${
-              a.entity_id ? ` · ${esc(a.entity_id)}` : ''}</small></span>
-              <span class="tm">${dt(a.at)}</span></li>`).join('') || '<li class="empty">ยังไม่มีบันทึก</li>'}</ul>
-        </div>
-      </div>
     </div>
 
     <div class="card">
-      <div class="hd"><h3>รอบบิลตามสัญญา</h3>
-        <span class="rt">กางทุกเดือนตามช่วงสัญญา · คลิกแถวเพื่อเปิดรอบบิล</span></div>
+      <div class="hd"><h3>รอบบิลตามสัญญา</h3></div>
       <div class="bd flush"><div class="tw"><table style="min-width:820px">
         <thead><tr>
           <th>รอบบิล</th><th style="width:150px">Timesheet</th>
@@ -317,13 +321,6 @@ async function renderDashboard() {
           || '<tr><td colspan="5" class="empty">ยังไม่มีสัญญาในระบบ</td></tr>'}</tbody>
       </table></div></div>
     </div>
-
-    <div class="note">${icon('info')}<span>
-      <strong>ตัวเลขในหน้านี้บอกอะไรไม่ได้บ้าง</strong> —
-      ระบบไม่ได้บันทึกการรับเงิน "วางบิลแล้ว" จึงแปลว่าสร้างเอกสารใน FlowAccount แล้ว
-      ไม่ได้แปลว่าลูกค้าจ่ายแล้ว · ส่วนลดวันลาคิดจากเรทเดือนหารด้วยตัวหารในสัญญา (ตั้งไว้ 20)
-      ซึ่งยังยืนยันไม่ได้ว่าเป็นค่าคงที่หรือวันทำงานจริงของแต่ละเดือน
-    </span></div>
   </div>`;
 
   bindRows();
@@ -336,24 +333,6 @@ async function renderDashboard() {
     });
   });
 }
-
-/** ชื่อการกระทำในบันทึก — เก็บเป็นภาษาอังกฤษใน DB แต่หน้าจอควรอ่านออก */
-const AUDIT_TH = {
-  read_timesheet_file: 'AI อ่านไฟล์ Timesheet',
-  extract_timesheet: 'AI อ่านไฟล์ Timesheet',
-  ingest_timesheet: 'รับ Timesheet เข้าระบบ',
-  ingest_timesheet_replaced: 'รับ Timesheet ฉบับแก้ไข',
-  recompute_manday: 'คำนวณ Manday ใหม่',
-  human_checked: 'คนยืนยันผลตรวจ',
-  reject_timesheet: 'ตีกลับ Timesheet',
-  approve_cycle: 'อนุมัติวางบิล',
-  draft_email_llm: 'AI ร่างอีเมล',
-  invoice_email_sent: 'บันทึกว่าส่งเมลแล้ว',
-  add_employee_alias: 'เพิ่มชื่อพ้อง',
-  update_assignment_rate: 'แก้เรทค่าบริการ',
-  add_holiday: 'เพิ่มวันหยุด',
-  seed: 'ใส่ข้อมูลตั้งต้น',
-};
 
 function bindRows() {
   main.querySelectorAll('[data-cycle]').forEach((row) => {
@@ -387,13 +366,9 @@ function cycleRow(c, { showCustomer = false } = {}) {
     <td><span class="st ${CYCLE_STATE_CLASS[c.state]}">${esc(c.stateLabel)}</span>
         ${c.invoiceNo ? `<span class="sub">${esc(c.invoiceNo)}</span>` : ''}</td>
     <td>${c.state === 'billed'
-        ? (c.overduePayment
-            ? `<span class="tg cr">เกินกำหนด</span><span class="sub">ครบ ${dateOnly(c.dueDate)}</span>`
-            : `<span class="sub" style="margin:0">ครบกำหนด ${dateOnly(c.dueDate)}</span>`)
-        : (c.overdueToBill
-            ? `<span class="tg wn">เลยกำหนดวางบิล</span><span class="sub">ควรวางบิล ${dateOnly(c.expectedBillDate)}</span>`
-            : `<span class="sub" style="margin:0">ควรวางบิล ${dateOnly(c.expectedBillDate)}</span>`)}</td>
-    <td class="r n">${money(c.value)}</td>
+        ? (c.overduePayment ? `<span class="tg cr">เกินกำหนด</span>` : `<span class="tg ok">ตรงเวลา</span>`)
+        : (c.overdueToBill ? `<span class="tg wn">เลยกำหนดวางบิล</span>` : '')}</td>
+    <td class="r n">${c.value ? money(c.value) : ''}</td>
   </tr>`;
 }
 
@@ -487,10 +462,7 @@ function sheetCard(t) {
       ? `<div class="note cr" style="margin:0">${icon('alt')}<span>${esc(failures.map((f) => f.title).join(' · '))}</span></div>`
       : t.statusReason
         ? `<div class="note wn" style="margin:0">${icon('alt')}<span>${esc(t.statusReason)}</span></div>`
-        : t.status === 'verified' && !t.check?.checked
-          ? `<div class="note wn" style="margin:0">${icon('alt')}<span>
-              เครื่องตรวจผ่านแล้ว แต่ยังไม่มีคนกดยืนยัน — รอบบิลนี้จะยังอนุมัติไม่ได้</span></div>`
-          : ''}
+        : ''}
 
     <div class="rec-acts ${t.status === 'billed' ? 'one' : ''}">
       <button class="btn pri" data-open="${esc(t.id)}">${icon('file')} เปิดตรวจ</button>
@@ -674,8 +646,6 @@ async function renderQueue() {
 
 // ── รายละเอียด Timesheet ────────────────────────────────────
 
-const SEV_TAG = { pass: 'ok', warn: 'wn', fail: 'cr' };
-const SEV_LABEL = { pass: 'ผ่าน', warn: 'ทักไว้', fail: 'ไม่ผ่าน' };
 const DOW = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const KIND_LABEL = { workday: 'ทำงาน', weekend: null, holiday: null, leave: 'ลา' };
 
@@ -713,61 +683,6 @@ function calendarHtml(manday) {
     </div>`;
 }
 
-/**
- * ผลการจับคู่กับฐานข้อมูล + ทางแก้ตรงจุดที่เจอปัญหา
- *
- * เดิมหน้านี้บอกได้แค่ว่า "ไม่พบ" แล้วจบ คนต้องไปเรียกโปรแกรมเมอร์มาเพิ่มชื่อพ้อง
- * ปุ่มเพิ่มชื่อพ้องจึงอยู่ตรงนี้ — ที่เดียวกับที่คนเห็นปัญหา ไม่ต้องไปหาหน้าอื่น
- */
-function matchingHtml(m, sheet) {
-  const row = (label, value, ok, needsConfirm, reason, fix = '') => `
-    <li><span class="l">${label}<small>${esc(reason)}</small>${fix}</span>
-      <span class="tg ${ok ? (needsConfirm ? 'wn' : 'ok') : 'cr'}">${esc(value)}</span></li>`;
-
-  /* เสนอเพิ่มชื่อพ้องเมื่อจับคู่ไม่ได้ หรือจับคู่ได้แบบใกล้เคียงที่ต้องยืนยัน
-     ถ้าตรงเป๊ะอยู่แล้วไม่ต้องเสนอ จะรบกวนเปล่าๆ */
-  const empId = sheet?.employee?.id;
-  const nameFix = (!m.name.ok || m.name.needsConfirm) && empId && m.name.raw
-    ? `<button class="lk fixa" data-alias-kind="name" data-alias="${esc(m.name.raw)}"
-         data-emp="${esc(empId)}">+ เพิ่ม "${esc(m.name.raw)}" เป็นชื่อพ้องของ ${esc(sheet.employee.nameTh)}</button>`
-    : '';
-  const posFix = !m.position.ok && empId && sheet?.rawPosition
-    ? `<button class="lk fixa" data-alias-kind="position" data-alias="${esc(sheet.rawPosition)}"
-         data-emp="${esc(empId)}">+ เพิ่ม "${esc(sheet.rawPosition)}" เป็นตำแหน่งพ้อง</button>`
-    : '';
-
-  return `<ul class="cks">
-    ${row('ชื่อพนักงาน',
-        m.name.ok ? (m.name.needsConfirm ? 'ต้องยืนยัน' : 'จับคู่ได้') : 'ไม่พบ',
-        m.name.ok, m.name.needsConfirm,
-        `"${m.name.raw}" → ${m.name.matchedTo ?? 'ไม่พบ'} · ${m.name.reason}`, nameFix)}
-    ${row('ตำแหน่ง', m.position.ok ? 'ตรง' : 'ต่างกัน', m.position.ok, false, m.position.reason, posFix)}
-    ${row('เรทค่าบริการ', m.rate.ok ? 'ตรง' : 'ไม่ตรง', m.rate.ok, false,
-        `${money(m.rate.fromContract)} บาท/เดือน · ${m.rate.reason}`)}
-  </ul>`;
-}
-
-/** ผูกปุ่มเพิ่มชื่อพ้อง — เพิ่มแล้วคำนวณใหม่ทันที ให้เห็นผลในคลิกเดียว */
-function bindAliasFix(sheetId) {
-  main.querySelectorAll('.fixa').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        await api(`/employees/${encodeURIComponent(btn.dataset.emp)}/aliases`, {
-          method: 'POST',
-          body: JSON.stringify({ kind: btn.dataset.aliasKind, alias: btn.dataset.alias }),
-        });
-        await api(`/timesheets/${encodeURIComponent(sheetId)}/recompute`, { method: 'POST' });
-        toast(`เพิ่มชื่อพ้อง "${btn.dataset.alias}" และคำนวณใหม่แล้ว`);
-        openSheet(sheetId);
-      } catch (error) {
-        btn.disabled = false;
-        toast(error.message, true);
-      }
-    });
-  });
-}
-
 async function openSheet(id) {
   state.view = 'detail';
   state.detailId = id;
@@ -779,7 +694,6 @@ async function openSheet(id) {
   const sheet = await api(`/timesheets/${encodeURIComponent(id)}`);
   const manday = sheet.manday;
   const failures = (manday?.checks ?? []).filter((c) => c.severity === 'fail');
-  const warnings = (manday?.checks ?? []).filter((c) => c.severity === 'warn');
   const step = sheet.status === 'billed' ? 4
     : failures.length || !sheet.check?.checked ? 2
     : 3;
@@ -827,7 +741,7 @@ async function openSheet(id) {
     </div>
 
     <div class="tabs" role="tablist">
-      ${['ภาพรวม', 'ไฟล์ต้นทาง', 'คำนวณ Manday', 'ผลตรวจสอบ'].map((t, i) =>
+      ${['ภาพรวม', 'ไฟล์ต้นทาง', 'คำนวณ Manday'].map((t, i) =>
         `<button class="tab ${state.tab === i + 1 ? 'on' : ''}" data-tab="${i + 1}">${t}</button>`).join('')}
     </div>
 
@@ -850,12 +764,6 @@ async function openSheet(id) {
                 <div class="t py"><span>ยอดของรายการนี้</span><span class="v">${money(manday?.lineAmount)}</span></div>
               </div>
             </div>
-          </div>
-
-          <div class="card">
-            <div class="hd"><h3>การจับคู่กับฐานข้อมูล</h3>
-              <span class="rt">ตำแหน่งบนใบแจ้งหนี้ใช้ค่าจากฐานข้อมูล ไม่ใช่จาก Timesheet</span></div>
-            <div class="bd">${matchingHtml(sheet.matching, sheet)}</div>
           </div>
         </div>
 
@@ -884,7 +792,7 @@ async function openSheet(id) {
               <li><span class="tx">ลูกค้าอนุมัติ Timesheet<small>${esc(sheet.approvedBy ?? '—')}</small></span>
                 <span class="tm">${dateOnly(sheet.approvedAt)}</span></li>
               ${sheet.audit.map((a) => `
-                <li><span class="tx">${esc(a.action)}<small>${esc(a.actor)}</small></span>
+                <li><span class="tx">${esc(auditActionLabel(a.action))}<small>${esc(auditActorLabel(a.actor))}</small></span>
                   <span class="tm">${dt(a.at)}</span></li>`).join('')}
             </ul></div>
           </div>
@@ -932,8 +840,7 @@ async function openSheet(id) {
     <!-- คำนวณ Manday -->
     <div class="tp ${state.tab === 3 ? 'on' : ''}" data-pane="3">
       <div class="card">
-        <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3>
-          <span class="rt">คำนวณจากปฏิทินวันหยุดในระบบ</span></div>
+        <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3></div>
         <div class="bd">${calendarHtml(manday)}</div>
       </div>
 
@@ -942,21 +849,6 @@ async function openSheet(id) {
         <div class="bd">${manday?.remarkLines?.length
           ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
           : '<div class="empty">ไม่มีวันลา จึงไม่มีหมายเหตุ</div>'}</div>
-      </div>
-    </div>
-
-    <!-- ผลตรวจสอบ -->
-    <div class="tp ${state.tab === 4 ? 'on' : ''}" data-pane="4">
-      <div class="card">
-        <div class="hd"><h3>ผลการตรวจสอบอัตโนมัติ</h3>
-          <span class="rt">ผ่าน ${(manday?.checks ?? []).filter((c) => c.severity === 'pass').length}
-            · ทักไว้ ${warnings.length} · ไม่ผ่าน ${failures.length}</span></div>
-        <div class="bd"><ul class="cks">
-          ${(manday?.checks ?? []).map((c) => `
-            <li><span class="l">${esc(c.title)}<small>${esc(c.detail)}</small></span>
-              <span class="tg ${SEV_TAG[c.severity]}">${SEV_LABEL[c.severity]}</span></li>`).join('')
-            || '<li class="empty">ยังไม่ได้คำนวณ</li>'}
-        </ul></div>
       </div>
     </div>
 
@@ -969,7 +861,7 @@ async function openSheet(id) {
             ? `<b>ยืนยันแล้ว</b> — ${esc(sheet.check.by ?? '')} · ${dt(sheet.check.at)}`
             : sheet.check?.stale
               ? '<b>ยอดเปลี่ยนหลังยืนยันไปแล้ว</b> — อ่านตัวเลขชุดใหม่แล้วยืนยันอีกครั้ง'
-              : '<b>เครื่องตรวจผ่าน</b> — อ่านแล้วกดยืนยันเพื่อให้รอบบิลนี้อนุมัติได้'}</span>
+              : ''}</span>
       <div class="gap"></div>
       <button class="btn dgr" id="rejectBtn">ตีกลับให้แก้ Timesheet</button>
       ${sheet.status === 'billed' || sheet.check?.checked
@@ -980,7 +872,6 @@ async function openSheet(id) {
   </div>`;
 
   el('backBtn').addEventListener('click', () => setNav('queue'));
-  bindAliasFix(id);
   main.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.tab = Number(btn.dataset.tab);
@@ -1184,9 +1075,6 @@ async function openCycle(contractId, period) {
 
     ${data.blockers.length ? `<div class="note cr">${icon('alt')}<span>
       <strong>ยังวางบิลไม่ได้</strong><br>${data.blockers.map(esc).join('<br>')}</span></div>` : ''}
-    ${data.warnings.length ? `<div class="note wn">${icon('alt')}<span>
-      <strong>ข้อควรทราบ ${data.warnings.length} ข้อ</strong><br>
-      ${data.warnings.map((w) => `${esc(w.employee)}: ${esc(w.detail)}`).join('<br>')}</span></div>` : ''}
 
     <div class="split2">
       <!-- ซ้าย: รายการในรอบบิล -->
@@ -1214,8 +1102,7 @@ async function openCycle(contractId, period) {
 
         <div class="tp" data-cpane="2">
           <div class="card">
-            <div class="hd"><h3>ร่างอีเมลวางบิล</h3>
-              <span class="rt">${data.emailDraft.source === 'llm' ? 'AI เรียบเรียง' : 'ร่างจาก template'}</span></div>
+            <div class="hd"><h3>ร่างอีเมลวางบิล</h3></div>
             <div class="bd">
               <div class="mailacts">
                 <button class="btn sm" id="aiDraftBtn">${icon('rf')} ให้ AI เรียบเรียงใหม่</button>
@@ -1232,12 +1119,16 @@ async function openCycle(contractId, period) {
                 <div class="f sj"><span class="l">เรื่อง</span><span id="mailSubject">${esc(data.emailDraft.subject)}</span></div>
                 <div class="lt" id="mailBody">${esc(data.emailDraft.body)}</div>
                 <div class="en">
-                  <span class="ey" style="margin-bottom:8px">เอกสารแนบ (ต้องแนบเองตอนส่ง)</span>
-                  <div class="files">${data.emailDraft.attachments.map((a) =>
-                    `<span class="file"><span class="pd">PDF</span> ${esc(a)}</span>`).join('')}</div>
+                  <div class="files">${data.emailDraft.attachments.map((raw) => {
+                    // ร่างเก่าก่อนมีลิงก์ไฟล์จริง เก็บเป็นสตริงชื่อไฟล์เฉยๆ — รองรับไว้ไม่ให้พัง
+                    const a = typeof raw === 'string' ? { label: raw, timesheetId: null } : raw;
+                    return a.timesheetId
+                      ? `<a class="file" href="/api/timesheets/${esc(a.timesheetId)}/file" target="_blank" rel="noopener">
+                           <span class="pd">PDF</span> ${esc(a.label)}</a>`
+                      : `<span class="file"><span class="pd">PDF</span> ${esc(a.label)}</span>`;
+                  }).join('')}</div>
                 </div>
               </div>
-              <div class="note">${icon('info')}<span>${esc(data.emailDraft.note)}</span></div>
             </div>
           </div>
         </div>
@@ -1262,8 +1153,6 @@ async function openCycle(contractId, period) {
                  </div>
                </div>`
             : `<div class="sendbar">
-                 <span class="sub" style="margin:0">ระบบไม่ส่งเมลเอง — ก๊อปร่างด้านซ้ายไปส่งจาก Gmail
-                   ของคุณ แล้วกดปิดงานที่นี่</span>
                  <button class="btn pri sm" id="sentBtn" data-inv="${esc(data.existing.id)}">
                    ${icon('send')} บันทึกว่าส่งเมลแล้ว</button></div>`}</div>` : ''}
         <div class="bd">
@@ -1319,7 +1208,7 @@ async function openCycle(contractId, period) {
         ? `<b>สร้างร่างใน FlowAccount แล้ว</b> — ${esc(data.existing.document_no)}`
         : data.blockers.length
           ? `<b>ยังอนุมัติไม่ได้</b> — ${data.blockers.length} ข้อ`
-          : `<b>พร้อมอนุมัติ</b> — ทักไว้ ${data.warnings.length} ข้อ`}</span>
+          : ''}</span>
       <div class="gap"></div>
       <button class="btn pri" id="approveBtn" ${billed || data.blockers.length ? 'disabled' : ''}>
         ${icon('send')} อนุมัติและสร้างร่างใน FlowAccount</button>
@@ -1401,13 +1290,20 @@ async function openCycle(contractId, period) {
 
   el('gmailDraftBtn')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
+    /* เปิดแท็บเปล่าไว้ก่อนตั้งแต่ตอนคลิก (ยังอยู่ใน user gesture เดิม) แล้วค่อยเปลี่ยน
+       location ทีหลังตอน await เสร็จ — ถ้าไปเรียก window.open() หลัง await เลย เบราว์เซอร์
+       จะมองว่าไม่ใช่ user gesture แล้ว บล็อก popup ทันที (ทดสอบแล้วเจอจริง) */
+    const draftWindow = window.open('', '_blank');
     btn.disabled = true;
     btn.textContent = 'กำลังสร้างร่างใน Gmail…';
     try {
       const r = await api(`/cycles/${encodeURIComponent(contractId)}/${period}/gmail-draft`, { method: 'POST' });
-      toast(`สร้างร่างใน Gmail แล้ว — ถึง ${r.to} (${r.note})`);
+      toast(`สร้างร่างใน Gmail แล้ว — ถึง ${r.to} · เปิดแท็บใหม่ให้แล้ว กดตรวจแล้วส่งได้จากที่นั่นเลย (${r.note})`);
+      if (r.url && draftWindow) draftWindow.location = r.url;
+      else draftWindow?.close();
     } catch (error) {
       toast(error.message, true);
+      draftWindow?.close();
     } finally {
       btn.disabled = false;
       btn.innerHTML = `${icon('mail')} สร้างร่างใน Gmail`;
@@ -1451,11 +1347,10 @@ function fileToBase64(file) {
 }
 
 async function renderUpload() {
-  const [contracts, settings] = await Promise.all([
-    api('/contracts'), api('/settings'),
+  const [contracts, settings, employees] = await Promise.all([
+    api('/contracts'), api('/settings'), api('/employees'),
   ]);
-  const ct = contracts[0];
-  const read = state.read;
+  const reads = state.reads;
 
   main.innerHTML = `
   <div class="page">
@@ -1468,6 +1363,7 @@ async function renderUpload() {
       <button class="tab ${state.uploadTab === 3 ? 'on' : ''}" data-utab="3">ดึงจาก Gmail
         ${settings.env.hasGmail ? '' : '<span class="tg mu">ยังไม่ต่อ</span>'}</button>
       <button class="tab ${state.uploadTab === 2 ? 'on' : ''}" data-utab="2">กรอกเอง</button>
+      <button class="tab ${state.uploadTab === 4 ? 'on' : ''}" data-utab="4">ประวัติ</button>
     </div>
 
     <!-- ── ดึงจาก Gmail ── -->
@@ -1477,9 +1373,6 @@ async function renderUpload() {
           <div class="hd"><h3>อีเมลแจ้งอนุมัติ Timesheet</h3>
             <span class="rt" id="gmailAcct">กำลังเชื่อมต่อ…</span></div>
           <div class="bd">
-            <div class="mailacts">
-              <button class="btn sm" id="gmailRefresh">${icon('rf')} ดึงรายการเมล</button>
-            </div>
             <div id="gmailList"></div>
           </div>
         </div>` : `
@@ -1506,45 +1399,17 @@ async function renderUpload() {
 
     <!-- ── อัปโหลดไฟล์ ── -->
     <div class="tp ${state.uploadTab === 1 ? 'on' : ''}" data-upane="1">
-      <div class="split2">
-        <div>
-          <div class="card">
-            <div class="hd"><h3>เลือกไฟล์ Timesheet</h3><span class="rt">PDF ที่ลูกค้าอนุมัติแล้ว</span></div>
-            <div class="bd">
-              <label class="drop" id="dropZone">
-                <input type="file" id="fileInput" accept="application/pdf" hidden>
-                ${icon('file', 'i')}
-                <b id="dropName">ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์</b>
-                <span>รับเฉพาะ PDF · ไม่เกิน 8 MB</span>
-              </label>
-              <div class="frm two" style="margin-top:16px">
-                <label>เลขที่เอกสาร
-                  <input id="uDoc" type="text" placeholder="เช่น 2026020101" autocomplete="off"
-                         value="${esc(read?.documentNo ?? '')}">
-                  <small>เลขบนใบ Timesheet หรือในอีเมลแจ้งอนุมัติ</small>
-                </label>
-                <label>รอบเดือนที่คาดไว้ (ถ้ารู้)
-                  <input id="uPeriod" type="month">
-                  <small>ใส่ไว้เพื่อให้ระบบทักถ้าไฟล์เป็นคนละเดือน</small>
-                </label>
-              </div>
-            </div>
-            <div class="ft">
-              <button class="btn pri" id="readBtn" disabled>${icon('srch')} อ่านไฟล์นี้</button>
-            </div>
-          </div>
+      <div class="card">
+        <div class="hd"><h3>เลือกไฟล์ Timesheet</h3><span class="rt">PDF ที่ลูกค้าอนุมัติแล้ว</span></div>
+        <div class="bd">
+          <label class="drop" id="dropZone">
+            <input type="file" id="fileInput" accept="application/pdf" hidden>
+            ${icon('file', 'i')}
+            <b id="dropName">ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์</b>
+          </label>
         </div>
-
-        <div class="card">
-          <div class="hd"><h3>สัญญาที่จะใช้อ้างอิง</h3></div>
-          <div class="bd">
-            ${ct ? `<dl class="kv">
-              <dt>ลูกค้า</dt><dd>${esc(ct.customer_name)}</dd>
-              <dt>ใบว่าจ้าง</dt><dd class="n">${esc(ct.po_no)}</dd>
-              <dt>ช่วงสัญญา</dt><dd>${dateOnly(ct.start_date)} – ${dateOnly(ct.end_date)}</dd>
-              <dt>พนักงานในสัญญา</dt><dd>${int(ct.headcount)} คน</dd>
-            </dl>` : '<div class="empty">ยังไม่มีสัญญาในระบบ</div>'}
-          </div>
+        <div class="ft">
+          <button class="btn pri" id="readBtn" disabled>${icon('srch')} อ่านไฟล์นี้</button>
         </div>
       </div>
 
@@ -1552,15 +1417,10 @@ async function renderUpload() {
 
     <!-- ── กรอกเอง ── -->
     <div class="tp ${state.uploadTab === 2 ? 'on' : ''}" data-upane="2">
-      <div class="split2">
-        <div class="card">
-          <div class="hd"><h3>ข้อมูลจากใบ Timesheet</h3>
-            <span class="rt">ตารางรายวันระบบสร้างจากปฏิทินให้เอง</span></div>
-          <div class="bd">
+      <div class="card">
+        <div class="hd"><h3>ข้อมูลจากใบ Timesheet</h3></div>
+        <div class="bd">
             <div class="frm">
-              <label>เลขที่เอกสาร
-                <input id="eDoc" type="text" placeholder="เช่น 2026020101" autocomplete="off">
-              </label>
               <label>รอบเดือน<input id="ePeriod" type="month"></label>
               <label>ชื่อพนักงาน <b>ตามที่เขียนในใบ</b>
                 <input id="eName" type="text" placeholder="เช่น Pongpun Mamak" autocomplete="off">
@@ -1579,13 +1439,23 @@ async function renderUpload() {
               <small class="fhint">ไม่มีวันลาก็เว้นว่างไว้</small>
             </div>
           </div>
-          <div class="ft"><button class="btn pri" id="eSave">บันทึกเข้าระบบ</button></div>
-        </div>
+        <div class="ft"><button class="btn pri" id="eSave">บันทึกเข้าระบบ</button></div>
       </div>
     </div>
 
-    <!-- ผลที่ AI อ่านได้ — อยู่นอกแท็บ เพราะมาได้จากทั้งอัปโหลดไฟล์และดึงจาก Gmail -->
-    ${read ? readResultHtml(read) : ''}
+    <!-- ── ประวัติที่ AI เคยอ่านแล้ว ── -->
+    <div class="tp ${state.uploadTab === 4 ? 'on' : ''}" data-upane="4">
+      <div class="card">
+        <div class="hd"><h3>ประวัติที่ AI เคยอ่านแล้ว</h3>
+          <span class="rt">ทั้งจากอัปโหลดไฟล์และดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง</span></div>
+        <div class="bd flush"><div id="aiHistoryList"><div class="loading">กำลังโหลด…</div></div></div>
+      </div>
+    </div>
+
+    <!-- ผลที่ AI อ่านได้ — วางไว้นอกแท็บในโค้ด แต่โชว์เฉพาะของแท็บที่กำลังเปิดอยู่ (กรอง tab ตรงนี้)
+         กันไม่ให้การ์ดจากแท็บอื่นโผล่มาปนตอนสับแท็บไปมา — แต่ละแท็บโชว์ได้พร้อมกันหลายใบ (คนละการ์ด)
+         เพราะ 1 อีเมลอาจมีไฟล์แนบของหลายคน -->
+    ${reads.filter((r) => r.tab === state.uploadTab).map((r) => readResultHtml(r, employees)).join('')}
   </div>`;
 
   main.querySelectorAll('[data-utab]').forEach((btn) => {
@@ -1598,39 +1468,49 @@ async function renderUpload() {
   bindUploadTab();
   bindGmailTab();
   bindManualTab(contracts);
+  bindAiHistoryTab();
 }
 
 /* ── ขั้นที่ 1 ทางที่สอง: เลือกอีเมลจากกล่องแล้วให้ AI อ่านทั้งฉบับ ──
    ต่างจากอัปโหลดไฟล์ตรงที่ได้เนื้ออีเมลมาด้วย → เลขที่เอกสารกับสถานะ "อนุมัติ"
    ระบบอ่านเองได้ ไม่ต้องให้คนพิมพ์ และคนยังเป็นคนกดเลือกว่าจะเอาฉบับไหนเข้าระบบ */
 function bindGmailTab() {
-  const refresh = el('gmailRefresh');
-  if (!refresh) return;
+  if (!el('gmailList')) return;
 
   const load = async () => {
-    refresh.disabled = true;
     el('gmailList').innerHTML = '<div class="loading">กำลังดึงรายการเมล…</div>';
     try {
       const inbox = await api('/gmail/inbox');
       el('gmailAcct').textContent = `กล่องของ ${inbox.account}`;
+
+      // เหลือแค่ฉบับที่ยังไม่เคยให้ AI อ่าน — ที่ทำไปแล้วย้ายไปโชว์ในดรอปดาวน์ประวัติด้านล่างแทน
+      // อีเมลฉบับเดียวอาจมีไฟล์แนบของหลายคน (เช่น ผู้จัดการส่งอนุมัติรวมทีเดียว) —
+      // แต่ละไฟล์ต้องอ่าน+ยืนยันแยกกันเป็นคนๆไป จึงต้องมีปุ่ม "ให้ AI อ่าน" แยกต่อไฟล์แนบ
+      // ไม่ใช่ปุ่มเดียวต่ออีเมลที่อ่านได้แค่ไฟล์แรกเหมือนเดิม
       el('gmailList').innerHTML = inbox.messages.length
         ? `<ul class="maillist">${inbox.messages.map((m) => `
-            <li class="${m.alreadyIngested ? 'done' : ''}">
+            <li>
               <span class="mi">
                 <span class="ms">${esc(m.subject)}</span>
                 <span class="mf">${esc(m.from)} · ${dt(m.receivedAt)}</span>
                 <span class="mq">${esc(m.snippet.slice(0, 110))}</span>
-                <span class="files">${m.attachments.map((a) =>
-                  `<span class="file"><span class="pd">PDF</span> ${esc(a.filename)}</span>`).join('')}</span>
+                <div class="attlist">
+                  ${m.attachments.map((a) => `
+                    <div class="attrow">
+                      <span class="file"><span class="pd">PDF</span> ${esc(a.filename)}</span>
+                      <button class="btn sm pri" data-mail="${esc(m.id)}" data-att="${esc(a.filename)}">
+                        ${icon('srch')} ให้ AI อ่าน</button>
+                    </div>`).join('')}
+                </div>
               </span>
-              ${m.alreadyIngested
-                ? '<span class="tg ok">เอาเข้าระบบแล้ว</span>'
-                : `<button class="btn sm pri" data-mail="${esc(m.id)}"
-                     data-att="${esc(m.attachments[0]?.filename ?? '')}">
-                     ${icon('srch')} ให้ AI อ่าน</button>`}
+              <button class="btn sm dgr" data-dismiss="${esc(m.id)}"
+                title="ลบอีเมลนี้ทิ้งทั้งฉบับ รวมทุกไฟล์แนบ (ไม่ลบอีเมลจริงใน Gmail)">${icon('trash')}</button>
             </li>`).join('')}</ul>`
-        : `<div class="empty">${icon('mail', 'i')}<div>ไม่พบอีเมลที่ตรงกับคำค้น —
-            แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`;
+        : inbox.ingested.length
+          ? `<div class="empty">${icon('mail', 'i')}<div>ไม่มีรายการใหม่ — ที่ตรงกับคำค้นให้ AI อ่านไปหมดแล้ว
+              (ดูประวัติที่เคยทำด้านล่างได้)</div></div>`
+          : `<div class="empty">${icon('mail', 'i')}<div>ไม่พบอีเมลที่ตรงกับคำค้น —
+              แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`;
 
       el('gmailList').querySelectorAll('[data-mail]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -1644,7 +1524,7 @@ function bindGmailTab() {
                 attachmentFilename: btn.dataset.att || null,
               }),
             });
-            state.read = result;
+            state.reads.push({ ...result, _key: crypto.randomUUID(), tab: 3 });
             toast(`อ่านเสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
             renderUpload();
           } catch (error) {
@@ -1654,74 +1534,205 @@ function bindGmailTab() {
           }
         });
       });
+
+      el('gmailList').querySelectorAll('[data-dismiss]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const filenames = [...btn.closest('li')?.querySelectorAll('.file') ?? []]
+            .map((f) => f.textContent.trim().replace(/^PDF\s*/, ''));
+          const label = filenames.length > 1
+            ? `${filenames.length} ไฟล์ (${filenames.join(', ')})`
+            : filenames[0] ?? 'ฉบับนี้';
+          const ok = await confirmModal({
+            iconName: 'trash-solid', danger: true,
+            title: 'ลบ Timesheet นี้?',
+            message: `Timesheet "<b>${esc(label)}</b>" จะหายไปจากรายการ — อีเมลจริงใน Gmail ยังอยู่เหมือนเดิม ไม่ถูกลบ`,
+            confirmLabel: 'ลบ',
+          });
+          if (!ok) return;
+          btn.disabled = true;
+          try {
+            await api('/gmail/dismiss', { method: 'POST', body: JSON.stringify({ messageId: btn.dataset.dismiss }) });
+            toast('ลบแล้ว');
+            load();
+          } catch (error) {
+            btn.disabled = false;
+            toast(error.message, true);
+          }
+        });
+      });
     } catch (error) {
       el('gmailList').innerHTML = `<div class="note cr">${icon('alt')}<span>${esc(error.message)}</span></div>`;
-    } finally {
-      refresh.disabled = false;
     }
   };
 
-  refresh.addEventListener('click', load);
+  // ดึงให้เองอัตโนมัติทันทีที่เข้าแท็บนี้ — เชื่อมกับกล่องเมลอยู่แล้ว ไม่ต้องมีปุ่มให้กดดึงเอง
+  if (state.uploadTab === 3) load();
 }
 
-/** ผลที่ AI อ่านได้ — แก้ได้ทุกช่องก่อนกดยืนยัน */
-function readResultHtml(read) {
+const AI_READ_STATUS_LABEL = { pending: 'รอตรวจ', confirmed: 'บันทึกแล้ว', discarded: 'ทิ้งแล้ว' };
+const AI_READ_STATUS_TAG = { pending: 'wn', confirmed: 'ok', discarded: 'mu' };
+const AI_READ_SOURCE_LABEL = { upload: 'อัปโหลดไฟล์', gmail: 'Gmail' };
+
+/** ประวัติที่ AI เคยอ่านแล้ว — รวมทั้งอัปโหลดไฟล์เองและดึงจาก Gmail ไม่ว่าจะกดยืนยันไปแล้วหรือยังก็ตาม */
+function bindAiHistoryTab() {
+  const wrap = el('aiHistoryList');
+  if (!wrap || state.uploadTab !== 4) return;
+
+  const load = async () => {
+    wrap.innerHTML = '<div class="loading">กำลังโหลด…</div>';
+    try {
+      const rows = await api('/ai-reads');
+      wrap.innerHTML = rows.length
+        ? `<div class="tw"><table style="min-width:760px">
+            <thead><tr>
+              <th>เลขเอกสาร</th><th>เดือน</th><th>ปี</th><th>พนักงาน</th><th>ที่มา</th>
+              <th>สถานะ</th><th>วันที่</th><th>เวลา</th><th></th>
+            </tr></thead>
+            <tbody>${rows.map((r) => {
+              const [monthName, yearTh] = (r.periodLabel ?? '— —').split(' ');
+              const readAt = toDate(r.readAt);
+              const dateStr = readAt
+                ? readAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '—';
+              const timeStr = readAt
+                ? readAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '—';
+              return `
+              <tr class="clk" data-hist-open="${r.id}">
+                <td class="n">${esc(r.documentNo ?? '—')}</td>
+                <td>${esc(monthName ?? '—')}</td>
+                <td class="n">${esc(yearTh ?? '—')}</td>
+                <td>${esc(r.employeeName ?? '—')}</td>
+                <td><span class="tg mu">${esc(AI_READ_SOURCE_LABEL[r.source] ?? r.source)}</span></td>
+                <td><span class="tg ${AI_READ_STATUS_TAG[r.status] ?? 'mu'}">${esc(AI_READ_STATUS_LABEL[r.status] ?? r.status)}</span></td>
+                <td class="n">${dateStr}</td>
+                <td class="n">${timeStr}</td>
+                <td class="r">
+                  <button class="btn sm" data-hist-view="${r.id}">${icon('file')} ดูรายละเอียด</button>
+                  <button class="btn sm dgr" data-hist-del="${r.id}" title="ลบรายการนี้ทิ้ง">${icon('trash')}</button>
+                </td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`
+        : `<div class="empty">${icon('file', 'i')}<div>ยังไม่มีประวัติ — ให้ AI อ่านไฟล์หรือดึงจาก Gmail ก่อน</div></div>`;
+
+      // คลิกที่แถว (หรือปุ่ม "ดูรายละเอียด" ในแถวเดียวกัน) → ดูรายละเอียดในแถบประวัติเลย ไม่ต้องสับไปแท็บอื่น
+      // เอา extraction ที่เก็บไว้ตอนอ่านครั้งนั้นมาเป็นการ์ดใหม่ใน state.reads ได้เลย เพราะเก็บ shape เดียวกัน
+      // จึงยืนยันและบันทึกเข้าระบบได้จริงจากหน้านี้เหมือนเพิ่งอ่านมาสดๆ ทุกประการ (tab: 4 กันไม่ให้ไปโผล่แท็บอื่น)
+      wrap.querySelectorAll('[data-hist-open]').forEach((tr) => {
+        tr.addEventListener('click', async (e) => {
+          if (e.target.closest('[data-hist-del]')) return;
+          try {
+            const detail = await api(`/ai-reads/${tr.dataset.histOpen}`);
+            if (!detail.extraction) { toast('ไม่พบข้อมูลที่ AI อ่านไว้สำหรับรายการนี้', true); return; }
+            state.reads.push({ ...detail.extraction, _key: crypto.randomUUID(), tab: 4 });
+            renderUpload();
+          } catch (error) {
+            toast(error.message, true);
+          }
+        });
+      });
+
+      wrap.querySelectorAll('[data-hist-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const ok = await confirmModal({
+            iconName: 'trash-solid', danger: true,
+            title: 'ลบรายการประวัตินี้?',
+            message: 'รายการนี้จะหายไปจากประวัติ — ถ้าเคยบันทึกเข้าระบบแล้ว Timesheet ตัวจริงจะไม่ถูกลบ',
+            confirmLabel: 'ลบ',
+          });
+          if (!ok) return;
+          btn.disabled = true;
+          try {
+            await api('/ai-reads/dismiss', {
+              method: 'POST',
+              body: JSON.stringify({ id: Number(btn.dataset.histDel) }),
+            });
+            toast('ลบแล้ว');
+            load();
+          } catch (error) {
+            btn.disabled = false;
+            toast(error.message, true);
+          }
+        });
+      });
+    } catch (error) {
+      wrap.innerHTML = `<div class="note cr">${icon('alt')}<span>${esc(error.message)}</span></div>`;
+    }
+  };
+
+  load();
+}
+
+/** ผลที่ AI อ่านได้ — แก้ได้ทุกช่องก่อนกดยืนยัน
+ *  รับได้หลายใบพร้อมกันบนจอ (คนละการ์ด) จึง id ทุกช่องต้องต่อท้ายด้วย key ของใบนั้นๆ
+ *  ไม่งั้นซ้ำกันข้ามการ์ด แล้ว document.getElementById จะเจอแค่ใบแรกเสมอ */
+function readResultHtml(read, employees = []) {
+  const key = read._key;
   const d = read.data;
-  /* บล็อกจากช่องสรุปวันลาไม่ตรงกับรายการ ("ช่องสรุประบุวันลา...แต่รายการวันลามี...")
-     แก้ในหน้านี้ได้เองแล้ว (ตารางวันลาด้านล่างแก้ไขได้) จึงไม่ต้องล็อกปุ่มไว้ตาย —
-     ปุ่มยืนยันจะเช็คจำนวนแถวล่าสุดเทียบกับช่องสรุปอีกทีตอนกด ไม่ใช่ใช้ค่าจากตอนอ่านไฟล์ครั้งแรก
-     บล็อกอื่น (จับคู่ชื่อไม่ได้/ไม่มีสัญญา/รอบเดือนผิด) ยังคงล็อกปุ่มไว้เหมือนเดิม แก้ในหน้านี้ไม่ได้ */
-  const hardBlockers = read.blockers.filter((b) => !b.startsWith('ช่องสรุประบุวันลา'));
+  /* บล็อกจากช่องสรุปวันลาไม่ตรงกับรายการ และบล็อกจากสถานะในเมล แก้ในหน้านี้ได้เองแล้ว
+     (ตารางวันลาแก้ไขได้ / สถานะมีดรอปดาวน์ให้เลือกจริง) จึงไม่ต้องล็อกปุ่มไว้ตายด้วยค่าตอนอ่านครั้งแรก
+     ปุ่มยืนยันจะเช็คค่าล่าสุดบนจอตอนกดอีกที — บล็อกอื่น (จับคู่ชื่อไม่ได้/ไม่มีสัญญา/รอบเดือนผิด)
+     ยังคงล็อกปุ่มไว้เหมือนเดิม แก้ในหน้านี้ไม่ได้ */
+  const hardBlockers = read.blockers.filter((b) =>
+    !b.startsWith('ช่องสรุประบุวันลา') && !b.startsWith('อีเมลระบุ'));
   const blocked = hardBlockers.length > 0;
+  const approvalRaw = read.email?.meta?.approvalStatus ?? null;
+  /* เทียบตรงตัวเป๊ะๆ ห้ามใช้ .includes — "รออนุมัติ" ก็มีคำว่า "อนุมัติ" อยู่ในนั้นเหมือนกัน
+     ถ้าเทียบแบบ substring จะเข้าใจผิดว่าอนุมัติแล้วทั้งที่ยังรออยู่ */
+  const approvalDefault = approvalRaw === 'อนุมัติ' ? 'อนุมัติ' : 'ไม่อนุมัติ';
+  const approvalBlocked = Boolean(read.email) && approvalDefault !== 'อนุมัติ';
+  const docInput = `<input id="uDoc-${key}" type="text" placeholder="เช่น 2026020101" autocomplete="off"
+                       value="${esc(read.documentNo ?? '')}">`;
+  // ดรอปดาวน์สถานะอนุมัติ — ย้ายมาไว้ที่หัวการ์ดแทนคำอธิบายชื่อโมเดล/สถานะยังไม่บันทึก
+  // (มีแค่ตอนอ่านจากอีเมล เพราะไฟล์อัปโหลดตรงไม่มีแนวคิดสถานะอนุมัติในเมล)
+  const approvalControl = read.email ? `
+    <span class="selectchip"><select id="rApproval-${key}">
+      <option value="อนุมัติ" ${approvalDefault === 'อนุมัติ' ? 'selected' : ''}>อนุมัติ</option>
+      <option value="ไม่อนุมัติ" ${approvalDefault === 'ไม่อนุมัติ' ? 'selected' : ''}>ไม่อนุมัติ</option>
+    </select>${icon('cd')}</span>` : '';
 
   return `
-  <div class="card">
-    <div class="hd"><h3>สิ่งที่ AI อ่านได้${read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์'}</h3>
-      <span class="rt">${esc(read.model)} · ยังไม่บันทึก แก้ได้ก่อนกดยืนยัน</span></div>
+  <div class="card" data-read-key="${esc(key)}">
+    <div class="hd"><h3>สิ่งที่ AI อ่านได้${read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์'}${
+      d.employeeName ? ` — ${esc(d.employeeName)}` : ''}</h3>
+      ${approvalControl}</div>
     <div class="bd">
       ${read.email ? `<div class="cmp" style="margin-bottom:16px">
         <div class="f"><span class="l">จาก</span><span>${esc(read.email.from)}</span></div>
         <div class="f sj"><span class="l">เรื่อง</span><span>${esc(read.email.subject)}</span></div>
-        <div class="f"><span class="l">สถานะในเมล</span>
-          <span><span class="tg ${read.email.meta.approvalStatus?.includes('ไม่อนุมัติ') ? 'cr'
-            : read.email.meta.approvalStatus?.includes('อนุมัติ') ? 'ok' : 'wn'}">
-            ${esc(read.email.meta.approvalStatus ?? 'ไม่พบสถานะในเมล')}</span></span></div>
-        <div class="f"><span class="l">เลขที่เอกสารในเมล</span>
-          <span class="n">${esc(read.email.meta.documentNo ?? '— ไม่พบ ต้องกรอกเอง')}</span></div>
-      </div>` : ''}
+        <div class="f"><span class="l">เลขเอกสาร</span>${docInput}</div>
+      </div>` : `<div class="frm" style="margin-bottom:16px"><label>เลขเอกสาร${docInput}</label></div>`}
       ${blocked ? `<div class="note cr">${icon('alt')}<span>
-        <strong>ยังบันทึกไม่ได้ ${read.blockers.length} ข้อ</strong><br>
-        ${read.blockers.map(esc).join('<br>')}</span></div>` : ''}
-      ${read.verification.issues.filter((i) => i.severity === 'warn').length
-        ? `<div class="note wn">${icon('alt')}<span><strong>ทักไว้</strong><br>
-            ${read.verification.issues.filter((i) => i.severity === 'warn')
-              .map((i) => esc(i.message)).join('<br>')}</span></div>` : ''}
+        <strong>ยังบันทึกไม่ได้ ${hardBlockers.length} ข้อ</strong><br>
+        ${hardBlockers.map(esc).join('<br>')}</span></div>` : ''}
 
       <div class="g2">
         <div class="frm">
           <label>ชื่อพนักงานตามที่เขียนในไฟล์
-            <input id="rName" type="text" value="${esc(d.employeeName ?? '')}">
-            <small>${read.matching.employee
-              ? `จับคู่ได้กับ ${esc(read.matching.employee.nameTh)} (${esc(read.matching.kind)})`
-              : 'จับคู่กับพนักงานในระบบไม่ได้'}</small>
+            <input id="rName-${key}" type="text" value="${esc(d.employeeName ?? '')}">
+            ${!read.matching.employee ? `
+              <small>จับคู่กับพนักงานในระบบไม่ได้</small>
+              <div class="fixa-picker">
+                <select id="rAliasEmp-${key}">
+                  <option value="">— เลือกพนักงานที่ตรงกับชื่อนี้จริงๆ —</option>
+                  ${employees.map((e) => `<option value="${esc(e.id)}">${esc(e.name_th)}</option>`).join('')}
+                </select>
+                <button class="btn sm rAliasAdd" type="button">+ เพิ่มเป็นชื่อพ้อง</button>
+              </div>` : ''}
           </label>
           <label>ตำแหน่งตามที่เขียนในไฟล์
-            <input id="rPos" type="text" value="${esc(d.position ?? '')}">
-            <small>${read.matching.employee
-              ? `ตำแหน่งที่จะขึ้นบิลคือ ${esc(read.matching.employee.invoicePosition)} (จากฐานข้อมูล)`
-              : '—'}</small>
+            <input id="rPos-${key}" type="text" value="${esc(d.position ?? '')}">
           </label>
-          <label>รอบเดือน<input id="rPeriod" type="month" value="${esc(d.period ?? '')}"></label>
+          <label>รอบเดือน<input id="rPeriod-${key}" type="month" value="${esc(d.period ?? '')}"></label>
         </div>
         <div class="frm">
           <label>วันทำงานที่ระบุท้ายตาราง
-            <input id="rWork" type="number" min="0" max="31" value="${int(d.totalWorkDays)}">
+            <input id="rWork-${key}" type="number" min="0" max="31" value="${int(d.totalWorkDays)}">
           </label>
           <label>วันลาที่ระบุท้ายตาราง
-            <input id="rLeave" type="number" min="0" max="31" value="${int(d.totalLeaveDays)}">
+            <input id="rLeave-${key}" type="number" min="0" max="31" value="${int(d.totalLeaveDays)}">
           </label>
           <label>ผู้อนุมัติฝั่งลูกค้า
-            <input id="rBy" type="text" value="${esc(read.approvedBy ?? 'Project Manager (TLI)')}">
+            <input id="rBy-${key}" type="text" value="${esc(read.approvedBy ?? 'Project Manager (TLI)')}">
             ${read.approvedAt ? `<small>อีเมลระบุวันที่อนุมัติ ${dateOnly(read.approvedAt)}</small>` : ''}
           </label>
         </div>
@@ -1729,39 +1740,39 @@ function readResultHtml(read) {
 
       <div class="fsec">
         <div class="fsec-h"><b>วันลาที่อ่านได้</b>
-          <button class="btn sm" id="rAddLeave">+ เพิ่มวันลา</button></div>
-        <small class="fhint">ตัวเลขนี้คือตัวที่ใช้หักส่วนลด — ถ้า AI อ่านไม่ครบ (เช่นช่องสรุปบอกว่ามีวันลา
-          แต่รายการด้านล่างไม่มี) แก้ไขในตารางนี้ได้ตรงๆ ก่อนกดยืนยัน</small>
-        <div id="rLeaveRows">${(d.leaveDays ?? []).map((l) => `
+          <button class="btn sm rAddLeave" type="button">+ เพิ่มวันลา</button></div>
+        <div class="rLeaveRows">${(d.leaveDays ?? []).map((l) => `
           <div class="lrow">
             <input type="date" class="ldate" value="${esc(l.date)}">
             <select class="ltype">
               ${Object.entries(LEAVE_OPTIONS).map(([v, label]) =>
                 `<option value="${v}" ${l.type === v ? 'selected' : ''}>${label}</option>`).join('')}
             </select>
-            <button class="btn sm dgr lrm">ลบ</button>
+            <button class="btn sm dgr lrm" type="button">ลบ</button>
           </div>`).join('')}</div>
       </div>
 
       <div class="fsec">
         <div class="fsec-h"><b>ลายเซ็น</b></div>
         <ul class="cks">
-          <li><span class="l">พนักงานเซ็น</span>
-            <span class="tg ${d.signedByEmployee ? 'ok' : 'wn'}">${d.signedByEmployee ? 'พบ' : 'ไม่พบ'}</span></li>
-          <li><span class="l">ผู้อนุมัติฝั่งลูกค้าเซ็น<small>ไม่พบ = ยังวางบิลไม่ได้</small></span>
-            <span class="tg ${d.signedByProjectManager ? 'ok' : 'cr'}">${d.signedByProjectManager ? 'พบ' : 'ไม่พบ'}</span></li>
+          <li><span class="l">พนักงาน</span>
+            <span class="v ${d.signedByEmployee ? '' : 'mu'}">${d.signedByEmployee
+              ? esc(d.employeeSignatureName || read.matching.employee?.nameTh || d.employeeName || 'พบลายเซ็น')
+              : '—'}</span></li>
+          <li><span class="l">ผู้อนุมัติฝั่งลูกค้า</span>
+            <span class="v ${d.signedByProjectManager ? '' : 'mu'}">${d.signedByProjectManager
+              ? esc(d.projectManagerSignatureName || read.approvedBy || d.position || 'พบลายเซ็น')
+              : '—'}</span></li>
         </ul>
       </div>
 
       <details class="raw"><summary>ดู JSON ดิบที่ AI อ่านออกมา</summary>
         <pre class="code">${esc(JSON.stringify(d, null, 2))}</pre></details>
     </div>
-    <div class="ft">
-      <span class="sub" style="margin:0">กดยืนยันแล้วระบบจะจับคู่พนักงาน คำนวณ Manday
-        และส่งใบนี้เข้าขั้นที่ 2</span>
-      <div class="gap"></div>
-      <button class="btn" id="discardBtn">ทิ้งผลนี้</button>
-      <button class="btn pri" id="confirmBtn" ${blocked ? 'disabled' : ''}>
+    <div class="ft review-ft">
+      <button class="btn ghost discardBtn" type="button">${icon('trash', 'i sm')} ทิ้งผลนี้</button>
+      <button class="btn pri lg confirmBtn" type="button" data-blocked="${blocked}"
+        ${(blocked || approvalBlocked) ? 'disabled' : ''}>
         ${icon('chk')} ยืนยันและบันทึกเข้าระบบ</button>
     </div>
   </div>`;
@@ -1804,10 +1815,9 @@ function bindUploadTab() {
         body: JSON.stringify({
           fileBase64: await fileToBase64(picked),
           fileName: picked.name,
-          expectedPeriod: el('uPeriod').value || null,
         }),
       });
-      state.read = { ...result, documentNo: el('uDoc').value.trim() };
+      state.reads.push({ ...result, _key: crypto.randomUUID(), tab: 1 });
       toast(`อ่านไฟล์เสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
       renderUpload();
     } catch (error) {
@@ -1817,76 +1827,125 @@ function bindUploadTab() {
     }
   });
 
-  el('discardBtn')?.addEventListener('click', () => {
-    state.read = null;
-    renderUpload();
-  });
+  /* ผลที่ AI อ่านได้มีได้หลายใบพร้อมกันบนจอ (อีเมลเดียวมีไฟล์แนบของหลายคนก็เจอบ่อย) แต่ละการ์ด
+     ผูก event ของตัวเองผ่าน data-read-key แทนการอ้าง id เดี่ยวแบบตอนมีใบเดียว — field(name) หา
+     ช่องกรอกในการ์ดนี้เท่านั้นด้วย id ที่ต่อท้ายด้วย key เดียวกับที่ readResultHtml() ตั้งไว้ */
+  main.querySelectorAll('[data-read-key]').forEach((card) => {
+    const key = card.dataset.readKey;
+    const entry = () => state.reads.find((r) => r._key === key);
+    const field = (name) => card.querySelector(`#${name}-${key}`);
 
-  el('rAddLeave')?.addEventListener('click', () => addLeaveRow('rLeaveRows'));
-  main.querySelectorAll('#rLeaveRows .lrm').forEach((btn) => {
-    btn.addEventListener('click', () => btn.closest('.lrow').remove());
-  });
+    card.querySelector('.discardBtn')?.addEventListener('click', () => {
+      state.reads = state.reads.filter((r) => r._key !== key);
+      renderUpload();
+    });
 
-  el('confirmBtn')?.addEventListener('click', async () => {
-    const btn = el('confirmBtn');
-    const documentNo = el('uDoc').value.trim();
-    if (!documentNo) { toast('ต้องกรอกเลขที่เอกสารก่อนบันทึก', true); return; }
+    // จับคู่ชื่อไม่ได้ทั้งหมด (ไม่ใช่แค่ใกล้เคียงต้องยืนยัน) จึงไม่มีพนักงานให้เสนอปุ่มลัดแบบหน้ารายละเอียด
+    // ให้คนเลือกจากลิสต์เองแทน — ยังเป็นคนยืนยันเองอยู่ดี ไม่ใช่ AI เดา แค่เปลี่ยนจาก "พิมพ์ชื่อ" เป็น "เลือกจากลิสต์"
+    card.querySelector('.rAliasAdd')?.addEventListener('click', async () => {
+      const sel = field('rAliasEmp');
+      const empId = sel.value;
+      if (!empId) { toast('เลือกพนักงานก่อน', true); return; }
+      const btn = card.querySelector('.rAliasAdd');
+      btn.disabled = true;
+      try {
+        const alias = field('rName').value.trim() || entry().data.employeeName;
+        await api(`/employees/${encodeURIComponent(empId)}/aliases`, {
+          method: 'POST',
+          body: JSON.stringify({ kind: 'name', alias }),
+        });
+        const employees = await api('/employees');
+        const picked = employees.find((e) => e.id === empId);
+        const current = entry();
+        current.matching = {
+          ...current.matching,
+          employee: picked
+            ? { id: picked.id, nameTh: picked.name_th, invoicePosition: picked.invoice_position }
+            : null,
+        };
+        current.blockers = current.blockers.filter((b) => !b.startsWith('จับคู่ชื่อ'));
+        toast(`เพิ่มชื่อพ้อง "${alias}" ให้ ${picked?.name_th ?? ''} แล้ว`);
+        renderUpload();
+      } catch (error) {
+        btn.disabled = false;
+        toast(error.message, true);
+      }
+    });
 
-    // เก็บวันลาจากตารางในหน้านี้ — ยึดตามที่เห็นบนจอ ไม่ใช่ผลดิบตอน AI อ่านครั้งแรก
-    // (คนอาจแก้ไปแล้วถ้า AI อ่านตกหรือเกิน — ดูคอมเมนต์เหตุผลที่ hardBlockers ด้านบน)
-    const leaveDays = [...main.querySelectorAll('#rLeaveRows .lrow')]
-      .map((r) => ({ date: r.querySelector('.ldate').value, type: r.querySelector('.ltype').value }))
-      .filter((l) => l.date);
-    const totalLeaveDays = Number(el('rLeave').value);
-    if (leaveDays.length !== totalLeaveDays) {
-      toast(
-        `ช่องสรุประบุวันลา ${totalLeaveDays} วัน แต่รายการวันลาในตารางมี ${leaveDays.length} รายการ — แก้ให้ตรงกันก่อน`,
-        true,
-      );
-      return;
-    }
+    card.querySelector('.rAddLeave')?.addEventListener('click', () => addLeaveRow(card.querySelector('.rLeaveRows')));
+    card.querySelectorAll('.rLeaveRows .lrm').forEach((btn) => {
+      btn.addEventListener('click', () => btn.closest('.lrow').remove());
+    });
 
-    btn.disabled = true;
-    const edited = {
-      ...state.read.data,
-      employeeName: el('rName').value.trim(),
-      position: el('rPos').value.trim(),
-      period: el('rPeriod').value,
-      totalWorkDays: Number(el('rWork').value),
-      totalLeaveDays,
-      leaveDays,
-    };
+    // สถานะในเมลตอนนี้เลือกเองได้จริง (ไม่ใช่แค่โชว์ผลตอนอ่านครั้งแรก) — สลับแล้วปลดล็อกปุ่มยืนยันได้เลย
+    // ไม่ต้อง render หน้าใหม่ทั้งหน้า เพราะจะทำให้ช่องอื่นที่แก้ไปแล้วรีเซ็ตกลับเป็นค่าดิบจาก AI
+    card.querySelector(`#rApproval-${key}`)?.addEventListener('change', () => {
+      const btn = card.querySelector('.confirmBtn');
+      btn.disabled = btn.dataset.blocked === 'true' || field('rApproval').value !== 'อนุมัติ';
+    });
 
-    try {
-      const r = await api('/timesheets/confirm', {
-        method: 'POST',
-        body: JSON.stringify({
-          documentNo,
-          extraction: edited,
-          fileName: state.read.fileName,
-          readModel: state.read.model,
-          approvedBy: el('rBy').value.trim() || null,
-          // มาจาก Gmail ก็ผูกเลขอีเมลไว้ด้วย จะได้รู้ว่าใบนี้มาจากเมลฉบับไหน
-          sourceEmailId: state.read.sourceEmailId ?? null,
-          approvedAt: state.read.approvedAt ?? null,
-        }),
-      });
-      state.read = null;
-      if (r.nextAction === 'needs_match') { toast(r.reason, true); renderUpload(); return; }
-      toast(`บันทึกแล้ว — ${r.status} · วางบิลได้ ${r.manday?.payableDays ?? '–'} วัน · ไปตรวจต่อได้เลย`);
-      openSheet(r.timesheetId);
-      syncBadges();
-    } catch (error) {
-      btn.disabled = false;
-      toast(error.message, true);
-    }
+    card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
+      const btn = card.querySelector('.confirmBtn');
+      const documentNo = field('uDoc').value.trim();
+      if (!documentNo) { toast('ต้องกรอกเลขที่เอกสารก่อนบันทึก', true); return; }
+
+      // เก็บวันลาจากตารางในหน้านี้ — ยึดตามที่เห็นบนจอ ไม่ใช่ผลดิบตอน AI อ่านครั้งแรก
+      // (คนอาจแก้ไปแล้วถ้า AI อ่านตกหรือเกิน — ดูคอมเมนต์เหตุผลที่ hardBlockers ด้านบน)
+      const leaveDays = [...card.querySelectorAll('.rLeaveRows .lrow')]
+        .map((r) => ({ date: r.querySelector('.ldate').value, type: r.querySelector('.ltype').value }))
+        .filter((l) => l.date);
+      const totalLeaveDays = Number(field('rLeave').value);
+      if (leaveDays.length !== totalLeaveDays) {
+        toast(
+          `ช่องสรุประบุวันลา ${totalLeaveDays} วัน แต่รายการวันลาในตารางมี ${leaveDays.length} รายการ — แก้ให้ตรงกันก่อน`,
+          true,
+        );
+        return;
+      }
+
+      btn.disabled = true;
+      const current = entry();
+      const edited = {
+        ...current.data,
+        employeeName: field('rName').value.trim(),
+        position: field('rPos').value.trim(),
+        period: field('rPeriod').value,
+        totalWorkDays: Number(field('rWork').value),
+        totalLeaveDays,
+        leaveDays,
+      };
+
+      try {
+        const r = await api('/timesheets/confirm', {
+          method: 'POST',
+          body: JSON.stringify({
+            documentNo,
+            extraction: edited,
+            fileName: current.fileName,
+            readModel: current.model,
+            approvedBy: field('rBy').value.trim() || null,
+            // มาจาก Gmail ก็ผูกเลขอีเมลไว้ด้วย จะได้รู้ว่าใบนี้มาจากเมลฉบับไหน
+            sourceEmailId: current.sourceEmailId ?? null,
+            approvedAt: current.approvedAt ?? null,
+          }),
+        });
+        state.reads = state.reads.filter((r2) => r2._key !== key);
+        if (r.nextAction === 'needs_match') { toast(r.reason, true); renderUpload(); return; }
+        toast(`บันทึกแล้ว — ${r.status} · วางบิลได้ ${r.manday?.payableDays ?? '–'} วัน · ไปตรวจต่อได้เลย`);
+        openSheet(r.timesheetId);
+        syncBadges();
+      } catch (error) {
+        btn.disabled = false;
+        toast(error.message, true);
+      }
+    });
   });
 }
 
 function bindManualTab(contracts) {
   if (!el('eSave')) return;
   addLeaveRow();
-  el('eAddLeave').addEventListener('click', addLeaveRow);
+  el('eAddLeave').addEventListener('click', () => addLeaveRow());
 
   el('eSave').addEventListener('click', async () => {
     const leaveDays = [...document.querySelectorAll('.lrow')]
@@ -1899,7 +1958,6 @@ function bindManualTab(contracts) {
       const r = await api('/timesheets/manual', {
         method: 'POST',
         body: JSON.stringify({
-          documentNo: el('eDoc').value.trim(),
           employeeName: el('eName').value.trim(),
           position: el('ePos').value.trim(),
           period: el('ePeriod').value,
@@ -1920,8 +1978,8 @@ function bindManualTab(contracts) {
 }
 
 /** แถววันลา — เพิ่มได้เรื่อยๆ ลบทีละแถวได้ — ใช้ทั้งแท็บ "กรอกเอง" และหน้าแก้ผลที่ AI อ่านได้ */
-function addLeaveRow(boxId = 'eLeaves') {
-  const box = el(boxId);
+function addLeaveRow(target = 'eLeaves') {
+  const box = typeof target === 'string' ? el(target) : target;
   const row = document.createElement('div');
   row.className = 'lrow';
   row.innerHTML = `
@@ -2253,7 +2311,12 @@ async function renderSystemAdmin() {
         <div class="card">
           <div class="hd"><h3>การเชื่อมต่อ</h3></div>
           <div class="bd"><dl class="kv">
-            <dt>FlowAccount</dt><dd><span class="tg ${settings.env.flowAccountMode === 'dry-run' ? 'wn' : 'ok'}">${esc(settings.env.flowAccountMode)}</span></dd>
+            <dt>FlowAccount (.env)</dt><dd><span class="tg ${settings.env.flowAccountMode === 'dry-run' ? 'wn' : 'ok'}">${esc(settings.env.flowAccountMode)}</span></dd>
+            <dt>FlowAccount (ใช้จริงตอนกดอนุมัติ)</dt>
+              <dd><span class="tg ${(settings.flowaccount?.mode ?? settings.env.flowAccountMode) === 'dry-run' ? 'wn' : 'ok'}">
+                ${esc(settings.flowaccount?.mode ?? settings.env.flowAccountMode)}</span>
+                ${settings.flowaccount?.mode && settings.flowaccount.mode !== settings.env.flowAccountMode
+                  ? '<small style="display:block;color:var(--cr)">ไม่ตรงกับค่าใน .env ด้านบน — ค่านี้ในฐานข้อมูลเป็นตัวที่ใช้จริง</small>' : ''}</dd>
             <dt>Credential FlowAccount</dt><dd>${settings.env.hasFlowAccountCredentials
                 ? '<span class="tg ok">ตั้งค่าแล้ว</span>' : '<span class="tg wn">ยังไม่ตั้ง</span>'}</dd>
             <dt>ชนิดเอกสาร</dt><dd>${esc(settings.flowaccount?.documentType ?? '—')}</dd>
@@ -2588,10 +2651,6 @@ async function syncBadges() {
   chip.className = `env ${p.flowAccountMode === 'dry-run' ? 'dry' : 'live'}`;
   chip.innerHTML = `<i></i> FlowAccount: ${esc(p.flowAccountMode)}`;
 
-  const mode = el('modeChip');
-  mode.className = `env mode ${p.manualMode ? 'dry' : 'live'}`;
-  mode.innerHTML = `<i></i> โหมด ${p.manualMode ? 'Manual — คนกดเอง' : 'Auto'}`;
-
   /* ชื่อบนแถบบนต้องเป็นชื่อเดียวกับที่ audit log บันทึก ไม่ใช่ป้ายตกแต่ง — มาจาก session ที่ login เข้ามา */
   const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', operator: 'พนักงานบัญชี' };
   el('actorName').textContent = p.actor;
@@ -2830,9 +2889,21 @@ function hideLoginScreen() {
   el('loginForm').reset();
 }
 
+/* ลิงก์จาก LINE (เช่น "ตรวจ Manday ไม่ผ่าน ... เข้าไปดูที่นี่") พา ?view=queue มาเปิดหน้าที่ถูก
+   ได้ทันทีโดยไม่ต้องกดเมนูเอง — เช็คแค่ตอนเปิดแอปครั้งแรกเท่านั้น ไม่งั้นจะดึงกลับหน้านั้นซ้ำๆ
+   ทุกครั้งที่ browser back/forward เพราะ query string ยังติดอยู่ใน URL */
+function applyDeepLinkView() {
+  const requested = new URLSearchParams(window.location.search).get('view');
+  if (requested && RENDER[requested]) {
+    state.view = requested;
+    markTab(requested);
+  }
+}
+
 async function startApp() {
   hideLoginScreen();
   applySideState(localStorage.getItem(SIDE_KEY) === '1');
+  applyDeepLinkView();
 
   el('mastDate').textContent = new Date().toLocaleDateString('th-TH', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',

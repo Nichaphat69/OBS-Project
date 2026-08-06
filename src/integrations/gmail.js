@@ -160,19 +160,26 @@ export class GmailClient {
     if (!to) throw new GmailError('ต้องระบุอีเมลผู้รับก่อนสร้างร่าง', { status: 400 });
 
     const mime = buildMime({ to, cc, subject, body, attachments });
-    const result = await this.call('/drafts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: { raw: toBase64Url(mime) } }),
-    });
+    const [result, profile] = await Promise.all([
+      this.call('/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: { raw: toBase64Url(mime) } }),
+      }),
+      this.profile(),
+    ]);
 
+    /* ลิงก์เปิดร่างนั้นใน Gmail บนเว็บ — คนกดจากหน้าเราไปแก้และกดส่งต่อได้เลย
+       ห้ามใช้ /mail/u/0/ เฉยๆ เพราะ "0" คือช่องบัญชีแรกที่ล็อกอินไว้ใน**เบราว์เซอร์คนกด**
+       ไม่ใช่บัญชีที่ต่อ Gmail API ไว้ — ถ้าเบราว์เซอร์นั้นล็อกอินบัญชีอื่นเป็นช่องแรก จะเปิดผิดบัญชี
+       ใช้ authuser=อีเมลจริงแทน ให้ Gmail หาช่องที่ตรงกับบัญชีนี้เอง */
+    const authuser = encodeURIComponent(profile.email);
     return {
       draftId: result.id,
       messageId: result.message?.id ?? null,
-      /* ลิงก์เปิดร่างนั้นใน Gmail บนเว็บ — คนกดจากหน้าเราไปแก้และกดส่งต่อได้เลย */
       url: result.message?.id
-        ? `https://mail.google.com/mail/u/0/#drafts?compose=${result.message.id}`
-        : 'https://mail.google.com/mail/u/0/#drafts',
+        ? `https://mail.google.com/mail/?authuser=${authuser}#drafts?compose=${result.message.id}`
+        : `https://mail.google.com/mail/?authuser=${authuser}#drafts`,
       attachmentCount: attachments.length,
     };
   }
