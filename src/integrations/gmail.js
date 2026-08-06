@@ -177,10 +177,55 @@ export class GmailClient {
     return {
       draftId: result.id,
       messageId: result.message?.id ?? null,
+      /* เก็บ threadId ไว้ด้วย เพราะเป็นตัวเดียวที่อยู่ยงหลังกดส่ง — ตอนส่ง Gmail จะลบร่างทิ้ง
+         แล้วสร้าง message ใหม่คนละ id ในสนทนาเดิม เลยตามจาก draftId/messageId ไม่ได้
+         (ใช้ใน findSentMessage เพื่อรู้ว่าร่างนี้ถูกส่งออกไปแล้วหรือยัง) */
+      threadId: result.message?.threadId ?? null,
       url: result.message?.id
         ? `https://mail.google.com/mail/?authuser=${authuser}#drafts?compose=${result.message.id}`
         : `https://mail.google.com/mail/?authuser=${authuser}#drafts`,
       attachmentCount: attachments.length,
+    };
+  }
+
+  /**
+   * หา message ที่ "ส่งออกไปแล้ว" ในสนทนานั้น — ใช้รู้ว่าร่างที่ระบบสร้างไว้ถูกกดส่งหรือยัง
+   *
+   * ตอนกดส่งจาก Gmail ร่างจะหายไปและเกิด message ใหม่ที่มี label SENT ในสนทนาเดิม
+   * เช็คจาก label ตรงๆ ไม่ต้องเดา — ยังไม่ส่งจะมีแต่ฉบับ label DRAFT อยู่ฉบับเดียว
+   *
+   * คืน null ถ้ายังไม่ส่ง หรือตามสนทนานั้นไม่ได้แล้ว — ไม่ถือเป็น error
+   *   404 สนทนาถูกลบทิ้งไปแล้ว
+   *   400 "Invalid id value" — id ที่เก็บไว้ผิดรูปแบบไปเลย (ยิงกับ Gmail จริงแล้วเจอว่าตอบ 400
+   *       ไม่ใช่ 404 เหมือนที่คิดไว้ตอนแรก) ทั้งสองกรณีแปลว่าตามต่อไม่ได้เหมือนกัน
+   *       ไม่ควรโยน error ขึ้นไปให้ทุกครั้งที่มีคนเปิดหน้ารอบบิลนั้น
+   *
+   * ใช้สิทธิ์ gmail.readonly ที่ขอไว้อยู่แล้ว ไม่ต้องขอ scope เพิ่ม
+   */
+  async findSentMessage(threadId) {
+    if (!threadId) return null;
+
+    let thread;
+    try {
+      thread = await this.call(`/threads/${encodeURIComponent(threadId)}?format=metadata`);
+    } catch (error) {
+      if (error instanceof GmailError && (error.status === 404 || error.status === 400)) return null;
+      throw error;
+    }
+
+    const sent = (thread.messages ?? []).find((m) => m.labelIds?.includes('SENT'));
+    if (!sent) return null;
+
+    const headers = sent.payload?.headers ?? [];
+    const header = (name) =>
+      headers.find((h) => h.name?.toLowerCase() === name)?.value ?? null;
+
+    return {
+      messageId: sent.id,
+      to: header('to'),
+      subject: header('subject'),
+      // internalDate เป็นมิลลิวินาทีในรูปสตริง — เวลาที่ Gmail รับฉบับนั้นเข้าระบบจริง
+      sentAt: sent.internalDate ? new Date(Number(sent.internalDate)).toISOString() : null,
     };
   }
 }

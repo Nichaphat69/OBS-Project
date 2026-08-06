@@ -27,6 +27,7 @@ const svc = await import('../src/service.js');
 const { closeDb } = await import('../src/db/index.js');
 const {
   verifyLineSignature, parseApprovalPostback, buildApprovalPostback, isAuthorizedApprover,
+  buildApprovalFlex, buildNeedsCheckFlex,
 } = await import('../src/integrations/line.js');
 
 test.after(() => {
@@ -237,6 +238,83 @@ test('requestCycleApproval ส่งขออนุมัติให้ทุ�
   } finally {
     svc.removeNotificationRecipient(first.id, { actor: 'ทดสอบ' });
     svc.removeNotificationRecipient(second.id, { actor: 'ทดสอบ' });
+  }
+});
+
+/* ── หน้าตาบับเบิลคำขออนุมัติ ─────────────────────────────────────────── */
+
+const FLEX_INPUT = {
+  contractId: 'CT-26B0113',
+  period: '2026-02',
+  customerName: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)',
+  projectName: 'Outsource for BAU Project',
+  periodLabel: 'กุมภาพันธ์ 2569',
+  headcount: 2,
+  paymentAmount: 180665.4,
+};
+
+test('มี URL ของระบบ → ปุ่มเดียว "อนุมัติวางบิล" พาเข้าหน้าวางบิลของรอบนั้นโดยตรง', () => {
+  const url = 'https://obs.example.com/?view=cycle&contract=CT-26B0113&period=2026-02';
+  const flex = buildApprovalFlex({ ...FLEX_INPUT, approveUrl: url });
+
+  assert.equal(flex.header.contents[0].text, 'ขออนุมัติวางบิล');
+  assert.equal(flex.footer.contents.length, 1, 'ปุ่มเดียวพอ — ไปตัดสินใจต่อในระบบ');
+  assert.deepEqual(flex.footer.contents[0].action, {
+    type: 'uri', label: 'อนุมัติวางบิล', uri: url,
+  });
+});
+
+test('ไม่มี URL ของระบบ → ตกกลับไปใช้ปุ่มอนุมัติ/ตีกลับในแชทแบบเดิม ไม่ใช่บับเบิลที่กดอะไรไม่ได้', () => {
+  const flex = buildApprovalFlex({ ...FLEX_INPUT, approveUrl: null });
+
+  const actions = flex.footer.contents.map((b) => b.action);
+  assert.equal(actions.length, 2);
+  assert.deepEqual(actions[0], {
+    type: 'postback', label: 'อนุมัติ', data: buildApprovalPostback('approve', 'CT-26B0113', '2026-02'),
+  });
+  assert.deepEqual(actions[1], {
+    type: 'postback', label: 'ตีกลับ', data: buildApprovalPostback('reject', 'CT-26B0113', '2026-02'),
+  });
+});
+
+test('บับเบิลสองเรื่องต้องคนละสี — เลื่อนผ่านในแชทแล้วต้องแยกออกโดยไม่ต้องอ่านหัวข้อ', () => {
+  const approval = buildApprovalFlex({ ...FLEX_INPUT, approveUrl: 'https://obs.example.com/x' });
+  const needsCheck = buildNeedsCheckFlex({
+    customerName: FLEX_INPUT.customerName,
+    projectName: FLEX_INPUT.projectName,
+    documentNos: ['2026010002'],
+    periodLabel: 'มกราคม 2569',
+    queueUrl: 'https://obs.example.com/?view=queue',
+  });
+
+  assert.equal(approval.header.backgroundColor, '#0078D4', 'เรื่องเงิน/วางบิลใช้สีน้ำเงินตามเว็บ');
+  assert.equal(needsCheck.header.backgroundColor, '#1B998B', 'เรื่องตรวจสอบใช้เขียวเข้ม');
+  assert.notEqual(approval.header.backgroundColor, needsCheck.header.backgroundColor);
+
+  // ปุ่มต้องสีเดียวกับแถบหัวของใบตัวเอง ไม่ใช่หัวสีหนึ่งปุ่มอีกสีหนึ่ง
+  assert.equal(approval.footer.contents[0].color, approval.header.backgroundColor);
+  assert.equal(needsCheck.footer.contents[0].color, needsCheck.header.backgroundColor);
+});
+
+test('requestCycleApproval ส่ง approveUrl ของรอบนั้นไปด้วยเมื่อมี APP_BASE_URL', async () => {
+  const before = process.env.APP_BASE_URL;
+  process.env.APP_BASE_URL = 'https://obs.example.com';
+
+  try {
+    // มิ.ย. 69 มีวันหยุด 2 วันในข้อมูลตั้งต้น ต้องบอก fakeTimesheet ด้วยไม่งั้นวันทำงานเกินปฏิทิน
+    await ingestAndCheckBothEmployees('2026-06', '2026060201', '2026060200', {
+      holidayDates: ['2026-06-01', '2026-06-03'],
+    });
+    const line = new FakeLineClient();
+    await svc.requestCycleApproval('CT-26B0113', '2026-06', { actor: 'ทดสอบ', client: line });
+
+    assert.equal(
+      line.sent[0].approveUrl,
+      'https://obs.example.com/?view=cycle&contract=CT-26B0113&period=2026-06',
+    );
+  } finally {
+    if (before === undefined) delete process.env.APP_BASE_URL;
+    else process.env.APP_BASE_URL = before;
   }
 });
 

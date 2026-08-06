@@ -17,7 +17,8 @@ import { draftBillingEmail, readApprovalEmail } from './llm/email.js';
 import { localLlmBaseUrl, localTextModel, localVisionModel } from './llm/localClient.js';
 import { GmailClient, hasGmailCredentials } from './integrations/gmail.js';
 import {
-  LineClient, isAuthorizedApprover, verifyLineSignature, parseApprovalPostback,
+  LineClient, isAuthorizedApprover, verifyLineSignature, parseApprovalPostback, buildNeedsCheckFlex,
+  hasLineCredentials,
 } from './integrations/line.js';
 
 // ── master data ────────────────────────────────────────────
@@ -326,6 +327,72 @@ export function getTimesheetFile(id) {
   return { filename: row.source_file || `${row.id}.pdf`, bytes: row.source_file_bytes };
 }
 
+/**
+ * ตัวเชื่อม FlowAccount ตามค่าที่ตั้งไว้จริง
+ *
+ * ค่าเริ่มต้นตอนยังไม่มีใครตั้ง 'flowaccount' ไว้ใน settings เลย ต้องตามค่า FLOWACCOUNT_MODE ใน .env
+ * ไม่ใช่ตายตัวเป็น dry-run — ไม่งั้นคนตั้ง .env เป็น sandbox ไว้แล้ว แต่ระบบยังยิงแบบ dry-run
+ * อยู่ดีเพราะไม่มีใครเคยบันทึกค่านี้ลง settings มาก่อน (ป้าย FlowAccount บนหัวเว็บอ่านจาก .env
+ * ตรงๆ จึงจะบอกว่า sandbox ทั้งที่จริงยิงแบบ dry-run อยู่ — ตัวเลขเอกสารที่ได้จะเป็นค่าเสมือน
+ * ไม่มีเอกสารจริงเกิดขึ้นใน FlowAccount เลย)
+ */
+function newFlowAccountClient() {
+  const settings = getSetting('flowaccount', {
+    mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
+    documentType: 'billing-note',
+  });
+  return new FlowAccountClient({ mode: settings.mode, documentType: settings.documentType });
+}
+
+/** ชื่อไฟล์ใบวางบิลที่ใช้ทั้งในรายการไฟล์แนบและตอนแนบเข้า Gmail — ต้องตรงกันทั้งสองที่ */
+export function invoiceFileName({ document_no: documentNo, id }) {
+  return `ใบวางบิล ${documentNo || id}.pdf`;
+}
+
+/**
+ * ดึงไฟล์ใบวางบิลจากหน้า share ของ FlowAccount มาเก็บไว้ในฐานข้อมูล
+ *
+ * best-effort — พลาดแล้วคืน null ไม่โยน error เพราะทุกจุดที่เรียกยังทำงานต่อได้โดยไม่มีไฟล์
+ * (ตอนอนุมัติ: เอกสารสร้างใน FlowAccount ไปแล้วจริง · ตอนเปิดหน้า: ยังโชว์รายการอื่นได้)
+ */
+export async function cacheInvoicePdf(invoiceId, shareLink, { client, actor = 'system' } = {}) {
+  if (!shareLink) return null;
+  const fa = client ?? newFlowAccountClient();
+  try {
+    const { bytes } = await fa.fetchSharedPdf(shareLink);
+    run('UPDATE invoices SET document_pdf = $pdf WHERE id = $id', { pdf: bytes, id: invoiceId });
+    return bytes;
+  } catch (error) {
+    logAudit({
+      actor,
+      action: 'flowaccount_pdf_fetch_failed',
+      entityType: 'invoice',
+      entityId: invoiceId,
+      detail: { message: error.message },
+    });
+    return null;
+  }
+}
+
+/**
+ * ไฟล์ PDF ใบวางบิลของใบนั้น — ปกติเก็บไว้ตั้งแต่ตอนอนุมัติแล้ว
+ * ใบที่สร้างไว้ก่อนมีคอลัมน์นี้ (หรือตอนนั้นดึงไม่สำเร็จ) จะยังไม่มีไฟล์ ก็ไปดึงให้ตอนมีคนขอครั้งแรก
+ * แล้วเก็บลงฐานข้อมูลไว้ ครั้งต่อไปไม่ต้องออกไปหา FlowAccount อีก
+ */
+export async function getInvoiceFile(id, { client } = {}) {
+  const row = get(
+    'SELECT id, document_no, share_link, document_pdf FROM invoices WHERE id = $id',
+    { id },
+  );
+  if (!row) return null;
+
+  const filename = invoiceFileName(row);
+  if (row.document_pdf) return { filename, bytes: row.document_pdf };
+
+  const bytes = await cacheInvoicePdf(row.id, row.share_link, { client });
+  return bytes ? { filename, bytes } : null;
+}
+
 export function recomputeTimesheet(id, { actor = 'system' } = {}) {
   const row = get(
     `SELECT t.*, a.monthly_rate, c.divisor_mode, c.divisor_value, c.customer_id,
@@ -555,10 +622,10 @@ export function removeHoliday({ date, customerId = null, actor }) {
 }
 
 /**
- * ปิดงาน — คนส่งเมลจาก Gmail ของตัวเองแล้วมากดยืนยันที่นี่
+ * ปิดงานเอง — เหลือไว้เผื่อกรณีที่ตรวจจาก Gmail ไม่ได้ (เช่นส่งจากโปรแกรมเมลอื่น)
  *
- * ระบบไม่ส่งเมลเอง (ข้อบังคับของงานนี้) จึงต้องมีขั้นนี้
- * ไม่มีขั้นนี้แล้วรอบบิลจะค้างอยู่ที่ "สร้างร่างแล้ว" ตลอดไป ไม่มีทางรู้ว่าอันไหนจบ
+ * ทางปกติคือ syncEmailSent() ตรวจเจอเองว่าร่างถูกกดส่งไปแล้ว หน้าเว็บจึงไม่มีปุ่มนี้แล้ว
+ * แต่ endpoint ยังอยู่ เพราะถ้าไม่มีทางปิดเลย รอบบิลที่ส่งนอก Gmail จะค้างที่ "สร้างร่างแล้ว" ตลอดไป
  */
 export function markInvoiceEmailSent({ invoiceId, actor }) {
   const inv = get(
@@ -581,6 +648,51 @@ export function markInvoiceEmailSent({ invoiceId, actor }) {
     detail: { documentNo: inv.document_no, period: inv.period },
   });
   return { invoiceId, documentNo: inv.document_no, sentAt: at, sentBy: actor };
+}
+
+/**
+ * ตรวจกล่อง Gmail ว่าร่างที่ระบบสร้างไว้ถูกกดส่งไปแล้วหรือยัง แล้วปิดรอบให้เอง
+ *
+ * เดิมต้องมีคนมากดปุ่ม "บันทึกว่าส่งเมลแล้ว" เอง ซึ่งลืมกันได้ง่ายมาก — รอบที่ส่งเมลไปแล้วจริง
+ * ก็ยังค้างเป็น "สร้างร่างแล้ว" อยู่ในระบบ ตอนนี้ดูจาก label SENT ของสนทนานั้นตรงๆแทน
+ *
+ * best-effort ทั้งหมด — Gmail ล่ม/ยังไม่ได้เชื่อม/ยังไม่เคยสร้างร่าง ก็แค่ไม่มีอะไรเปลี่ยน
+ * ไม่โยน error ออกไป เพราะทุกจุดที่เรียกคือ "เปิดหน้าดู" ซึ่งต้องเปิดได้เสมอ
+ *
+ * @returns {boolean} true เมื่อเพิ่งเปลี่ยนสถานะเป็นส่งแล้วในรอบนี้
+ */
+export async function syncEmailSent(invoiceId, { client } = {}) {
+  const inv = get(
+    `SELECT id, document_no, period, email_sent_at, gmail_thread_id
+       FROM invoices WHERE id = $id`,
+    { id: invoiceId },
+  );
+  if (!inv || inv.email_sent_at || !inv.gmail_thread_id) return false;
+  if (!client && !hasGmailCredentials()) return false;
+
+  try {
+    const gmail = client ?? new GmailClient();
+    const sent = await gmail.findSentMessage(inv.gmail_thread_id);
+    if (!sent) return false;
+
+    const at = sent.sentAt ?? new Date().toISOString();
+    const by = sent.to ? `Gmail — ส่งถึง ${sent.to}` : 'Gmail';
+    run(
+      'UPDATE invoices SET email_sent_at = $at, email_sent_by = $by WHERE id = $id',
+      { id: inv.id, at, by },
+    );
+    logAudit({
+      actor: 'system', action: 'email_sent_detected', entityType: 'invoice', entityId: inv.id,
+      detail: { documentNo: inv.document_no, period: inv.period, messageId: sent.messageId },
+    });
+    return true;
+  } catch (error) {
+    logAudit({
+      actor: 'system', action: 'email_sent_check_failed', entityType: 'invoice', entityId: inv.id,
+      detail: { message: error.message },
+    });
+    return false;
+  }
 }
 
 /**
@@ -1019,17 +1131,26 @@ export async function createGmailDraft(contractId, period, { actor, client } = {
   }
 
   const draft = preview.existing?.email_draft
-    ? JSON.parse(preview.existing.email_draft)
+    ? withInvoiceAttachment(JSON.parse(preview.existing.email_draft), preview.existing)
     : preview.emailDraft;
 
-  /* แนบไฟล์ Timesheet ตัวจริงเข้าร่างเลยถ้ามีเก็บไว้ในระบบ (ดู getTimesheetFile) — ใบแจ้งหนี้แนบ
-     เป็นไฟล์จริงไม่ได้ เพราะ FlowAccount ไม่มี endpoint ให้ไฟล์ PDF ตรงๆ (ดูหมายเหตุใน flowaccount.js)
-     มีแต่ shareLink ซึ่งอยู่ในเนื้อเมลให้กดเปิดเองอยู่แล้ว */
-  const attachments = (draft.attachments ?? [])
-    .filter((a) => a.timesheetId)
-    .map((a) => getTimesheetFile(a.timesheetId))
-    .filter(Boolean)
-    .map((f) => ({ filename: f.filename, mimeType: 'application/pdf', content: f.bytes }));
+  /* แนบไฟล์ตัวจริงเข้าร่างให้ครบทุกใบตามรายการไฟล์แนบที่โชว์อยู่บนหน้าเว็บ
+     ทั้งใบวางบิล (ตัดมาจากหน้า share ของ FlowAccount) และ Timesheet ของพนักงานทุกคนในรอบ
+     ใบไหนหาไฟล์ไม่เจอก็ข้ามไป ไม่ทำให้สร้างร่างทั้งฉบับล้ม แต่จะบอกไว้ใน note ว่าขาดกี่ใบ */
+  const wanted = draft.attachments ?? [];
+  const files = [];
+  for (const a of wanted) {
+    const file = a.invoiceId
+      ? await getInvoiceFile(a.invoiceId)
+      : a.timesheetId
+        ? getTimesheetFile(a.timesheetId)
+        : null;
+    if (file) files.push(file);
+  }
+  const attachments = files.map((f) => ({
+    filename: f.filename, mimeType: 'application/pdf', content: f.bytes,
+  }));
+  const missing = wanted.length - attachments.length;
 
   const gmail = client ?? new GmailClient();
   const result = await gmail.createDraft({
@@ -1039,6 +1160,15 @@ export async function createGmailDraft(contractId, period, { actor, client } = {
     body: draft.body,
     attachments,
   });
+
+  /* ผูกร่างนั้นไว้กับใบแจ้งหนี้ — threadId คือตัวที่ syncEmailSent() ใช้ตามต่อว่าถูกกดส่งหรือยัง
+     ระบบจะได้ขึ้น "ส่งเมลแล้ว" ให้เองโดยไม่ต้องมีคนมากดบอก (ดู syncEmailSent) */
+  if (preview.existing?.id) {
+    run(
+      'UPDATE invoices SET gmail_draft_id = $draftId, gmail_thread_id = $threadId WHERE id = $id',
+      { draftId: result.draftId ?? null, threadId: result.threadId ?? null, id: preview.existing.id },
+    );
+  }
 
   logAudit({
     actor,
@@ -1053,8 +1183,9 @@ export async function createGmailDraft(contractId, period, { actor, client } = {
     to,
     subject: draft.subject,
     note: attachments.length
-      ? `แนบไฟล์ Timesheet ${attachments.length} ใบให้แล้ว — ยังต้องแนบใบแจ้งหนี้เองก่อนกดส่ง (FlowAccount ยังไม่มีไฟล์ PDF ให้ดึงอัตโนมัติ)`
-      : 'สร้างเป็นร่างในกล่อง Drafts แล้ว — ต้องแนบใบแจ้งหนี้กับ Timesheet เองก่อนกดส่ง',
+      ? `แนบไฟล์ให้แล้ว ${attachments.length} ใบ` +
+        (missing > 0 ? ` — อีก ${missing} ใบหาไฟล์ในระบบไม่เจอ ต้องแนบเองก่อนกดส่ง` : ' ครบตามรายการ')
+      : 'สร้างเป็นร่างในกล่อง Drafts แล้ว — ยังไม่มีไฟล์ในระบบเลย ต้องแนบเองก่อนกดส่ง',
   };
 }
 
@@ -1101,12 +1232,26 @@ export const NEXT_ACTION = {
   ALREADY_BILLED: 'already_billed',     // รอบนี้วางบิลไปแล้ว
 };
 
-/** ลิงก์กดเข้าหน้า "ตรวจ Manday" ตรงจากข้อความ LINE — ไม่ตั้ง APP_BASE_URL ไว้ก็คืนสตริงว่าง
- *  (ข้อความ LINE ยังส่งได้ตามปกติ แค่ไม่มีลิงก์ให้กด) เพราะ localhost ที่เซิร์ฟเวอร์เห็นมือถือเข้าไม่ถึง
- *  ต้องให้คนตั้งเป็น URL ที่มือถือเปิดได้จริงเอง (ดู .env.example) */
-function queueLink() {
+/** ที่อยู่เว็บของระบบที่มือถือเปิดได้จริง — ไม่ตั้ง APP_BASE_URL ไว้ก็คืน null
+ *  (ข้อความ LINE ยังส่งได้ตามปกติ แค่ไม่มีปุ่มให้กดเข้าเว็บ) เพราะ localhost ที่เซิร์ฟเวอร์เห็น
+ *  มือถือเข้าไม่ถึง ต้องให้คนตั้งเป็น URL ที่มือถือเปิดได้จริงเอง (ดู .env.example) */
+function appBase() {
   const base = process.env.APP_BASE_URL;
-  return base ? `${base.replace(/\/+$/, '')}/?view=queue` : null;
+  return base ? base.replace(/\/+$/, '') : null;
+}
+
+/** ลิงก์กดเข้าหน้า "ตรวจ Manday" ตรงจากข้อความ LINE */
+function queueLink() {
+  const base = appBase();
+  return base ? `${base}/?view=queue` : null;
+}
+
+/** ลิงก์กดเข้าหน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้นโดยตรง — ใช้กับปุ่มในคำขออนุมัติ */
+function cycleLink(contractId, period) {
+  const base = appBase();
+  return base
+    ? `${base}/?view=cycle&contract=${encodeURIComponent(contractId)}&period=${encodeURIComponent(period)}`
+    : null;
 }
 
 /**
@@ -1150,32 +1295,54 @@ function thaiList(items) {
  * ทั้งหมดที่ยังค้างอยู่จริงในระบบ ไม่ต้องนับเองว่ามีกี่ใบ — ไม่ได้ตรวจไม่ผ่านแบบ notifyCheckFailed
  * เดิมไม่มีการแจ้งเตือนจุดนี้เลย ทำให้ Timesheet ค้างอยู่ในคิวโดยไม่มีใครรู้จนกว่าจะเปิดเว็บมาดูเอง
  */
+/* LINE รับ carousel ได้ไม่เกิน 12 ใบ — กันไว้ที่ 10 เผื่อพื้นที่ ถ้าลูกค้าเยอะกว่านี้จริง
+   จะตัดออกแล้วบันทึกไว้ใน audit log ว่าตัดไปกี่ราย ไม่ปล่อยให้หายเงียบๆเหมือนไม่มีอยู่ */
+const NEEDS_CHECK_MAX_BUBBLES = 10;
+
 async function notifyNeedsCheck({ client } = {}) {
   const pending = listTimesheets().filter((s) => s.status === 'verified' && !s.check?.checked);
   if (!pending.length) return;
 
   const line = client ?? new LineClient({ approverTarget: null });
   const targets = lineApproverTargets();
-  const link = queueLink();
-
-  const periods = [...new Set(pending.map((s) => s.period))];
-  const periodText = periods.length === 1
-    ? `ประจำเดือน ${thaiMonth(periods[0])}`
-    : `รอบ ${thaiList(periods.map((p) => thaiMonth(p)))}`;
-  const docList = thaiList(pending.map((s) => s.id));
+  const queueUrl = queueLink();
   const entityId = pending.map((s) => s.id).join(',');
 
-  const text =
-    `📋 แจ้งเตือนจากระบบวางบิล OBS\n` +
-    `มีรายการรอตรวจ Manday ${pending.length} รายการ\n` +
-    `เลขเอกสาร ${docList} ${periodText}\n\n` +
-    `รอกดยืนยันในหน้า "ตรวจ Manday"${link ? `\n${link}` : ''}`;
+  /* แยกบับเบิลตามลูกค้า — ใบเดียวโชว์ชื่อลูกค้าเดียวได้ ถ้ารวมหลายลูกค้าไว้ในบับเบิลเดียว
+     ชื่อบริษัทบนหัวจะกลายเป็นของผิดคน คนอ่านเข้าใจผิดว่าเอกสารทุกใบเป็นของลูกค้ารายนั้น */
+  const byCustomer = new Map();
+  for (const sheet of pending) {
+    const key = sheet.contract?.customerName ?? '—';
+    if (!byCustomer.has(key)) byCustomer.set(key, []);
+    byCustomer.get(key).push(sheet);
+  }
+
+  const groups = [...byCustomer.entries()];
+  const shown = groups.slice(0, NEEDS_CHECK_MAX_BUBBLES);
+  const dropped = groups.length - shown.length;
+
+  const bubbles = shown.map(([customerName, sheets]) => {
+    const periods = [...new Set(sheets.map((s) => s.period))];
+    return buildNeedsCheckFlex({
+      customerName,
+      projectName: sheets[0].contract?.projectName ?? null,
+      documentNos: sheets.map((s) => s.id),
+      periodLabel: thaiList(periods.map((p) => thaiMonth(p))),
+      queueUrl,
+    });
+  });
+
+  const allPeriods = [...new Set(pending.map((s) => s.period))];
+  const altText =
+    `ตรวจ Manday — มี ${pending.length} รายการรอตรวจ ` +
+    `ประจำเดือน ${thaiList(allPeriods.map((p) => thaiMonth(p)))}`;
 
   try {
-    await line.pushPlainText(text, { targets });
+    await line.pushNeedsCheck({ bubbles, altText, targets });
     logAudit({
       actor: 'system', action: 'notify_line_needs_check',
-      entityType: 'timesheet', entityId, detail: { count: pending.length },
+      entityType: 'timesheet', entityId,
+      detail: { count: pending.length, bubbles: bubbles.length, ...(dropped ? { dropped } : {}) },
     });
   } catch (error) {
     logAudit({
@@ -1641,12 +1808,13 @@ export function previewCycleInvoice(contractId, period) {
      และถ้าเคยกด "ให้ AI เรียบเรียงใหม่" ก็เป็นฉบับนั้น) ไม่ใช่คำนวณ template เปล่าใหม่ทุกครั้ง
      ไม่งั้นร่างที่ AI ปรับไว้ (หรือลิงก์ดูเอกสาร) จะโผล่แค่แวบเดียวตอนกดปุ่ม แล้วหายไปตอนโหลดหน้าใหม่ */
   const existing = get(
-    `SELECT id, document_no, share_link, status, created_at, email_sent_at, email_sent_by, email_draft
+    `SELECT id, document_no, share_link, status, created_at, email_sent_at, email_sent_by, email_draft,
+            gmail_draft_id, gmail_thread_id
        FROM invoices WHERE contract_id = $c AND period = $p`,
     { c: contractId, p: period },
   );
   const emailDraft = existing?.email_draft
-    ? JSON.parse(existing.email_draft)
+    ? withInvoiceAttachment(JSON.parse(existing.email_draft), existing)
     : buildEmailDraft({ contract, invoice });
 
   return {
@@ -1665,9 +1833,45 @@ export function previewCycleInvoice(contractId, period) {
 }
 
 /**
+ * หน้ารอบบิลที่หน้าเว็บเรียก — เหมือน previewCycleInvoice() แต่แวะเช็คกล่อง Gmail ก่อน
+ *
+ * เช็คตอนเปิดหน้าเพราะเป็นจังหวะเดียวที่คนกำลังมองผลอยู่จริง — ไม่ต้องตั้ง cron มาไล่เช็คทุกใบ
+ * ทั้งที่ส่วนใหญ่ไม่มีอะไรเปลี่ยน (และ syncEmailSent จะออกจากฟังก์ชันทันทีถ้าใบนั้นปิดไปแล้ว)
+ */
+export async function cycleDetail(contractId, period, { client } = {}) {
+  await syncEmailSent(`INV-${contractId}-${period}`, { client });
+  return previewCycleInvoice(contractId, period);
+}
+
+/**
+ * เติมใบวางบิลเข้ารายการไฟล์แนบของร่างที่บันทึกไว้ก่อนหน้านี้
+ *
+ * ร่างรุ่นเก่าไม่มีใบวางบิลในรายการเลย เพราะตอนนั้นยังดึงไฟล์จริงจาก FlowAccount ไม่ได้
+ * เลยใส่แค่ลิงก์ไว้ในเนื้อเมลแทน (บางฉบับมีบรรทัดชื่อไฟล์เปล่าๆ กดอะไรไม่ได้ค้างอยู่)
+ * เติมให้ตอนอ่านขึ้นมาแทนการไล่แก้ JSON เก่าทุกแถวในฐานข้อมูล — ร่างที่ AI เคยเรียบเรียงไว้ก็ไม่ถูกทับ
+ */
+function withInvoiceAttachment(draft, existing) {
+  if (!draft || !existing?.id) return draft;
+
+  const attachments = draft.attachments ?? [];
+  if (attachments.some((a) => a.invoiceId)) return draft;
+
+  return {
+    ...draft,
+    attachments: [
+      { label: invoiceFileName(existing), invoiceId: existing.id, timesheetId: null },
+      // เก็บเฉพาะบรรทัด Timesheet — บรรทัดใบวางบิลเปล่าๆ ของร่างเก่าถูกแทนด้วยตัวข้างบนแล้ว
+      ...attachments.filter((a) => a.timesheetId || a.label?.startsWith('Timesheet')),
+    ],
+  };
+}
+
+/**
  * ร่างอีเมลวางบิล — สร้างเป็นร่างเท่านั้น ระบบไม่ส่งเอง
  */
-export function buildEmailDraft({ contract, invoice, documentNo = null, shareLink = null }) {
+export function buildEmailDraft({
+  contract, invoice, documentNo = null, shareLink = null, invoiceId = null,
+}) {
   const company = getSetting('company', { nameTh: 'บริษัท ไอ แพสชั่น จำกัด' });
   const t = invoice.totals;
   const monthLabel = thaiMonth(invoice.period);
@@ -1721,22 +1925,28 @@ export function buildEmailDraft({ contract, invoice, documentNo = null, shareLin
       (documentNo ? ` (${documentNo})` : ''),
     body,
     invoiceLink: shareLink,
-    /* ใบแจ้งหนี้ไม่อยู่ในรายการนี้แล้วถ้ามี shareLink — มีลิงก์เปิดได้จริงในเนื้อเมลแทน
-       ไม่มีลิงก์ (dry-run/sandbox ยังพลาด) ก็ยังเตือนให้แนบเองเหมือนเดิม เผื่อมีไฟล์จากที่อื่น
-       ไฟล์ Timesheet แต่ละใบมี timesheetId ให้กดดู/ดาวน์โหลดของจริงได้ (ดู GET /api/timesheets/:id/file)
-       ไม่ใช่แค่ชื่อไฟล์เปล่าๆเหมือนก่อนหน้านี้ — หาไม่เจอ (ไฟล์เก่าก่อนมีคอลัมน์นี้) ก็ยังโชว์ชื่อไว้เฉยๆ */
+    /* ไฟล์แนบทุกใบมี id ให้กดดู/ดาวน์โหลดของจริงได้ ไม่ใช่แค่ชื่อไฟล์เปล่าๆ
+         · ใบวางบิล → invoiceId (GET /api/invoices/:id/file — ตัดไฟล์จริงจากหน้า share มาเก็บไว้)
+         · Timesheet → timesheetId (GET /api/timesheets/:id/file)
+       ยังไม่อนุมัติจึงยังไม่มี invoiceId ก็ใส่ชื่อไว้เฉยๆ ให้เห็นว่าเดี๋ยวจะมีไฟล์นี้
+       หาไฟล์ไม่เจอ (ใบเก่าก่อนมีคอลัมน์นี้) หน้าเว็บจะโชว์เป็นชื่อไฟล์กดไม่ได้แทน */
     attachments: [
-      ...(shareLink ? [] : [{
-        label: documentNo ? `ใบแจ้งหนี้ ${documentNo}.pdf` : 'ใบแจ้งหนี้ (รอเลขจาก FlowAccount).pdf',
+      {
+        label: documentNo ? `ใบวางบิล ${documentNo}.pdf` : 'ใบวางบิล (รอเลขจาก FlowAccount).pdf',
+        invoiceId,
         timesheetId: null,
-      }]),
+      },
       ...invoice.items.map((i) => {
         const sheet = get(
           `SELECT id FROM timesheets WHERE contract_id = $c AND employee_id = $e AND period = $p
              ORDER BY created_at DESC LIMIT 1`,
           { c: contract.id, e: i.employeeId, p: invoice.period },
         );
-        return { label: `Timesheet ${i.employeeName} ${invoice.period}.pdf`, timesheetId: sheet?.id ?? null };
+        return {
+          label: `Timesheet ${i.employeeName} ${invoice.period}.pdf`,
+          invoiceId: null,
+          timesheetId: sheet?.id ?? null,
+        };
       }),
     ],
   };
@@ -1895,6 +2105,7 @@ export async function requestCycleApproval(contractId, period, { actor, client }
     periodLabel: preview.periodLabel,
     headcount: preview.entries.length,
     paymentAmount: t.paymentAmount,
+    approveUrl: cycleLink(contractId, period),
     targets: lineApproverTargets(),
   });
 
@@ -2046,13 +2257,7 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
      อยู่ดีเพราะไม่มีใครเคยบันทึกค่านี้ลง settings มาก่อน (ป้าย FlowAccount บนหัวเว็บอ่านจาก .env
      ตรงๆ จึงจะบอกว่า sandbox ทั้งที่จริงยิงแบบ dry-run อยู่ — ตัวเลขเอกสารที่ได้จะเป็นค่าเสมือน
      ไม่มีเอกสารจริงเกิดขึ้นใน FlowAccount เลย) */
-  const settings = getSetting('flowaccount', {
-    mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
-    documentType: 'billing-note',
-  });
-  const client =
-    flowAccount ??
-    new FlowAccountClient({ mode: settings.mode, documentType: settings.documentType });
+  const client = flowAccount ?? newFlowAccountClient();
 
   const invoiceId = `INV-${contractId}-${period}`;
   const sequence =
@@ -2096,6 +2301,7 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
     invoice: preview.invoice,
     documentNo: result.documentNo,
     shareLink,
+    invoiceId,
   });
 
   saveInvoice({
@@ -2106,6 +2312,10 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
     response: result,
     emailDraft,
   });
+
+  /* คว้าไฟล์ใบวางบิลมาเก็บตั้งแต่ตอนนี้เลย จะได้แนบเข้าร่างอีเมลได้โดยไม่ต้องรอโหลดตอนกด
+     ต้องทำหลัง saveInvoice เพราะเป็น UPDATE ทับแถวที่เพิ่งบันทึก — best-effort เหมือน shareLink */
+  await cacheInvoicePdf(invoiceId, shareLink, { client, actor });
 
   logAudit({
     actor,
@@ -2729,6 +2939,11 @@ export function settingsSnapshot() {
       localVisionModel: localVisionModel(),
       hasGmail: hasGmailCredentials(),
       gmailQuery: DEFAULT_GMAIL_QUERY,
+      /* LINE กับ APP_BASE_URL — ไม่มีสองอย่างนี้ ปุ่มในข้อความแจ้งเตือนจะกดเข้าเว็บไม่ได้
+         หน้าจัดการระบบต้องบอกได้ว่าตั้งครบหรือยัง ไม่ใช่ต้องไปเปิด .env ดูเอง */
+      hasLine: hasLineCredentials(),
+      lineRecipientCount: lineApproverTargets().length,
+      appBaseUrl: process.env.APP_BASE_URL ?? null,
     },
   };
 }

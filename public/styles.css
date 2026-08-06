@@ -1382,9 +1382,15 @@ td.n, .docid { white-space: nowrap; }
   padding:0 10px; min-width:0; }
 .hadd input:focus{ outline:2px solid var(--brand); outline-offset:-1px; }
 
-/* แถบปิดงานในหน้าอนุมัติรอบบิล */
-.sendbar{ display:flex; align-items:center; justify-content:flex-end; gap:12px;
-  flex-wrap:wrap; border-bottom:1px solid var(--hair); }
+/* แถบปิดงานในหน้าอนุมัติรอบบิล — มีปุ่มเดียวชิดขวา
+   เดิมเส้นคั่นอยู่ที่ตัวแถบเอง เลยลากค้างอยู่กลางพื้นที่ว่างข้างปุ่มเหมือนเส้นหลุดมา
+   ย้ายมาเป็นขอบล่างของบล็อกให้ลากเต็มความกว้างการ์ดเหมือนเส้นคั่นอื่นในหน้า
+   และบีบระยะบน-ล่างลงจากบล็อกเนื้อหาปกติ เพราะมีแค่ปุ่มบรรทัดเดียวไม่ต้องใช้พื้นที่เท่ากัน */
+.card > .bd.sendrow{ display:flex; align-items:center; justify-content:space-between;
+  gap:12px; flex-wrap:wrap; padding:13px 24px; border-bottom:1px solid var(--hair); }
+.card > .bd.sendrow .hint{ display:flex; align-items:center; gap:7px;
+  font-size:12.5px; color:var(--mut); line-height:1.6; }
+.card > .bd.sendrow .hint svg{ flex:none; }
 
 /* กล่องยืนยันว่าส่งเมลแล้ว — โชว์ว่าส่งถึงใคร ใครบันทึก เมื่อไหร่ ในกล่องเดียว อ่านง่ายกว่าแถบข้อความเปล่าๆ */
 .sentok{ display:flex; align-items:flex-start; gap:12px; padding:16px 18px;

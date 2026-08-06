@@ -290,8 +290,10 @@ const routes = [
   ['GET', /^\/api\/pulse$/, (_m, _url, _body, session) => svc.pulse({ actor: session.nameTh, role: session.role })],
   ['GET', /^\/api\/cycles$/, () => svc.billingCycles()],
 
+  /* cycleDetail ไม่ใช่ previewCycleInvoice ตรงๆ เพราะต้องแวะเช็คกล่อง Gmail ก่อนว่าร่างถูกส่งไปหรือยัง
+     แล้วขึ้นแถบ "ส่งเมลแล้ว" ให้เองโดยไม่ต้องมีคนมากดบอก (ดู syncEmailSent) */
   ['GET', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})$/, (m) =>
-    svc.previewCycleInvoice(decodeURIComponent(m[1]), m[2])],
+    svc.cycleDetail(decodeURIComponent(m[1]), m[2])],
 
   ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/approve$/, (m, _url, _body, session) =>
     svc.approveCycle(decodeURIComponent(m[1]), m[2], { actor: session.nameTh })],
@@ -504,13 +506,20 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  /** ไฟล์ PDF ต้นฉบับของ Timesheet — ไม่ผ่าน sendJson เพราะต้องส่งเป็นไบต์ดิบให้เบราว์เซอร์เปิดดูได้ตรงๆ
-   *  (ใช้ตอนกดดูไฟล์แนบจากหน้าร่างอีเมล / แนบจริงเข้า Gmail draft) */
-  const fileMatch = url.pathname.match(/^\/api\/timesheets\/([^/]+)\/file$/);
+  /** ไฟล์ PDF ต้นฉบับ — ไม่ผ่าน sendJson เพราะต้องส่งเป็นไบต์ดิบให้เบราว์เซอร์เปิดดูได้ตรงๆ
+   *  (ใช้ตอนกดดูไฟล์แนบจากหน้าร่างอีเมล / แนบจริงเข้า Gmail draft)
+   *  timesheets = ไฟล์ที่รับเข้ามา · invoices = ใบวางบิลที่ตัดมาจากหน้า share ของ FlowAccount */
+  const fileMatch = url.pathname.match(/^\/api\/(timesheets|invoices)\/([^/]+)\/file$/);
   if (fileMatch && req.method === 'GET') {
-    const file = svc.getTimesheetFile(decodeURIComponent(fileMatch[1]));
+    const id = decodeURIComponent(fileMatch[2]);
+    const isInvoice = fileMatch[1] === 'invoices';
+    const file = isInvoice ? await svc.getInvoiceFile(id) : svc.getTimesheetFile(id);
     if (!file) {
-      sendJson(res, 404, { error: `ไม่พบไฟล์ต้นฉบับของ Timesheet ${decodeURIComponent(fileMatch[1])}` });
+      sendJson(res, 404, {
+        error: isInvoice
+          ? `ยังไม่มีไฟล์ใบวางบิลของ ${id} — ดึงจาก FlowAccount ไม่สำเร็จหรือยังไม่มีลิงก์ดูเอกสาร`
+          : `ไม่พบไฟล์ต้นฉบับของ Timesheet ${id}`,
+      });
       return;
     }
     res.writeHead(200, {

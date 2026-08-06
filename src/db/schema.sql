@@ -163,6 +163,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   period              TEXT NOT NULL,
   document_no         TEXT,               -- เลขที่ FlowAccount ออกให้
   share_link          TEXT,               -- ลิงก์ดูเอกสาร (พิมพ์เป็น PDF ได้) จาก FlowAccount — ข้อ 4.3
+  document_pdf        BLOB,               -- ไฟล์ใบวางบิลตัวจริง ตัดมาจากหน้า share_link (ดู fetchSharedPdf)
+                                          -- เก็บไว้เพราะต้องแนบเข้าร่างอีเมล และลิงก์ share อาจหมดอายุทีหลัง
   document_date       TEXT NOT NULL,
   due_date            TEXT,
   total               REAL NOT NULL,
@@ -180,7 +182,11 @@ CREATE TABLE IF NOT EXISTS invoices (
   approved_by         TEXT,
   approved_at         TEXT,
   email_draft         TEXT,               -- JSON ร่างอีเมล
-  -- ระบบไม่ส่งเมลเอง คนกดส่งจาก Gmail ของตัวเองแล้วมาปิดงานที่นี่
+  -- ร่างที่ระบบสร้างไว้ในกล่อง Drafts — threadId คือตัวที่ใช้ตามว่าถูกกดส่งหรือยัง
+  -- (ตอนส่ง Gmail ลบร่างทิ้งแล้วสร้าง message ใหม่คนละ id ในสนทนาเดิม)
+  gmail_draft_id      TEXT,
+  gmail_thread_id     TEXT,
+  -- ระบบไม่ส่งเมลเอง คนกดส่งจาก Gmail ของตัวเอง แล้วระบบตรวจเจอเองว่าส่งแล้ว (ดู syncEmailSent)
   -- สองช่องนี้คือขั้นสุดท้ายของรอบบิล ถ้าไม่มีก็ไม่รู้ว่ารอบไหนจบแล้ว
   email_sent_at       TEXT,
   email_sent_by       TEXT,

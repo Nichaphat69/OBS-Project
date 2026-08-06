@@ -1000,6 +1000,13 @@ async function renderCycles() {
   });
 }
 
+/* ข้อความบอกสถานะขั้นสุดท้ายของรอบบิล — ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งหรือยัง
+   ไม่มีปุ่มให้คนมากดบอกแล้ว เพราะเดิมลืมกดกันประจำ รอบที่ส่งไปแล้วจริงก็ยังค้างเป็น "สร้างร่างแล้ว" */
+const WAITING_SEND = `${icon('clock')} สร้างร่างใน Gmail แล้ว — กดส่งจาก Gmail ได้เลย ` +
+  'ระบบจะขึ้นว่าส่งแล้วให้เองเมื่อเปิดหน้านี้อีกครั้ง';
+const NO_DRAFT_YET = `${icon('info')} ยังไม่ได้สร้างร่างใน Gmail — สร้างจากแท็บ “ร่างอีเมล” ด้านซ้าย ` +
+  'แล้วระบบจะตามให้เองว่าส่งไปแล้วหรือยัง';
+
 async function openCycle(contractId, period) {
   state.view = 'cycle';
   markTab('cycle');
@@ -1121,9 +1128,15 @@ async function openCycle(contractId, period) {
                 <div class="en">
                   <div class="files">${data.emailDraft.attachments.map((raw) => {
                     // ร่างเก่าก่อนมีลิงก์ไฟล์จริง เก็บเป็นสตริงชื่อไฟล์เฉยๆ — รองรับไว้ไม่ให้พัง
-                    const a = typeof raw === 'string' ? { label: raw, timesheetId: null } : raw;
-                    return a.timesheetId
-                      ? `<a class="file" href="/api/timesheets/${esc(a.timesheetId)}/file" target="_blank" rel="noopener">
+                    const a = typeof raw === 'string' ? { label: raw } : raw;
+                    // ใบวางบิลกับ Timesheet คนละ endpoint แต่เปิดดูแบบเดียวกัน
+                    const href = a.invoiceId
+                      ? `/api/invoices/${encodeURIComponent(a.invoiceId)}/file`
+                      : a.timesheetId
+                        ? `/api/timesheets/${encodeURIComponent(a.timesheetId)}/file`
+                        : null;
+                    return href
+                      ? `<a class="file" href="${esc(href)}" target="_blank" rel="noopener">
                            <span class="pd">PDF</span> ${esc(a.label)}</a>`
                       : `<span class="file"><span class="pd">PDF</span> ${esc(a.label)}</span>`;
                   }).join('')}</div>
@@ -1143,18 +1156,23 @@ async function openCycle(contractId, period) {
                   ? ` · <a href="${esc(data.existing.share_link)}" target="_blank" rel="noopener">เปิดดูเอกสาร</a>`
                   : ''}`
               : 'เลขเอกสารจะได้จาก FlowAccount'}</span></div>
-          ${billed ? `<div class="bd">${data.existing.email_sent_at
-            ? `<div class="sentok">
-                 <span class="ic">${icon('chk')}</span>
-                 <div>
-                   <div class="ttl">ส่งเมลแล้ว</div>
-                   <div class="meta">ถึง <b>${esc(data.emailDraft?.to || 'ไม่พบอีเมลผู้รับในร่าง')}</b><br>
-                     บันทึกโดย ${esc(data.existing.email_sent_by || '—')} · ${dt(data.existing.email_sent_at)}</div>
+          ${billed ? (data.existing.email_sent_at
+            ? `<div class="bd">
+                 <div class="sentok">
+                   <span class="ic">${icon('chk')}</span>
+                   <div>
+                     <div class="ttl">ส่งเมลแล้ว</div>
+                     <div class="meta">ถึง <b>${esc(data.emailDraft?.to || 'ไม่พบอีเมลผู้รับในร่าง')}</b><br>
+                       บันทึกโดย ${esc(data.existing.email_sent_by || '—')} · ${dt(data.existing.email_sent_at)}</div>
+                   </div>
                  </div>
                </div>`
-            : `<div class="sendbar">
-                 <button class="btn pri sm" id="sentBtn" data-inv="${esc(data.existing.id)}">
-                   ${icon('send')} บันทึกว่าส่งเมลแล้ว</button></div>`}</div>` : ''}
+            /* ไม่มีปุ่มให้กดบอกว่าส่งแล้วอีกต่อไป — ระบบไปดูในกล่อง Gmail เองว่าร่างถูกกดส่งหรือยัง
+               แล้วสลับเป็นแถบเขียวด้านบนให้เอง (ดู syncEmailSent) ตรงนี้บอกแค่ว่ากำลังรออะไรอยู่ */
+            : `<div class="bd sendrow">
+                 <span class="hint" id="sendHint">${data.existing.gmail_thread_id
+                   ? WAITING_SEND : NO_DRAFT_YET}</span>
+               </div>`) : ''}
         <div class="bd">
           <div class="doc">
             <div class="dh">
@@ -1299,6 +1317,8 @@ async function openCycle(contractId, period) {
     try {
       const r = await api(`/cycles/${encodeURIComponent(contractId)}/${period}/gmail-draft`, { method: 'POST' });
       toast(`สร้างร่างใน Gmail แล้ว — ถึง ${r.to} · เปิดแท็บใหม่ให้แล้ว กดตรวจแล้วส่งได้จากที่นั่นเลย (${r.note})`);
+      /* อัปเดตแถบสถานะตรงๆแทนการโหลดหน้าใหม่ทั้งหน้า — ไม่งั้นแท็บที่คนเปิดค้างไว้จะเด้งกลับไปแท็บแรก */
+      if (el('sendHint')) el('sendHint').innerHTML = WAITING_SEND;
       if (r.url && draftWindow) draftWindow.location = r.url;
       else draftWindow?.close();
     } catch (error) {
@@ -1310,20 +1330,6 @@ async function openCycle(contractId, period) {
     }
   });
 
-  /* ปิดงาน — ขั้นสุดท้ายของรอบบิล ระบบไม่ส่งเมลเอง คนส่งแล้วมายืนยันที่นี่
-     ถ้าไม่มีขั้นนี้ รอบบิลจะค้างที่ "สร้างร่างแล้ว" ตลอดไป ไม่รู้ว่าอันไหนจบ */
-  el('sentBtn')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try {
-      const r = await api(`/invoices/${encodeURIComponent(btn.dataset.inv)}/sent`, { method: 'POST' });
-      toast(`ปิดงานแล้ว — บันทึกว่า ${r.sentBy} ส่งเมล ${r.documentNo ?? ''} เรียบร้อย`);
-      openCycle(contractId, period);
-    } catch (error) {
-      btn.disabled = false;
-      toast(error.message, true);
-    }
-  });
 }
 
 
@@ -2322,9 +2328,19 @@ async function renderSystemAdmin() {
             <dt>ชนิดเอกสาร</dt><dd>${esc(settings.flowaccount?.documentType ?? '—')}</dd>
             <dt>Gmail</dt><dd>${settings.env.hasGmail
                 ? '<span class="tg ok">เชื่อมต่อแล้ว</span>' : '<span class="tg wn">ยังไม่เชื่อม</span>'}</dd>
+            <dt>LINE</dt><dd>${settings.env.hasLine
+                ? `<span class="tg ok">เชื่อมต่อแล้ว</span> <small>ผู้รับแจ้งเตือน ${int(settings.env.lineRecipientCount)} ราย</small>`
+                : '<span class="tg wn">ยังไม่เชื่อม</span>'}</dd>
+            <dt>ลิงก์ในข้อความ LINE</dt><dd>${settings.env.appBaseUrl
+                ? `<span class="n">${esc(settings.env.appBaseUrl)}</span>`
+                : `<span class="tg wn">ยังไม่ตั้ง</span>
+                   <small style="display:block">ข้อความแจ้งเตือนจะไม่มีปุ่มกดเข้าระบบ</small>`}</dd>
             <dt>AI ในเครื่อง</dt><dd class="n">${esc(settings.env.localLlmBaseUrl)}</dd>
-            <dt>โมเดล (ข้อความ)</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>
-            <dt>โมเดล (อ่านไฟล์)</dt><dd class="n">${esc(settings.env.localVisionModel)}</dd>
+            ${settings.env.localTextModel === settings.env.localVisionModel
+              // ตัวเดียวกันทั้งอ่านไฟล์และร่างข้อความ — แยกสองแถวก็เห็นค่าซ้ำกันเปล่าๆ
+              ? `<dt>โมเดล</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>`
+              : `<dt>โมเดล (ข้อความ)</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>
+                 <dt>โมเดล (อ่านไฟล์)</dt><dd class="n">${esc(settings.env.localVisionModel)}</dd>`}
           </dl></div>
         </div>
         <div class="card">
@@ -2334,7 +2350,11 @@ async function renderSystemAdmin() {
             <dt>ต้องได้ครบทุกคน</dt><dd>${settings.billingRules?.requireAllTimesheets ? 'ใช่' : 'ไม่'}</dd>
             <dt>ต้องมีคนกดยืนยัน</dt><dd><span class="tg ${settings.billingRules?.requireHumanCheck === false ? 'mu' : 'ok'}">
               ${settings.billingRules?.requireHumanCheck === false ? 'ไม่ (โหมด auto)' : 'ใช่ (โหมด manual)'}</span></dd>
-            <dt>ส่งอีเมลอัตโนมัติ</dt><dd><span class="tg ok">ไม่ส่ง — สร้างร่างเท่านั้น</span></dd>
+            <dt>ส่งอีเมลอัตโนมัติ</dt><dd><span class="tg ok">สร้างร่างเท่านั้น</span></dd>
+            <dt>ไฟล์แนบในร่างอีเมล</dt><dd>ใบวางบิล + Timesheet ทุกคนในรอบ
+              <small style="display:block">ใบวางบิลดึงจาก FlowAccount มาเก็บให้เองตอนกดอนุมัติ</small></dd>
+            <dt>ปิดรอบเมื่อส่งเมล</dt><dd><span class="tg ok">อัตโนมัติ</span>
+              <small style="display:block">ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งแล้วหรือยัง</small></dd>
           </dl></div>
         </div>
       </div>
@@ -2889,27 +2909,48 @@ function hideLoginScreen() {
   el('loginForm').reset();
 }
 
-/* ลิงก์จาก LINE (เช่น "ตรวจ Manday ไม่ผ่าน ... เข้าไปดูที่นี่") พา ?view=queue มาเปิดหน้าที่ถูก
-   ได้ทันทีโดยไม่ต้องกดเมนูเอง — เช็คแค่ตอนเปิดแอปครั้งแรกเท่านั้น ไม่งั้นจะดึงกลับหน้านั้นซ้ำๆ
-   ทุกครั้งที่ browser back/forward เพราะ query string ยังติดอยู่ใน URL */
+/* ปุ่มในข้อความ LINE พา query string มาเปิดหน้าที่ต้องทำงานต่อได้ทันที ไม่ต้องกดเมนูหาเอง
+     ?view=queue                              → คิว "ตรวจ Manday"
+     ?view=cycle&contract=…&period=YYYY-MM    → หน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้น
+   เช็คแค่ตอนเปิดแอปครั้งแรกเท่านั้น ไม่งั้นจะดึงกลับหน้านั้นซ้ำๆทุกครั้งที่ browser back/forward
+   เพราะ query string ยังติดอยู่ใน URL
+
+   คืนรอบบิลที่ต้องเปิดต่อ (ถ้ามี) แทนที่จะเปิดเองที่นี่ เพราะ openCycle() ต้องรอ API
+   ต้องให้ startApp เป็นคนสั่งเปิดหลังหน้าแรกขึ้นแล้ว จะได้ไม่มีจอโล่งค้างระหว่างโหลด */
 function applyDeepLinkView() {
-  const requested = new URLSearchParams(window.location.search).get('view');
+  const q = new URLSearchParams(window.location.search);
+  const requested = q.get('view');
+
+  if (requested === 'cycle') {
+    const contractId = q.get('contract');
+    const period = q.get('period');
+    if (contractId && period) {
+      markTab('cycle');
+      return { contractId, period };
+    }
+  }
   if (requested && RENDER[requested]) {
     state.view = requested;
     markTab(requested);
   }
+  return null;
 }
 
 async function startApp() {
   hideLoginScreen();
   applySideState(localStorage.getItem(SIDE_KEY) === '1');
-  applyDeepLinkView();
+  const deepCycle = applyDeepLinkView();
 
   el('mastDate').textContent = new Date().toLocaleDateString('th-TH', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 
-  render();          // render() เรียก syncBadges() ให้ป้ายขึ้นรอบแรกอยู่แล้ว
+  if (deepCycle) {
+    syncBadges();  // render() ปกติเป็นคนเรียกให้ แต่รอบนี้ข้าม render() ไปเปิดรอบบิลตรงๆ
+    await openCycle(deepCycle.contractId, deepCycle.period);
+  } else {
+    render();      // render() เรียก syncBadges() ให้ป้ายขึ้นรอบแรกอยู่แล้ว
+  }
   listenForChanges();
   startPulse();
 }

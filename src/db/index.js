@@ -37,6 +37,9 @@ const ADDED_COLUMNS = [
   ['users', 'active', 'INTEGER NOT NULL DEFAULT 1'],
   ['timesheets', 'source_file_bytes', 'BLOB'],
   ['ai_reads', 'file_bytes', 'BLOB'],
+  ['invoices', 'document_pdf', 'BLOB'],
+  ['invoices', 'gmail_draft_id', 'TEXT'],
+  ['invoices', 'gmail_thread_id', 'TEXT'],
 ];
 
 function addMissingColumns(database) {

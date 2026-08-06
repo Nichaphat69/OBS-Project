@@ -251,8 +251,23 @@ test('ชื่อที่ไม่มีในระบบ → ไม่บั
 });
 
 class FakeLineClient {
-  constructor() { this.sent = []; }
+  constructor() { this.sent = []; this.flex = []; }
   async pushPlainText(text) { this.sent.push(text); return { sentTo: 'fake-target' }; }
+  async pushNeedsCheck(message) { this.flex.push(message); return { sentTo: 'fake-target' }; }
+}
+
+/** ข้อความทุกบรรทัดในบับเบิล — ใช้เช็คว่าเลขเอกสาร/เดือนโผล่ในนั้นจริง โดยไม่ต้องไล่โครง JSON เอง */
+function bubbleTexts(bubble) {
+  const out = [];
+  const walk = (node) => {
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'text' && node.text) out.push(node.text);
+    if (node.action?.label) out.push(node.action.label);
+    for (const value of Object.values(node)) if (typeof value === 'object') walk(value);
+  };
+  walk(bubble);
+  return out;
 }
 
 test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน → nextAction เป็น fix_mismatch และแจ้ง LINE (ข้อ 2.6)', async () => {
@@ -291,11 +306,73 @@ test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE สร�
   });
 
   assert.notEqual(result.nextAction, svc.NEXT_ACTION.FIX_MISMATCH);
-  assert.equal(line.sent.length, 1, 'ตรวจผ่านแล้วก็ยังต้องแจ้งว่ามีของใหม่รอคนกดยืนยัน');
-  // ข้อความสรุปทั้งคิว "ต้องตรวจ" ไม่ใช่แค่ใบนี้ใบเดียว — เจ้าใบนี้ต้องอยู่ในรายการที่แจ้งด้วย
-  assert.match(line.sent[0], /มีรายการรอตรวจ Manday \d+ รายการ/);
-  assert.match(line.sent[0], /2026020103/);
-  assert.doesNotMatch(line.sent[0], /ไม่ผ่าน/, 'ต้องเป็นข้อความ "รอตรวจ" ไม่ใช่ข้อความตรวจไม่ผ่านของ notifyCheckFailed');
+  assert.equal(line.sent.length, 0, 'ต้องไม่ใช่ข้อความเปล่าๆ — ของรอตรวจส่งเป็นบับเบิลที่มีปุ่ม');
+  assert.equal(line.flex.length, 1, 'ตรวจผ่านแล้วก็ยังต้องแจ้งว่ามีของใหม่รอคนกดยืนยัน');
+
+  const message = line.flex[0];
+  assert.match(message.altText, /ตรวจ Manday — มี \d+ รายการรอตรวจ/, 'altText ต้องอ่านรู้เรื่องบนหน้า lock screen');
+
+  // บับเบิลสรุปทั้งคิว "ต้องตรวจ" ไม่ใช่แค่ใบนี้ใบเดียว — เจ้าใบนี้ต้องอยู่ในรายการที่แจ้งด้วย
+  const texts = message.bubbles.flatMap(bubbleTexts);
+  assert.ok(texts.includes('ตรวจ Manday'), 'หัวบับเบิลต้องเป็น "ตรวจ Manday"');
+  assert.ok(texts.includes('2026020103'), 'ต้องมีเลขเอกสารของใบที่เพิ่งเข้ามา');
+  assert.ok(texts.some((t) => t.includes('บริษัท ไทยประกันชีวิต')), 'ต้องบอกด้วยว่าเป็นของลูกค้าราย');
+  // คิวอาจคาบหลายเดือน แถวนี้จึงเป็น "มกราคม 2569 และ กุมภาพันธ์ 2569" ได้ ขอแค่มีเดือนของใบนี้อยู่
+  assert.ok(texts.some((t) => t.includes('กุมภาพันธ์ 2569')), 'ต้องบอกรอบเดือน');
+  assert.ok(
+    !texts.some((t) => t.includes('ไม่ผ่าน')),
+    'ต้องเป็นบับเบิล "รอตรวจ" ไม่ใช่ข้อความตรวจไม่ผ่านของ notifyCheckFailed',
+  );
+});
+
+test('บับเบิลรอตรวจแยกตามลูกค้า และมีปุ่มพาเข้าหน้าตรวจ Manday เมื่อมี APP_BASE_URL', async () => {
+  const before = process.env.APP_BASE_URL;
+  process.env.APP_BASE_URL = 'https://obs.example.com/';
+
+  try {
+    const line = new FakeLineClient();
+    await svc.ingestTimesheet({
+      documentNo: '2026020104',
+      fileBase64: Buffer.from('x').toString('base64'),
+      expectedPeriod: '2026-02',
+      extractor: stubExtractor(fakeFebruary({ employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager' })),
+      lineClient: line,
+    });
+
+    const { bubbles } = line.flex[0];
+    // ข้อมูลตั้งต้นมีลูกค้ารายเดียว — คิวทั้งหมดจึงต้องรวมอยู่ในบับเบิลใบเดียว ไม่แตกเป็นใบต่อเอกสาร
+    assert.equal(bubbles.length, 1, 'ลูกค้ารายเดียวต้องได้บับเบิลใบเดียว');
+
+    const button = bubbles[0].footer.contents[0];
+    assert.equal(button.action.type, 'uri', 'ต้องเป็นปุ่มเปิดเว็บ ไม่ใช่ลิงก์เปล่าในข้อความ');
+    assert.equal(button.action.label, 'ตรวจ Manday');
+    assert.equal(button.action.uri, 'https://obs.example.com/?view=queue', 'ต้องตัด / ท้าย base ทิ้งไม่ให้ซ้ำ');
+  } finally {
+    if (before === undefined) delete process.env.APP_BASE_URL;
+    else process.env.APP_BASE_URL = before;
+  }
+});
+
+test('ไม่ตั้ง APP_BASE_URL → บับเบิลยังส่งได้ แค่ไม่มีปุ่มให้กด', async () => {
+  const before = process.env.APP_BASE_URL;
+  delete process.env.APP_BASE_URL;
+
+  try {
+    const line = new FakeLineClient();
+    await svc.ingestTimesheet({
+      documentNo: '2026020105',
+      fileBase64: Buffer.from('x').toString('base64'),
+      expectedPeriod: '2026-02',
+      extractor: stubExtractor(fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' })),
+      lineClient: line,
+    });
+
+    const { bubbles } = line.flex[0];
+    assert.equal(bubbles[0].footer, undefined, 'ไม่มีปุ่มก็ต้องไม่มี footer เลย — LINE ไม่รับ footer ที่ contents ว่าง');
+    assert.ok(bubbleTexts(bubbles[0]).includes('2026020105'), 'เนื้อหายังต้องครบเหมือนเดิม');
+  } finally {
+    if (before !== undefined) process.env.APP_BASE_URL = before;
+  }
 });
 
 test('เอกสารที่วางบิลแล้ว → ไม่เขียนทับ', async () => {

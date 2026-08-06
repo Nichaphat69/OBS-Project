@@ -98,3 +98,58 @@ test('getShareLink ต้องมี documentId ก่อน ไม่งั้
   const c = client({});
   await assert.rejects(() => c.getShareLink(null), FlowAccountError);
 });
+
+/* ── fetchSharedPdf — ตัดไฟล์ PDF ออกจากหน้า share ────────────────────────
+   หน้า share ของจริงฝังไฟล์ทั้งไฟล์มาเป็น base64 ในตัวหน้าเลย แล้วให้ pdf.js วาด
+   (ไล่ดูหน้าจริงของ BL2026020002 แล้ว 6 ส.ค. 2569) — โครง HTML ข้างล่างย่อมาจากของจริง */
+
+const SHARE_LINK = 'https://doc-api-a.dev.flowaccount.com/api/billingnote/share/html/th/abc123';
+
+function sharePage(base64) {
+  return `<html><body><div class="pdf-content"><div id="container"></div></div>
+    <script>
+      function renderPdf() {
+        var pdfAsDataUri = "data:application/pdf;base64,${base64}";
+        PDFJS.getDocument(pdfAsDataUri).then(function (pdf) { });
+      }
+    </script></body></html>`;
+}
+
+function htmlClient(body, { ok = true, status = 200 } = {}) {
+  return new FlowAccountClient({
+    mode: 'sandbox',
+    documentType: 'billing-note',
+    fetchImpl: async () => ({ ok, status, text: async () => body }),
+  });
+}
+
+test('fetchSharedPdf ตัด base64 ที่ฝังในหน้า share ออกมาเป็นไฟล์ PDF ได้', async () => {
+  const pdf = Buffer.from('%PDF-1.4\nไฟล์ใบวางบิลจำลอง\n%%EOF');
+  const result = await htmlClient(sharePage(pdf.toString('base64'))).fetchSharedPdf(SHARE_LINK);
+
+  assert.ok(Buffer.isBuffer(result.bytes));
+  assert.equal(result.bytes.toString('utf8'), pdf.toString('utf8'));
+});
+
+test('fetchSharedPdf ต้องมีลิงก์ก่อน ไม่งั้น error ทันทีไม่ยิงออกไป', async () => {
+  await assert.rejects(() => htmlClient('').fetchSharedPdf(null), FlowAccountError);
+});
+
+test('fetchSharedPdf เปิดหน้าไม่ได้ → error พร้อม status', async () => {
+  await assert.rejects(
+    () => htmlClient('ไม่พบ', { ok: false, status: 404 }).fetchSharedPdf(SHARE_LINK),
+    (error) => error instanceof FlowAccountError && error.status === 404,
+  );
+});
+
+test('fetchSharedPdf หน้าเปลี่ยนรูปแบบจนไม่มี base64 ฝังอยู่ → error ไม่คืนไฟล์เปล่า', async () => {
+  await assert.rejects(
+    () => htmlClient('<html><body>เอกสารนี้ถูกลบแล้ว</body></html>').fetchSharedPdf(SHARE_LINK),
+    FlowAccountError,
+  );
+});
+
+test('fetchSharedPdf ปฏิเสธถ้าก้อนที่ตัดมาได้ไม่ได้ขึ้นต้นด้วย %PDF', async () => {
+  const notPdf = Buffer.from('<html>โดนพาไปหน้า login</html>').toString('base64');
+  await assert.rejects(() => htmlClient(sharePage(notPdf)).fetchSharedPdf(SHARE_LINK), FlowAccountError);
+});

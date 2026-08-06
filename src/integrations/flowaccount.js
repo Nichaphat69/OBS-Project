@@ -247,6 +247,47 @@ export class FlowAccountClient {
     return { mode: this.mode, ok: true, link: body?.data?.link ?? null };
   }
 
+  /**
+   * ไฟล์ PDF ตัวจริงของเอกสาร — ดึงจากหน้า shareLink ไม่ใช่จาก API
+   *
+   * ไล่ดูหน้า share ของจริงแล้ว (6 ส.ค. 2569): หน้านั้นไม่ได้ไปโหลด PDF จากที่อื่นมาแสดง
+   * แต่ **ฝังไฟล์ทั้งไฟล์มาในหน้าเลย** เป็น base64 (`var pdfAsDataUri = "data:application/pdf;base64,…"`)
+   * แล้วให้ pdf.js วาดลง canvas — ปุ่มดาวน์โหลดบนหน้าก็แปลงสตริงก้อนเดียวกันนี้เป็นไฟล์
+   * เพราะงั้นดึง HTML มาแล้วตัด base64 ออกมา ก็ได้ไฟล์เดียวกับที่กดดาวน์โหลดเองเป๊ะๆ
+   *
+   * ในหน้ายังมี URL ไป media.flowaccount.com อยู่ด้วย แต่บรรทัดนั้นถูก comment ทิ้งไว้ในโค้ดของเขา
+   * ไม่ได้ใช้งานจริง เลยไม่ยึดเป็นหลัก — ยึด base64 ที่หน้าใช้วาดจริงแทน
+   *
+   * หน้า share เปิดได้โดยไม่ต้องมี token (ใครถือลิงก์ก็เปิดได้) จึงไม่ต้องขอ access token ที่นี่
+   */
+  async fetchSharedPdf(shareLink) {
+    if (!shareLink) {
+      throw new FlowAccountError('ต้องมีลิงก์ดูเอกสารก่อนจึงจะดึงไฟล์ PDF ได้');
+    }
+
+    const response = await this.fetch(shareLink, { headers: { Accept: 'text/html' } });
+    if (!response.ok) {
+      throw new FlowAccountError('เปิดหน้าเอกสารของ FlowAccount เพื่อดึงไฟล์ PDF ไม่สำเร็จ', {
+        status: response.status,
+      });
+    }
+
+    const html = await response.text();
+    const match = html.match(/data:application\/pdf;base64,([A-Za-z0-9+/=]+)/);
+    if (!match) {
+      throw new FlowAccountError(
+        'ไม่พบไฟล์ PDF ฝังอยู่ในหน้าเอกสารของ FlowAccount — หน้าอาจเปลี่ยนรูปแบบไปแล้ว',
+      );
+    }
+
+    const bytes = Buffer.from(match[1], 'base64');
+    /* กันกรณีตัด base64 ได้ไม่ครบ/ได้ก้อนอื่นมาแทน — ไฟล์ PDF จริงต้องขึ้นต้นด้วย %PDF เสมอ */
+    if (bytes.subarray(0, 4).toString('latin1') !== '%PDF') {
+      throw new FlowAccountError('ข้อมูลที่ดึงมาจากหน้าเอกสารไม่ใช่ไฟล์ PDF ที่อ่านได้');
+    }
+    return { mode: this.mode, ok: true, bytes };
+  }
+
   /** ดึงเอกสารเดิม (ใบเสนอราคา / PO) มา cross-check เรทราคา */
   async listDocuments({ type = 'quotations', from, to } = {}) {
     if (this.isDryRun) {
