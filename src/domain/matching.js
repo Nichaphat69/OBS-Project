@@ -44,6 +44,12 @@ export function editDistance(a, b) {
   return prev[b.length];
 }
 
+/* เกณฑ์ของชั้นจับคู่หลวม — ตั้งจากค่าที่วัดกับชื่อจริงที่โมเดลอ่านผิด ไม่ได้ตั้งลอยๆ
+     ชื่อเดียวกันอ่านเพี้ยน   0.72 – 0.80  (Sineee Masamasukiam ↔ Sunee Maneekasemsuk = 0.72)
+     คนละคนกันจริง           0.22 – 0.44  (Pongpun Mamak ↔ Sunee Maneekasemsuk = 0.44)
+   0.65 อยู่กลางช่องว่างพอดี ห่างจากทั้งสองฝั่งมากพอที่จะไม่พลิกง่ายๆ */
+const LOOSE_THRESHOLD = 0.65;
+
 export const MATCH = {
   EXACT: 'exact',
   ALIAS: 'alias',
@@ -100,6 +106,28 @@ export function matchEmployee(rawName, employees, { maxDistance = 2 } = {}) {
     };
   }
 
+  /* 4. ชั้นสุดท้าย — ใช้ตัวอักษรที่ซ้ำกัน ไม่ใช่ระยะแก้ไข
+     โมเดล vision อ่านชื่อผิดแบบ "สลับ/แทรกตัวอักษร" ซึ่งกินระยะแก้ไขเกิน 2 อย่างรวดเร็ว
+     (วัดกับของจริง: "Korawit Khamsuk" → "Korweil Khamsiuk" ต่างกัน 5 · "Sunee Maneekasemsuk"
+     → "Sineee Masamasukiam" ต่างกัน 9) ทั้งที่ตัวอักษรที่ใช้แทบเป็นชุดเดียวกัน
+     ชั้นนี้จึงจับได้ในกรณีที่ชั้น 3 จับไม่ได้ แต่ตั้งเกณฑ์ไว้สูงและบอกชัดว่าให้คนยืนยันก่อน
+     — ไม่ผูกให้เองเงียบๆ เพราะเป็นการเดาที่ผิดได้ */
+  let loose = null;
+  for (const employee of employees) {
+    for (const candidate of [employee.nameTh, employee.nameEn, ...(employee.aliases ?? [])]) {
+      const score = letterOverlap(target, normalizeName(candidate));
+      if (score >= LOOSE_THRESHOLD && (!loose || score > loose.score)) loose = { employee, candidate, score };
+    }
+  }
+  if (loose) {
+    return {
+      match: MATCH.FUZZY,
+      employee: loose.employee,
+      reason: `น่าจะเป็น "${loose.candidate}" (ตัวอักษรตรงกัน ${Math.round(loose.score * 100)}%) `
+        + '— AI อาจอ่านชื่อเพี้ยน ต้องให้คนยืนยันและเพิ่มเป็นชื่อพ้องก่อน',
+    };
+  }
+
   return {
     match: MATCH.NONE,
     employee: null,
@@ -128,4 +156,21 @@ export function checkPosition(rawPosition, employee) {
       `Timesheet เขียนตำแหน่งว่า "${rawPosition}" ซึ่งไม่อยู่ในรายการของ ${employee.nameTh} ` +
       `(ฐานข้อมูลใช้ "${employee.invoicePosition}") — ใบแจ้งหนี้จะใช้ชื่อตำแหน่งจากฐานข้อมูล`,
   };
+}
+
+/**
+ * สัดส่วนตัวอักษรที่สองชื่อใช้ร่วมกัน (ไม่สนลำดับ) — 0 ถึง 1
+ *
+ * ต่างจากระยะแก้ไขตรงที่ไม่สนว่าตัวอักษรอยู่ตำแหน่งไหน จึงทนต่อการอ่านสลับตัว
+ * ซึ่งเป็นรูปแบบความผิดพลาดที่โมเดล vision ทำบ่อยที่สุดกับชื่อคน
+ */
+function letterOverlap(a, b) {
+  if (!a || !b) return 0;
+  const pool = [...b];
+  let shared = 0;
+  for (const ch of a) {
+    const at = pool.indexOf(ch);
+    if (at !== -1) { pool.splice(at, 1); shared += 1; }
+  }
+  return shared / Math.max(a.length, b.length);
 }

@@ -723,8 +723,42 @@ export async function readTimesheetFile({
   }
 
   const source = fileBase64 ? Buffer.from(fileBase64, 'base64') : filePath;
-  const { data, verification, usage, model } = await extractor(source, { expectedPeriod });
+  const extracted = await extractor(source, { expectedPeriod });
+  const { usage, model } = extracted;
 
+  /* ไฟล์เดียวอาจมี Timesheet ของหลายคน (ดู groupPagesByEmployee ใน extract/timesheet.js)
+     ต้องจับคู่พนักงานและตรวจ blocker แยกทีละฉบับ ไม่ใช่ยุบเป็นก้อนเดียว */
+  const documents = (extracted.documents ?? [{ data: extracted.data, verification: extracted.verification }])
+    .map(({ data, verification }) => enrichDocument(data, verification));
+
+  const { data, verification } = documents[0];
+
+  logAudit({
+    actor: 'llm',
+    action: 'read_timesheet_file',
+    entityType: 'timesheet',
+    entityId: fileName ?? 'อัปโหลด',
+    detail: {
+      model, usage, documentCount: documents.length,
+      employees: documents.map((d) => d.data.employeeName), period: data.period,
+      ok: documents.every((d) => d.verification.ok),
+    },
+  });
+
+  return {
+    fileName,
+    model,
+    usage,
+    /** ทุกฉบับที่แยกได้จากไฟล์นี้ — หน้าเว็บต้องให้คนตรวจทีละฉบับก่อนยืนยัน */
+    documents,
+    // ฉบับแรกวางไว้ระดับบนด้วย เพื่อให้โค้ดเดิมที่อ่าน result.data ยังทำงานได้
+    ...documents[0],
+    fileBytes: Buffer.isBuffer(source) ? source : null,
+  };
+}
+
+/** จับคู่พนักงาน หาสัญญา และสรุปสิ่งที่ติดขัด ของ Timesheet หนึ่งฉบับ */
+function enrichDocument(data, verification) {
   // จับคู่ให้ดูก่อน ยังไม่ผูกอะไร — คนจะได้รู้ตั้งแต่ยังไม่บันทึกว่าชื่อนี้ไปลงที่ใคร
   const employees = employeesForMatching();
   const nameMatch = matchEmployee(data.employeeName, employees);
@@ -742,23 +776,9 @@ export async function readTimesheetFile({
       )
     : null;
 
-  logAudit({
-    actor: 'llm',
-    action: 'read_timesheet_file',
-    entityType: 'timesheet',
-    entityId: fileName ?? 'อัปโหลด',
-    detail: { model, usage, employeeName: data.employeeName, period: data.period, ok: verification.ok },
-  });
-
   return {
-    fileName,
-    model,
-    usage,
     data,
     verification,
-    // ไฟล์ต้นฉบับจริง — เก็บผ่านๆ ไปให้ logAiRead()/confirmTimesheet() แนบเป็น PDF จริงในร่างอีเมลได้
-    // ทีหลัง (ไม่ส่งกลับไปให้หน้าเว็บเห็น — server.js ตัดออกก่อนตอบกลับ client)
-    fileBytes: Buffer.isBuffer(source) ? source : null,
     matching: {
       kind: nameMatch.match,
       reason: nameMatch.reason,
@@ -968,10 +988,20 @@ const DEFAULT_GMAIL_QUERY =
 
 export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client } = {}) {
   const gmail = client ?? new GmailClient();
-  const [profile, messages] = await Promise.all([
+  const [profile, found] = await Promise.all([
     gmail.profile(),
     gmail.searchMessages({ query, max }),
   ]);
+  const { messages, skipped } = found;
+
+  /* ฉบับที่ดึงรายละเอียดไม่สำเร็จ — บอกไว้ในผลลัพธ์ให้หน้าเว็บขึ้นเตือน แต่ไม่ล้มทั้งกล่อง
+     คนจะได้รู้ว่ารายการที่เห็นอาจยังไม่ครบ แทนที่จะเข้าใจว่ากล่องมีแค่นี้จริงๆ */
+  if (skipped.length) {
+    logAudit({
+      actor: 'system', action: 'gmail_message_skipped', entityType: 'gmail', entityId: 'inbox',
+      detail: { count: skipped.length, items: skipped },
+    });
+  }
 
   /* เคยดึงไฟล์แนบไหนเข้าระบบไปแล้วบ้าง (key ด้วย source_email_id + source_file คู่กัน ไม่ใช่แค่ตัวอีเมล)
      เพราะ 1 อีเมลอาจมีไฟล์แนบของหลายคน — คนละไฟล์กันต้องแยกสถานะกันคนละอัน ไม่งั้นแค่คนแรกที่
@@ -1001,6 +1031,7 @@ export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client
   return {
     account: profile.email,
     query,
+    skipped: skipped.length,
     // ยังต้องโผล่ในรายการที่ต้องทำถ้า "มีไฟล์แนบไหนสักไฟล์" ที่ยังไม่ได้อ่าน+ยืนยัน แม้ไฟล์อื่นในฉบับ
     // เดียวกันจะเข้าระบบไปแล้วก็ตาม — ปุ่ม "ให้ AI อ่าน" แยกทีละไฟล์แนบอยู่แล้ว (ดูฝั่งหน้าเว็บ)
     messages: withAttachments
@@ -1013,6 +1044,32 @@ export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client
         return { ...m, ...meta, periodLabel: meta.period ? thaiMonth(meta.period) : null };
       }),
   };
+}
+
+/**
+ * ไฟล์แนบใน Gmail ฉบับนั้น — ให้คนเปิดดู/ดาวน์โหลดจากหน้าเว็บได้ก่อนสั่งให้ AI อ่าน
+ *
+ * ดึงสดจาก Gmail ทุกครั้ง ไม่เก็บลงระบบ เพราะไฟล์ยังไม่ได้เข้าระบบจริง (ยังไม่มีใครยืนยัน)
+ * จับคู่ด้วยชื่อไฟล์ไม่ใช่ attachmentId — attachmentId ของ Gmail เปลี่ยนทุกครั้งที่เรียก API
+ * (เหตุผลเดียวกับใน readTimesheetFromEmail)
+ */
+export async function getGmailAttachment({ messageId, filename = null, client } = {}) {
+  if (!messageId) throw Object.assign(new Error('ต้องระบุอีเมลที่จะเปิดไฟล์แนบ'), { status: 400 });
+
+  const gmail = client ?? new GmailClient();
+  const message = await gmail.getMessage(messageId);
+  const target = filename
+    ? message.pdfAttachments.find((a) => a.filename === filename)
+    : message.pdfAttachments[0];
+
+  if (!target) {
+    throw Object.assign(
+      new Error(filename ? `อีเมลฉบับนี้ไม่มีไฟล์ชื่อ "${filename}"` : 'อีเมลฉบับนี้ไม่มีไฟล์ PDF แนบมา'),
+      { status: 404 },
+    );
+  }
+
+  return { filename: target.filename, bytes: await gmail.getAttachment(messageId, target.attachmentId) };
 }
 
 /** ซ่อนอีเมลฉบับนี้ทิ้งจากรายการที่ต้องอ่าน — ไม่แตะอีเมลจริงใน Gmail เลย กดยกเลิกได้ (ลบแถวใน gmail_dismissed) */
@@ -1094,11 +1151,23 @@ export async function readTimesheetFromEmail({
     },
   });
 
+  /* บล็อกเกอร์ที่มาจากตัวอีเมล (สถานะไม่ใช่อนุมัติ / เดือนไม่ตรง) ใช้กับทุกฉบับในไฟล์
+     เพราะเป็นเรื่องของอีเมลทั้งฉบับ ไม่ใช่ของคนใดคนหนึ่ง
+     ส่วนเลขที่เอกสาร ให้ใช้ของแต่ละคนที่อยู่ในหน้าอีเมลอนุมัติในไฟล์ก่อน — ไฟล์รวมหลายคน
+     มีเลขคนละใบ ถ้าใช้เลขจากอีเมลตัวเดียวกันทุกคน สองคนจะทับกันเป็นเอกสารใบเดียว */
+  const emailOnlyBlockers = blockers.filter((b) => !sheet.blockers.includes(b));
+  const documents = (sheet.documents ?? []).map((doc) => ({
+    ...doc,
+    blockers: [...doc.blockers, ...emailOnlyBlockers],
+    documentNo: doc.data.documentNo ?? emailMeta.documentNo ?? null,
+  }));
+
   return {
     ...sheet,
+    documents,
     blockers,
     /* เติมค่าที่อีเมลรู้แต่ไฟล์ไม่รู้ — คนแก้ได้ทุกช่องก่อนกดยืนยันอยู่แล้ว */
-    documentNo: emailMeta.documentNo ?? null,
+    documentNo: sheet.data?.documentNo ?? emailMeta.documentNo ?? null,
     approvedBy: emailMeta.approvedBy ?? null,
     approvedAt: emailMeta.approvedAt ?? null,
     sourceEmailId: messageId,

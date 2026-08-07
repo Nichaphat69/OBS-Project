@@ -90,9 +90,17 @@
     <div class="bellpop" id="bellPop" role="dialog" aria-label="อะไรเพิ่งเกิดขึ้น" hidden></div>
   </div>
   <div class="who">
-    <span class="av" id="actorAvatar">?</span>
-    <span class="wt"><b id="actorName">…</b><span id="actorRole">กำลังโหลด</span></span>
-    <button class="logout" id="logoutBtn" title="ออกจากระบบ" aria-label="ออกจากระบบ"><svg class="i sm"><use href="#i-cl"/></svg></button>
+    <button class="whobtn" id="whoBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="whoPop">
+      <span class="av" id="actorAvatar">?</span>
+      <span class="wt"><b id="actorName">…</b><span id="actorRole">กำลังโหลด</span></span>
+      <svg class="i sm cv"><use href="#i-cd"/></svg>
+    </button>
+    <div class="whopop" id="whoPop" role="menu" aria-label="บัญชีผู้ใช้" hidden>
+      <div class="wp-hd"><b id="actorUser">…</b><span id="actorRole2">…</span></div>
+      <button class="wp-item" id="logoutBtn" role="menuitem">
+        <svg class="i sm"><use href="#i-cl"/></svg> ออกจากระบบ
+      </button>
+    </div>
   </div>
 </header>
 

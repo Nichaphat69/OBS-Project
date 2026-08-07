@@ -269,7 +269,7 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 }
 
 /* ชื่อผู้ใช้ต้องไม่ตัดบรรทัด ไม่งั้นแถบบนสูงขึ้นและตัวหนังสือโดนตัดที่ขอบขวา */
-.who { display: flex; align-items: center; gap: 10px; padding-left: 16px; flex: none;
+.who { position: relative; display: flex; align-items: center; padding-left: 16px; flex: none;
   border-left: 1px solid var(--hair); }
 .who .wt b, .who .wt span { white-space: nowrap; }
 .who .av {
@@ -277,13 +277,41 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   color: var(--brand-d); display: grid; place-items: center;
   font-size: 11.5px; font-weight: 700; flex: none; border: 1px solid var(--tint2);
 }
+.who .wt { text-align: left; }
 .who .wt b { display: block; font-size: 12.5px; line-height: 1.3; color: var(--ink); }
 .who .wt span { display: block; font-size: 10.5px; color: var(--mut); line-height: 1.2; }
-.who .logout {
-  border: none; background: none; color: var(--mut); cursor: pointer;
-  padding: 6px; margin-left: 2px; border-radius: var(--r-ctl); display: grid; place-items: center;
+
+/* ทั้งชิปเป็นปุ่มเดียว ไม่ใช่ไอคอนเล็กๆข้างๆ — เดิมมีแต่ไอคอนจางๆที่ไม่บอกว่ากดแล้วได้อะไร
+   กดแล้วเปิดเมนูบัญชี (มีปุ่มออกจากระบบ) แทนที่จะเด้ง confirm() ของเบราว์เซอร์ทันที */
+.who .whobtn {
+  display: flex; align-items: center; gap: 10px; font: inherit; cursor: pointer;
+  border: 1px solid transparent; background: none; color: inherit;
+  padding: 4px 8px 4px 4px; border-radius: var(--r-ctl);
 }
-.who .logout:hover { background: var(--hov); color: var(--cr); }
+.who .whobtn:hover { background: var(--hov); border-color: var(--rule); }
+.who .whobtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.who .whobtn .cv { color: var(--mut); transition: transform .15s ease; }
+.who .whobtn[aria-expanded="true"] { background: var(--hov); border-color: var(--rule); }
+.who .whobtn[aria-expanded="true"] .cv { transform: rotate(180deg); }
+
+/* เมนูบัญชีใต้ชิป — โครงเดียวกับแผงแจ้งเตือนใต้กระดิ่ง (.bellpop) ให้เปิดมาแล้วรู้สึกเป็นชุดเดียวกัน */
+.whopop {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; min-width: 216px;
+  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
+  box-shadow: var(--sh2); overflow: hidden; padding: 6px;
+}
+.whopop[hidden] { display: none; }
+.wp-hd { padding: 10px 12px 12px; border-bottom: 1px solid var(--hair); margin-bottom: 6px; }
+.wp-hd b { display: block; font-size: 13px; color: var(--ink); }
+.wp-hd span { display: block; font-size: 11.5px; color: var(--mut); margin-top: 2px; }
+.wp-item {
+  display: flex; align-items: center; gap: 9px; width: 100%; font: inherit; font-size: 13px;
+  text-align: left; cursor: pointer; border: none; background: none; color: var(--cr);
+  padding: 9px 12px; border-radius: var(--r-ctl);
+}
+.wp-item:hover { background: var(--crb); }
+.wp-item:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.wp-item:disabled { opacity: .6; cursor: default; }
 
 /* ── หน้า login — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ───────── */
 .login-screen {
@@ -1017,6 +1045,11 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 .attrow { display: flex; align-items: center; gap: 10px; }
 .attrow .file { flex: 1; min-width: 0; }
 .attrow .btn { flex: none; }
+/* ปุ่มไอคอนล้วน (ดาวน์โหลด) — เป็น <a> จึงต้องบังคับ line-height เองไม่ให้สูงเกินปุ่มข้างๆ */
+.btn.icon {
+  width: var(--h-ctl-sm); padding: 0; display: inline-grid; place-items: center;
+  text-decoration: none;
+}
 
 /* ── แถบปุ่มล่าง ────────────────────────────────────────── */
 .fbar {
@@ -1318,12 +1351,19 @@ td.n, .docid { white-space: nowrap; }
 .frm input:focus{ outline:2px solid var(--brand); outline-offset:-1px; border-color:var(--brand); }
 .frm input[readonly]{ background:var(--sunk); color:var(--mut); cursor:default; }
 .frm small{ font-weight:400; color:var(--mut); font-size:11.5px; line-height:1.45; }
-.fixa-picker { display: flex; gap: 6px; margin-top: 6px; }
-.fixa-picker select {
-  flex: 1; min-width: 0; border: 1px solid var(--rule); border-radius: var(--r-ctl);
-  height: 30px; padding: 0 8px; font-size: 12.5px; color: var(--ink); background: var(--paper);
+/* ตัวเลือกอยู่ในช่องแคบ (ครึ่งหนึ่งของการ์ด) — ต้องยอมให้ตัดลงบรรทัดใหม่
+   ไม่งั้นปุ่มจะทับดรอปดาวน์เมื่อชื่อพนักงานยาว ซึ่งเกิดขึ้นจริงกับรายการที่มีชื่อ+ตำแหน่ง+ลูกค้า */
+.fixa-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; align-items: stretch; }
+/* ดรอปดาวน์ห่อด้วย .selectchip เหมือนช่องเลือกอื่นในระบบแล้ว — เดิมเป็น select เปล่าที่หน้าตา
+   ไม่เข้าพวกกับช่องอื่น และเตี้ยกว่าปุ่มข้างๆจนดูไม่ตรงแถว */
+.fixa-picker .selectchip.grow { flex: 1 1 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+/* ข้อความในตัวเลือกยาว (ชื่อไทย + ชื่ออังกฤษ + ตำแหน่ง + ลูกค้า) — ถ้าไม่บังคับความกว้าง
+   เบราว์เซอร์จะขยาย select ตามตัวเลือกที่ยาวที่สุดจนล้นออกนอกการ์ด */
+.fixa-picker .selectchip select {
+  font-size: 12.5px; width: 100%; min-width: 0; text-overflow: ellipsis;
 }
-.fixa-picker button { flex: none; white-space: nowrap; }
+.fixa-picker button { flex: 0 0 auto; white-space: nowrap; margin-left: auto; }
+.fixa-picker button:disabled { opacity: .5; cursor: default; }
 
 .fsec{ margin-top:18px; padding-top:14px; border-top:1px solid var(--hair); }
 .fsec-h{ display:flex; align-items:center; justify-content:space-between;

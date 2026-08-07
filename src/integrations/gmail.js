@@ -32,6 +32,12 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/gmail.compose',
 ];
 
+/* สถานะที่ถือว่า "รอแล้วลองใหม่ได้" — 429 คือยิงถี่เกิน ส่วน 5xx คือฝั่ง Google เอง
+   ที่เหลือ (401 token เสีย · 403 ไม่มีสิทธิ์ · 404 ไม่มีของ) ลองซ้ำกี่ครั้งก็ได้ผลเดิม */
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 500;
+
 export class GmailError extends Error {
   constructor(message, { status = null, body = null } = {}) {
     super(message);
@@ -72,9 +78,16 @@ export class GmailClient {
     this.fetch = fetchImpl;
     this.token = null;
     this.tokenExpiresAt = 0;
+    this.refreshing = null;   // คำขอ token ที่กำลังวิ่งอยู่ — ดู getAccessToken()
   }
 
-  /** access token อายุสั้น ขอใหม่จาก refresh token เมื่อใกล้หมดอายุ */
+  /**
+   * access token อายุสั้น ขอใหม่จาก refresh token เมื่อใกล้หมดอายุ
+   *
+   * เก็บคำขอที่กำลังวิ่งอยู่ไว้ใน this.refreshing แล้วให้คนที่มาทีหลังรอตัวเดียวกัน —
+   * เปิดหน้ากล่อง Gmail ทีหนึ่งยิงหลายคำขอพร้อมกัน (อ่านอีเมลทีละฉบับ) ถ้าไม่กันไว้
+   * ทุกคำขอจะไปขอ token ใหม่พร้อมกันหมด ซึ่ง Google นับเป็นการยิงถี่และตอบ 429 กลับมา
+   */
   async getAccessToken() {
     if (!this.clientId || !this.clientSecret || !this.refreshToken) {
       throw new GmailError(
@@ -83,42 +96,75 @@ export class GmailClient {
       );
     }
     if (this.token && Date.now() < this.tokenExpiresAt - 60_000) return this.token;
+    if (this.refreshing) return this.refreshing;
 
-    const response = await this.fetch(OAUTH_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        refresh_token: this.refreshToken,
-        grant_type: 'refresh_token',
-      }).toString(),
-    });
+    this.refreshing = (async () => {
+      const response = await this.fetch(OAUTH_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          refresh_token: this.refreshToken,
+          grant_type: 'refresh_token',
+        }).toString(),
+      });
 
-    const body = await safeJson(response);
-    if (!response.ok) {
-      throw new GmailError(
-        'ขอ access token จาก Google ไม่สำเร็จ — refresh token อาจหมดอายุ ให้รัน `npm run gmail:auth` ใหม่',
-        { status: response.status, body },
-      );
+      const body = await safeJson(response);
+      if (!response.ok) {
+        throw new GmailError(
+          'ขอ access token จาก Google ไม่สำเร็จ — refresh token อาจหมดอายุ ให้รัน `npm run gmail:auth` ใหม่',
+          { status: response.status, body },
+        );
+      }
+
+      this.token = body.access_token;
+      this.tokenExpiresAt = Date.now() + Number(body.expires_in ?? 3600) * 1000;
+      return this.token;
+    })();
+
+    try {
+      return await this.refreshing;
+    } finally {
+      this.refreshing = null;   // ล้างทิ้งทั้งกรณีสำเร็จและพลาด ไม่งั้นพลาดครั้งเดียวแล้วค้างตลอด
     }
-
-    this.token = body.access_token;
-    this.tokenExpiresAt = Date.now() + Number(body.expires_in ?? 3600) * 1000;
-    return this.token;
   }
 
-  async call(path, options = {}) {
+  /**
+   * เรียก Gmail API หนึ่งครั้ง — ลองซ้ำให้เองเมื่อเป็นความผิดพลาดชั่วคราว
+   *
+   * 429 (ยิงถี่เกิน) และ 5xx (ฝั่ง Google) เป็นอาการที่หายเองเมื่อรอสักครู่ ไม่ใช่ของเสียถาวร
+   * เดิมพลาดครั้งเดียวคือขึ้น error เต็มหน้าให้คนกดใหม่เอง ทั้งที่รออีกครึ่งวินาทีก็ผ่านแล้ว
+   */
+  async call(path, options = {}, { attempt = 1 } = {}) {
     const token = await this.getAccessToken();
-    const response = await this.fetch(`${API}${path}`, {
-      ...options,
-      headers: { Authorization: `Bearer ${token}`, ...(options.headers ?? {}) },
-    });
-    const body = await safeJson(response);
-    if (!response.ok) {
-      throw new GmailError(`เรียก Gmail API ไม่สำเร็จ (${path})`, { status: response.status, body });
+
+    let response;
+    try {
+      response = await this.fetch(`${API}${path}`, {
+        ...options,
+        headers: { Authorization: `Bearer ${token}`, ...(options.headers ?? {}) },
+      });
+    } catch (networkError) {
+      if (attempt < MAX_ATTEMPTS) return this.retry(path, options, attempt);
+      throw new GmailError(`ต่อ Gmail ไม่ได้ (${path}) — ${networkError.message}`, { status: null });
     }
-    return body;
+
+    const body = await safeJson(response);
+    if (response.ok) return body;
+
+    if (RETRY_STATUS.has(response.status) && attempt < MAX_ATTEMPTS) {
+      return this.retry(path, options, attempt);
+    }
+    throw new GmailError(describeGmailError(response.status, body, path), {
+      status: response.status,
+      body,
+    });
+  }
+
+  async retry(path, options, attempt) {
+    await new Promise((r) => { setTimeout(r, RETRY_DELAY_MS * attempt); });
+    return this.call(path, options, { attempt: attempt + 1 });
   }
 
   /** อีเมลของบัญชีที่ต่ออยู่ — ไว้แสดงบนหน้าจอว่ากำลังดูกล่องของใคร */
@@ -131,13 +177,30 @@ export class GmailClient {
    * ค้นอีเมลแจ้งอนุมัติ Timesheet
    * @param {string} query  Gmail search syntax เช่น 'subject:(แจ้งอนุมัติ) has:attachment newer_than:60d'
    */
+  /**
+   * ค้นอีเมลแล้วดึงรายละเอียดมาให้ครบทุกฉบับ
+   *
+   * ฉบับไหนดึงไม่สำเร็จให้ข้ามไป ไม่ล้มทั้งกล่อง — เดิมใช้ Promise.all ซึ่งพังฉบับเดียว
+   * (เช่นถูกลบทิ้งพอดีหลังได้รายการมา หรือ Google สะดุดชั่วคราว) ก็ขึ้น error เต็มหน้า
+   * ทั้งที่อีกหลายฉบับดึงมาได้เรียบร้อย คนเลยทำงานต่อไม่ได้เลยทั้งที่ควรจะได้
+   *
+   * @returns {Promise<{messages: object[], skipped: {id: string, reason: string}[]}>}
+   */
   async searchMessages({ query, max = 20 } = {}) {
     const params = new URLSearchParams({ q: query, maxResults: String(max) });
     const list = await this.call(`/messages?${params}`);
-    if (!list.messages?.length) return [];
+    if (!list.messages?.length) return { messages: [], skipped: [] };
 
     // ดึงรายละเอียดทีละฉบับ — Gmail คืนมาแค่ id กับ threadId เท่านั้น
-    return Promise.all(list.messages.map((m) => this.getMessage(m.id)));
+    const results = await Promise.allSettled(list.messages.map((m) => this.getMessage(m.id)));
+
+    const messages = [];
+    const skipped = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') messages.push(r.value);
+      else skipped.push({ id: list.messages[i].id, reason: r.reason?.message ?? String(r.reason) });
+    });
+    return { messages, skipped };
   }
 
   async getMessage(id) {
@@ -343,6 +406,29 @@ function shapeMessage(raw) {
       (a) => a.mimeType === 'application/pdf' || /\.pdf$/i.test(a.filename),
     ),
   };
+}
+
+/**
+ * แปลง error ของ Gmail เป็นข้อความที่คนอ่านแล้วรู้ว่าต้องทำอะไรต่อ
+ *
+ * เดิมข้อความมีแต่ path ที่พัง ("เรียก Gmail API ไม่สำเร็จ (/messages/xxx)") ซึ่งบอกแค่ว่า
+ * พังที่ไหน ไม่ได้บอกว่าเพราะอะไรหรือควรทำยังไง — คนเห็นแล้วทำอะไรต่อไม่ถูก
+ */
+function describeGmailError(status, body, path) {
+  const reason = body?.error?.message ?? body?.error_description ?? null;
+  const hint = {
+    401: 'สิทธิ์เข้าถึงหมดอายุ — รัน `npm run gmail:auth` ใหม่',
+    403: 'บัญชีนี้ไม่มีสิทธิ์ หรือใช้โควตาเกินกำหนดแล้ว',
+    404: 'ไม่พบอีเมลฉบับนี้แล้ว — อาจถูกลบไปหลังจากระบบเพิ่งเห็นรายการ',
+    429: 'เรียก Gmail ถี่เกินไป ลองใหม่อีกครั้งในอีกสักครู่',
+  }[status] ?? (status >= 500 ? 'ระบบของ Google ขัดข้องชั่วคราว ลองใหม่อีกครั้ง' : null);
+
+  return [
+    `เรียก Gmail ไม่สำเร็จ (${status})`,
+    hint,
+    reason && reason !== hint ? `Google แจ้งว่า: ${reason}` : null,
+    `— ${path}`,
+  ].filter(Boolean).join(' · ');
 }
 
 async function safeJson(response) {

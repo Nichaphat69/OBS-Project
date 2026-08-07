@@ -22,6 +22,7 @@
 import { readFile } from 'node:fs/promises';
 import { pdf } from 'pdf-to-img';
 import { callLocalJSON, localVisionModel } from '../llm/localClient.js';
+import { normalizePeriod, normalizeDate, classifyDayKind, classifyLeaveType } from './normalize.js';
 
 const TIMESHEET_SCHEMA = {
   type: 'object',
@@ -41,13 +42,33 @@ const TIMESHEET_SCHEMA = {
       type: ['string', 'null'],
       description: 'เดือนของ Timesheet ในรูปแบบ YYYY-MM เช่น 2026-01 — ไม่เห็นในหน้านี้ให้เป็น null',
     },
+    documentNo: {
+      type: ['string', 'null'],
+      description:
+        'เลขที่เอกสารจากหน้าอีเมลแจ้งอนุมัติที่แนบมาท้ายไฟล์ (บรรทัด "เลขที่เอกสาร : 2026010087") ' +
+        '— ไม่มีหน้านั้นในหน้านี้ให้เป็น null',
+    },
+    approvalStatus: {
+      type: ['string', 'null'],
+      description:
+        'สถานะจากหน้าอีเมลแจ้งอนุมัติ (บรรทัด "สถานะ : อนุมัติ") — ไม่เห็นให้เป็น null',
+    },
     totalWorkDays: {
       type: 'integer',
-      description: 'ตัวเลขในช่อง Total Work days ท้ายตาราง ไม่ต้องนับเอง — ไม่เห็นในหน้านี้ให้เป็น 0',
+      description:
+        'จำนวนวันทำงานจากช่องสรุปท้ายตาราง ไม่ต้องนับแถวเอง — ชื่อช่องต่างกันไปตามฟอร์ม เช่น ' +
+        'Total Work days · Total base man-day · No. Manday · Summary Work Days · Claim to APHD ' +
+        '(ถ้าช่องสรุปเป็นชั่วโมงรวม เช่น 160.00 ให้ใส่ในช่อง totalHours แทน) — ไม่เห็นให้เป็น 0',
     },
     totalLeaveDays: {
       type: 'integer',
-      description: 'ตัวเลขในช่อง Leave/Sick (days) ท้ายตาราง — ไม่เห็นในหน้านี้ให้เป็น 0',
+      description: 'จำนวนวันลาจากช่องสรุปท้ายตาราง เช่น Leave/Sick (days) หรือคอลัมน์ Leave — ไม่เห็นให้เป็น 0',
+    },
+    totalHours: {
+      type: ['number', 'null'],
+      description:
+        'ชั่วโมงรวมจากช่องสรุป เช่น "Total duration (hour in decimal) 160.00" หรือ TOTAL 140.00 ' +
+        'ของฟอร์ม Fujitsu — ฟอร์มที่สรุปเป็นวันไม่มีช่องนี้ ให้เป็น null',
     },
     days: {
       type: 'array',
@@ -61,11 +82,23 @@ const TIMESHEET_SCHEMA = {
           label: {
             type: ['string', 'null'],
             description:
-              'ป้ายกำกับที่เขียนในช่อง Job Description เมื่อไม่ได้ทำงาน ' +
-              'เช่น Holiday, Weekend, Sick leave — ถ้าเป็นวันทำงานปกติให้เป็น null',
+              'ป้ายกำกับของแถวเมื่อไม่ได้ทำงาน คัดตามที่เขียนในเอกสารทุกตัวอักษร ' +
+              'เช่น Holiday, Public Holiday, Weekend, Sick leave, Personal Leave, ANNUAL LEAVE ' +
+              '— วันทำงานปกติให้เป็น null',
+          },
+          type: {
+            type: ['string', 'null'],
+            description:
+              'ค่าในคอลัมน์ Type (ถ้าฟอร์มนี้มี) เช่น Working, Weekend, Public Holiday — ไม่มีคอลัมน์นี้ให้เป็น null',
+          },
+          remark: {
+            type: ['string', 'null'],
+            description:
+              'ค่าในคอลัมน์ Remark / Remarks / Note / Location / Place ของแถวนี้ — ไม่มีให้เป็น null',
           },
           jobDescription: { type: ['string', 'null'] },
         },
+        // type / remark เป็นของเสริมที่มีเฉพาะบางฟอร์ม ไม่บังคับให้โมเดลตอบ
         required: ['date', 'timeIn', 'timeOut', 'label', 'jobDescription'],
         additionalProperties: false,
       },
@@ -114,6 +147,8 @@ const TIMESHEET_SCHEMA = {
       items: { type: 'string' },
     },
   },
+  /* documentNo · approvalStatus · totalHours ไม่ใส่ในนี้ตั้งใจ — มีเฉพาะบางฟอร์ม
+     ถ้าบังคับ โมเดลที่ไม่ตอบคีย์พวกนี้จะทำให้อ่านทั้งไฟล์ล้มทั้งที่ข้อมูลหลักครบแล้ว */
   required: [
     'vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period',
     'totalWorkDays', 'totalLeaveDays', 'days', 'leaveDays',
@@ -134,11 +169,26 @@ const SYSTEM_PROMPT = `คุณคือผู้ช่วยฝ่ายบั
   ให้คัดชื่อนั้นมาใส่ employeeSignatureName / projectManagerSignatureName ตามช่อง — เห็นแต่ลายเซ็นอ่านไม่ออก
   หรือไม่มีชื่อกำกับเลยให้เป็น null ห้ามเดาชื่อขึ้นมาเอง
 - totalWorkDays และ totalLeaveDays ให้อ่านจากช่องสรุปท้ายตารางที่เอกสารเขียนไว้เท่านั้น ห้ามนับแถวเอง
-- ระบุปีเป็น ค.ศ. เสมอ เอกสารอาจเขียนปีเป็น พ.ศ. ให้แปลงโดยลบ 543
-- วันที่ทุกช่องต้องเป็นรูปแบบ YYYY-MM-DD เท่านั้น (ปี 4 หลัก - เดือน 2 หลัก - วัน 2 หลัก เช่น 2026-01-18)
-  ห้ามใส่ชื่อเดือนแบบย่อปนในค่านี้เด็ดขาด (ห้ามเขียน "2026-18-Jan-26" หรือรูปแบบอื่นที่ไม่ใช่ YYYY-MM-DD)
-  ถ้าเอกสารเขียนวันที่แบบ "18-Jan-26" ให้แปลงเป็น 2026-01-18 ก่อนตอบทุกครั้ง
-- ถ้าอ่านค่าใดไม่ชัดเจน ให้บันทึกลง notes อย่าเดา`;
+- วันที่ให้คัดมาตามที่เอกสารเขียน ไม่ต้องแปลงรูปแบบเอง (ระบบมีตัวแปลงอยู่แล้ว)
+  เช่นเอกสารเขียน "1/1/2569" ก็ตอบ "1/1/2569" · เขียน "18-Jan-26" ก็ตอบ "18-Jan-26"
+  ขอแค่คัดให้ครบตัวอักษร อย่าตัดทิ้งและอย่าเติมเอง
+- ถ้าอ่านค่าใดไม่ชัดเจน ให้บันทึกลง notes อย่าเดา
+
+ฟอร์ม Timesheet ของลูกค้าแต่ละรายไม่เหมือนกัน — สิ่งที่ต่างกันและต้องเผื่อไว้
+- ชื่อหัวเอกสารอาจเป็น Timesheet · TimeSheet · Working Report · Monthly Timesheet หรือไม่มีเลย
+- ชื่อพนักงานอยู่ในช่องชื่อต่างกัน: Employee Name · Name · Resource Name · Outsource Name
+- ตำแหน่งอยู่ในช่อง: Position · Contract Role · Role
+- ชื่อลูกค้าอยู่ในช่อง: Client Name · Customer · Project หรืออยู่แค่ในโลโก้หัวกระดาษ
+- คอลัมน์รายละเอียดงานชื่อได้หลายแบบ: Job Description · Job Discription (สะกดผิดในต้นฉบับ) ·
+  CONTENT · ACTIVITY · Description · Notes — ทั้งหมดถือเป็น jobDescription เหมือนกัน
+- คำบอกว่าไม่ได้ทำงานอาจอยู่คนละคอลัมน์กันในแต่ละฟอร์ม — อาจอยู่ในช่อง Job Description,
+  คอลัมน์ Type, คอลัมน์ Remark/Remarks, หรือเป็นแถวเดียวยาวพาดทั้งตาราง
+  เห็นตรงไหนให้ใส่ตรงนั้นตามช่องของมัน (label / type / remark) อย่าย้ายที่
+- บางฟอร์มมีคอลัมน์เพิ่ม เช่น Site, Location, Place, Base hours, Additional hours, OT, Break
+  ให้ใส่ค่าที่เกี่ยวกับสถานที่/หมายเหตุลง remark ส่วนคอลัมน์ชั่วโมงไม่ต้องใส่ในแถว
+- ถ้าไฟล์มีหน้าอีเมลแจ้งอนุมัติแนบมาด้วย (หัวเรื่อง "แจ้งอนุมัติเอกสาร TimeSheet")
+  ให้อ่าน "เลขที่เอกสาร" ลง documentNo และ "สถานะ" ลง approvalStatus
+  หน้านั้นไม่มีตารางรายวัน ให้ days และ leaveDays เป็น [] ตามปกติ`;
 
 /**
  * แปลง PDF (path หรือ Buffer) เป็นรูปภาพทีละหน้า — pdf-to-img รับได้แค่ path
@@ -146,7 +196,12 @@ const SYSTEM_PROMPT = `คุณคือผู้ช่วยฝ่ายบั
  */
 async function pdfToImages(pdfBuffer) {
   const dataUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
-  const doc = await pdf(dataUrl, { scale: 2 });
+  /* scale 3 ไม่ใช่ 2 — ตัวหนังสือในตาราง Timesheet เล็กมาก ภาพใหญ่ขึ้นอ่านง่ายขึ้น
+     ทดสอบกับเอกสารจริงแล้วพบว่า **ยังแก้ชื่ออ่านเพี้ยนไม่ได้** (Korawit Khamsuk ยังอ่านเป็น
+     Korweil Khamsiuk ทั้งที่ scale 2 และ 3) จึงไม่ใช่ทางแก้ของเรื่องนั้น — ที่แก้จริงคือ
+     การโหวตข้ามหน้า (pickByVote) กับชั้นจับคู่ด้วยตัวอักษรซ้ำใน domain/matching.js
+     เก็บ scale 3 ไว้เพราะเสียเวลาเพิ่มแค่ราว 4% แลกกับภาพที่อ่านง่ายขึ้น */
+  const doc = await pdf(dataUrl, { scale: 3 });
   try {
     const pages = [];
     for await (const page of doc) pages.push(page);
@@ -156,41 +211,53 @@ async function pdfToImages(pdfBuffer) {
   }
 }
 
-const MONTH_NAMES_EN = [
-  'january', 'february', 'march', 'april', 'may', 'june',
-  'july', 'august', 'september', 'october', 'november', 'december',
+const HEADER_KEYS = [
+  'vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period',
+  'documentNo', 'approvalStatus', 'employeeSignatureName', 'projectManagerSignatureName',
 ];
 
 /**
- * แปลงรอบเดือนที่โมเดลอ่านมาให้เป็น YYYY-MM เสมอ — ทดสอบแล้วว่าโมเดล vision ขนาดเล็ก
- * ไม่ยอมแปลงให้ตรง schema เอง มักคัดลอกข้อความในเอกสารมาเป๊ะๆ แทน (เช่น "March 2026",
- * "Mar-26") เอกสารจริงบางฉบับคอลัมน์แคบจนชื่อเดือนถูกตัดกลางคำด้วย (เช่น "Janua")
- * จึงจับคู่ชื่อเดือนแบบ prefix ทั้งสองทาง ไม่ใช่เทียบให้ตรงเป๊ะ
- * แปลงไม่ได้ก็คืนค่าเดิม — ให้ verifyExtraction() จับว่ารูปแบบผิดต่อไปตามปกติ
+ * เลือกค่าที่หน้าส่วนใหญ่อ่านตรงกัน
+ *
+ * ทำไมต้องโหวต: หัวเอกสาร (ชื่อคน ตำแหน่ง ลูกค้า) พิมพ์ซ้ำอยู่ทุกหน้าของ Timesheet ฉบับเดียวกัน
+ * เท่ากับได้อ่านค่าเดียวกันหลายรอบ เดิมโค้ดหยิบ "ค่าแรกที่ไม่ว่าง" ซึ่งแปลว่าถ้าหน้าแรกอ่านเพี้ยน
+ * ทั้งฉบับก็ผิดตาม ทั้งที่อีก 3 หน้าอ่านถูก — โหวตแล้วเสียงข้างมากชนะ
+ *
+ * เทียบแบบไม่สนตัวพิมพ์เล็กใหญ่และช่องว่าง เพื่อให้ "Sunee  Maneekasemsuk" กับ
+ * "sunee maneekasemsuk" นับเป็นเสียงเดียวกัน แต่คืนค่าตามที่เอกสารเขียนจริง
+ * เสมอกัน → เลือกอันที่ยาวกว่า เพราะมักเป็นอันที่อ่านมาได้ครบกว่า (ไม่ถูกตัดกลางคำ)
  */
-function normalizePeriod(raw) {
-  if (!raw) return raw;
-  const value = String(raw).trim();
-  if (/^\d{4}-\d{2}$/.test(value)) return value;
+function pickByVote(values) {
+  if (!values?.length) return null;
 
-  const lower = value.toLowerCase();
-  const yearMatch = lower.match(/\b(20\d{2}|\d{2})\b/);
-  const wordMatch = lower.match(/[a-z]{3,}/);
-  if (!yearMatch || !wordMatch) return value;
+  const groups = new Map();
+  for (const raw of values) {
+    const value = String(raw).trim();
+    if (!value) continue;
+    const key = value.toLowerCase().replace(/\s+/g, ' ');
+    const group = groups.get(key) ?? { count: 0, samples: [] };
+    group.count += 1;
+    group.samples.push(value);
+    groups.set(key, group);
+  }
+  if (!groups.size) return null;
 
-  const word = wordMatch[0];
-  const monthIndex = MONTH_NAMES_EN.findIndex(
-    (name) => name.startsWith(word) || word.startsWith(name.slice(0, 3)),
-  );
-  if (monthIndex === -1) return value;
+  const best = [...groups.values()].sort(
+    (a, b) => b.count - a.count || b.samples[0].length - a.samples[0].length,
+  )[0];
 
-  const year = yearMatch[0].length === 2 ? `20${yearMatch[0]}` : yearMatch[0];
-  return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+  /* ในกลุ่มที่ชนะ ใช้ "สะกดที่พบบ่อยที่สุด" ไม่ใช่ยาวที่สุด — ยาวกว่าในที่นี้มักแปลว่า
+     มีช่องว่างเกินมา ("java  programmer") ไม่ได้แปลว่าอ่านมาได้ครบกว่า
+     เท่ากันให้เอาอันที่เจอก่อน เพราะเรียงตามลำดับหน้าในเอกสารอยู่แล้ว */
+  const bySpelling = new Map();
+  for (const sample of best.samples) bySpelling.set(sample, (bySpelling.get(sample) ?? 0) + 1);
+  return [...bySpelling.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
 const EMPTY_PAGE_DATA = {
   vendor: null, clientName: null, projectName: null, employeeName: null, position: null, period: null,
-  totalWorkDays: 0, totalLeaveDays: 0, days: [], leaveDays: [],
+  documentNo: null, approvalStatus: null,
+  totalWorkDays: 0, totalLeaveDays: 0, totalHours: null, days: [], leaveDays: [],
   signedByEmployee: false, employeeSignatureName: null,
   signedByProjectManager: false, projectManagerSignatureName: null, notes: [],
 };
@@ -202,9 +269,10 @@ const EMPTY_PAGE_DATA = {
  */
 function mergePageResults(pageResults) {
   const merged = { ...EMPTY_PAGE_DATA, days: [], leaveDays: [], notes: [] };
-  const dayByDate = new Map();
-  const leaveByDate = new Map();
+  const votes = {};
   const notes = [];
+  const rawDays = [];
+  const rawLeaves = [];
 
   for (const { pageIndex, data, error } of pageResults) {
     if (error) {
@@ -212,34 +280,100 @@ function mergePageResults(pageResults) {
       continue;
     }
 
-    for (const key of [
-      'vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period',
-      'employeeSignatureName', 'projectManagerSignatureName',
-    ]) {
-      if (!merged[key] && data[key]) merged[key] = data[key];
+    for (const key of HEADER_KEYS) {
+      if (data[key]) (votes[key] ??= []).push(String(data[key]));
     }
     merged.totalWorkDays = Math.max(merged.totalWorkDays, data.totalWorkDays || 0);
     merged.totalLeaveDays = Math.max(merged.totalLeaveDays, data.totalLeaveDays || 0);
+    if (merged.totalHours === null && Number.isFinite(data.totalHours)) merged.totalHours = data.totalHours;
 
-    for (const day of data.days ?? []) {
-      const existing = dayByDate.get(day.date);
-      if (!existing || (!existing.timeIn && day.timeIn) || (!existing.label && day.label)) {
-        dayByDate.set(day.date, day);
-      }
-    }
-    for (const leave of data.leaveDays ?? []) {
-      leaveByDate.set(leave.date, leave);
-    }
+    rawDays.push(...(data.days ?? []));
+    rawLeaves.push(...(data.leaveDays ?? []));
 
     if (data.signedByEmployee) merged.signedByEmployee = true;
     if (data.signedByProjectManager) merged.signedByProjectManager = true;
     for (const note of data.notes ?? []) notes.push(`[หน้า ${pageIndex}] ${note}`);
   }
 
+  /* ชื่อคนในหัวเอกสารซ้ำอยู่ทุกหน้า — เอาค่าที่หน้าส่วนใหญ่อ่านตรงกัน ไม่ใช่ค่าจากหน้าแรก
+     หน้าเดียวอ่านเพี้ยนจึงไม่ลากทั้งฉบับผิดตามอีกต่อไป (ดู pickByVote) */
+  for (const key of HEADER_KEYS) merged[key] = pickByVote(votes[key]);
+
+  /* ชื่อข้างลายเซ็นเป็นอีกเสียงหนึ่งของชื่อเดียวกัน — ถ้าหัวเอกสารอ่านได้ไม่ตรงกันเลยสักหน้า
+     แต่ลายเซ็นอ่านได้ชัด ให้ใช้ชื่อจากลายเซ็นแทน ดีกว่าปล่อยค่าที่มีเสียงเดียว */
+  if (merged.employeeSignatureName && votes.employeeName) {
+    const all = [...votes.employeeName, merged.employeeSignatureName];
+    merged.employeeName = pickByVote(all) ?? merged.employeeName;
+  }
+
+  /* ต้องรู้รอบเดือนก่อนจึงจะแปลงวันที่ได้ — ฟอร์มบางแบบเขียนแต่เลขวัน (Fujitsu) หรือเขียน
+     วัน/เดือน สลับกันได้ (5/1/2026) ต้องอาศัยเดือนของเอกสารเป็นตัวชี้ขาด */
+  merged.period = normalizePeriod(merged.period);
+  const period = /^\d{4}-\d{2}$/.test(merged.period ?? '') ? merged.period : null;
+
+  const dayByDate = new Map();
+  const unreadable = [];
+  for (const day of rawDays) {
+    const date = normalizeDate(day.date, period);
+    if (!date) {
+      if (day.date) unreadable.push(String(day.date));
+      continue;
+    }
+    /* ป้ายบอกว่าไม่ได้ทำงานอยู่คนละคอลัมน์ในแต่ละฟอร์ม — ดูรวมกันทุกช่องแล้วสรุปเป็นชนิดเดียว
+       เก็บข้อความดิบไว้ใน label เหมือนเดิมด้วย เพื่อให้คนตรวจเห็นคำที่เอกสารเขียนจริง */
+    const kind = classifyDayKind(day.label, day.type, day.remark, day.jobDescription);
+    const row = {
+      ...day,
+      date,
+      kind,
+      label: day.label ?? (kind === 'work' ? null : (day.type ?? day.remark ?? null)),
+    };
+    const existing = dayByDate.get(date);
+    if (!existing || (!existing.timeIn && row.timeIn) || (!existing.label && row.label)) {
+      dayByDate.set(date, row);
+    }
+  }
+  if (unreadable.length) {
+    notes.push(`อ่านวันที่ไม่ออก ${unreadable.length} แถว: ${[...new Set(unreadable)].slice(0, 5).join(', ')}`);
+  }
+
+  const leaveByDate = new Map();
+  for (const leave of rawLeaves) {
+    const date = normalizeDate(leave.date, period);
+    if (!date) continue;
+    leaveByDate.set(date, {
+      ...leave,
+      date,
+      // โมเดลเดาประเภทพลาดได้ — จัดประเภทซ้ำจากคำที่เอกสารเขียนจริง ซึ่งตรวจสอบได้
+      type: classifyLeaveType(leave.rawLabel ?? leave.type),
+    });
+  }
+
+  /* ฟอร์มที่ไม่มีตารางวันลาแยก (ส่วนใหญ่) — เก็บวันลาจากแถวรายวันที่จัดกลุ่มได้ว่าเป็นวันลา
+     ไม่งั้นระบบจะมองว่าเดือนนั้นไม่มีใครลาเลย แล้วคิดส่วนลดขาด */
+  for (const row of dayByDate.values()) {
+    if (row.kind === 'leave' && !leaveByDate.has(row.date)) {
+      const raw = row.label ?? row.type ?? row.remark ?? '';
+      leaveByDate.set(row.date, { date: row.date, type: classifyLeaveType(raw), rawLabel: String(raw) });
+    }
+  }
+
   merged.days = [...dayByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   merged.leaveDays = [...leaveByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+  /* ฟอร์มที่มีทั้งช่อง "Total base man-day 21.00" และ "Total duration (hour) 168.00" วางติดกัน
+     โมเดลหยิบเลขชั่วโมงมาใส่ช่องวันบ่อยมาก (เจอจริงกับฟอร์ม CP Axtra) — เดือนหนึ่งมีไม่เกิน 31 วัน
+     เกินกว่านั้นแปลว่าหยิบผิดช่องแน่ ย้ายไปเป็นชั่วโมงแทนแล้วบอกไว้ ดีกว่าปล่อยตัวเลขผิดไปคิดเงินต่อ */
+  if (merged.totalWorkDays > 31) {
+    if (merged.totalHours === null) merged.totalHours = merged.totalWorkDays;
+    notes.push(
+      `ช่องสรุปวันทำงานอ่านได้ ${merged.totalWorkDays} ซึ่งเกินจำนวนวันในเดือน — ` +
+      'น่าจะเป็นชั่วโมงรวมไม่ใช่จำนวนวัน ระบบย้ายไปเป็นชั่วโมงแล้ว ให้คนตรวจยืนยันอีกครั้ง',
+    );
+    merged.totalWorkDays = 0;
+  }
+
   merged.notes = notes;
-  merged.period = normalizePeriod(merged.period);
 
   return merged;
 }
@@ -300,15 +434,87 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl } = {
     );
   }
 
-  const data = mergePageResults(pageResults);
+  /* ไฟล์เดียวอาจมี Timesheet ของหลายคนต่อกัน — ต้องแยกก่อนรวม ไม่งั้นข้อมูลสองคนปนกันเป็นคนเดียว
+     (เจอจริงกับไฟล์ ThaiLife 1-2026.pdf 8 หน้า: หน้า 1-5 ของ Sunee · หน้า 6-8 ของ Pongpun) */
+  const groups = groupPagesByEmployee(pageResults);
+  const documents = groups.map((pages) => {
+    const data = mergePageResults(pages);
+    return {
+      data,
+      pageRange: [pages[0].pageIndex, pages[pages.length - 1].pageIndex],
+      verification: verifyExtraction(data, { expectedPeriod }),
+    };
+  });
 
   return {
-    data,
+    /** เอกสารทั้งหมดที่แยกได้จากไฟล์นี้ — ไฟล์ปกติมี 1 ฉบับ ไฟล์รวมหลายคนมีมากกว่านั้น */
+    documents,
+    /* ฉบับแรกวางไว้ที่ระดับบนสุดด้วย เพื่อให้โค้ดเดิมที่อ่าน result.data ยังทำงานได้เหมือนเดิม */
+    data: documents[0].data,
+    verification: documents[0].verification,
     usage: totalUsage,
     model: `local:${model}`,
-    /** ผลตรวจความสมเหตุสมผลด้วยโค้ด ไม่พึ่งโมเดล */
-    verification: verifyExtraction(data, { expectedPeriod }),
   };
+}
+
+/** ตัดให้เหลือแต่ตัวอักษรพิมพ์เล็ก ใช้เทียบชื่อแบบหลวมๆ ข้ามหน้า */
+function nameKey(name) {
+  return String(name ?? '').toLowerCase().replace(/[^a-z฀-๿]/g, '');
+}
+
+/**
+ * ชื่อสองอันน่าจะเป็นคนเดียวกันไหม — เทียบแบบหลวมเพราะโมเดลอ่านชื่อเพี้ยนได้ระหว่างหน้า
+ * (หน้าหนึ่งอ่านได้ "Sunee Maneekasemsuk" อีกหน้าเป็น "Sineee Masamasukiam")
+ * ใช้ตัวอักษรร่วมกันเป็นเกณฑ์ ไม่ใช่ต้องตรงเป๊ะ
+ */
+function sameEmployee(a, b) {
+  const x = nameKey(a);
+  const y = nameKey(b);
+  if (!x || !y) return true;          // หน้าไหนไม่มีชื่อ ถือว่าอยู่กลุ่มเดิม
+  if (x === y || x.startsWith(y) || y.startsWith(x)) return true;
+
+  /* นับ "ตัวอักษรที่ใช้ร่วมกัน" ไม่ใช่ตัวที่ตรงตำแหน่ง — โมเดลอ่านเพี้ยนแบบสลับ/แทรกตัวอักษร
+     ("Sunee Maneekasemsuk" → "Sineee Masamasukiam") ซึ่งทำให้ตำแหน่งเลื่อนกันหมดทั้งที่เป็นชื่อเดียวกัน
+     แต่คนละคนจริงๆ (Sunee vs Pongpun Mamak) ใช้ตัวอักษรต่างกันมากอยู่ดี จึงยังแยกออก */
+  const pool = [...y];
+  let shared = 0;
+  for (const ch of x) {
+    const at = pool.indexOf(ch);
+    if (at !== -1) { pool.splice(at, 1); shared += 1; }
+  }
+  return shared / Math.max(x.length, y.length) >= 0.65;
+}
+
+/**
+ * แบ่งหน้าออกเป็นกลุ่มตามพนักงาน — หน้าที่ขึ้นชื่อคนใหม่คือจุดเริ่มเอกสารฉบับถัดไป
+ *
+ * หน้าที่ไม่มีชื่อพนักงาน (เช่นหน้าอีเมลแจ้งอนุมัติที่แนบท้าย หรือหน้าที่โมเดลอ่านหัวไม่ออก)
+ * ให้อยู่กลุ่มเดียวกับหน้าก่อนหน้า เพราะเอกสารเรียงต่อกันเป็นชุดของแต่ละคนอยู่แล้ว
+ */
+export function groupPagesByEmployee(pageResults) {
+  const groups = [];
+  let current = null;
+  let currentName = null;
+
+  for (const page of pageResults) {
+    const name = page.data?.employeeName ?? null;
+
+    if (!current) {
+      current = [];
+      currentName = name;
+      groups.push(current);
+    } else if (name && currentName && !sameEmployee(name, currentName)) {
+      current = [];
+      currentName = name;
+      groups.push(current);
+    } else if (name && !currentName) {
+      currentName = name;
+    }
+
+    current.push(page);
+  }
+
+  return groups.length ? groups : [pageResults];
 }
 
 /**

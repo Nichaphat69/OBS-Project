@@ -248,6 +248,87 @@ function gmailWithResponses(threadResponse) {
   });
 }
 
+/* ── ความทนทานเวลา Gmail สะดุด ─────────────────────────────────────────
+   ที่คุมไว้: ยิงถี่/Google ล่ม ต้องลองใหม่เอง · อีเมลเสียฉบับเดียวห้ามล้มทั้งกล่อง
+   · ข้อความ error ต้องบอกสาเหตุ ไม่ใช่บอกแค่ path ที่พัง */
+
+/** GmailClient ที่ต่อกับ fetch จำลอง — คิวคำตอบไว้ล่วงหน้าทีละคำขอ */
+function gmailWithQueue(queue) {
+  const calls = [];
+  const client = new GmailClient({
+    clientId: 'id',
+    clientSecret: 'secret',
+    refreshToken: 'refresh',
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      if (String(url).includes('oauth2')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'tok', expires_in: 3600 }) };
+      }
+      const next = queue.shift();
+      if (!next) throw new Error('ไม่มีคำตอบจำลองเหลือแล้ว');
+      return next;
+    },
+  });
+  return { client, calls };
+}
+
+const err = (status, message) => ({
+  ok: false, status, text: async () => JSON.stringify({ error: { message, code: status } }),
+});
+const ok = (obj) => ({ ok: true, status: 200, text: async () => JSON.stringify(obj) });
+
+test('Gmail ตอบ 429 (ยิงถี่เกิน) → ลองใหม่ให้เองแล้วผ่าน ไม่เด้ง error ใส่หน้าคน', async () => {
+  const { client, calls } = gmailWithQueue([err(429, 'Rate Limit Exceeded'), ok({ id: 'm1' })]);
+  const result = await client.call('/messages/m1');
+
+  assert.equal(result.id, 'm1');
+  assert.equal(calls.filter((u) => u.includes('/messages/')).length, 2, 'ต้องยิงซ้ำครั้งที่สอง');
+});
+
+test('Gmail ตอบ 503 (ฝั่ง Google ล่ม) → ลองใหม่เช่นกัน', async () => {
+  const { client } = gmailWithQueue([err(503, 'Backend Error'), ok({ id: 'm2' })]);
+  assert.equal((await client.call('/messages/m2')).id, 'm2');
+});
+
+test('Gmail ตอบ 404 → ไม่ลองซ้ำ เพราะลองกี่ครั้งก็ได้ผลเดิม', async () => {
+  const { client, calls } = gmailWithQueue([err(404, 'Requested entity was not found.')]);
+  await assert.rejects(() => client.call('/messages/หาย'), (e) => e.status === 404);
+  assert.equal(calls.filter((u) => u.includes('/messages/')).length, 1, 'ต้องยิงครั้งเดียวพอ');
+});
+
+test('ข้อความ error บอกสาเหตุและทางแก้ ไม่ใช่บอกแค่ path ที่พัง', async () => {
+  const { client } = gmailWithQueue([err(401, 'Invalid Credentials')]);
+  await assert.rejects(() => client.call('/messages/m3'), (e) => {
+    assert.match(e.message, /401/, 'ต้องมีรหัสสถานะ');
+    assert.match(e.message, /gmail:auth/, 'ต้องบอกว่าต้องทำอะไรต่อ');
+    assert.match(e.message, /Invalid Credentials/, 'ต้องยกคำที่ Google แจ้งมาด้วย');
+    return true;
+  });
+});
+
+test('ขอ token พร้อมกันหลายคำขอ → ยิงขอจริงครั้งเดียว ไม่ไปกระตุ้นให้ Google ตอบ 429', async () => {
+  const { client, calls } = gmailWithQueue([ok({ id: 'a' }), ok({ id: 'b' }), ok({ id: 'c' })]);
+  await Promise.all([client.call('/messages/a'), client.call('/messages/b'), client.call('/messages/c')]);
+
+  assert.equal(calls.filter((u) => u.includes('oauth2')).length, 1, 'ต้องขอ token ครั้งเดียว');
+});
+
+test('อีเมลเสียฉบับเดียว → ข้ามฉบับนั้น ที่เหลือยังใช้ได้ ไม่ล้มทั้งกล่อง', async () => {
+  const { client } = gmailWithQueue([
+    ok({ messages: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }] }),
+    ok({ id: 'm1', payload: { headers: [], body: {} } }),
+    err(404, 'Requested entity was not found.'),   // m2 ถูกลบไปพอดีหลังได้รายการมา
+    ok({ id: 'm3', payload: { headers: [], body: {} } }),
+  ]);
+
+  const { messages, skipped } = await client.searchMessages({ query: 'x' });
+  assert.equal(messages.length, 2, 'อีก 2 ฉบับต้องยังได้มา');
+  assert.deepEqual(messages.map((m) => m.id), ['m1', 'm3']);
+  assert.equal(skipped.length, 1);
+  assert.equal(skipped[0].id, 'm2');
+  assert.match(skipped[0].reason, /404/);
+});
+
 test('findSentMessage อ่าน label SENT + เวลา + ผู้รับ จาก response ของ Gmail ได้ถูก', async () => {
   const gmail = gmailWithResponses({
     ok: true,

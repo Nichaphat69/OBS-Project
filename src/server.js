@@ -506,6 +506,19 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  /** ส่งไฟล์ PDF เป็นไบต์ดิบ — inline = เปิดดูในเบราว์เซอร์ · attachment = สั่งดาวน์โหลด
+   *  ชื่อไฟล์ภาษาไทยต้องใช้ filename* ตาม RFC 5987 ไม่งั้นเบราว์เซอร์ได้ชื่อเพี้ยน */
+  const sendPdf = (response, file, download) => {
+    const encoded = encodeURIComponent(file.filename ?? 'document.pdf');
+    response.writeHead(200, {
+      ...NO_CACHE,
+      'Content-Type': 'application/pdf',
+      'Content-Length': file.bytes.length,
+      'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encoded}`,
+    });
+    response.end(file.bytes);
+  };
+
   /** ไฟล์ PDF ต้นฉบับ — ไม่ผ่าน sendJson เพราะต้องส่งเป็นไบต์ดิบให้เบราว์เซอร์เปิดดูได้ตรงๆ
    *  (ใช้ตอนกดดูไฟล์แนบจากหน้าร่างอีเมล / แนบจริงเข้า Gmail draft)
    *  timesheets = ไฟล์ที่รับเข้ามา · invoices = ใบวางบิลที่ตัดมาจากหน้า share ของ FlowAccount */
@@ -522,13 +535,23 @@ const server = createServer(async (req, res) => {
       });
       return;
     }
-    res.writeHead(200, {
-      ...NO_CACHE,
-      'Content-Type': 'application/pdf',
-      'Content-Length': file.bytes.length,
-      'Content-Disposition': 'inline',
-    });
-    res.end(file.bytes);
+    sendPdf(res, file, url.searchParams.get('dl') !== null);
+    return;
+  }
+
+  /** ไฟล์แนบใน Gmail ที่ยังไม่ได้เข้าระบบ — ให้เปิดดูก่อนสั่งให้ AI อ่านได้
+   *  ดึงสดจาก Gmail ทุกครั้ง ไม่เก็บลงระบบ เพราะยังไม่มีใครยืนยันไฟล์นี้ */
+  const mailFileMatch = url.pathname.match(/^\/api\/gmail\/([^/]+)\/attachment$/);
+  if (mailFileMatch && req.method === 'GET') {
+    try {
+      const file = await svc.getGmailAttachment({
+        messageId: decodeURIComponent(mailFileMatch[1]),
+        filename: url.searchParams.get('filename'),
+      });
+      sendPdf(res, file, url.searchParams.get('dl') !== null);
+    } catch (error) {
+      sendJson(res, error.status ?? 500, { error: error.message });
+    }
     return;
   }
 

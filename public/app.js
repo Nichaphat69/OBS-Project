@@ -281,7 +281,7 @@ async function renderDashboard() {
               <span><span class="tt">${esc(n.title)}</span>
                 ${n.detail ? `<span class="td">${esc(n.detail)}</span>` : ''}</span>
               <button class="go" data-task="${i}">เปิด</button>
-            </li>`).join('') || '<li class="empty">ไม่มีงานค้าง</li>'}</ul>
+            </li>`).join('')}</ul>
         </div>
       </div>
 
@@ -813,8 +813,15 @@ async function openSheet(id) {
             <dt>Total Work days</dt><dd class="n">${int(sheet.reportedWorkDays)}</dd>
             <dt>Leave / Sick (days)</dt><dd class="n">${int(sheet.reportedLeave)}</dd>
           </dl>
-          <div class="files">
-            <span class="file"><span class="pd">PDF</span> ${esc(sheet.sourceFile ?? 'ไม่มีไฟล์')}</span>
+          <div class="attrow" style="margin-top:12px">
+            ${sheet.sourceFile ? (() => {
+              // ไฟล์ต้นฉบับถูกเก็บไว้ตอนยืนยันเข้าระบบ (timesheets.source_file_bytes)
+              const src = `/api/timesheets/${encodeURIComponent(sheet.id)}/file`;
+              return `<a class="file" href="${esc(src)}" target="_blank" rel="noopener"
+                         title="เปิดดูไฟล์ต้นฉบับ"><span class="pd">PDF</span> ${esc(sheet.sourceFile)}</a>
+                      <a class="btn sm icon" href="${esc(src)}?dl" download="${esc(sheet.sourceFile)}"
+                         title="ดาวน์โหลดไฟล์ต้นฉบับ" aria-label="ดาวน์โหลด">${icon('cd')}</a>`;
+            })() : '<span class="file"><span class="pd">PDF</span> ไม่มีไฟล์ต้นฉบับเก็บไว้</span>'}
           </div>
         </div>
       </div>
@@ -1489,11 +1496,18 @@ function bindGmailTab() {
       const inbox = await api('/gmail/inbox');
       el('gmailAcct').textContent = `กล่องของ ${inbox.account}`;
 
+      /* บางฉบับดึงรายละเอียดไม่สำเร็จ (ถูกลบพอดี หรือ Gmail สะดุด) — รายการที่เห็นจึงยังไม่ครบ
+         ต้องบอกไว้ ไม่งั้นคนเข้าใจว่ากล่องมีแค่นี้จริงๆ แล้วไปตามหาอีเมลที่หายไปไม่เจอ */
+      const warn = inbox.skipped
+        ? `<div class="note warn">${icon('alt')}<span>ดึงรายละเอียดไม่สำเร็จ ${int(inbox.skipped)} ฉบับ
+             — รายการด้านล่างอาจยังไม่ครบ กดรีเฟรชอีกครั้งได้</span></div>`
+        : '';
+
       // เหลือแค่ฉบับที่ยังไม่เคยให้ AI อ่าน — ที่ทำไปแล้วย้ายไปโชว์ในดรอปดาวน์ประวัติด้านล่างแทน
       // อีเมลฉบับเดียวอาจมีไฟล์แนบของหลายคน (เช่น ผู้จัดการส่งอนุมัติรวมทีเดียว) —
       // แต่ละไฟล์ต้องอ่าน+ยืนยันแยกกันเป็นคนๆไป จึงต้องมีปุ่ม "ให้ AI อ่าน" แยกต่อไฟล์แนบ
       // ไม่ใช่ปุ่มเดียวต่ออีเมลที่อ่านได้แค่ไฟล์แรกเหมือนเดิม
-      el('gmailList').innerHTML = inbox.messages.length
+      el('gmailList').innerHTML = warn + (inbox.messages.length
         ? `<ul class="maillist">${inbox.messages.map((m) => `
             <li>
               <span class="mi">
@@ -1501,12 +1515,19 @@ function bindGmailTab() {
                 <span class="mf">${esc(m.from)} · ${dt(m.receivedAt)}</span>
                 <span class="mq">${esc(m.snippet.slice(0, 110))}</span>
                 <div class="attlist">
-                  ${m.attachments.map((a) => `
+                  ${m.attachments.map((a) => {
+                    // ดึงสดจาก Gmail — ไฟล์ยังไม่ได้เข้าระบบ (ยังไม่มีใครยืนยัน) จึงไม่มีสำเนาในฐานข้อมูล
+                    const src = `/api/gmail/${encodeURIComponent(m.id)}/attachment?filename=${encodeURIComponent(a.filename)}`;
+                    return `
                     <div class="attrow">
-                      <span class="file"><span class="pd">PDF</span> ${esc(a.filename)}</span>
+                      <a class="file" href="${esc(src)}" target="_blank" rel="noopener"
+                         title="เปิดดูไฟล์นี้"><span class="pd">PDF</span> ${esc(a.filename)}</a>
+                      <a class="btn sm icon" href="${esc(src)}&dl" download="${esc(a.filename)}"
+                         title="ดาวน์โหลดไฟล์นี้" aria-label="ดาวน์โหลด">${icon('cd')}</a>
                       <button class="btn sm pri" data-mail="${esc(m.id)}" data-att="${esc(a.filename)}">
                         ${icon('srch')} ให้ AI อ่าน</button>
-                    </div>`).join('')}
+                    </div>`;
+                  }).join('')}
                 </div>
               </span>
               <button class="btn sm dgr" data-dismiss="${esc(m.id)}"
@@ -1516,7 +1537,7 @@ function bindGmailTab() {
           ? `<div class="empty">${icon('mail', 'i')}<div>ไม่มีรายการใหม่ — ที่ตรงกับคำค้นให้ AI อ่านไปหมดแล้ว
               (ดูประวัติที่เคยทำด้านล่างได้)</div></div>`
           : `<div class="empty">${icon('mail', 'i')}<div>ไม่พบอีเมลที่ตรงกับคำค้น —
-              แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`;
+              แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`);
 
       el('gmailList').querySelectorAll('[data-mail]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -1530,8 +1551,11 @@ function bindGmailTab() {
                 attachmentFilename: btn.dataset.att || null,
               }),
             });
-            state.reads.push({ ...result, _key: crypto.randomUUID(), tab: 3 });
-            toast(`อ่านเสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
+            const added = readsFromResult(result, 3);
+            state.reads.push(...added);
+            toast(added.length > 1
+              ? `อ่านเสร็จ — ไฟล์นี้มี Timesheet ${added.length} คน แยกให้ตรวจทีละคนแล้ว`
+              : `อ่านเสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
             renderUpload();
           } catch (error) {
             btn.disabled = false;
@@ -1671,6 +1695,73 @@ function bindAiHistoryTab() {
 /** ผลที่ AI อ่านได้ — แก้ได้ทุกช่องก่อนกดยืนยัน
  *  รับได้หลายใบพร้อมกันบนจอ (คนละการ์ด) จึง id ทุกช่องต้องต่อท้ายด้วย key ของใบนั้นๆ
  *  ไม่งั้นซ้ำกันข้ามการ์ด แล้ว document.getElementById จะเจอแค่ใบแรกเสมอ */
+/**
+ * แตกผลที่ AI อ่านมาเป็นการ์ดตรวจทีละฉบับ
+ *
+ * ไฟล์เดียวอาจมี Timesheet ของหลายคนต่อกัน (เจอจริงกับไฟล์รวมของ ThaiLife) —
+ * ฝั่งระบบแยกให้แล้วใน result.documents คนละฉบับพร้อมผลจับคู่พนักงานของตัวเอง
+ * ที่นี่จึงต้องวางเป็นการ์ดแยกกัน ให้คนตรวจและกดยืนยันทีละคน ไม่ใช่ยุบเหลือใบเดียว
+ *
+ * ค่าระดับไฟล์ (อีเมลต้นทาง · ชื่อไฟล์ · โมเดล) ใช้ร่วมกันทุกฉบับ จึงกระจายลงไปให้ครบทุกใบ
+ */
+
+/** ป้ายในดรอปดาวน์ — ชื่อไทยอย่างเดียวไม่พอให้เลือกถูก ต้องเห็นชื่ออังกฤษ ตำแหน่ง และลูกค้าด้วย */
+function employeeLabel(e) {
+  const parts = [e.name_th];
+  if (e.name_en) parts.push(`(${e.name_en})`);
+  const tail = [e.invoice_position, e.customer_name].filter(Boolean).join(' · ');
+  return tail ? `${parts.join(' ')} — ${tail}` : parts.join(' ');
+}
+
+/**
+ * เรียงพนักงานให้คนที่ชื่อใกล้เคียงกับที่อ่านมาอยู่บนสุด พร้อมติดดาวไว้
+ *
+ * ระบบจับคู่อัตโนมัติไม่ได้ก็จริง แต่ "ใกล้เคียง" กับ "ไม่เกี่ยวเลย" ต่างกันมาก —
+ * เรียงมั่วตามลำดับในฐานข้อมูลทำให้คนต้องไล่หาเองทั้งรายการ แล้วเลือกผิดได้ง่าย
+ * นับตัวอักษรที่ใช้ร่วมกัน (ไม่สนลำดับ) เพราะชื่อที่ AI อ่านเพี้ยนมักสลับตัวอักษร
+ */
+function rankEmployees(employees, readName) {
+  const norm = (v) => String(v ?? '').toLowerCase().replace(/[^a-z\u0E00-\u0E7F]/g, '');
+  const target = norm(readName);
+
+  const score = (e) => {
+    if (!target) return 0;
+    const candidates = [norm(e.name_en), norm(e.name_th)].filter(Boolean);
+    return Math.max(0, ...candidates.map((c) => {
+      if (!c) return 0;
+      const pool = [...c];
+      let hit = 0;
+      for (const ch of target) {
+        const at = pool.indexOf(ch);
+        if (at !== -1) { pool.splice(at, 1); hit += 1; }
+      }
+      return hit / Math.max(target.length, c.length);
+    }));
+  };
+
+  return employees
+    .map((e) => ({ e, s: score(e) }))
+    .sort((a, b) => b.s - a.s || a.e.name_th.localeCompare(b.e.name_th, 'th'))
+    .map(({ e, s }) => ({ e, close: s >= 0.6 }));
+}
+
+function readsFromResult(result, tab) {
+  const { documents, data, verification, matching, contract, blockers, documentNo, ...shared } = result;
+  const list = documents?.length
+    ? documents
+    : [{ data, verification, matching, contract, blockers, documentNo }];
+
+  return list.map((doc, i) => ({
+    ...shared,
+    ...doc,
+    documentNo: doc.documentNo ?? documentNo ?? null,
+    _key: crypto.randomUUID(),
+    tab,
+    /* บอกว่าเป็นใบที่เท่าไรจากไฟล์เดียวกัน — ไม่งั้นเห็นสองการ์ดแล้วนึกว่าอ่านซ้ำ */
+    partOfFile: list.length > 1 ? { index: i + 1, total: list.length } : null,
+  }));
+}
+
 function readResultHtml(read, employees = []) {
   const key = read._key;
   const d = read.data;
@@ -1688,6 +1779,11 @@ function readResultHtml(read, employees = []) {
   const approvalBlocked = Boolean(read.email) && approvalDefault !== 'อนุมัติ';
   const docInput = `<input id="uDoc-${key}" type="text" placeholder="เช่น 2026020101" autocomplete="off"
                        value="${esc(read.documentNo ?? '')}">`;
+  /* ไฟล์ต้นฉบับที่ AI อ่าน — เปิดดู/ดาวน์โหลดได้เฉพาะที่ดึงมาจาก Gmail เพราะยังอยู่ในเมล
+     ไฟล์ที่อัปโหลดตรงยังไม่มีสำเนาในระบบจนกว่าจะกดยืนยัน (ตอนนั้นดูได้ที่หน้า Timesheet) */
+  const srcFile = read.sourceEmailId && read.fileName
+    ? `/api/gmail/${encodeURIComponent(read.sourceEmailId)}/attachment?filename=${encodeURIComponent(read.fileName)}`
+    : null;
   // ดรอปดาวน์สถานะอนุมัติ — ย้ายมาไว้ที่หัวการ์ดแทนคำอธิบายชื่อโมเดล/สถานะยังไม่บันทึก
   // (มีแค่ตอนอ่านจากอีเมล เพราะไฟล์อัปโหลดตรงไม่มีแนวคิดสถานะอนุมัติในเมล)
   const approvalControl = read.email ? `
@@ -1700,8 +1796,15 @@ function readResultHtml(read, employees = []) {
   <div class="card" data-read-key="${esc(key)}">
     <div class="hd"><h3>สิ่งที่ AI อ่านได้${read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์'}${
       d.employeeName ? ` — ${esc(d.employeeName)}` : ''}</h3>
+      ${read.partOfFile ? `<span class="tg mu">ใบที่ ${read.partOfFile.index} จาก ${read.partOfFile.total} ในไฟล์เดียวกัน</span>` : ''}
       ${approvalControl}</div>
     <div class="bd">
+      ${srcFile ? `<div class="attrow" style="margin-bottom:14px">
+        <a class="file" href="${esc(srcFile)}" target="_blank" rel="noopener"
+           title="เปิดดูไฟล์ต้นฉบับที่ AI อ่าน"><span class="pd">PDF</span> ${esc(read.fileName)}</a>
+        <a class="btn sm icon" href="${esc(srcFile)}&dl" download="${esc(read.fileName)}"
+           title="ดาวน์โหลดไฟล์ต้นฉบับ" aria-label="ดาวน์โหลด">${icon('cd')}</a>
+      </div>` : ''}
       ${read.email ? `<div class="cmp" style="margin-bottom:16px">
         <div class="f"><span class="l">จาก</span><span>${esc(read.email.from)}</span></div>
         <div class="f sj"><span class="l">เรื่อง</span><span>${esc(read.email.subject)}</span></div>
@@ -1716,13 +1819,15 @@ function readResultHtml(read, employees = []) {
           <label>ชื่อพนักงานตามที่เขียนในไฟล์
             <input id="rName-${key}" type="text" value="${esc(d.employeeName ?? '')}">
             ${!read.matching.employee ? `
-              <small>จับคู่กับพนักงานในระบบไม่ได้</small>
+              <small>จับคู่กับพนักงานในระบบไม่ได้ — เลือกว่าชื่อนี้คือใคร แล้วกดเพิ่มเป็นชื่อพ้อง
+                ครั้งต่อไประบบจะจับคู่ให้เอง</small>
               <div class="fixa-picker">
-                <select id="rAliasEmp-${key}">
-                  <option value="">— เลือกพนักงานที่ตรงกับชื่อนี้จริงๆ —</option>
-                  ${employees.map((e) => `<option value="${esc(e.id)}">${esc(e.name_th)}</option>`).join('')}
-                </select>
-                <button class="btn sm rAliasAdd" type="button">+ เพิ่มเป็นชื่อพ้อง</button>
+                <span class="selectchip grow"><select id="rAliasEmp-${key}">
+                  <option value="">— เลือกพนักงานที่ตรงกับชื่อนี้ —</option>
+                  ${rankEmployees(employees, d.employeeName).map(({ e, close }) => `
+                    <option value="${esc(e.id)}">${close ? '★ ' : ''}${esc(employeeLabel(e))}</option>`).join('')}
+                </select>${icon('cd')}</span>
+                <button class="btn sm pri rAliasAdd" type="button" disabled>${icon('chk')} เพิ่มเป็นชื่อพ้อง</button>
               </div>` : ''}
           </label>
           <label>ตำแหน่งตามที่เขียนในไฟล์
@@ -1823,8 +1928,11 @@ function bindUploadTab() {
           fileName: picked.name,
         }),
       });
-      state.reads.push({ ...result, _key: crypto.randomUUID(), tab: 1 });
-      toast(`อ่านไฟล์เสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
+      const added = readsFromResult(result, 1);
+      state.reads.push(...added);
+      toast(added.length > 1
+        ? `อ่านไฟล์เสร็จ — ไฟล์นี้มี Timesheet ${added.length} คน แยกให้ตรวจทีละคนแล้ว`
+        : `อ่านไฟล์เสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
       renderUpload();
     } catch (error) {
       btn.disabled = false;
@@ -1848,6 +1956,12 @@ function bindUploadTab() {
 
     // จับคู่ชื่อไม่ได้ทั้งหมด (ไม่ใช่แค่ใกล้เคียงต้องยืนยัน) จึงไม่มีพนักงานให้เสนอปุ่มลัดแบบหน้ารายละเอียด
     // ให้คนเลือกจากลิสต์เองแทน — ยังเป็นคนยืนยันเองอยู่ดี ไม่ใช่ AI เดา แค่เปลี่ยนจาก "พิมพ์ชื่อ" เป็น "เลือกจากลิสต์"
+    /* ปุ่มเพิ่มชื่อพ้องเปิดใช้ได้ต่อเมื่อเลือกคนแล้วเท่านั้น — เดิมกดได้ตลอดแล้วเด้ง toast
+       ว่า "เลือกพนักงานก่อน" ซึ่งเป็นการปล่อยให้กดผิดก่อนแล้วค่อยบอก */
+    const aliasSel = card.querySelector(`#rAliasEmp-${CSS.escape(key)}`);
+    const aliasBtn = card.querySelector('.rAliasAdd');
+    aliasSel?.addEventListener('change', () => { aliasBtn.disabled = !aliasSel.value; });
+
     card.querySelector('.rAliasAdd')?.addEventListener('click', async () => {
       const sel = field('rAliasEmp');
       const empId = sel.value;
@@ -2676,6 +2790,10 @@ async function syncBadges() {
   el('actorName').textContent = p.actor;
   el('actorAvatar').textContent = initials(p.actor);
   el('actorRole').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
+  /* ในเมนูโชว์ username ที่ใช้ login ด้วย — ชิปด้านนอกโชว์ชื่อไทย ซึ่งคนละตัวกัน
+     เปิดเมนูแล้วต้องรู้ได้ว่ากำลังใช้บัญชีไหนอยู่จริงก่อนกดออกจากระบบ */
+  el('actorUser').textContent = state.username ?? p.actor;
+  el('actorRole2').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
 
   /* เมนู "จัดการระบบ" (ผู้ใช้/บันทึกระบบ) เห็นเฉพาะ admin — server บล็อก 403 ไว้อีกชั้นอยู่แล้ว
      แต่ operator ไม่ควรเห็นปุ่มที่กดแล้วเจอ error ตั้งแต่แรก */
@@ -2868,6 +2986,9 @@ function renderBellPop(feed) {
 
 el('bellBtn').addEventListener('click', async (e) => {
   e.stopPropagation();
+  /* ต้องสั่งปิดเมนูบัญชีตรงนี้เอง — stopPropagation ข้างบนกันไม่ให้คลิกลอยไปถึง document
+     ตัวปิดเมนูบัญชีที่ดักไว้ที่ document จึงไม่มีวันได้ทำงาน แล้วสองแผงจะเปิดซ้อนกัน */
+  closeWho();
   const pop = el('bellPop');
   if (!pop.hidden) { closeBell(); return; }
   try {
@@ -2977,9 +3098,42 @@ el('loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-el('logoutBtn').addEventListener('click', async () => {
-  if (!confirm('ออกจากระบบ?')) return;
+/* ── เมนูบัญชีบนแถบบน ────────────────────────────────────────
+   เปิด/ปิดแบบเดียวกับแผงแจ้งเตือนใต้กระดิ่ง — กดข้างนอกหรือ Esc ก็ปิด */
+
+function closeWho() {
+  el('whoPop').hidden = true;
+  el('whoBtn').setAttribute('aria-expanded', 'false');
+}
+
+el('whoBtn').addEventListener('click', () => {
+  const pop = el('whoPop');
+  if (pop.hidden) {
+    closeBell();               // เปิดทีละอัน ไม่ให้สองแผงซ้อนกัน
+    pop.hidden = false;
+    el('whoBtn').setAttribute('aria-expanded', 'true');
+    el('logoutBtn').focus();   // เปิดมาแล้วกด Enter ต่อได้เลย ไม่ต้องไล่ Tab
+  } else closeWho();
+});
+
+document.addEventListener('click', (e) => {
+  if (!el('whoPop').hidden && !e.target.closest('.who')) closeWho();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !el('whoPop').hidden) {
+    closeWho();
+    el('whoBtn').focus();
+  }
+});
+
+el('logoutBtn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  /* ยิงบอกเซิร์ฟเวอร์ให้ลบ session ทิ้ง — ยิงไม่สำเร็จก็ยังต้องพากลับไปหน้า login อยู่ดี
+     ไม่งั้นคนกดออกจากระบบแล้วยังค้างอยู่ในหน้าเดิม นึกว่าออกไปแล้วทั้งที่ยังไม่ออก */
   try { await api('/auth/logout', { method: 'POST' }); } catch { /* ไม่ได้ก็เคลียร์ฝั่งเราไปเลย */ }
+  btn.disabled = false;
+  closeWho();
   showLoginScreen();
 });
 
