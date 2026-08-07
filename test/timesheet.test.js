@@ -201,28 +201,53 @@ test('extractTimesheet อ่านทีละหน้าแล้วรวม
   assert.equal(result.verification.ok, true);
 });
 
-test('extractTimesheet ทนได้ถ้าอ่านบางหน้าไม่สำเร็จ — ใช้ข้อมูลจากหน้าที่เหลือ + บันทึกโน้ต', async () => {
+const okResponse = (data) => ({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    choices: [{ message: { content: JSON.stringify(data) }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 300, completion_tokens: 80 },
+  }),
+});
+
+test('ต่อโมเดลไม่ติดชั่วคราว → ลองใหม่ให้เองแล้วอ่านได้ครบ ไม่เสียหน้านั้นไป', async () => {
+  // เจอจริงกับ LM Studio: หน้า 1, 2, 7 หลุดด้วย "fetch failed" ทั้งที่หน้าอื่นอ่านได้ปกติ
   let call = 0;
   const fetchImpl = async () => {
     call += 1;
-    if (call === 1) throw new Error('connect ECONNREFUSED');
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({
-        choices: [{
-          message: { content: JSON.stringify(fakeTimesheetData('2026-01')) },
-          finish_reason: 'stop',
-        }],
-        usage: { prompt_tokens: 300, completion_tokens: 80 },
-      }),
-    };
+    if (call === 1) throw new Error('fetch failed');
+    return okResponse(fakeTimesheetData('2026-01'));
   };
 
   const result = await extractTimesheet(TWO_PAGE_PDF, { expectedPeriod: '2026-01', fetchImpl });
 
-  assert.equal(result.data.employeeName, 'Pongpun Mamak');
-  assert.ok(result.data.notes.some((n) => /หน้า 1 ไม่สำเร็จ/.test(n)));
+  assert.deepEqual(result.data.failedPages, [], 'ลองใหม่แล้วผ่าน จึงต้องไม่มีหน้าไหนเสีย');
+  assert.equal(result.verification.ok, true, 'อ่านครบแล้วต้องบันทึกได้');
+});
+
+test('ต่อโมเดลไม่ติดจนหมดสิทธิ์ลองใหม่ → ใช้หน้าที่เหลือได้ แต่ห้ามบันทึกเข้าระบบ', async () => {
+  /* หน้าแรกพังทุกครั้งที่ลอง (3 ครั้ง) หน้าที่สองอ่านได้ —
+     ข้อมูลขาดไปหนึ่งหน้า จะคิดวันทำงาน/วันลาผิดโดยไม่มีใครรู้ตัว จึงต้องกันไว้ */
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    // 3 ครั้งแรกคือความพยายามอ่านหน้า 1 (ลองใหม่ครบแล้วยังพัง) ที่เหลือคือหน้า 2 ซึ่งอ่านได้
+    if (calls <= 3) throw new Error('fetch failed');
+    return okResponse(fakeTimesheetData('2026-01'));
+  };
+
+  const result = await extractTimesheet(TWO_PAGE_PDF, { expectedPeriod: '2026-01', fetchImpl });
+
+  assert.equal(calls, 4, 'หน้า 1 ลอง 3 ครั้งแล้วยอมแพ้ · หน้า 2 อีก 1 ครั้ง');
+  assert.deepEqual(result.data.failedPages, [1]);
+  assert.equal(result.data.totalPages, 2);
+  assert.ok(result.data.notes.some((n) => /หน้า 1 ไม่สำเร็จ/.test(n)), 'ยังต้องบันทึกไว้ใน notes');
+
+  const blocker = result.verification.issues.find((i) => i.severity === 'fail');
+  assert.ok(blocker, 'ต้องเป็น blocker ไม่ใช่แค่โน้ต');
+  assert.match(blocker.message, /อ่านไม่สำเร็จ 1 หน้าจาก 2 หน้า/);
+  assert.match(blocker.message, /กดอ่านใหม่/, 'ต้องบอกด้วยว่าให้ทำอะไรต่อ');
+  assert.equal(result.verification.ok, false, 'ห้ามให้ผ่านไปบันทึกได้');
 });
 
 test('extractTimesheet โยน error รวมถ้าทุกหน้าอ่านไม่สำเร็จเลย', async () => {

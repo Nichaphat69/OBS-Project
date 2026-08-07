@@ -256,7 +256,7 @@ function pickByVote(values) {
 
 const EMPTY_PAGE_DATA = {
   vendor: null, clientName: null, projectName: null, employeeName: null, position: null, period: null,
-  documentNo: null, approvalStatus: null,
+  documentNo: null, approvalStatus: null, failedPages: [], totalPages: 0,
   totalWorkDays: 0, totalLeaveDays: 0, totalHours: null, days: [], leaveDays: [],
   signedByEmployee: false, employeeSignatureName: null,
   signedByProjectManager: false, projectManagerSignatureName: null, notes: [],
@@ -271,11 +271,13 @@ function mergePageResults(pageResults) {
   const merged = { ...EMPTY_PAGE_DATA, days: [], leaveDays: [], notes: [] };
   const votes = {};
   const notes = [];
+  const failedPages = [];
   const rawDays = [];
   const rawLeaves = [];
 
   for (const { pageIndex, data, error } of pageResults) {
     if (error) {
+      failedPages.push(pageIndex);
       notes.push(`อ่านหน้า ${pageIndex} ไม่สำเร็จ: ${error}`);
       continue;
     }
@@ -374,6 +376,11 @@ function mergePageResults(pageResults) {
   }
 
   merged.notes = notes;
+  /* หน้าที่อ่านไม่สำเร็จต้องเป็นข้อมูล ไม่ใช่แค่ข้อความใน notes — verifyExtraction() จะได้
+     กันไม่ให้บันทึกเข้าระบบได้ เดิมเก็บไว้แค่ใน notes ซึ่งไม่มีอะไรมาอ่านต่อ ผลคือเอกสารที่
+     อ่านได้ไม่ครบยังกดยืนยันบันทึกได้ตามปกติ ทั้งที่ข้อมูลขาดไปครึ่งเอกสาร */
+  merged.failedPages = failedPages;
+  merged.totalPages = pageResults.length;
 
   return merged;
 }
@@ -523,6 +530,18 @@ export function groupPagesByEmployee(pageResults) {
  */
 export function verifyExtraction(data, { expectedPeriod } = {}) {
   const issues = [];
+
+  /* อ่านบางหน้าไม่สำเร็จ = ข้อมูลขาด ห้ามบันทึกเข้าระบบ
+     วันทำงาน/วันลาที่หายไปพร้อมหน้านั้นทำให้คิดเงินผิดโดยไม่มีใครรู้ตัว
+     และถ้าไฟล์รวมหลายคน หน้าที่หายอาจเป็นตัวคั่นคน ทำให้ข้อมูลสองคนปนกันด้วย */
+  if (data.failedPages?.length) {
+    issues.push({
+      severity: 'fail',
+      message:
+        `อ่านไม่สำเร็จ ${data.failedPages.length} หน้าจาก ${data.totalPages ?? '?'} หน้า `
+        + `(หน้า ${data.failedPages.join(', ')}) — ข้อมูลยังไม่ครบทั้งเอกสาร ให้กดอ่านใหม่อีกครั้ง`,
+    });
+  }
 
   if (expectedPeriod && data.period !== expectedPeriod) {
     issues.push({

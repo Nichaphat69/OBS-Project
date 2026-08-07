@@ -1553,9 +1553,13 @@ function bindGmailTab() {
             });
             const added = readsFromResult(result, 3);
             state.reads.push(...added);
+            /* อ่านจาก added[0] ไม่ใช่ result.data — added มาจาก readsFromResult() ซึ่งรับประกันว่ามี
+               อย่างน้อยหนึ่งใบเสมอ ส่วน result.data เป็นแค่สำเนาที่วางไว้ให้โค้ดเดิม ถ้าฝั่งระบบ
+               เปลี่ยนรูปแบบเมื่อไหร่ตรงนี้จะพังทั้งการ์ดทั้งที่ข้อมูลมาครบ */
+            const first = added[0].data;
             toast(added.length > 1
               ? `อ่านเสร็จ — ไฟล์นี้มี Timesheet ${added.length} คน แยกให้ตรวจทีละคนแล้ว`
-              : `อ่านเสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
+              : `อ่านเสร็จ — ${first.employeeName ?? ''} รอบ ${first.period ?? ''}`);
             renderUpload();
           } catch (error) {
             btn.disabled = false;
@@ -1930,9 +1934,10 @@ function bindUploadTab() {
       });
       const added = readsFromResult(result, 1);
       state.reads.push(...added);
+      const first = added[0].data;   // ดูเหตุผลที่ไม่ใช้ result.data ในตัวจัดการฝั่ง Gmail
       toast(added.length > 1
         ? `อ่านไฟล์เสร็จ — ไฟล์นี้มี Timesheet ${added.length} คน แยกให้ตรวจทีละคนแล้ว`
-        : `อ่านไฟล์เสร็จ — ${result.data.employeeName ?? ''} รอบ ${result.data.period ?? ''}`);
+        : `อ่านไฟล์เสร็จ — ${first.employeeName ?? ''} รอบ ${first.period ?? ''}`);
       renderUpload();
     } catch (error) {
       btn.disabled = false;

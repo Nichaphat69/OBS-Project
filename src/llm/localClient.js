@@ -35,7 +35,31 @@ export function localVisionModel() {
  * @param {number} [args.maxTokens]
  * @param {typeof fetch} [args.fetchImpl]  ใช้แทนตอนเทสต์เท่านั้น
  */
-export async function callLocalJSON({
+/* ต่อโมเดลไม่ติด/โมเดลตอบ 5xx เป็นอาการชั่วคราว — LM Studio สะดุดตอนสลับโมเดลหรือ
+   หน่วยความจำเต็มชั่วขณะ แล้วกลับมาเองภายในไม่กี่วินาที ไม่ใช่ของเสียถาวร
+   เจอจริงตอนอ่านไฟล์ 8 หน้า: หน้า 1, 2, 7 หลุดด้วย "fetch failed" ทั้งที่หน้าอื่นอ่านได้ปกติ
+   ซึ่งทำให้ข้อมูลขาดไปครึ่งเอกสารโดยที่ผลลัพธ์ยังดู "อ่านสำเร็จ" */
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1500;
+
+const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
+
+export async function callLocalJSON(args) {
+  let last;
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await callOnce(args);
+    } catch (error) {
+      last = error;
+      // ลองซ้ำเฉพาะที่เป็นปัญหาการเชื่อมต่อ/ฝั่งเซิร์ฟเวอร์ ไม่ใช่คำตอบที่ผิดรูปแบบ
+      if (!error.retryable || attempt === RETRY_ATTEMPTS) throw error;
+      await sleep(RETRY_DELAY_MS * attempt);
+    }
+  }
+  throw last;
+}
+
+async function callOnce({
   model, system, userContent, schema, maxTokens = 4000, fetchImpl = fetch,
 }) {
   const baseUrl = localLlmBaseUrl();
@@ -65,7 +89,7 @@ export async function callLocalJSON({
         `เชื่อมต่อโมเดลในเครื่องไม่ได้ที่ ${baseUrl} — ` +
         `เปิด Local Server ใน LM Studio (หรือ Ollama) แล้วหรือยัง? (${error.message})`,
       ),
-      { status: 502 },
+      { status: 502, retryable: true },
     );
   }
 
@@ -73,7 +97,7 @@ export async function callLocalJSON({
     const text = await res.text().catch(() => '');
     throw Object.assign(
       new Error(`โมเดลในเครื่องตอบผิดพลาด (${res.status}): ${text.slice(0, 300)}`),
-      { status: 502 },
+      { status: 502, retryable: res.status >= 500 },
     );
   }
 
