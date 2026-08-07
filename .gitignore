@@ -20,3 +20,11 @@ docs/*.pdf
 !docs/OBS_*.pdf
 docs/*.xlsx
 docs/*.docx
+
+# คีย์ SSH ของเซิร์ฟเวอร์ — ห้ามขึ้น repo เด็ดขาด (วางไว้ในโฟลเดอร์นี้เพื่อความสะดวกเท่านั้น)
+*.pem
+*.ppk
+*.key
+
+# เอกสารโครงสร้างเซิร์ฟเวอร์ — มี IP · Security Group · พอร์ตภายใน
+BSCP-server-port-reference.pdf
