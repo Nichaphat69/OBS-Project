@@ -29,11 +29,11 @@
   --rule:   #E6E9EF;   /* เส้นขอบบางมาก ใช้เท่าที่จำเป็น */
   --hair:   #EFF1F5;
 
-  /* มุมโค้ง — ตามรูปอ้างอิง Maine.gov และ Himalayas */
-  --r-card: 10px;   /* การ์ด ตาราง กล่องข้อความ */
-  --r-ctl:  8px;    /* ปุ่ม ช่องกรอก ตัวเลือก */
+  /* มุมโค้ง — เพิ่มความนุ่มขึ้นจากเดิมทั้งระบบ ให้ได้ฟีลลิ่งแบบแอปยุคใหม่ ไม่ใช่ซอฟต์แวร์องค์กรเดิม */
+  --r-card: 18px;   /* การ์ด ตาราง กล่องข้อความ */
+  --r-ctl:  12px;   /* ปุ่ม ช่องกรอก ตัวเลือก */
   --r-pill: 999px;  /* ชิป ป้ายสถานะ ปุ่มกรอง */
-  --r-side: 8px;    /* รายการเมนูข้าง */
+  --r-side: 12px;   /* รายการเมนูข้าง */
 
   /* ความสูงกลางของคอนโทรลในแถบเครื่องมือ — ช่องค้นหา ปุ่ม ตัวเลือก ต้องสูงเท่ากันหมด */
   --h-ctl: 40px;
@@ -43,17 +43,24 @@
   --side-w:  264px;
   --top-h:   68px;
 
+  /* คิวสำหรับ transition ที่นุ่มนวลขึ้น — ใช้แทน ease ธรรมดาในจุดที่มีการขยับ/ยก */
+  --ease: cubic-bezier(.2,.8,.2,1);
+
   /* แบรนด์ iPassion — น้ำเงินสดใช้เป็นสีเน้น */
   /* น้ำเงินโลโก้ iPassion — สงวนไว้ให้ "ปุ่มที่ให้ลงมือทำ" อย่างเดียว
      ในหนึ่งหน้าจอควรมีของสีนี้น้อยที่สุด คนจะได้รู้ทันทีว่าต้องกดอะไร */
-  --brand:   #0078D4;
+  --brand:   #0A78D4;
   /* น้ำเงินกรมท่า — ใช้กับปุ่มหลักและตัวเลขสำคัญ ให้โทนทางการแบบเอกสารองค์กร */
-  --brand-h: #0068BC;
-  --brand-d: #00548F;
+  --brand-h: #0868BD;
+  --brand-d: #0A5490;
+  /* ฟ้าอ่อนใช้ปิดท้ายไล่สีของปุ่ม/แถบหลัก — สดขึ้นแต่ยังอยู่ในตระกูลเดียวกับ --brand */
+  --brand-l: #4FADEE;
   --tint:    #E9F3FC;
   --tint2:   #D3E7F8;
   --bline:   #A9D2F1;
   --sky:     #7CC4F5;
+  /* ไล่สีของปุ่ม/แถบหลัก — ใช้ร่วมกันทุกจุดที่อยากให้ดูเด่นเป็นพิเศษ */
+  --grad-brand: linear-gradient(135deg, var(--brand-l) 0%, var(--brand) 55%, var(--brand-h) 100%);
 
   /* สีบอกสถานะ — สดและเย็นตากว่าเดิม ไม่ออกโทนน้ำตาล */
   --ok: #067647; --okb: #ECFDF3; --okl: #A6F4C5;
@@ -63,15 +70,28 @@
   --pr: #5925DC; --prb: #F4F3FF; --prl: #D9D6FE;
   --red: #D92D20;   /* ป้ายตัวเลขแจ้งเตือน */
 
-  /* เงาแบบนุ่มสองชั้น ให้การ์ดดูลอยแบบสะอาด ไม่ใช่ตีกรอบหนัก */
+  /* เงาแบบนุ่มหลายชั้น ให้การ์ดดูลอยแบบสะอาด ไม่ใช่ตีกรอบหนัก
+     เพิ่ม sh3 (ยกตัวตอนโฮเวอร์) กับ sh-brand (แสงฟุ้งสีแบรนด์ให้ปุ่มหลัก/จุดสำคัญเด่นขึ้น) */
   --sh1: 0 1px 2px rgba(16,24,40,.04);
   --sh2: 0 4px 12px rgba(16,24,40,.08), 0 2px 4px rgba(16,24,40,.04);
+  --sh3: 0 16px 32px -12px rgba(16,24,40,.16), 0 4px 10px -4px rgba(16,24,40,.06);
+  --sh-brand: 0 8px 20px -6px rgba(10,120,212,.45), 0 2px 5px -1px rgba(10,120,212,.25);
 
   --wrap: 1420px;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--page); }
+
+/* พื้นหลังทั้งระบบ — แต่งเป็นแสงฟุ้งสีแบรนด์จางๆที่มุมบนแทนพื้นเทาเรียบๆ
+   จางมากจนไม่รบกวนการอ่าน แต่ให้ความรู้สึกมีมิติ ไม่แบนเหมือนกระดาษถ่ายเอกสาร */
+body {
+  background:
+    radial-gradient(1100px 560px at 14% -8%, rgba(10,120,212,.07), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(10,120,212,.05), transparent 55%),
+    var(--page);
+  background-attachment: fixed;
+}
 
 /* ซ่อนแถบเลื่อนไปเลย — เดิมโชว์แท่งบางๆ แต่ยังดูเหมือนชิ้นส่วน UI หลุดมาค้างอยู่มุมจอ
    ยังเลื่อนด้วยเมาส์/แทร็กแพด/คีย์บอร์ดได้ตามปกติ แค่ไม่โชว์แท่งให้เห็น */
@@ -129,10 +149,15 @@ svg.i.solid { stroke: none; fill: currentColor; }
 /* ═══ โครงหน้า — เมนูข้างถาวร + เนื้อหาเลื่อนได้ ═══ */
 .shell { display: flex; align-items: flex-start; min-height: 100vh; }
 
+/* เมนูข้างโทนสว่าง — ขาวนวลไล่สีจางๆ (ไม่ใช่ขาวเรียบแบนสนิท) ให้ยังดูมีมิติแบบพรีเมียม
+   แต่ยังคุมโทนสว่างทั้งระบบตามที่ต้องการ ความเด่นของ "ถูกเลือกอยู่" มาจากปุ่มไล่สีเต็มแท่ง
+   ด้านล่างแทน ไม่ต้องพึ่งพื้นเข้มมาช่วยคอนทราสต์ */
 .side {
   width: var(--side-w); flex: none; position: sticky; top: var(--top-h); z-index: 40;
-  height: calc(100vh - var(--top-h)); background: var(--paper);
+  height: calc(100vh - var(--top-h));
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFD 100%);
   border-right: 1px solid var(--rule);
+  box-shadow: 6px 0 24px -18px rgba(16,24,40,.18);
   display: flex; flex-direction: column;
 }
 .frame { flex: 1; min-width: 0; }
@@ -140,27 +165,33 @@ svg.i.solid { stroke: none; fill: currentColor; }
 /* ── รายการเมนู ── */
 .snav {
   flex: 1; overflow-y: auto; padding: 16px 12px 20px;
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 3px;
 }
 .sgrp {
-  font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
-  color: var(--fnt); padding: 18px 14px 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--fnt); padding: 18px 14px 8px;
 }
 
 .mtab {
   display: flex; align-items: center; gap: 12px; font: inherit; width: 100%;
   font-size: 14px; font-weight: 600; background: none; cursor: pointer;
   padding: 11px 14px; color: var(--ink2); text-align: left;
-  border: none; border-radius: var(--r-side);
-  transition: color .13s, background .13s;
+  border: none; border-radius: var(--r-side); position: relative;
+  transition: color .15s var(--ease), background .15s var(--ease), transform .15s var(--ease);
 }
 .mtab > span:first-of-type { flex: 1; }
 .mtab:hover { color: var(--ink); background: var(--hov); }
+.mtab:active { transform: scale(.985); }
 .mtab:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .mtab svg.i { color: var(--fnt); transition: color .13s; }
 .mtab:hover svg.i { color: var(--mut); }
-.mtab.on { color: var(--ink); background: var(--sel); font-weight: 700; }
-.mtab.on svg.i { color: var(--brand); }
+/* แท็บที่เปิดอยู่ — เติมพื้นเป็นไล่สีแบรนด์เต็มปุ่ม พร้อมแสงฟุ้ง คมชัดกว่าแถบสีเล็กๆแบบเดิมมาก
+   เหมือนปุ่มที่ถูกกดอยู่จริงๆ ไม่ใช่แค่ป้ายบอกตำแหน่งจางๆ */
+.mtab.on {
+  color: #fff; font-weight: 700; background: var(--grad-brand);
+  box-shadow: 0 8px 20px -6px rgba(10,120,212,.5), inset 0 1px 0 rgba(255,255,255,.3);
+}
+.mtab.on svg.i { color: #fff; }
 .mtab .bdg {
   font-size: 10.5px; font-weight: 700; min-width: 19px; text-align: center;
   padding: 1px 6px; border-radius: 999px; background: var(--red); color: #fff;
@@ -168,6 +199,7 @@ svg.i.solid { stroke: none; fill: currentColor; }
 }
 /* ป้าย 0 ไม่ควรแดง — ไม่มีงานค้างไม่ใช่เรื่องต้องเตือน */
 .mtab .bdg.zero { background: var(--hair); color: var(--fnt); }
+.mtab.on .bdg { box-shadow: 0 0 0 2px var(--brand); }
 /* ป้าย "ตรวจ Manday" กับ "วางบิล & ร่างอีเมล" ไม่ใช่ตัวนับรวม แต่บอกว่ามีงานใหม่ค้างรอ
    (เข้ามารออนุมัติ/รอตรวจใหม่ล่าสุด) — ไม่มีงานค้างก็ไม่ต้องโชว์เลข 0 เลย ต่างจากตัวเลขสรุปอื่นๆ
    ในหน้าเนื้อหา (เช่นแท็บ "ยืนยันแล้ว/วางบิลแล้ว/ตีกลับ") ที่ยังโชว์ 0 ตามปกติ */
@@ -185,7 +217,7 @@ svg.i.solid { stroke: none; fill: currentColor; }
   border: 1.5px solid var(--paper);
   font-variant-numeric: tabular-nums; transition: background .13s;
 }
-.mtab[data-step].on::before { background: var(--brand); }
+.mtab[data-step].on::before { background: var(--brand-d); border-color: #fff; }
 
 /* ── ท้ายเมนูข้าง ── */
 /* ปุ่มและป้ายในเมนูข้างคงมุมโค้งไว้ให้เข้ากับรายการเมนู */
@@ -239,8 +271,9 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 
 /* ═══ แถบบน — บางและเงียบ ไว้บอกสถานะระบบเท่านั้น ═══ */
 .topbar {
-  height: var(--top-h); background: var(--paper); border-bottom: 1px solid var(--rule);
-  position: sticky; top: 0; z-index: 50;
+  height: var(--top-h); background: rgba(255,255,255,.86); border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: 0 1px 0 var(--rule), 0 8px 24px -20px rgba(16,24,40,.2);
   display: flex; align-items: center; gap: 16px; padding: 0 28px 0 0;
 }
 .topbar .gap { flex: 1; }
@@ -273,9 +306,10 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   border-left: 1px solid var(--hair); }
 .who .wt b, .who .wt span { white-space: nowrap; }
 .who .av {
-  width: 32px; height: 32px; border-radius: 50%; background: var(--tint);
-  color: var(--brand-d); display: grid; place-items: center;
-  font-size: 11.5px; font-weight: 700; flex: none; border: 1px solid var(--tint2);
+  width: 32px; height: 32px; border-radius: 50%; background: var(--grad-brand);
+  color: #fff; display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 700; flex: none; border: none;
+  box-shadow: 0 3px 8px -2px rgba(10,120,212,.5);
 }
 .who .wt { text-align: left; }
 .who .wt b { display: block; font-size: 12.5px; line-height: 1.3; color: var(--ink); }
@@ -313,34 +347,57 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 .wp-item:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .wp-item:disabled { opacity: .6; cursor: default; }
 
-/* ── หน้า login — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ───────── */
+/* ── หน้า login — สองคอลัมน์ ซ้ายภาพประกอบแบรนด์ ขวาฟอร์มจริง ───────── */
 .login-screen {
-  position: fixed; inset: 0; z-index: 100; background: var(--page);
-  display: grid; place-items: center; padding: 24px;
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; grid-template-columns: 1fr 1fr;
+  background: var(--page);
 }
 /* [hidden] มี specificity สูงกว่า .login-screen เฉยๆ (มีทั้ง class และ attribute) จึงชนะเสมอ
    ถ้าไม่มีบรรทัดนี้ display:grid ข้างบนจะทับกฎ [hidden]{display:none} ของเบราว์เซอร์เอง
    เพราะ CSS จาก author เหนือกว่า user-agent default ไม่ว่า specificity จะเท่ากันหรือไม่ */
 .login-screen[hidden] { display: none; }
-.login-card {
-  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
-  box-shadow: var(--sh1); padding: 36px 32px; width: 100%; max-width: 360px;
-  display: flex; flex-direction: column; gap: 14px;
+
+/* ── คอลัมน์ซ้าย — รูปจริงที่ผู้ใช้สร้างไว้ (public/img/login-orb.png) เต็มคอลัมน์
+   ไม่ใช่กราฟิกที่วาดเอง — cover ให้เต็มพื้นที่เสมอไม่ว่าจอจะสูง/เตี้ยแค่ไหน
+   center top เพราะลูกแก้วอยู่ค่อนไปทางบนของภาพ ไม่อยากให้โดนตัดหัวตอนจอเตี้ย */
+.login-art {
+  background: url('/img/login-orb.png') center top / cover no-repeat, #0A5FB0;
 }
-.login-card .blogo { width: 180px; height: auto; margin-bottom: 6px; }
-.login-card h1 { font-size: 18px; color: var(--ink); margin: 0; }
-.login-card .lc-sub { font-size: 12.5px; color: var(--mut); margin: -8px 0 4px; line-height: 1.5; }
+
+/* ── คอลัมน์ขวา — ฟอร์มจริง วางตรงกลางบนพื้นขาวเรียบ ไม่ต้องมีการ์ดลอยซ้อนอีกชั้น ── */
+.login-panel {
+  display: grid; place-items: center; background: var(--paper); padding: 24px;
+}
+.login-card {
+  width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 14px;
+  animation: login-pop .35s var(--ease);
+}
+@keyframes login-pop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .login-card { animation: none; } }
+.login-card h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); margin: 0; }
+.login-card .lc-sub { font-size: 13px; color: var(--mut); margin: -6px 0 6px; line-height: 1.5; }
 .login-card label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
   font-weight: 600; color: var(--ink2); }
 .login-card input {
   font: inherit; font-size: 13.5px; color: var(--ink); background: var(--paper);
-  border: 1px solid var(--rule); border-radius: var(--r-ctl); height: var(--h-ctl); padding: 0 11px;
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); height: 46px; padding: 0 14px;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
 }
-.login-card input:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: var(--brand); }
-.login-card .btn.pri { justify-content: center; margin-top: 4px; }
+.login-card input:focus {
+  outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px rgba(10,120,212,.14);
+}
+.login-card .btn.pri { justify-content: center; margin-top: 4px; height: 46px; font-size: 14.5px; }
 .login-card .lc-err {
   font-size: 12.5px; color: var(--cr); background: var(--crb); border: 1px solid var(--crl);
   border-radius: var(--r-ctl); padding: 8px 11px;
+}
+
+/* จอแคบ — ตัดภาพประกอบซ้ายออกไปเลย เหลือแต่ฟอร์มเต็มจอ ดีกว่าบีบสองคอลัมน์จนอ่านไม่ออก */
+@media (max-width: 820px) {
+  .login-screen { grid-template-columns: 1fr; }
+  .login-art { display: none; }
 }
 
 .env {
@@ -360,7 +417,12 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   .topbar { padding: 0 16px 0 0; }
   .topbar .brand { width: auto; border-right: none; padding: 0 14px; }
   .topbar .obs { display: none; }
-  .shell { flex-direction: column; }
+  /* .shell ปกติใช้ align-items:flex-start (ตั้งใจให้เมนูข้างสูงเท่าเนื้อหาจริง ไม่ใช่เต็มจอ
+     ตอนเรียงเป็นแถว) แต่พอสลับเป็น flex-direction:column ตอนจอแคบ ค่านี้กลายเป็นแกนขวาง
+     ทำให้ .frame หุบตามความกว้าง "เนื้อหา" แทนความกว้างจอ — การ์ด/ตารางที่กว้างสุดในหน้า
+     (เช่นตารางที่มี min-width ของมันเอง) จะดันทั้งหน้าให้กว้างเกินจอ เกิดสกรอลแนวนอนทั้งเว็บ
+     ต้องบังคับ stretch เฉพาะโหมดจอแคบให้ .side/.frame เต็มความกว้างเสมอ */
+  .shell { flex-direction: column; align-items: stretch; }
   .side {
     width: 100%; height: auto; position: static; border-right: none;
     border-bottom: 1px solid var(--rule);
@@ -385,43 +447,68 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 /* ── ปุ่ม ───────────────────────────────────────────────── */
 .btn {
   font: inherit; font-size: 13.5px; font-weight: 600; border-radius: var(--r-ctl);
-  min-height: var(--h-ctl); padding: 0 18px; cursor: pointer; border: 1px solid var(--rule);
+  min-height: var(--h-ctl); padding: 0 20px; cursor: pointer; border: 1px solid var(--rule);
   background: var(--paper); color: var(--ink2); text-decoration: none;
   box-shadow: var(--sh1);
   display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-  transition: background .13s, border-color .13s, box-shadow .13s;
+  transition: background .16s var(--ease), border-color .16s var(--ease),
+    box-shadow .16s var(--ease), transform .16s var(--ease), color .16s var(--ease);
 }
-.btn:hover:not(:disabled) { background: var(--hov); border-color: #D2D7E0; color: var(--ink); }
+.btn:hover:not(:disabled) {
+  background: var(--hov); border-color: #D2D7E0; color: var(--ink);
+  box-shadow: var(--sh2); transform: translateY(-1px);
+}
+.btn:active:not(:disabled) { transform: translateY(0); box-shadow: var(--sh1); }
 .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* ปุ่มหลัก — ไล่สีแบรนด์ 3 จุดสี + แสงฟุ้ง + ประกายบนขอบด้านในบนๆ (เหมือนผิวเคลือบเงา)
+   ให้เด่นเป็นจุดสนใจแรกของหน้าอย่างชัดเจน ตามที่ตั้งใจไว้แต่แรก
+   (ทั้งหน้าควรมีปุ่มสีนี้น้อยที่สุด คนจะได้รู้ทันทีว่าต้องกดอะไร) */
 .btn.pri {
-  background: var(--brand); border-color: var(--brand); color: #fff;
+  background: var(--grad-brand); border: none; color: #fff; font-weight: 700;
+  box-shadow: var(--sh-brand), inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(0,0,0,.08);
 }
-.btn.pri:hover:not(:disabled) { background: var(--brand-h); border-color: var(--brand-h); }
+.btn.pri:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--brand-l) 0%, var(--brand-h) 55%, var(--brand-d) 100%);
+  color: #fff;
+  box-shadow: 0 14px 30px -8px rgba(10,120,212,.6), 0 3px 8px -1px rgba(10,120,212,.35),
+    inset 0 1px 0 rgba(255,255,255,.35);
+  transform: translateY(-2px);
+}
+.btn.pri:active:not(:disabled) { transform: translateY(0); box-shadow: var(--sh-brand); }
 .btn.dgr { color: var(--cr); border-color: var(--crl); }
 .btn.dgr:hover:not(:disabled) { background: var(--crb); border-color: var(--cr); }
 .btn.sm { min-height: var(--h-ctl-sm); padding: 0 13px; font-size: 12.5px; }
 .btn:disabled { opacity: .5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover:not(:disabled) { transform: none; } }
 
 /* ── การ์ด ──────────────────────────────────────────────── */
 .card {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
   box-shadow: var(--sh1); margin-bottom: 26px; overflow: hidden;
+  transition: box-shadow .18s var(--ease), border-color .18s var(--ease);
 }
 .card > .hd {
   display: flex; align-items: baseline; gap: 14px; padding: 20px 24px 18px;
   border-bottom: 1px solid var(--hair); flex-wrap: wrap;
 }
 .card > .hd h3 {
-  margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.015em;
+  margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.015em;
   text-transform: none; color: var(--ink);
+  display: flex; align-items: center; gap: 9px;
+}
+/* จุดไล่สีแบรนด์เล็กๆหน้าหัวข้อการ์ด — ให้หัวข้อทุกการ์ดมีจุดสะดุดตาเดียวกัน อ่านเป็นชุดเดียวกันทั้งระบบ */
+.card > .hd h3::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--grad-brand); box-shadow: 0 0 0 3px var(--tint);
 }
 .card > .hd .rt { margin-left: auto; font-size: 12px; color: var(--mut); }
 .card > .bd { padding: 26px 24px; }
 .card > .bd.flush { padding: 0; }
 
-/* แถบปุ่มท้ายการ์ด (เช่น "บันทึกเข้าระบบ") — จัดกลาง ไม่ใช่ปล่อยชิดซ้ายตามค่าเริ่มต้นของ block */
+/* แถบปุ่มท้ายการ์ด (เช่น "บันทึกเข้าระบบ") — จัดกลาง ไม่ใช่ปล่อยชิดซ้ายตามค่าเริ่มต้นของ block
+   ใส่ gap ไว้เผื่อมีมากกว่าหนึ่งปุ่ม (เช่น ยกเลิก/บันทึก) ไม่งั้นปุ่มจะเบียดกันแน่นจนดูอึดอัด */
 .card > .ft {
-  display: flex; justify-content: center; padding: 18px 24px;
+  display: flex; justify-content: center; align-items: center; gap: 14px; padding: 18px 24px;
   border-top: 1px solid var(--hair);
 }
 /* แถบปุ่มยืนยันผลที่ AI อ่านได้ — แยกปุ่มรองกับปุ่มหลักให้ชัด ไม่แข่งกันแบบเดิม */
@@ -445,19 +532,20 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   display: inline-flex; align-items: center; height: var(--h-ctl); padding: 0 16px;
   border-radius: var(--r-pill); cursor: pointer; white-space: nowrap;
   border: 1px solid var(--rule); background: var(--paper); color: var(--ink2);
-  transition: background .13s, color .13s, border-color .13s;
+  transition: background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
 }
 .pbtn:hover { background: var(--hov); border-color: var(--fnt); }
 .pbtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .pbtn.on {
-  background: var(--sel); border-color: var(--sel-bd); color: var(--ink);
+  background: var(--grad-brand); border-color: var(--brand-h); color: #fff;
+  box-shadow: 0 3px 10px -3px rgba(10,120,212,.5);
 }
 .pbtn .c {
   font-variant-numeric: tabular-nums; margin-left: 7px; font-weight: 600;
   font-size: 12px; padding: 1px 7px; border-radius: var(--r-pill);
   background: var(--hov); color: var(--mut);
 }
-.pbtn.on .c { background: var(--paper); color: var(--ink2); }
+.pbtn.on .c { background: rgba(255,255,255,.25); color: #fff; }
 
 .filterbar .gap { flex: 1; min-width: 8px; }
 
@@ -467,7 +555,7 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   height: var(--h-ctl); padding: 0 16px;
   width: 320px; max-width: 100%; transition: border-color .13s, box-shadow .13s;
 }
-.searchbox:focus-within { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(0,120,212,.12); }
+.searchbox:focus-within { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(10,120,212,.12); }
 .searchbox svg.i { color: var(--fnt); }
 .searchbox input {
   border: none; background: none; font: inherit; font-size: 14px;
@@ -494,7 +582,7 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   border: 1px solid var(--rule); background: var(--paper); border-radius: var(--r-ctl);
   height: var(--h-ctl);
 }
-.selectchip:focus-within { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(0,120,212,.12); }
+.selectchip:focus-within { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(10,120,212,.12); }
 .selectchip select {
   appearance: none; font: inherit; font-size: 12.5px; font-weight: 600;
   color: var(--brand-d); background: none; border: none; outline: none;
@@ -504,6 +592,52 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   position: absolute; right: 12px; pointer-events: none; color: var(--brand);
   width: 14px; height: 14px;
 }
+
+/* ═══ ตัวเลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่ (แถบบน) ═══
+   ปุ่ม + แผงลอย (ไม่ใช่ <select> ธรรมดา) เพราะรายการของ <select> เป็นเมนูเบราว์เซอร์เอง
+   แต่งหน้าตาไม่ได้เลย ส่วนอันนี้เปลี่ยนแล้วกระทบข้อมูลทั้งระบบ ควรเด่นกว่าตัวกรองหน้าเดียวทั่วไป
+   โครงเดียวกับเมนูบัญชี (.whobtn/.whopop) ให้กดแล้วรู้สึกเป็นชุดเดียวกันทั้งแอป */
+.ctxwrap { position: relative; }
+.ctxbtn {
+  display: flex; align-items: center; gap: 9px; font: inherit; font-size: 13px; font-weight: 700;
+  cursor: pointer; height: var(--h-ctl); padding: 0 14px; color: var(--brand-d);
+  border: 1px solid var(--bline); background: var(--tint); border-radius: var(--r-ctl);
+  min-width: 200px; max-width: 280px; transition: background .13s var(--ease), border-color .13s var(--ease);
+}
+.ctxbtn svg.i:first-child { color: var(--brand); flex: none; }
+.ctxbtn .ctx-label { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctxbtn .cv { color: var(--brand); flex: none; transition: transform .15s var(--ease); }
+.ctxbtn:hover:not(:disabled) { background: var(--tint2); border-color: var(--brand); }
+.ctxbtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.ctxbtn[aria-expanded="true"] .cv { transform: rotate(180deg); }
+.ctxbtn:disabled { cursor: default; opacity: .75; }
+
+.ctxpop {
+  position: absolute; top: calc(100% + 10px); left: 0; z-index: 60; width: 340px; max-width: calc(100vw - 32px);
+  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
+  box-shadow: var(--sh2); overflow: hidden; padding: 6px; max-height: 60vh; overflow-y: auto;
+}
+.ctxpop[hidden] { display: none; }
+.ctx-item {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; font: inherit;
+  text-align: left; cursor: pointer; border: none; background: none;
+  padding: 10px 11px; border-radius: var(--r-ctl);
+}
+.ctx-item:hover:not(:disabled) { background: var(--hov); }
+.ctx-item:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.ctx-item:disabled { cursor: default; opacity: .5; }
+.ctx-item + .ctx-item { margin-top: 2px; }
+.ctx-item .chk {
+  width: 18px; height: 18px; flex: none; border-radius: 50%; margin-top: 1px;
+  display: grid; place-items: center; color: #fff;
+}
+.ctx-item.on .chk { background: var(--grad-brand); box-shadow: 0 2px 6px -1px rgba(10,120,212,.5); }
+.ctx-item .chk svg { width: 11px; height: 11px; }
+.ctx-item .tx { min-width: 0; flex: 1; }
+.ctx-item .tx b { display: block; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+.ctx-item .tx span { display: block; font-size: 11.5px; color: var(--mut); margin-top: 1px; line-height: 1.35; }
+.ctx-item.on .tx b { color: var(--brand-d); }
+.ctx-item .tg { margin-top: 2px; flex: none; }
 
 /* ═══ ตารางที่กางรายละเอียดในแถว ═══ */
 .qtable { width: 100%; border-collapse: collapse; }
@@ -626,17 +760,18 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 .rec {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
   padding: 18px; display: flex; flex-direction: column; gap: 14px;
-  transition: box-shadow .15s, border-color .15s, transform .15s;
+  transition: box-shadow .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease);
 }
-.rec:hover { box-shadow: var(--sh2); border-color: #D2D7E0; }
+.rec:hover { box-shadow: var(--sh3); border-color: #D2D7E0; transform: translateY(-2px); }
 .rec.sel { border-color: var(--brand); box-shadow: 0 0 0 3px var(--tint); }
 .rec.flag { border-color: var(--crl); background: #FFFCFB; }
+@media (prefers-reduced-motion: reduce) { .rec { transition: none; } .rec:hover { transform: none; } }
 
 .rec-hd { display: flex; align-items: flex-start; gap: 12px; }
 .rec-hd .ava {
   width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid;
   place-items: center; font-size: 13px; font-weight: 700; letter-spacing: -.01em;
-  background: var(--brand); color: #fff; border: none;
+  background: var(--grad-brand); color: #fff; border: none; box-shadow: 0 3px 8px -2px rgba(10,120,212,.5);
 }
 .rec-hd .ava.g { background: #1E9E72; color: #fff; }
 .rec-hd .ava.w { background: var(--wn); color: #fff; }
@@ -705,9 +840,13 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   font: inherit; font-size: 12.5px; min-width: 34px; height: 34px; padding: 0 10px;
   border-radius: var(--r-ctl); border: 1px solid var(--rule); background: var(--paper);
   cursor: pointer; color: var(--ink2); font-variant-numeric: tabular-nums;
+  transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease);
 }
 .pgn button:hover:not(:disabled) { background: var(--hov); border-color: var(--fnt); }
-.pgn button.on { background: var(--sel); border-color: var(--sel-bd); color: var(--ink); font-weight: 700; }
+.pgn button.on {
+  background: var(--grad-brand); border-color: var(--brand-h); color: #fff; font-weight: 700;
+  box-shadow: 0 3px 10px -3px rgba(10,120,212,.5);
+}
 .pgn button:disabled { opacity: .4; cursor: default; }
 
 /* ═══ ซ้ายรายการ ขวารายละเอียดค้างไว้ ═══ */
@@ -734,7 +873,7 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   font: inherit; font-size: 13px; font-weight: 500;
   display: inline-flex; align-items: center; padding: 0 16px;
   border: none; background: none; cursor: pointer; color: var(--ink2);
-  border-right: 1px solid var(--hair); white-space: nowrap; transition: background .12s;
+  border-right: 1px solid var(--hair); white-space: nowrap; transition: background .15s var(--ease), color .15s var(--ease);
 }
 .seg button:last-child { border-right: none; }
 .seg button:hover { background: var(--sunk); }
@@ -756,14 +895,15 @@ table { border-collapse: collapse; width: 100%; min-width: 820px; }
 thead th {
   text-align: left; font-size: 12.5px; font-weight: 600; letter-spacing: 0;
   color: var(--mut); padding: 14px 20px;
-  background: var(--sunk); border-bottom: 1px solid var(--rule); white-space: nowrap;
+  background: linear-gradient(180deg, var(--sunk) 0%, var(--paper) 100%);
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
 }
 tbody td {
   padding: 16px 20px; border-bottom: 1px solid var(--hair);
   font-size: 14px; vertical-align: middle;
 }
 tbody tr:last-child td { border-bottom: none; }
-tbody tr.rw { cursor: pointer; transition: background .1s; }
+tbody tr.rw { cursor: pointer; transition: background .14s var(--ease); }
 tbody tr.rw:hover { background: var(--hov); }
 tfoot td {
   padding: 14px 20px; font-size: 13.5px; color: var(--mut);
@@ -782,28 +922,29 @@ td .nm { font-weight: 600; }
   color: var(--brand-d); letter-spacing: -.005em;
 }
 
-/* ── สถานะ ──────────────────────────────────────────────── */
+/* ── สถานะ ── ขอบสีบางๆ + เงาจางๆ ให้ป้ายดูมีน้ำหนักเป็นชิ้นของจริง ไม่ใช่แค่พื้นสีแบนๆ ── */
 .st {
   display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px;
-  font-weight: 500; padding: 5px 11px; border-radius: var(--r-pill);
-  white-space: nowrap; border: none;
+  font-weight: 600; padding: 5px 11px; border-radius: var(--r-pill);
+  white-space: nowrap; border: 1px solid transparent;
+  box-shadow: 0 1px 2px rgba(16,24,40,.03);
 }
 .st::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
-.st.ok { color: var(--ok); background: var(--okb); }
-.st.wn { color: var(--wn); background: var(--wnb); }
-.st.cr { color: var(--cr); background: var(--crb); }
-.st.pr { color: var(--pr); background: var(--prb); }
-.st.mu { color: var(--mut); background: var(--hov); }
+.st.ok { color: var(--ok); background: var(--okb); border-color: var(--okl); }
+.st.wn { color: var(--wn); background: var(--wnb); border-color: var(--wnl); }
+.st.cr { color: var(--cr); background: var(--crb); border-color: var(--crl); }
+.st.pr { color: var(--pr); background: var(--prb); border-color: var(--prl); }
+.st.mu { color: var(--mut); background: var(--hov); border-color: var(--rule); }
 
 .tg {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
-  font-weight: 600; padding: 4px 10px; border-radius: var(--r-pill);
-  border: none; white-space: nowrap;
+  font-weight: 700; padding: 4px 10px; border-radius: var(--r-pill);
+  border: 1px solid transparent; white-space: nowrap;
 }
-.tg.ok { color: var(--ok); background: var(--okb); }
-.tg.wn { color: var(--wn); background: var(--wnb); }
-.tg.cr { color: var(--cr); background: var(--crb); }
-.tg.mu { color: var(--mut); background: var(--hov); }
+.tg.ok { color: var(--ok); background: var(--okb); border-color: var(--okl); }
+.tg.wn { color: var(--wn); background: var(--wnb); border-color: var(--wnl); }
+.tg.cr { color: var(--cr); background: var(--crb); border-color: var(--crl); }
+.tg.mu { color: var(--mut); background: var(--hov); border-color: var(--rule); }
 
 /* ── หน้ารายละเอียด ─────────────────────────────────────── */
 .back {
@@ -830,7 +971,7 @@ td .nm { font-weight: 600; }
 .pstep.dn .cir { background: var(--ok); border-color: var(--ok); color: #fff; }
 .pstep.cu .cir {
   background: var(--brand); border-color: var(--brand); color: #fff;
-  box-shadow: 0 0 0 6px var(--tint), 0 10px 20px -8px rgba(0,120,212,.55);
+  box-shadow: 0 0 0 6px var(--tint), 0 10px 20px -8px rgba(10,120,212,.55);
 }
 .pstep .cap {
   font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
@@ -1078,7 +1219,12 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 /* ── สถานะว่าง / โหลด ───────────────────────────────────── */
 .vw { display: none; } .vw.on { display: block; }
 .empty { padding: 56px 20px; text-align: center; color: var(--mut); font-size: 13px; }
-.empty svg.i { width: 30px; height: 30px; color: var(--fnt); margin-bottom: 12px; }
+/* วางไอคอนในป้ายวงกลมไล่สีจางๆ แทนไอคอนลอยเดี่ยวๆ ให้สถานะ "ว่าง" ดูตั้งใจออกแบบ ไม่ใช่ที่เหลือจากเนื้อหา */
+.empty svg.i {
+  width: 22px; height: 22px; color: var(--brand); margin-bottom: 14px;
+  padding: 13px; border-radius: 50%;
+  background: linear-gradient(150deg, var(--tint) 0%, var(--tint2) 100%);
+}
 .loading { padding: 60px; text-align: center; color: var(--mut); font-size: 13px; }
 
 /* ── รายการกิจกรรม ──────────────────────────────────────── */
@@ -1105,8 +1251,8 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
   letter-spacing: .02em; text-transform: none; color: var(--mut);
 }
 .greet h1, .phd h1 {
-  margin: 6px 0 0; font-size: 25px; font-weight: 700;
-  letter-spacing: -.032em; line-height: 1.2;
+  margin: 6px 0 0; font-size: 29px; font-weight: 800;
+  letter-spacing: -.036em; line-height: 1.15;
 }
 .greet .sub2, .phd p {
   margin: 9px 0 0; font-size: 14px; color: var(--mut); max-width: 78ch; line-height: 1.6;
@@ -1120,6 +1266,31 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
   margin: 0 0 12px; font-size: 26px; font-weight: 700;
   letter-spacing: -.035em; line-height: 1.2; color: var(--ink);
 }
+
+/* ═══ สวิตช์ ON/OFF — ใช้กับ "สัญญาไหนกำลังดำเนินการอยู่" ในแท็บลูกค้า & สัญญา
+   เขียว = ON = ระบบกำลังทำงานให้บริษัทนี้อยู่ตอนนี้ (ดู setActiveContract ฝั่งเซิร์ฟเวอร์) ═══ */
+.toggle {
+  display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none;
+  margin-left: auto;
+}
+.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.toggle .tk {
+  position: relative; width: 40px; height: 24px; flex: none; border-radius: var(--r-pill);
+  background: var(--hair); border: 1px solid var(--rule);
+  transition: background .16s var(--ease), border-color .16s var(--ease);
+}
+.toggle .tk::before {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--paper); box-shadow: var(--sh2);
+  transition: transform .18s var(--ease);
+}
+.toggle.on .tk { background: var(--ok); border-color: var(--ok); }
+.toggle.on .tk::before { transform: translateX(16px); }
+.toggle input:disabled ~ .tk { opacity: .5; cursor: default; }
+.toggle input:focus-visible ~ .tk { outline: 2px solid var(--brand); outline-offset: 2px; }
+.toggle .tl { font-size: 12.5px; font-weight: 700; color: var(--mut); white-space: nowrap; }
+.toggle.on .tl { color: var(--ok); }
+@media (prefers-reduced-motion: reduce) { .toggle .tk, .toggle .tk::before { transition: none; } }
 
 /* แถวข้อมูลกำกับเอกสารแบบการ์ด — ใบว่าจ้าง / สัญญา / ข้อมูล ณ วันที่ / ผู้จัดทำ */
 .metabar {
@@ -1154,7 +1325,7 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 .kpi {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
   padding: 22px 24px 24px; box-shadow: var(--sh1); position: relative; overflow: hidden;
-  transition: box-shadow .18s, border-color .18s, transform .18s;
+  transition: box-shadow .2s var(--ease), border-color .2s var(--ease), transform .2s var(--ease);
 }
 .kpi::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
@@ -1163,17 +1334,19 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 .kpi.w::before { background: linear-gradient(90deg, var(--wn), var(--wnl)); }
 .kpi.g::before { background: linear-gradient(90deg, var(--ok), var(--okl)); }
 .kpi.c::before { background: linear-gradient(90deg, var(--cr), var(--crl)); }
-.kpi.a::before { background: linear-gradient(90deg, var(--brand), #5CB6F0); }
+.kpi.a::before { background: linear-gradient(90deg, var(--brand), var(--brand-l)); }
 .kpi.a {
   background: linear-gradient(150deg, var(--tint) 0%, var(--paper) 55%);
 }
 .kpi.act { cursor: pointer; }
-.kpi.act:hover { box-shadow: var(--sh2); border-color: #D2D7E0; transform: translateY(-2px); }
+.kpi.act:hover { box-shadow: var(--sh3); border-color: #D2D7E0; transform: translateY(-3px); }
 .kpi.act:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .kpi { transition: none; } .kpi.act:hover { transform: none; } }
 .kpi .kh { display: flex; align-items: center; gap: 10px; }
 .kpi .ic {
   width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
-  background: var(--tint); color: var(--brand-d); border: 1px solid var(--tint2);
+  background: var(--grad-brand); color: #fff; border: 1px solid var(--brand-h);
+  box-shadow: 0 3px 8px -2px rgba(10,120,212,.45);
 }
 .kpi .ic svg { width: 17px; height: 17px; }
 .kpi .kl { font-size: 13px; font-weight: 500; color: var(--mut); }
@@ -1189,7 +1362,13 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 .kpi.c .kv { color: var(--cr); }
 .kpi.g .ic { background: var(--okb); color: var(--ok); border-color: var(--okl); }
 .kpi.g .kv { color: var(--ok); }
-.kpi.a .kv { color: var(--brand-d); }
+/* ตัวเลขเด่นของการ์ดหลัก — ไล่สีบนตัวหนังสือ ให้เป็นจุดสะดุดตาที่สุดของแดชบอร์ด
+   ใส่ color สำรองไว้ด้วยเผื่อเบราว์เซอร์ไม่รองรับ background-clip:text (จะได้ยังอ่านออก) */
+.kpi.a .kv {
+  color: var(--brand-d);
+  background: linear-gradient(100deg, var(--brand-h) 10%, var(--brand) 55%, var(--brand-l) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
 
 .pill {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;
@@ -1330,6 +1509,14 @@ tbody tr.urgent:hover { background: #FFF5E8; }
   .tabbar-in { padding: 0 16px; }
   .page { padding: 22px 16px 80px; }
   .fbar { margin: 22px -16px -80px; padding: 14px 16px; }
+}
+/* จอแคบมาก (มือถือแนวตั้งทั่วไป) — โลโก้เต็ม + ป้าย FlowAccount + กระดิ่ง + ชิปผู้ใช้
+   รวมกันแล้วกว้างเกินจอเสมอ ต้องซ่อนป้ายสถานะที่ไม่ใช่ปุ่ม (ดูซ้ำได้ในหน้าแดชบอร์ด)
+   ก่อน ไม่งั้นแถบบนจะดันให้ทั้งหน้าสกรอลแนวนอน */
+@media (max-width: 480px) {
+  .env:not(.mode) { display: none; }
+  .topbar { gap: 10px; padding: 0 12px 0 0; }
+  .topbar .brand { padding: 0 10px; }
 }
 
 /* เอกสารใบแจ้งหนี้อยู่ในคอลัมน์แคบ จึงบีบระยะขอบเซลล์ให้ชื่อรายการมีที่พอ */
@@ -1593,6 +1780,22 @@ td.n, .docid { white-space: nowrap; }
   display: flex; gap: 10px; justify-content: flex-end; width: 100%;
   padding: 22px 28px; border-top: 1px solid var(--hair); margin-top: 20px;
 }
+
+/* ── ดูไฟล์ PDF ในหน้า — .modal-backdrop.pdf ใช้ backdrop เดียวกันแต่การ์ดใหญ่เต็มจอ ─── */
+.pdf-card {
+  max-width: min(960px, 92vw); width: 100%; height: min(90vh, 1100px);
+  align-items: stretch; border-radius: 14px;
+}
+.pdf-hd {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--hair);
+}
+.pdf-title {
+  display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600;
+  color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pdf-actions { display: flex; gap: 8px; flex: none; }
+.pdf-frame { flex: 1; width: 100%; border: none; background: #525659; }
 .modal-ft .btn { padding: 10px 18px; }
 /* ปุ่มยกเลิกแบบตัวอักษรเปล่า ไม่มีเส้นขอบ ตามภาพตัวอย่าง */
 .modal-ft .btn:not(.dgr):not(.pri) {
@@ -1605,3 +1808,28 @@ td.n, .docid { white-space: nowrap; }
 }
 .modal-ft .btn.dgr:hover:not(:disabled) { background: #c62838; border-color: #c62838; }
 .modal-ft .btn.dgr svg { color: #fff; }
+
+/* ── การ์ด "AI กำลังอ่าน" ─────────────────────────────────────────
+   ขึ้นทันทีที่กดปุ่ม ในตำแหน่งเดียวกับที่ผลจะไปโผล่ — เดิมคนต้องนั่งมองปุ่มที่กดไม่ได้
+   เป็นนาทีๆ โดยไม่มีอะไรบอกว่าระบบยังทำงานอยู่หรือค้างไปแล้ว */
+.card.pending { border-color: var(--tint2); background: linear-gradient(var(--tint), var(--paper) 70px); }
+.card.pending .hd .rt { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--brand-d); }
+.readwait { display: flex; flex-direction: column; gap: 9px; }
+.readwait b { font-size: 13.5px; color: var(--ink); }
+.readwait span { font-size: 12.5px; color: var(--mut); line-height: 1.65; }
+/* แถบวิ่งไปมา — บอกว่ายังทำงานอยู่ ไม่ได้บอกเปอร์เซ็นต์ เพราะฝั่งระบบยังไม่ส่งความคืบหน้ามา
+   จึงตั้งใจไม่ทำให้ดูเหมือน progress bar จริงที่รู้ว่าเหลืออีกเท่าไร */
+.readwait .bar { height: 4px; border-radius: 999px; background: var(--tint2); overflow: hidden; }
+.readwait .bar i {
+  display: block; width: 35%; height: 100%; border-radius: 999px; background: var(--brand);
+  animation: readslide 1.4s ease-in-out infinite;
+}
+@keyframes readslide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* แถบบอกว่ากำลังไล่อ่านอัตโนมัติ + ปุ่มหยุด — วางไว้บนสุดของรายการเมล */
+.note.autoread { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.note.autoread span { flex: 1; }
+.note.autoread button { flex: none; }

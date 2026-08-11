@@ -26,11 +26,11 @@ test('ยังไม่มีผู้ใช้เลยตอนฐานข�
   assert.equal(auth.hasAnyUser(), false);
 });
 
-test('สร้างผู้ใช้ใหม่สำเร็จ — ไม่ระบุ role เป็น operator โดยปริยาย', () => {
+test('สร้างผู้ใช้ใหม่สำเร็จ — ไม่ระบุ role เป็น user โดยปริยาย', () => {
   const user = auth.createUser({ username: 'nicha', nameTh: 'นิชา', password: 'sup3rsecret' });
   assert.equal(user.username, 'nicha');
   assert.equal(user.nameTh, 'นิชา');
-  assert.equal(user.role, 'operator');
+  assert.equal(user.role, 'user');
   assert.equal(auth.hasAnyUser(), true);
 });
 
@@ -64,7 +64,7 @@ test('ตั้งชื่อ username ซ้ำไม่ได้', () => {
 
 test('login ด้วยรหัสถูก → ได้ข้อมูลผู้ใช้กลับมารวม role', () => {
   const user = auth.verifyLogin('nicha', 'sup3rsecret');
-  assert.deepEqual(user, { username: 'nicha', nameTh: 'นิชา', role: 'operator' });
+  assert.deepEqual(user, { username: 'nicha', nameTh: 'นิชา', role: 'user' });
 });
 
 test('login ด้วยรหัสผิด → null', () => {
@@ -81,7 +81,7 @@ test('สร้าง session แล้ว resolve กลับมาได้�
   assert.ok(new Date(expiresAt).getTime() > Date.now());
 
   const resolved = auth.resolveSession(token);
-  assert.deepEqual(resolved, { username: 'nicha', nameTh: 'นิชา', role: 'operator' });
+  assert.deepEqual(resolved, { username: 'nicha', nameTh: 'นิชา', role: 'user' });
 });
 
 test('resolveSession คืน null เมื่อ token ไม่มีอยู่จริง', () => {
@@ -124,7 +124,7 @@ test('updateUserRole เปลี่ยน role ได้ และมีผล�
   const result = auth.updateUserRole('nicha', 'admin', { actor: 'ทดสอบ' });
   assert.equal(result.role, 'admin');
   assert.equal(auth.verifyLogin('nicha', 'sup3rsecret').role, 'admin');
-  auth.updateUserRole('nicha', 'operator', { actor: 'ทดสอบ' }); // คืนค่าเดิมกันเทสต์อื่นพัง
+  auth.updateUserRole('nicha', 'user', { actor: 'ทดสอบ' }); // คืนค่าเดิมกันเทสต์อื่นพัง
 });
 
 test('updateUserRole กับ role ที่ไม่รู้จัก → error 400', () => {

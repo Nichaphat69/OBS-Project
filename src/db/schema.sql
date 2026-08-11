@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS employees (
   name_en          TEXT,
   -- ชื่อตำแหน่งที่จะขึ้นบนใบแจ้งหนี้ (ไม่ใช้ค่าจาก Timesheet)
   invoice_position TEXT NOT NULL,
+  -- รหัสพนักงานฝั่ง HRDD (WorkDD) — คนละระบบกับ id ข้างบน ใช้จับคู่ตอนเทียบวันลากับ HRDD เท่านั้น
+  hrdd_employee_code TEXT,
   created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
@@ -227,11 +229,12 @@ CREATE TABLE IF NOT EXISTS cycle_approvals (
 
 -- ── ผู้ใช้งานระบบ (login) ────────────────────────────────────
 -- เก็บรหัสผ่านเอง (scrypt) ยังไม่ผูก SSO — ดู src/auth.js
--- role: 'admin' แก้ข้อมูลหลักได้ (เรท/สัญญา/ชื่อพ้อง/วันหยุด) · 'operator' ทำงานประจำวันได้แต่แก้ไม่ได้
+-- role: 'admin' แก้ข้อมูลหลักได้ (เรท/สัญญา/ชื่อพ้อง/วันหยุด) · 'user' ทำงานประจำวันได้แต่แก้ไม่ได้
+-- มีแค่ 2 ค่านี้เท่านั้น (ดู ROLES ใน src/auth.js) — ห้ามเพิ่ม role อื่นจนกว่าจะมี workflow ที่ต้องใช้จริง
 CREATE TABLE IF NOT EXISTS users (
   username      TEXT PRIMARY KEY,
   name_th       TEXT NOT NULL,        -- ชื่อที่จะไปโผล่ใน audit log ทุกครั้งที่กดยืนยัน/อนุมัติ
-  role          TEXT NOT NULL DEFAULT 'operator',
+  role          TEXT NOT NULL DEFAULT 'user',
   active        INTEGER NOT NULL DEFAULT 1,  -- ปิดใช้งานได้โดยไม่ลบ (ประวัติ audit log ยังอ้างชื่อนี้อยู่)
   password_salt TEXT NOT NULL,
   password_hash TEXT NOT NULL,

@@ -7,7 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractTimesheet, verifyExtraction } from '../src/extract/timesheet.js';
+import { extractTimesheet, verifyExtraction, mergeDocumentsByEmployee } from '../src/extract/timesheet.js';
 
 // PDF ขั้นต่ำ 1 หน้า — พอให้ pdf-to-img แปลงเป็นรูปได้จริง เนื้อหาในหน้าไม่สำคัญ
 // เพราะการทดสอบนี้ไม่ได้พึ่งความแม่นของโมเดลจริง (จำลองคำตอบด้วย fakeFetch)
@@ -227,12 +227,15 @@ test('ต่อโมเดลไม่ติดชั่วคราว → ล
 
 test('ต่อโมเดลไม่ติดจนหมดสิทธิ์ลองใหม่ → ใช้หน้าที่เหลือได้ แต่ห้ามบันทึกเข้าระบบ', async () => {
   /* หน้าแรกพังทุกครั้งที่ลอง (3 ครั้ง) หน้าที่สองอ่านได้ —
-     ข้อมูลขาดไปหนึ่งหน้า จะคิดวันทำงาน/วันลาผิดโดยไม่มีใครรู้ตัว จึงต้องกันไว้ */
+     ข้อมูลขาดไปหนึ่งหน้า จะคิดวันทำงาน/วันลาผิดโดยไม่มีใครรู้ตัว จึงต้องกันไว้
+     ทุกหน้ายิงคำขอพร้อมกัน (ดู runPages ใน timesheet.js) ลำดับ call จึงสลับกันได้
+     ต้องแยกพัง/ผ่านตามว่าเป็นหน้าไหน ไม่ใช่ตามลำดับ call ทั้งไฟล์ */
   let calls = 0;
-  const fetchImpl = async () => {
+  const fetchImpl = async (url, init) => {
     calls += 1;
-    // 3 ครั้งแรกคือความพยายามอ่านหน้า 1 (ลองใหม่ครบแล้วยังพัง) ที่เหลือคือหน้า 2 ซึ่งอ่านได้
-    if (calls <= 3) throw new Error('fetch failed');
+    const body = JSON.parse(init.body);
+    const text = JSON.stringify(body.messages);
+    if (/หน้าที่ 1\//.test(text)) throw new Error('fetch failed');
     return okResponse(fakeTimesheetData('2026-01'));
   };
 
@@ -533,4 +536,125 @@ test('ตัวพิมพ์เล็กใหญ่และช่องว�
 
   const result = await extractTimesheet(makePdf(3), { expectedPeriod: '2026-01', fetchImpl });
   assert.equal(result.data.position, 'Java Programmer', '2 เสียง (นับรวมที่พิมพ์ต่างกัน) ต้องชนะ 1 เสียง');
+});
+
+/* ── mergeDocumentsByEmployee ─────────────────────────────────────────
+   เจอจริงกับ Thailife 1-2026.pdf: ตารางวันเขียนชื่อเป็นอังกฤษ "Sunee Maneekasemsuk"
+   แต่หน้าอีเมลแจ้งอนุมัติที่แนบท้ายไฟล์เขียนเป็นไทย "นางสาว สุนีย์ มณีเกษมสุข" — ตัวอักษร
+   ไม่ทับกันเลยสักตัว groupPagesByEmployee (เทียบตัวอักษรร่วมกัน) จึงแยกเป็นคนละฉบับ
+   ทั้งที่เป็นคนเดียวกัน ต้องใช้ roster พนักงานช่วยรวมกลับ */
+
+test('mergeDocumentsByEmployee รวมฉบับที่ถูกแยกผิดเพราะชื่อคนละภาษากลับเป็นคนเดียวกัน', () => {
+  const mainDoc = {
+    data: pageWith({
+      employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager', period: '2026-01',
+      totalWorkDays: 20, totalLeaveDays: 0,
+      days: [{ date: '2026-01-05', timeIn: '8:30', timeOut: '17:30', label: null }],
+    }),
+    pageRange: [1, 5],
+    verification: { ok: true, issues: [] },
+  };
+  const attachmentDoc = {
+    data: pageWith({
+      employeeName: 'นางสาว สุนีย์ มณีเกษมสุข', documentNo: 'OBS202620', approvalStatus: 'อนุมัติ',
+      signedByProjectManager: true, projectManagerSignatureName: 'Somsri Jaidee',
+    }),
+    pageRange: [6, 6],
+    verification: { ok: true, issues: [] },
+  };
+
+  // จำลอง roster: ทั้งสองชื่อผูกกับพนักงานคนเดียวกัน (matchEmployee ของจริงทำแบบนี้ผ่าน nameTh/nameEn)
+  const resolveEmployeeId = (name) => (/sunee|สุนีย์/i.test(name ?? '') ? 'emp-sunee' : null);
+
+  const merged = mergeDocumentsByEmployee([mainDoc, attachmentDoc], resolveEmployeeId, { expectedPeriod: '2026-01' });
+
+  assert.equal(merged.length, 1, 'สองฉบับที่เป็นคนเดียวกันต้องรวมเหลือฉบับเดียว');
+  assert.equal(merged[0].data.employeeName, 'Sunee Maneekasemsuk', 'ใช้ชื่อจากฉบับที่มีตารางวันเป็นหลัก ไม่ใช่ฉบับที่เกือบว่างเปล่า');
+  assert.equal(merged[0].data.days.length, 1, 'ตารางวันต้องยังอยู่ครบ');
+  assert.equal(merged[0].data.documentNo, 'OBS202620', 'เติมเลขเอกสารจากฉบับแนบท้ายที่ฉบับหลักไม่มี');
+  assert.equal(merged[0].data.signedByProjectManager, true, 'เติมลายเซ็นผู้อนุมัติจากฉบับแนบท้าย');
+  assert.deepEqual(merged[0].pageRange, [1, 6], 'ช่วงหน้าต้องครอบคลุมทั้งสองฉบับที่รวมกัน');
+});
+
+test('mergeDocumentsByEmployee ไม่รวมคนละคนเข้าด้วยกันแม้ resolveEmployeeId คืนค่า null ทั้งคู่', () => {
+  const docA = {
+    data: pageWith({ employeeName: 'Pongpun Mamak', days: [{ date: '2026-01-05', timeIn: '8:30', timeOut: '17:30', label: null }] }),
+    pageRange: [1, 1],
+    verification: { ok: true, issues: [] },
+  };
+  const docB = {
+    data: pageWith({ employeeName: 'Sunee Maneekasemsuk', days: [{ date: '2026-01-06', timeIn: '8:30', timeOut: '17:30', label: null }] }),
+    pageRange: [2, 2],
+    verification: { ok: true, issues: [] },
+  };
+
+  const merged = mergeDocumentsByEmployee([docA, docB], () => null);
+
+  assert.equal(merged.length, 2, 'จับคู่พนักงานไม่ได้เลยทั้งคู่ ต้องปล่อยแยกไว้ ไม่เดารวมเอง');
+});
+
+/* ── การจัดประเภทวันจาก jobDescription ─────────────────────────────────
+   เจอจริงกับ ThaiLife 1-2026-Pongpun.pdf: บางวันหยุด (24, 25 ม.ค.) โมเดลใส่ป้าย "Weekend"
+   ไว้ใน jobDescription แทน label ถ้าตัดจอบดิสคริปชันออกทั้งก้อนจะพลาดวันพวกนี้กลายเป็น
+   วันทำงาน แต่ถ้าเอาทั้งก้อนมาเช็ค (รวมย่อหน้าบรรยายงานจริงที่ยาว) จะกลับไปเจอบั๊กเดิม —
+   วันที่ 8, 9 มีคำว่า "เวลา" และวันที่ 27 มีคำว่า "บุคลากร" ซึ่งมีตัวอักษร "ลา" แทรกอยู่
+   กลางคำ ถูก regex ของวันลาจับผิด ต้องแยกด้วยความยาว/ขึ้นบรรทัดใหม่แทน */
+
+test('วันหยุดที่โมเดลใส่ป้ายไว้ใน jobDescription แทน label (สั้น ไม่มีขึ้นบรรทัดใหม่) ต้องยังจับเป็นวันหยุดได้', async () => {
+  const fetchImpl = fakeVisionFetch(pageWith({
+    period: '2026-01',
+    days: [
+      { date: '2026-01-24', timeIn: null, timeOut: null, label: null, jobDescription: 'Weekend' },
+      { date: '2026-01-25', timeIn: null, timeOut: null, label: null, jobDescription: 'Holiday' },
+    ],
+  }));
+
+  const result = await extractTimesheet(MINIMAL_PDF, { expectedPeriod: '2026-01', fetchImpl });
+  assert.equal(result.data.days.find((d) => d.date === '2026-01-24').kind, 'weekend');
+  assert.equal(result.data.days.find((d) => d.date === '2026-01-25').kind, 'holiday');
+});
+
+test('ย่อหน้าบรรยายงานยาวที่มีคำว่า "ลา" แทรกอยู่กลางคำอื่น (เวลา, บุคลากร) ต้องไม่ถูกจับว่าเป็นวันลา', async () => {
+  const fetchImpl = fakeVisionFetch(pageWith({
+    period: '2026-01',
+    days: [
+      {
+        date: '2026-01-08', timeIn: '8:30', timeOut: '17:00', label: null,
+        jobDescription: 'แก้โปรแกรมหนังสือขออนุมัติแต่งตั้ง -defect เงื่อนไขระยะเวลาการติดโทษ แก้โปรแกรม NewPerformance',
+      },
+      {
+        date: '2026-01-27', timeIn: '8:30', timeOut: '17:00', label: null,
+        jobDescription: 'แก้เมนูประวัติผลงานบุคลากรฝ่ายขาย ComLV เขียนรายงานประวัติผลงานบุคลากรฝ่ายขาย ComLV',
+      },
+    ],
+  }));
+
+  const result = await extractTimesheet(MINIMAL_PDF, { expectedPeriod: '2026-01', fetchImpl });
+  assert.equal(result.data.days.find((d) => d.date === '2026-01-08').kind, 'work');
+  assert.equal(result.data.days.find((d) => d.date === '2026-01-27').kind, 'work');
+});
+
+test('วันที่ตารางบอกว่าเป็น Holiday/Weekend ต้องไม่ถูกนับเป็นวันลาแม้ leaveDays ที่โมเดลแยกให้มาจะมีวันเดียวกันอยู่ด้วย', async () => {
+  /* เจอจริงกับ ThaiLife 1-2026-Sunee.pdf: ไฟล์ระบุ "Leave /Sick (days) 0" ไม่มีวันลาเลย
+     แต่โมเดลเอาข้อความสรุปท้ายตารางไปเข้าใจผิดว่าเป็นแถววันลาของวันที่ 31 (ซึ่งจริงๆเป็น
+     Holiday) และบางรอบยังเอาวันที่ 1, 2 (Holiday เหมือนกัน) มาใส่ซ้ำในลิสต์วันลาด้วย */
+  const fetchImpl = fakeVisionFetch(pageWith({
+    period: '2026-01',
+    days: [
+      { date: '2026-01-01', timeIn: null, timeOut: null, label: 'Holiday' },
+      { date: '2026-01-02', timeIn: null, timeOut: null, label: 'Holiday' },
+      { date: '2026-01-05', timeIn: '8:30', timeOut: '17:30', label: null },
+      { date: '2026-01-31', timeIn: null, timeOut: null, label: 'Holiday' },
+    ],
+    leaveDays: [
+      { date: '2026-01-01', type: 'unknown', rawLabel: 'Holiday' },
+      { date: '2026-01-02', type: 'unknown', rawLabel: 'Holiday' },
+      { date: '2026-01-31', type: 'sick', rawLabel: 'Leave /Sick (days)' },
+    ],
+  }));
+
+  const result = await extractTimesheet(MINIMAL_PDF, { expectedPeriod: '2026-01', fetchImpl });
+  assert.deepEqual(result.data.leaveDays, [], 'ทุกวันที่ตารางบอกว่าเป็น Holiday ต้องถูกตัดออกจากวันลาหมด');
+  assert.equal(result.data.days.find((d) => d.date === '2026-01-01').kind, 'holiday');
+  assert.equal(result.data.days.find((d) => d.date === '2026-01-31').kind, 'holiday');
 });

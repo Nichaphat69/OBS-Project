@@ -124,13 +124,16 @@ const routes = [
     return svc.listKnownLineUsers();
   }],
 
-  /** ภาพรวม — หน้ารายงาน ไม่ใช่ขั้นตอนงาน แต่ใช้ดูข้อมูลรวมของทั้งระบบได้ */
-  ['GET', /^\/api\/dashboard$/, () => svc.dashboard()],
+  /** ภาพรวม — หน้ารายงาน ไม่ใช่ขั้นตอนงาน แต่ใช้ดูข้อมูลรวมของทั้งระบบได้
+   *  ?contractId= กรองให้เหลือแค่บริษัทที่กำลังเลือกอยู่บนแถบบน — ไม่ส่งมา = รวมทุกสัญญา (ของเดิม) */
+  ['GET', /^\/api\/dashboard$/, (_m, url) =>
+    svc.dashboard({ contractId: url.searchParams.get('contractId') ?? undefined })],
 
   ['GET', /^\/api\/timesheets$/, (_m, url) =>
     svc.listTimesheets({
       status: url.searchParams.get('status') ?? undefined,
       period: url.searchParams.get('period') ?? undefined,
+      contractId: url.searchParams.get('contractId') ?? undefined,
     })],
 
   ['GET', /^\/api\/timesheets\/([^/]+)$/, (m) => {
@@ -141,6 +144,11 @@ const routes = [
 
   ['POST', /^\/api\/timesheets\/([^/]+)\/recompute$/, (m, _url, _body, session) =>
     svc.recomputeTimesheet(decodeURIComponent(m[1]), { actor: session.nameTh })],
+
+  /** เทียบวันลาที่ Timesheet รายงานกับวันลาที่อนุมัติแล้วจริงใน HRDD — อ่านอย่างเดียว
+   * ไม่มีเขียน/แก้/ลบฝั่ง HRDD เด็ดขาด (ดูคอมเมนต์ที่ svc.checkTimesheetAgainstHrdd) */
+  ['GET', /^\/api\/timesheets\/([^/]+)\/hrdd-compare$/, (m) =>
+    svc.checkTimesheetAgainstHrdd(decodeURIComponent(m[1]))],
 
   ['POST', /^\/api\/timesheets\/([^/]+)\/reject$/, (m, _url, body, session) => {
     if (!body?.reason) throw httpError(400, 'ต้องระบุเหตุผลที่ตีกลับ');
@@ -282,8 +290,31 @@ const routes = [
   ['GET', /^\/api\/cycles\/ready$/, () => svc.readyCycles()],
 
   ['GET', /^\/api\/contracts$/, () => svc.listContracts()],
+  /** สัญญาที่กำลังดำเนินการอยู่ตอนนี้ — แถบบนใช้ตั้งค่าเริ่มต้นของตัวเลือกบริษัทตอนเปิดหน้าเว็บ */
+  ['GET', /^\/api\/contracts\/active$/, () => svc.getActiveContract()],
+
+  /* ── เพิ่มลูกค้า/สัญญาใหม่ + สลับว่าใครกำลัง active — แก้ข้อมูลหลักเฉพาะ admin เหมือนกัน ── */
+  ['POST', /^\/api\/customers$/, (_m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.createCustomer({ ...body, actor: session.nameTh });
+  }],
+
+  ['POST', /^\/api\/contracts$/, (_m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.createContract({ ...body, actor: session.nameTh });
+  }],
+
+  ['PATCH', /^\/api\/contracts\/([^/]+)\/active$/, (m, _url, body, session) => {
+    requireAdmin(session);
+    const contractId = decodeURIComponent(m[1]);
+    return body?.active === false
+      ? svc.deactivateContract(contractId, { actor: session.nameTh })
+      : svc.setActiveContract(contractId, { actor: session.nameTh });
+  }],
+
   ['GET', /^\/api\/employees$/, () => svc.listEmployees()],
-  ['GET', /^\/api\/invoices$/, () => svc.listInvoices()],
+  ['GET', /^\/api\/invoices$/, (_m, url) =>
+    svc.listInvoices({ contractId: url.searchParams.get('contractId') ?? undefined })],
   ['GET', /^\/api\/activity$/, (_m, url) =>
     svc.activityFeed({ limit: Number(url.searchParams.get('limit') ?? 30) })],
   ['GET', /^\/api\/settings$/, () => svc.settingsSnapshot()],

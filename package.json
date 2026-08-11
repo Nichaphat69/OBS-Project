@@ -18,6 +18,7 @@
     "user:reset-password": "node scripts/reset-password.js"
   },
   "dependencies": {
-    "pdf-to-img": "^6.2.0"
+    "pdf-to-img": "^6.2.0",
+    "pdfjs-dist": "~5.6.205"
   }
 }

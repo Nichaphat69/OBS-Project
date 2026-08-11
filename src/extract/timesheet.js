@@ -1,11 +1,14 @@
 /**
  * อ่านข้อมูลจากไฟล์ Timesheet PDF ด้วยโมเดล vision ที่รันในเครื่อง (LM Studio/Ollama)
  *
- * Timesheet เป็น PDF ที่ export มาจาก Excel และมีข้อความไทยผสม
- * การดึงข้อความแบบ text extraction ล้วนมักได้ตัวอักษรไทยเพี้ยน
- * จึงแปลงแต่ละหน้าเป็นรูปภาพก่อน (pdf-to-img) แล้วส่งให้โมเดล vision "มองเห็น"
- * แทน — โมเดลข้อความล้วนอย่าง Gemma 2B ทำงานนี้ไม่ได้ ต้องใช้รุ่นที่รับภาพได้
- * (LOCAL_LLM_VISION_MODEL เช่น Gemma 3 4B ขึ้นไป)
+ * มีสองทาง เลือกอัตโนมัติตามตัวเอกสาร
+ *
+ * 1. ทางเร็ว (ค่าเริ่มต้น) — อ่านชั้นข้อความใน PDF ตรงๆ ด้วย pdfjs แล้วส่งข้อความให้โมเดล
+ *    เอกสารเกือบทั้งหมด export มาจาก Excel จึงมีชั้นข้อความสมบูรณ์อยู่แล้ว (14 จาก 15 ฉบับที่สำรวจ)
+ *    เร็วกว่าและแม่นกว่าการให้โมเดลมองรูปมาก — ดูตัวเลขที่วัดไว้ใน extract/pdfText.js
+ *
+ * 2. ทางสำรอง — ไฟล์ที่เป็นภาพสแกนจริง (เช่นภาพหน้าจอเว็บ) ไม่มีชั้นข้อความให้อ่าน
+ *    ต้องแปลงเป็นรูปแล้วส่งให้โมเดล vision "มองเห็น" (LOCAL_LLM_VISION_MODEL)
  *
  * ⚠️ อ่านทีละหน้า ไม่ส่งทุกหน้าในคำขอเดียว — ทดสอบกับเอกสารจริงแล้วว่าโมเดลขนาด 4B
  * เมื่อได้รับภาพ 4 หน้าขึ้นไปพร้อมกัน (รวมกับ schema ที่ซับซ้อน) จะ "ปฏิเสธ" ทั้งคำขอ
@@ -21,8 +24,9 @@
 
 import { readFile } from 'node:fs/promises';
 import { pdf } from 'pdf-to-img';
-import { callLocalJSON, localVisionModel } from '../llm/localClient.js';
+import { callLocalJSON, localVisionModel, localTextModel } from '../llm/localClient.js';
 import { normalizePeriod, normalizeDate, classifyDayKind, classifyLeaveType } from './normalize.js';
+import { extractPdfText, employeeNameIn } from './pdfText.js';
 
 const TIMESHEET_SCHEMA = {
   type: 'object',
@@ -274,6 +278,7 @@ function mergePageResults(pageResults) {
   const failedPages = [];
   const rawDays = [];
   const rawLeaves = [];
+  const rawTotalLeaveClaims = [];
 
   for (const { pageIndex, data, error } of pageResults) {
     if (error) {
@@ -286,7 +291,7 @@ function mergePageResults(pageResults) {
       if (data[key]) (votes[key] ??= []).push(String(data[key]));
     }
     merged.totalWorkDays = Math.max(merged.totalWorkDays, data.totalWorkDays || 0);
-    merged.totalLeaveDays = Math.max(merged.totalLeaveDays, data.totalLeaveDays || 0);
+    rawTotalLeaveClaims.push(data.totalLeaveDays || 0);
     if (merged.totalHours === null && Number.isFinite(data.totalHours)) merged.totalHours = data.totalHours;
 
     rawDays.push(...(data.days ?? []));
@@ -322,13 +327,23 @@ function mergePageResults(pageResults) {
       continue;
     }
     /* ป้ายบอกว่าไม่ได้ทำงานอยู่คนละคอลัมน์ในแต่ละฟอร์ม — ดูรวมกันทุกช่องแล้วสรุปเป็นชนิดเดียว
-       เก็บข้อความดิบไว้ใน label เหมือนเดิมด้วย เพื่อให้คนตรวจเห็นคำที่เอกสารเขียนจริง */
-    const kind = classifyDayKind(day.label, day.type, day.remark, day.jobDescription);
+       เก็บข้อความดิบไว้ใน label เหมือนเดิมด้วย เพื่อให้คนตรวจเห็นคำที่เอกสารเขียนจริง
+       jobDescription เอามาเช็คด้วยได้เฉพาะตอนที่ "สั้นและไม่มีขึ้นบรรทัดใหม่" เท่านั้น —
+       วัดจริงกับ ThaiLife 1-2026-Pongpun.pdf: วันที่ไม่ได้ทำงาน (Weekend/Holiday) ที่โมเดล
+       ดันใส่ป้ายไว้ใน jobDescription แทน label มีความยาวแค่ 7 ตัวอักษรไม่มีขึ้นบรรทัดใหม่
+       ส่วนย่อหน้าบรรยายงานจริงสั้นที่สุดยาว 83 ตัวอักษรและมีขึ้นบรรทัดใหม่เสมอ ห่างกันมากพอ
+       ที่จะตัดแยกโดยไม่เสี่ยงจับคำว่า "ลา" ที่แทรกอยู่กลางคำอื่นในย่อหน้ายาว (เช่น "เวลา"
+       "บุคลากร") เหมือนตอนที่เอา jobDescription ทั้งก้อนมาเช็คตรงๆ */
+    const statusLikeJobDescription =
+      day.jobDescription && day.jobDescription.length <= 20 && !day.jobDescription.includes('\n')
+        ? day.jobDescription
+        : null;
+    const kind = classifyDayKind(day.label, day.type, day.remark, statusLikeJobDescription);
     const row = {
       ...day,
       date,
       kind,
-      label: day.label ?? (kind === 'work' ? null : (day.type ?? day.remark ?? null)),
+      label: day.label ?? (kind === 'work' ? null : (day.type ?? day.remark ?? statusLikeJobDescription)),
     };
     const existing = dayByDate.get(date);
     if (!existing || (!existing.timeIn && row.timeIn) || (!existing.label && row.label)) {
@@ -343,6 +358,14 @@ function mergePageResults(pageResults) {
   for (const leave of rawLeaves) {
     const date = normalizeDate(leave.date, period);
     if (!date) continue;
+    /* โมเดลบางครั้งรายงานวันเดียวกันซ้ำสองที่ขัดกันเอง — ตาราง days บอกว่าวันนั้นเป็น
+       Holiday/Weekend (อ่านป้ายตรงตัวถูกแล้ว) แต่ leaveDays ที่โมเดลแยกให้มาดันมีวันเดียวกัน
+       อยู่ด้วย (เจอจริงกับ ThaiLife 1-2026-Sunee.pdf: โมเดลเอาข้อความสรุปท้ายตาราง
+       "Leave /Sick (days) 0" ไปเข้าใจผิดว่าเป็นแถววันลาของวันสุดท้าย ทั้งที่วันนั้นเป็น Holiday
+       และวันอื่นที่เป็น Holiday ก็โดนใส่มาซ้ำในบางรอบด้วย) ป้ายที่อ่านตรงจากตารางเชื่อถือได้
+       กว่า ถ้าขัดกันให้เชื่อตารางแทนไม่งั้นวันหยุดจะถูกนับเป็นวันลาผิดๆ กระทบยอดหักส่วนลด */
+    const tableKind = dayByDate.get(date)?.kind;
+    if (tableKind === 'holiday' || tableKind === 'weekend') continue;
     leaveByDate.set(date, {
       ...leave,
       date,
@@ -362,6 +385,22 @@ function mergePageResults(pageResults) {
 
   merged.days = [...dayByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   merged.leaveDays = [...leaveByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+  /* จำนวนวันลาให้นับจากรายการวันลาที่ประกอบขึ้นเองแล้ว (merged.leaveDays) ไม่ใช่เชื่อเลขที่
+     โมเดลอ่านจากช่องสรุปท้ายตารางตรงๆ — วัดจริงกับ ThaiLife 1-2026-Pongpun.pdf: หน้า 1 ไม่มี
+     ช่องสรุปนี้อยู่ในหน้าเลย (อยู่หน้า 2) แต่โมเดลก็ยังตอบ totalLeaveDays มาเป็น 4 ทั้งที่ควร
+     เป็น 0 หรือปล่อยว่าง ส่วนหน้า 2 ที่มีช่องสรุปจริงตอบถูกเป๊ะว่า 1 — พอรวมหลายหน้าด้วย
+     Math.max ตัวเลขที่หลอน (4) จากหน้าที่ไม่มีข้อมูลจะชนะตัวเลขที่ถูกจากหน้าที่มีข้อมูลจริงเสมอ
+     รายการวันลาที่ประกอบจากตาราง (ผ่านการตรวจ Holiday/Weekend แล้ว) เชื่อถือได้กว่ามาก
+     จึงใช้ความยาวของรายการเป็นตัวเลขจริง เก็บเลขที่โมเดลอ้างไว้ในหมายเหตุเผื่อไม่ตรงกันเฉยๆ */
+  if (rawTotalLeaveClaims.some((n) => n !== merged.leaveDays.length)) {
+    const claimed = Math.max(...rawTotalLeaveClaims);
+    notes.push(
+      `โมเดลอ่านช่องสรุปวันลาได้ ${claimed} วัน แต่นับจากตารางได้ ${merged.leaveDays.length} วัน ` +
+      'ใช้ตัวเลขที่นับจากตารางแทน (แม่นยำกว่า) — ตรวจดูอีกครั้งว่าตรงกับเอกสารจริง',
+    );
+  }
+  merged.totalLeaveDays = merged.leaveDays.length;
 
   /* ฟอร์มที่มีทั้งช่อง "Total base man-day 21.00" และ "Total duration (hour) 168.00" วางติดกัน
      โมเดลหยิบเลขชั่วโมงมาใส่ช่องวันบ่อยมาก (เจอจริงกับฟอร์ม CP Axtra) — เดือนหนึ่งมีไม่เกิน 31 วัน
@@ -392,52 +431,120 @@ function mergePageResults(pageResults) {
  * @param {string} [options.expectedPeriod]  รอบบิลที่คาดไว้ ใช้เตือนเมื่อไม่ตรง
  * @param {typeof fetch} [options.fetchImpl]  ใช้แทนตอนเทสต์เท่านั้น
  */
-export async function extractTimesheet(source, { expectedPeriod, fetchImpl } = {}) {
+export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forceVision = false } = {}) {
   const pdfBuffer = Buffer.isBuffer(source) ? source : await readFile(source);
-  const pages = await pdfToImages(pdfBuffer);
 
+  /* ทางเร็ว — เอกสารส่วนใหญ่ export มาจาก Excel จึงมีชั้นข้อความอยู่แล้ว ไม่ต้องให้โมเดลมองรูป
+     วัดกับของจริง 15 ฉบับ: 14 ฉบับมีชั้นข้อความ ดึงได้ใน 30–150 มิลลิวินาที และแม่นกว่ามาก
+     ฉบับที่เป็นภาพสแกนจริง (hasText=false) ค่อยถอยไปใช้ทางโมเดล vision ด้านล่างเหมือนเดิม */
   const hint = expectedPeriod
     ? ` รอบบิลที่ระบบคาดไว้คือ ${expectedPeriod} — ถ้าเอกสารไม่ใช่เดือนนี้ ให้ใส่เดือนตามเอกสารและบันทึกลง notes`
     : '';
 
-  const model = localVisionModel();
-  const pageResults = [];
-  let totalUsage = null;
-
-  for (let i = 0; i < pages.length; i++) {
-    const pageIndex = i + 1;
-    const userContent = [
-      {
-        type: 'image_url',
-        image_url: { url: `data:image/png;base64,${pages[i].toString('base64')}` },
-      },
-      {
-        type: 'text',
-        text:
-          `นี่คือหน้าที่ ${pageIndex}/${pages.length} ของเอกสาร Timesheet ฉบับเดียวกัน ` +
-          `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}`,
-      },
-    ];
-
+  if (!forceVision) {
     try {
-      const result = await callLocalJSON({
-        model, system: SYSTEM_PROMPT, userContent, schema: TIMESHEET_SCHEMA, maxTokens: 6000, fetchImpl,
-      });
-      pageResults.push({ pageIndex, data: result.data });
-      if (result.usage) {
-        totalUsage = {
-          prompt_tokens: (totalUsage?.prompt_tokens ?? 0) + (result.usage.prompt_tokens ?? 0),
-          completion_tokens: (totalUsage?.completion_tokens ?? 0) + (result.usage.completion_tokens ?? 0),
-        };
+      const text = await extractPdfText(pdfBuffer);
+      if (text.hasText) {
+        return await runPages(
+          text.pages.length,
+          (i) => ({
+            model: localTextModel(),
+            userContent:
+              `ข้างล่างนี้คือข้อความที่ดึงมาจากหน้าที่ ${i + 1}/${text.pages.length} ของเอกสาร Timesheet ` +
+              `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}\n\n${text.pages[i]}`,
+            // ชื่อจากชั้นข้อความเชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ ไม่ได้ผ่านการเดา
+            nameOverride: employeeNameIn(text.pages[i]),
+          }),
+          { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model} (ชั้นข้อความ)` },
+        );
       }
     } catch (error) {
-      pageResults.push({ pageIndex, error: error.message });
+      // อ่านชั้นข้อความไม่ได้ไม่ใช่เรื่องคอขาดบาดตาย — ถอยไปทางเดิมที่ใช้ได้แน่นอน
+      console.warn('[extract] อ่านชั้นข้อความไม่สำเร็จ ใช้โมเดล vision แทน —', error.message);
     }
   }
 
+  const pages = await pdfToImages(pdfBuffer);
+  return runPages(
+    pages.length,
+    (i) => ({
+      model: localVisionModel(),
+      userContent: [
+        { type: 'image_url', image_url: { url: `data:image/png;base64,${pages[i].toString('base64')}` } },
+        {
+          type: 'text',
+          text:
+            `นี่คือหน้าที่ ${i + 1}/${pages.length} ของเอกสาร Timesheet ฉบับเดียวกัน ` +
+            `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}`,
+        },
+      ],
+    }),
+    { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model}` },
+  );
+}
+
+/* จำนวนคำขอที่ยอมให้ค้างพร้อมกันสูงสุด — เซิร์ฟเวอร์ LM Studio แบ่ง context รวมออกเป็น
+   ส่วนเท่าๆ กันตามจำนวนคำขอพร้อมกัน (ไม่ใช่แบ่งตามโหลดจริง) ยิ่งยิงพร้อมกันมาก แต่ละคำขอ
+   ยิ่งได้ context น้อยลง — ทดสอบจริง 10 ส.ค. 2569: ยิง 4 พร้อมกันด้วย schema เต็ม (มี
+   jobDescription/ลายเซ็น/notes ฯลฯ) หน้าที่มีข้อมูลเยอะจะได้ "Context size has been exceeded"
+   (400) ทันที ลดเหลือ 2 พร้อมกันแล้วผ่านหมดไม่มีหน้าไหนพัง — ถ้าจะเพิ่มค่านี้ต้องไปเพิ่ม
+   Context Length ของโมเดลใน LM Studio ก่อน ไม่งั้นจะเจอ error เดิม */
+const MAX_CONCURRENT_PAGES = 2;
+
+/**
+ * อ่านหลายหน้าพร้อมกันแบบจำกัดจำนวน (ดู MAX_CONCURRENT_PAGES) แล้วรวมผลด้วย
+ * groupPagesByEmployee/mergePageResults — ใช้ร่วมกันทั้งทางข้อความ (เร็ว แม่น) และทาง vision
+ * (ทางสำรองสำหรับไฟล์ที่เป็นภาพสแกนจริง)
+ *
+ * วัดจริง 10 ส.ค. 2569 กับไฟล์ 7 หน้า: ยิงทีละหน้าตามลำดับ 103.6s → ยิงพร้อมกัน 2 คำขอ
+ * ลดเหลือ 61.9s (เร็วขึ้น ~1.7 เท่า) โดยไม่มีหน้าไหนหลุด
+ * groupPagesByEmployee ต้องได้ผลเรียงตามลำดับหน้า จึงเรียง pageResults กลับก่อนใช้งาน
+ *
+ * @param {number} pageCount
+ * @param {(pageIndex0: number) => {model: string, userContent: any, nameOverride?: string|null}} buildRequest
+ */
+async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, modelLabel }) {
+  let model;
+  const settled = [];
+  let next = 0;
+
+  async function worker() {
+    while (next < pageCount) {
+      const i = next;
+      next += 1;
+      const pageIndex = i + 1;
+      const req = buildRequest(i);
+      model = req.model;
+      try {
+        const result = await callLocalJSON({
+          model: req.model, system: SYSTEM_PROMPT, userContent: req.userContent, schema: TIMESHEET_SCHEMA,
+          maxTokens: 6000, fetchImpl,
+        });
+        if (req.nameOverride) result.data.employeeName = req.nameOverride;
+        settled.push({ pageIndex, data: result.data, usage: result.usage });
+      } catch (error) {
+        settled.push({ pageIndex, error: error.message });
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(MAX_CONCURRENT_PAGES, pageCount) }, () => worker()),
+  );
+
+  settled.sort((a, b) => a.pageIndex - b.pageIndex);
+  const pageResults = settled.map(({ pageIndex, data, error }) => ({ pageIndex, data, error }));
+  const totalUsage = settled.reduce((acc, p) => {
+    if (!p.usage) return acc;
+    return {
+      prompt_tokens: (acc?.prompt_tokens ?? 0) + (p.usage.prompt_tokens ?? 0),
+      completion_tokens: (acc?.completion_tokens ?? 0) + (p.usage.completion_tokens ?? 0),
+    };
+  }, null);
+
   if (pageResults.every((p) => p.error)) {
     throw new Error(
-      `อ่าน Timesheet ไม่สำเร็จเลยสักหน้า (${pages.length} หน้า): ${pageResults.map((p) => p.error).join(' · ')}`,
+      `อ่าน Timesheet ไม่สำเร็จเลยสักหน้า (${pageCount} หน้า): ${pageResults.map((p) => p.error).join(' · ')}`,
     );
   }
 
@@ -460,7 +567,7 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl } = {
     data: documents[0].data,
     verification: documents[0].verification,
     usage: totalUsage,
-    model: `local:${model}`,
+    model: modelLabel(model),
   };
 }
 
@@ -522,6 +629,88 @@ export function groupPagesByEmployee(pageResults) {
   }
 
   return groups.length ? groups : [pageResults];
+}
+
+/**
+ * รวมเอกสารที่ groupPagesByEmployee แยกไว้ผิดคน กลับเป็นคนเดียวกัน
+ *
+ * groupPagesByEmployee เทียบชื่อด้วยตัวอักษรที่ใช้ร่วมกัน (sameEmployee) ซึ่งเทียบข้ามภาษา
+ * ไม่ได้เลย — หน้าตารางเขียนชื่อเป็นอังกฤษ "Sunee Maneekasemsuk" แต่หน้าอีเมลแจ้งอนุมัติที่
+ * แนบท้ายไฟล์เขียนเป็นไทย "นางสาว สุนีย์ มณีเกษมสุข" ตัวอักษรไม่ทับกันเลยสักตัวเพราะคนละ
+ * ชุดตัวอักษร (Latin vs ไทย) เลยถูกแยกเป็นคนละฉบับทั้งที่เป็นคนเดียวกันจริง
+ *
+ * ฐานข้อมูลพนักงานรู้อยู่แล้วว่าทั้งสองชื่อเป็นคนเดียวกัน (นามEn + นามTh ของพนักงานคนเดียวกัน)
+ * จึงใช้ resolveEmployeeId เป็นตัวช่วยเทียบข้ามภาษาแทนการเทียบตัวอักษรตรงๆ
+ * ฟังก์ชันนี้ไม่แตะฐานข้อมูลเอง (คงความเป็นโมดูลอ่าน PDF ล้วนๆ ทดสอบด้วยตัวปลอมได้) —
+ * ผู้เรียกต้องส่ง resolveEmployeeId เข้ามา (service.js ใช้ matchEmployee กับ roster จริง)
+ *
+ * @param {Array<{data: object, pageRange: [number, number], verification: object}>} documents
+ * @param {(employeeName: string|null) => (string|number|null)} resolveEmployeeId
+ * @param {{expectedPeriod?: string}} [options]
+ */
+export function mergeDocumentsByEmployee(documents, resolveEmployeeId, { expectedPeriod } = {}) {
+  const groups = [];
+  const indexOfEmployee = new Map();
+
+  for (const doc of documents) {
+    const employeeId = resolveEmployeeId(doc.data.employeeName);
+    if (employeeId != null && indexOfEmployee.has(employeeId)) {
+      groups[indexOfEmployee.get(employeeId)].push(doc);
+    } else {
+      groups.push([doc]);
+      if (employeeId != null) indexOfEmployee.set(employeeId, groups.length - 1);
+    }
+  }
+
+  return groups.map((group) => (group.length === 1 ? group[0] : mergeDocumentGroup(group, { expectedPeriod })));
+}
+
+/** ฉบับที่มีตารางวันมากที่สุดถือเป็นหลัก ฉบับอื่น (มักเป็นหน้าอีเมลแจ้งอนุมัติที่แนบท้าย) มีไว้เติมช่องที่ฉบับหลักไม่มี */
+function mergeDocumentGroup(group, { expectedPeriod }) {
+  const sorted = [...group].sort((a, b) => b.data.days.length - a.data.days.length);
+  const primary = sorted[0].data;
+  const merged = { ...primary, days: [...primary.days], leaveDays: [...primary.leaveDays], notes: [...primary.notes] };
+
+  const dayByDate = new Map(merged.days.map((d) => [d.date, d]));
+  const leaveByDate = new Map(merged.leaveDays.map((d) => [d.date, d]));
+  const failedPages = [...(primary.failedPages ?? [])];
+  let totalPages = primary.totalPages ?? 0;
+
+  for (const { data: d } of sorted.slice(1)) {
+    for (const key of HEADER_KEYS) if (!merged[key] && d[key]) merged[key] = d[key];
+    merged.totalWorkDays = Math.max(merged.totalWorkDays, d.totalWorkDays || 0);
+    if (merged.totalHours === null && Number.isFinite(d.totalHours)) merged.totalHours = d.totalHours;
+    if (d.signedByEmployee) merged.signedByEmployee = true;
+    if (d.signedByProjectManager) merged.signedByProjectManager = true;
+    if (!merged.employeeSignatureName && d.employeeSignatureName) merged.employeeSignatureName = d.employeeSignatureName;
+    if (!merged.projectManagerSignatureName && d.projectManagerSignatureName) {
+      merged.projectManagerSignatureName = d.projectManagerSignatureName;
+    }
+
+    for (const day of d.days ?? []) {
+      const existing = dayByDate.get(day.date);
+      if (!existing || (!existing.timeIn && day.timeIn) || (!existing.label && day.label)) dayByDate.set(day.date, day);
+    }
+    for (const leave of d.leaveDays ?? []) if (!leaveByDate.has(leave.date)) leaveByDate.set(leave.date, leave);
+
+    merged.notes.push(...(d.notes ?? []));
+    failedPages.push(...(d.failedPages ?? []));
+    totalPages += d.totalPages ?? 0;
+  }
+
+  merged.days = [...dayByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  merged.leaveDays = [...leaveByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  // เหตุผลเดียวกับใน mergePageResults — นับจากรายการวันลาที่รวมแล้ว ไม่เชื่อเลขที่โมเดลอ้างตรงๆ
+  merged.totalLeaveDays = merged.leaveDays.length;
+  merged.failedPages = [...new Set(failedPages)].sort((a, b) => a - b);
+  merged.totalPages = totalPages;
+
+  const pageIndexes = group.flatMap((doc) => doc.pageRange);
+  return {
+    data: merged,
+    pageRange: [Math.min(...pageIndexes), Math.max(...pageIndexes)],
+    verification: verifyExtraction(merged, { expectedPeriod }),
+  };
 }
 
 /**
@@ -604,10 +793,7 @@ export function verifyExtraction(data, { expectedPeriod } = {}) {
     issues.push({ severity: 'warn', message: 'ไม่พบลายเซ็นพนักงาน' });
   }
   if (!data.signedByProjectManager) {
-    issues.push({
-      severity: 'fail',
-      message: 'ไม่พบลายเซ็นผู้อนุมัติฝั่งลูกค้า — ยังวางบิลไม่ได้',
-    });
+    issues.push({ severity: 'warn', message: 'ไม่พบลายเซ็นผู้อนุมัติฝั่งลูกค้า' });
   }
 
   for (const note of data.notes ?? []) {

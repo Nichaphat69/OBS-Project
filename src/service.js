@@ -12,10 +12,13 @@ import { FlowAccountClient } from './integrations/flowaccount.js';
 import { thaiMonth, thaiDate, money, round2 } from './util/money.js';
 import { nextPeriod } from './domain/calendar.js';
 import { buildManualSheet, manualExtractor } from './domain/manual-sheet.js';
-import { extractTimesheet } from './extract/timesheet.js';
+import { extractTimesheet, mergeDocumentsByEmployee } from './extract/timesheet.js';
+import { normalizePeriod } from './extract/normalize.js';
 import { draftBillingEmail, readApprovalEmail } from './llm/email.js';
 import { localLlmBaseUrl, localTextModel, localVisionModel } from './llm/localClient.js';
 import { GmailClient, hasGmailCredentials } from './integrations/gmail.js';
+import { HrddClient, hasHrddCredentials, HrddError } from './integrations/hrdd.js';
+import { compareLeaves, summarizeLeaveComparison } from './domain/leaveCompare.js';
 import {
   LineClient, isAuthorizedApprover, verifyLineSignature, parseApprovalPostback, buildNeedsCheckFlex,
   hasLineCredentials,
@@ -34,6 +37,127 @@ export function listContracts() {
       JOIN customers cu ON cu.id = c.customer_id
      ORDER BY c.po_date DESC
   `);
+}
+
+/** สัญญาที่ "กำลังดำเนินการอยู่" ตอนนี้ — มีได้ทีละฉบับเท่านั้น (ดู setActiveContract)
+ * ตัวเลือกบริษัทบนแถบบนใช้ค่านี้เป็นค่าเริ่มต้นตอนเปิดหน้าเว็บ
+ */
+export function getActiveContract() {
+  return get(`
+    SELECT c.*, cu.name_th AS customer_name, cu.tax_id, cu.billing_place,
+           cu.contact_name, cu.contact_phone
+      FROM contracts c
+      JOIN customers cu ON cu.id = c.customer_id
+     WHERE c.status = 'active'
+     LIMIT 1
+  `);
+}
+
+/** เลขรันสำหรับ id ที่ออกเอง — ไล่จากเลขสูงสุดที่มีอยู่จริงในตาราง ต้องเช็คว่าส่วนต่อท้ายทั้งหมด
+ * เป็นเลขล้วนๆด้วย /^\d+$/ ไม่ใช่แค่ parseInt เฉยๆ — id เดิมที่ตั้งด้วยมือแบบ CT-26B0113 ขึ้นต้น
+ * ด้วยเลข "26" ทำให้ parseInt("26B0113") อ่านได้ 26 (ตัดที่ตัวอักษรตัวแรก) กลายเป็นชนกับเลขรันจริง
+ * ต้องกันไว้ไม่ให้ id ประเภทนี้ปนเข้ามาในการนับเลขถัดไป */
+function nextId(prefix, table) {
+  const rows = all(`SELECT id FROM ${table} WHERE id LIKE $pattern`, { pattern: `${prefix}-%` });
+  const nums = rows
+    .map((r) => r.id.slice(prefix.length + 1))
+    .filter((suffix) => /^\d+$/.test(suffix))
+    .map(Number);
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `${prefix}-${String(next).padStart(4, '0')}`;
+}
+
+/**
+ * เพิ่มลูกค้าใหม่ — หน้า "ข้อมูลหลัก → ลูกค้า & สัญญา" กดปุ่ม "เพิ่มลูกค้าใหม่"
+ * ยังไม่มีสัญญาเป็นของตัวเอง ต้อง createContract ต่ออีกที (ปุ่มเดียวในหน้าเว็บเรียกทั้งสองต่อกัน)
+ */
+export function createCustomer({
+  nameTh, nameEn = null, taxId, branch = 'สำนักงานใหญ่', address = null, creditDays = 30,
+  billingPlace = null, contactName = null, contactPhone = null, contactEmail = null, actor,
+}) {
+  if (!nameTh || !taxId) {
+    throw Object.assign(new Error('ต้องระบุชื่อบริษัทและเลขผู้เสียภาษีให้ครบ'), { status: 400 });
+  }
+  const id = nextId('CUS', 'customers');
+  run(
+    `INSERT INTO customers
+       (id, name_th, name_en, tax_id, branch, address, credit_days, billing_place,
+        contact_name, contact_phone, contact_email)
+     VALUES ($id, $nameTh, $nameEn, $taxId, $branch, $address, $creditDays, $billingPlace,
+             $contactName, $contactPhone, $contactEmail)`,
+    {
+      id, nameTh, nameEn, taxId, branch, address, creditDays: Number(creditDays) || 30,
+      billingPlace, contactName, contactPhone, contactEmail,
+    },
+  );
+  logAudit({ actor, action: 'create_customer', entityType: 'customer', entityId: id, detail: { nameTh, taxId } });
+  return get('SELECT * FROM customers WHERE id = $id', { id });
+}
+
+/**
+ * เพิ่มสัญญาใหม่ให้ลูกค้าที่มีอยู่แล้ว (หรือที่เพิ่ง createCustomer มา)
+ * สัญญาใหม่เริ่มเป็น 'inactive' เสมอ (ไม่แย่งที่สัญญาที่กำลังทำงานอยู่โดยไม่ตั้งใจ) ยกเว้นระบบยังไม่มี
+ * สัญญา active เลยสักฉบับ — กรณีนั้นตั้งให้ active ทันทีไม่งั้นจะไม่มีข้อมูลอะไรให้แดชบอร์ดแสดงเลย
+ */
+export function createContract({
+  customerId, poNo, contractNo = null, projectName, poDate = null, startDate, endDate,
+  creditDays = 30, divisorMode = 'fixed', divisorValue = 20, vatRate = 0.07, whtRate = 0.03,
+  actor,
+}) {
+  const customer = get('SELECT id FROM customers WHERE id = $id', { id: customerId });
+  if (!customer) throw Object.assign(new Error('ไม่พบลูกค้ารายนี้'), { status: 404 });
+  if (!poNo || !projectName || !startDate || !endDate) {
+    throw Object.assign(
+      new Error('ต้องระบุเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบ'),
+      { status: 400 },
+    );
+  }
+  const id = nextId('CT', 'contracts');
+  const hasActive = Boolean(getActiveContract());
+  run(
+    `INSERT INTO contracts
+       (id, customer_id, po_no, contract_no, project_name, po_date, start_date, end_date,
+        credit_days, divisor_mode, divisor_value, vat_rate, wht_rate, status)
+     VALUES ($id, $customerId, $poNo, $contractNo, $projectName, $poDate, $startDate, $endDate,
+             $creditDays, $divisorMode, $divisorValue, $vatRate, $whtRate, $status)`,
+    {
+      id, customerId, poNo, contractNo, projectName, poDate, startDate, endDate,
+      creditDays: Number(creditDays) || 30, divisorMode, divisorValue: Number(divisorValue) || 20,
+      vatRate: Number(vatRate), whtRate: Number(whtRate),
+      status: hasActive ? 'inactive' : 'active',
+    },
+  );
+  logAudit({
+    actor, action: 'create_contract', entityType: 'contract', entityId: id,
+    detail: { customerId, poNo, projectName, status: hasActive ? 'inactive' : 'active' },
+  });
+  return listContracts().find((c) => c.id === id);
+}
+
+/**
+ * สลับว่าสัญญาไหน "กำลังดำเนินการอยู่" — มีได้ฉบับเดียวทั้งระบบ (ตั้งใจ ไม่ใช่ทำได้หลายฉบับพร้อมกัน)
+ * เพราะแดชบอร์ด/คิวตรวจ/ใบแจ้งหนี้ทั้งหมดอ่านจากตัวนี้ตัวเดียวว่า "ตอนนี้กำลังทำงานให้ลูกค้ารายไหน"
+ * ตั้ง active ใหม่ → ปิดฉบับเดิมอัตโนมัติในทรานแซกชันเดียวกัน กันเผลอเปิดสองฉบับพร้อมกัน
+ */
+export function setActiveContract(contractId, { actor }) {
+  const contract = get('SELECT id FROM contracts WHERE id = $id', { id: contractId });
+  if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
+  tx(() => {
+    run(`UPDATE contracts SET status = 'inactive' WHERE status = 'active' AND id != $id`, { id: contractId });
+    run(`UPDATE contracts SET status = 'active' WHERE id = $id`, { id: contractId });
+  });
+  logAudit({ actor, action: 'set_active_contract', entityType: 'contract', entityId: contractId });
+  return listContracts().find((c) => c.id === contractId);
+}
+
+/** ปิดสัญญาฉบับนี้โดยไม่เปิดฉบับอื่นแทน — ปล่อยให้ "ไม่มีสัญญา active เลย" ได้ชั่วคราว
+ * (หน้าเว็บควรเตือนให้เลือกฉบับอื่น ไม่ใช่ปิดไปเงียบๆ) */
+export function deactivateContract(contractId, { actor }) {
+  const contract = get('SELECT id FROM contracts WHERE id = $id', { id: contractId });
+  if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
+  run(`UPDATE contracts SET status = 'inactive' WHERE id = $id`, { id: contractId });
+  logAudit({ actor, action: 'deactivate_contract', entityType: 'contract', entityId: contractId });
+  return listContracts().find((c) => c.id === contractId);
 }
 
 
@@ -143,7 +267,7 @@ function checkStamp(row, computed) {
   return { checked: !stale, stale, at: row.check_at, by: row.check_by };
 }
 
-export function listTimesheets({ status, period } = {}) {
+export function listTimesheets({ status, period, contractId } = {}) {
   const rows = all(`
     SELECT t.id, t.contract_id, t.employee_id, t.period, t.source_email_id, t.source_file,
            t.received_at, t.approved_by, t.approved_at, t.raw_employee_name, t.raw_position,
@@ -167,6 +291,7 @@ export function listTimesheets({ status, period } = {}) {
   return rows
     .filter((r) => (status ? r.status === status : true))
     .filter((r) => (period ? r.period === period : true))
+    .filter((r) => (contractId ? r.contract_id === contractId : true))
     .map(shapeTimesheetRow);
 }
 
@@ -247,7 +372,7 @@ export function getTimesheet(id) {
     { id },
   );
   const dayLabels = all(
-    'SELECT date, label, time_in, time_out FROM timesheet_days WHERE timesheet_id = $id ORDER BY date',
+    'SELECT date, label, time_in, time_out, job_desc, remark FROM timesheet_days WHERE timesheet_id = $id ORDER BY date',
     { id },
   );
 
@@ -279,6 +404,85 @@ export function getTimesheet(id) {
         WHERE entity_type = 'timesheet' AND entity_id = $id ORDER BY id`,
       { id },
     ).map((a) => ({ ...a, detail: a.detail ? JSON.parse(a.detail) : null })),
+  };
+}
+
+/** ตัดชื่อเล่นในวงเล็บที่ HRDD แปะท้าย requestName เช่น "Pongpun Mamak ( Ford )"
+ * ไม่ตัดออก matchEmployee จะเจอ "(" ปนอยู่ในชื่อแล้วจับคู่ไม่ติด */
+function stripHrddNickname(name) {
+  return String(name ?? '').replace(/\(.*?\)/g, '').trim();
+}
+
+/** รหัสสถานะที่แปลว่า "อนุมัติแล้ว" ของบริษัทนี้ใน HRDD — เป็นข้อมูลที่บริษัทตั้งเอง (ดูคอมเมนต์
+ * ใน src/integrations/hrdd.js) จึงต้องถามใหม่ทุกครั้ง ห้ามจำรหัสจากบริษัทหนึ่งไปใช้กับอีกบริษัท
+ * หาแถวที่ชื่อสถานะเป็น "approve" ก่อน ไม่เจอเป๊ะๆ ค่อยเดาจากสถานะที่ไม่ใช่รอ/ตีกลับ/ยกเลิก */
+async function resolveHrddApprovedStatusCodes(client) {
+  let statuses;
+  try { statuses = await client.findLeaveStatuses(); } catch { return []; }
+  if (!Array.isArray(statuses) || !statuses.length) return [];
+
+  const approved = statuses.filter((s) => /approve/i.test(s.name ?? ''));
+  if (approved.length) return approved.map((s) => s.code);
+
+  return statuses
+    .filter((s) => !/wait|pending|reject|cancel/i.test(s.name ?? ''))
+    .map((s) => s.code);
+}
+
+/**
+ * เทียบวันลาที่ Timesheet ฉบับนี้รายงาน กับวันลาที่อนุมัติแล้วจริงใน HRDD ของพนักงานคนเดียวกัน
+ *
+ * จับคู่ "พนักงานคนไหนในบริษัท" ด้วยชื่อ (ไม่ใช่ employeeCode) เพราะ endpoint ของ HRDD ที่ใช้
+ * (POST /leavetransaction/findByCompany) ไม่คืนค่า employeeCode มาให้เลย — ยืนยันจากซอร์สโค้ด
+ * HRDD เองแล้วว่าเป็นช่องโหว่ที่ทีม HRDD ควรแก้ (ดูรายละเอียดที่คุยกันไว้) ระหว่างนี้ใช้ requestName
+ * เทียบผ่าน matchEmployee() ตัวเดียวกับที่จับคู่ชื่อจาก Timesheet อยู่แล้ว ไม่ต้องสร้างระบบจับคู่ใหม่
+ *
+ * ไม่มีผลข้างเคียงใดๆกับ HRDD — เรียกแค่ endpoint อ่านข้อมูล (สถานะวันลา + รายการวันลา)
+ * ไม่มีเขียน/แก้/ลบฝั่ง HRDD เด็ดขาด
+ */
+export async function checkTimesheetAgainstHrdd(timesheetId) {
+  const sheet = getTimesheet(timesheetId);
+  if (!sheet) throw Object.assign(new Error(`ไม่พบ Timesheet ${timesheetId}`), { status: 404 });
+
+  if (!hasHrddCredentials()) {
+    return {
+      state: 'not_connected',
+      message: 'ยังไม่ได้เชื่อมต่อ HRDD — ใส่ HRDD_BASE_URL/HRDD_USERNAME/HRDD_PASSWORD ใน .env',
+    };
+  }
+
+  const [year, month] = sheet.period.split('-').map(Number);
+  const dateFrom = `${sheet.period}-01`;
+  const dateTo = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+
+  const client = new HrddClient({});
+  let companyLeaves;
+  try {
+    const statusCodes = await resolveHrddApprovedStatusCodes(client);
+    companyLeaves = await client.findLeavesByCompany({ dateFrom, dateTo, status: statusCodes });
+  } catch (error) {
+    const message = error instanceof HrddError ? error.message : `เชื่อมต่อ HRDD ไม่สำเร็จ: ${error.message}`;
+    return { state: 'error', message };
+  }
+
+  const employees = employeesForMatching();
+  const targetId = sheet.employee.id;
+  const hrddLeaves = companyLeaves.filter((rec) => {
+    const result = matchEmployee(stripHrddNickname(rec.requestName), employees);
+    return result.employee?.id === targetId;
+  });
+
+  const tsLeaves = sheet.leaveDays.map((d) => ({ date: d.date, type: d.leave_type }));
+  const rows = compareLeaves(tsLeaves, hrddLeaves);
+  const summary = summarizeLeaveComparison(rows);
+
+  return {
+    state: summary.mismatched > 0 ? 'diff' : 'match',
+    period: sheet.period,
+    employeeName: sheet.employee.nameTh,
+    rows,
+    summary,
+    checkedAt: new Date().toISOString(),
   };
 }
 
@@ -727,9 +931,20 @@ export async function readTimesheetFile({
   const { usage, model } = extracted;
 
   /* ไฟล์เดียวอาจมี Timesheet ของหลายคน (ดู groupPagesByEmployee ใน extract/timesheet.js)
-     ต้องจับคู่พนักงานและตรวจ blocker แยกทีละฉบับ ไม่ใช่ยุบเป็นก้อนเดียว */
-  const documents = (extracted.documents ?? [{ data: extracted.data, verification: extracted.verification }])
-    .map(({ data, verification }) => enrichDocument(data, verification));
+     ต้องจับคู่พนักงานและตรวจ blocker แยกทีละฉบับ ไม่ใช่ยุบเป็นก้อนเดียว
+     แต่ groupPagesByEmployee เทียบชื่อข้ามภาษาไม่ได้ (ตารางเขียนอังกฤษ "Sunee Maneekasemsuk"
+     หน้าอีเมลแจ้งอนุมัติที่แนบท้ายเขียนไทย "นางสาว สุนีย์ มณีเกษมสุข") จึงแยกฉบับผิดคนได้
+     ใช้ roster พนักงานจริงช่วยรวมฉบับที่จริงๆ เป็นคนเดียวกันกลับเข้าด้วยกันก่อนตรวจ */
+  const employees = employeesForMatching();
+  const rawDocuments = extracted.documents ?? [
+    { data: extracted.data, pageRange: [1, extracted.data.totalPages || 1], verification: extracted.verification },
+  ];
+  const mergedDocuments = mergeDocumentsByEmployee(
+    rawDocuments,
+    (name) => matchEmployee(name, employees).employee?.id ?? null,
+    { expectedPeriod },
+  );
+  const documents = mergedDocuments.map(({ data, verification }) => enrichDocument(data, verification));
 
   const { data, verification } = documents[0];
 
@@ -1135,8 +1350,12 @@ export async function readTimesheetFromEmail({
     blockers.push(`อีเมลระบุสถานะ "${emailMeta.approvalStatus}" ไม่ใช่ "อนุมัติ"`);
   }
 
-  // เดือนในอีเมลกับในไฟล์ไม่ตรงกัน = หยิบไฟล์ผิดฉบับ ต้องให้คนดูก่อน
-  if (emailMeta.period && sheet.data.period && emailMeta.period !== sheet.data.period) {
+  /* เดือนในอีเมลกับในไฟล์ไม่ตรงกัน = หยิบไฟล์ผิดฉบับ ต้องให้คนดูก่อน
+     schema ของ email.js ขอให้โมเดลตอบ YYYY-MM ตรงๆ แต่โมเดลในเครื่อง (ตัวเล็ก) ไม่เชื่อฟัง
+     เสมอไป บางทีตอบมาเป็น "มกราคม 2026" ดิบๆ — ต้อง normalizePeriod ทั้งสองฝั่งก่อนเทียบ
+     ไม่งั้นเดือนเดียวกันจะโดนมองว่าไม่ตรงกันเสมอเพราะรูปแบบต่างกัน ไม่ใช่เดือนต่างกันจริง */
+  const emailPeriod = normalizePeriod(emailMeta.period);
+  if (emailPeriod && sheet.data.period && emailPeriod !== sheet.data.period) {
     blockers.push(`อีเมลบอกรอบ ${emailMeta.period} แต่ในไฟล์เป็น ${sheet.data.period}`);
   }
 
@@ -1941,46 +2160,31 @@ function withInvoiceAttachment(draft, existing) {
 export function buildEmailDraft({
   contract, invoice, documentNo = null, shareLink = null, invoiceId = null,
 }) {
-  const company = getSetting('company', { nameTh: 'บริษัท ไอ แพสชั่น จำกัด' });
+  const company = getSetting('company', {});
   const t = invoice.totals;
   const monthLabel = thaiMonth(invoice.period);
 
-  const lines = invoice.items.map((item) => {
-    const base = `  • ${item.name} (${item.employeeName}) จำนวน 1 เดือน เป็นเงิน ${money(item.pricePerUnit)} บาท`;
-    if (item.discount > 0) {
-      return `${base}\n    หักส่วนลดวันลา ${item.leaveCount} วัน เป็นเงิน ${money(item.discount)} บาท`;
-    }
-    return base;
-  });
-
-  const quotations = [...new Set(invoice.items.map((i) => i.quotationNo).filter(Boolean))];
+  const companyName = company.nameTh ?? 'บริษัท ไอ แพสชั่น จำกัด';
 
   const body = [
-    `เรียน ${contract.contact_name ?? 'ผู้ประสานงาน'}`,
+    `เรียน ${contract.customer_name}`,
+    `${companyName} ขอส่งเอกสารประกอบการวางบิล ` +
+      `สำหรับการให้บริการประจำเดือน${monthLabel} เพื่อโปรดตรวจสอบและดำเนินการตามขั้นตอนของบริษัท`,
+    'รายละเอียดการวางบิล',
     '',
-    `${company.nameTh} ขอนำส่งใบแจ้งหนี้ค่าบริการพนักงาน Outsource โครงการ ${contract.project_name} ` +
-      `ประจำเดือน${monthLabel} รายละเอียดดังนี้`,
+    `* รอบการให้บริการ: ${monthLabel}`,
+    `* จำนวนพนักงาน: ${invoice.items.length} คน`,
+    `* เลขที่ใบวางบิล: ${documentNo ?? '—'}`,
+    `* ยอดรวมสุทธิ: ${money(t.paymentAmount)} บาท`,
     '',
-    ...lines,
     '',
-    `รวมหลังหักส่วนลด ${money(t.totalAfterDiscount)} บาท ` +
-      `ภาษีมูลค่าเพิ่ม ${Math.round(t.vatRate * 100)}% จำนวน ${money(t.vat)} บาท ` +
-      `รวมทั้งสิ้น ${money(t.grandTotal)} บาท`,
-    `หักภาษี ณ ที่จ่าย ${Math.round(t.whtRate * 100)}% จำนวน ${money(t.withholdingTax)} บาท ` +
-      `คงเหลือยอดรับชำระ ${money(t.paymentAmount)} บาท`,
-    `กำหนดชำระภายใน ${invoice.creditDays} วัน ครบกำหนดวันที่ ${thaiDate(invoice.dueDate)}`,
-    '',
-    `อ้างอิงใบว่าจ้างเลขที่ ${contract.po_no}` +
-      (quotations.length ? ` และใบเสนอราคาเลขที่ ${quotations.join(', ')}` : ''),
-    contract.billing_place
-      ? `ทั้งนี้ทางบริษัทจะนำเอกสารเข้าวางบิลที่ ${contract.billing_place} ตามรอบที่กำหนด`
-      : null,
-    shareLink ? `ดูใบแจ้งหนี้ฉบับเต็ม (เปิดแล้วพิมพ์เป็น PDF ได้จากเบราว์เซอร์): ${shareLink}` : null,
-    '',
-    'จึงเรียนมาเพื่อโปรดพิจารณา ขอบพระคุณเป็นอย่างสูง',
-  ]
-    .filter((line) => line !== null)
-    .join('\n');
+    'จึงเรียนมาเพื่อโปรดตรวจสอบและดำเนินการในส่วนที่เกี่ยวข้อง',
+    `หากต้องการข้อมูลหรือเอกสารเพิ่มเติม กรุณาติดต่อ${companyName}`,
+    'ขอแสดงความนับถือ',
+    companyName,
+    ...(company.phone ? [`โทร. ${company.phone}`] : []),
+    ...(company.email ? [`อีเมล ${company.email}`] : []),
+  ].join('\n');
 
   return {
     to: contract.contact_email
@@ -2611,14 +2815,14 @@ const THAI_MONTH_SHORT = [
 ];
 
 /** ใบแจ้งหนี้ที่ระบบสร้างไว้ — ใช้ในแดชบอร์ดเท่านั้น ไม่มี endpoint เพราะทะเบียนตัวจริงอยู่ที่ FlowAccount */
-function invoiceRows() {
+function invoiceRows({ contractId } = {}) {
   return all(`
     SELECT i.*, c.po_no, cu.name_th AS customer_name
       FROM invoices i
       JOIN contracts c ON c.id = i.contract_id
       JOIN customers cu ON cu.id = c.customer_id
      ORDER BY i.document_date DESC
-  `);
+  `).filter((row) => (contractId ? row.contract_id === contractId : true));
 }
 
 /**
@@ -2662,10 +2866,15 @@ function trend(current, previous) {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
-export function dashboard() {
+/**
+ * ภาพรวมทั้งระบบ — ไม่ระบุ contractId = รวมทุกสัญญา (ของเดิม เผื่อมีที่อื่นเรียกแบบไม่กรอง)
+ * ระบุ contractId = กรองเหลือแค่สัญญาของ "บริษัทที่กำลังดำเนินการอยู่" ที่เลือกจากแถบบน
+ * (ดู setActiveContract) — หน้าเว็บส่ง contractId ของสัญญา active มาด้วยเสมอ
+ */
+export function dashboard({ contractId } = {}) {
   const today = isoToday();
-  const sheets = listTimesheets();
-  const invoices = invoiceRows();
+  const sheets = listTimesheets({ contractId });
+  const invoices = invoiceRows({ contractId });
 
   const byStatus = {};
   for (const sheet of sheets) byStatus[sheet.status] = (byStatus[sheet.status] ?? 0) + 1;
@@ -2676,7 +2885,9 @@ export function dashboard() {
   );
   const leaveDeduction = sheets.reduce((sum, s) => sum + (s.discount ?? 0), 0);
 
-  const contracts = listContracts().map((contract) => {
+  const contracts = listContracts()
+    .filter((c) => (contractId ? c.id === contractId : true))
+    .map((contract) => {
     const periods = contractCycles(contract.id, { today });
     const billed = periods.filter((p) => p.state === CYCLE_STATE.BILLED);
     const contractValue = round2((contract.monthly_total ?? 0) * periods.length);
@@ -2702,7 +2913,7 @@ export function dashboard() {
     };
   });
 
-  const series = monthlySeries();
+  const series = monthlySeries().filter((s) => (contractId ? s.contractId === contractId : true));
   const billedSeries = series.filter((s) => s.billed > 0);
   const latest = billedSeries[billedSeries.length - 1] ?? null;
   const previous = billedSeries[billedSeries.length - 2] ?? null;
@@ -2782,19 +2993,21 @@ export function dashboard() {
    กระดิ่งตอบคำถาม "อะไรเพิ่งเกิดขึ้น" ส่วนการ์ดงานที่ต้องทำบนแดชบอร์ด
    ตอบ "อะไรยังค้าง" — คนละคำถาม จึงไม่ใช่ของซ้ำกัน */
 
-export function listInvoices() {
+export function listInvoices({ contractId } = {}) {
   return all(`
     SELECT i.*, c.po_no, c.project_name, cu.name_th AS customer_name
       FROM invoices i
       JOIN contracts c ON c.id = i.contract_id
       JOIN customers cu ON cu.id = c.customer_id
      ORDER BY i.document_date DESC
-  `).map((row) => ({
-    ...row,
-    periodLabel: thaiMonth(row.period),
-    response: row.response ? JSON.parse(row.response) : null,
-    emailDraft: row.email_draft ? JSON.parse(row.email_draft) : null,
-  }));
+  `)
+    .filter((row) => (contractId ? row.contract_id === contractId : true))
+    .map((row) => ({
+      ...row,
+      periodLabel: thaiMonth(row.period),
+      response: row.response ? JSON.parse(row.response) : null,
+      emailDraft: row.email_draft ? JSON.parse(row.email_draft) : null,
+    }));
 }
 
 /* ── ผู้รับแจ้งเตือน — จัดการระบบ → ผู้รับแจ้งเตือน ────────────────

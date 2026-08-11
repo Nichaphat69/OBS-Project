@@ -5,8 +5,8 @@
  *   npm run user:create
  *
  * รันแบบระบุค่าตรงในคำสั่งเดียว (เหมาะตอนสั่งจากสคริปต์/เอเจนต์อื่น ไม่มี terminal โต้ตอบสด):
- *   npm run user:create -- <username> "<ชื่อที่โชว์ในบันทึก>" "<รหัสผ่าน>" [admin|operator]
- *   role ไม่ระบุ = operator (ทำงานประจำวันได้ แก้ข้อมูลหลักไม่ได้ — ดู ROLES ใน src/auth.js)
+ *   npm run user:create -- <username> "<ชื่อที่โชว์ในบันทึก>" "<รหัสผ่าน>" [admin|user]
+ *   role ไม่ระบุ = user (ทำงานประจำวันได้ แก้ข้อมูลหลักไม่ได้ — ดู ROLES ใน src/auth.js)
  *
  * เก็บรหัสผ่านแบบ hash (scrypt) เท่านั้น ไม่มีที่ไหนในระบบเก็บรหัสผ่านตัวจริง
  * ⚠️ โหมดถามทีละคำ รหัสผ่านจะโชว์บนจอตอนพิมพ์ (terminal ธรรมดาไม่ได้ซ่อนให้) — อย่าพิมพ์ต่อหน้าคนอื่น
@@ -32,7 +32,7 @@ if (!username || !nameTh || !password) {
   username = (await ask('Username (ใช้ล็อกอิน เช่น nicha): ')).trim();
   nameTh = (await ask('ชื่อที่จะโชว์ในบันทึกทุกครั้งที่กดยืนยัน/อนุมัติ: ')).trim();
   password = (await ask('รหัสผ่าน (อย่างน้อย 8 ตัวอักษร — จะโชว์บนจอ อย่าพิมพ์ต่อหน้าคนอื่น): ')).trim();
-  role = (await ask(`Role (${ROLES.join('/')}, ปล่อยว่าง = operator): `)).trim();
+  role = (await ask(`Role (${ROLES.join('/')}, ปล่อยว่าง = user): `)).trim();
   rl.close();
 }
 

@@ -14,6 +14,7 @@
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
   <symbol id="i-cr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
   <symbol id="i-cl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="i-chk" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-alt" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9.5"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 16v-4.5M12 8h.01"/></symbol>
@@ -39,23 +40,21 @@
   <symbol id="i-trash-solid" viewBox="0 0 24 24"><path d="M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h4.25a.75.75 0 0 1 0 1.5H19l-1.06 13.06A2.25 2.25 0 0 1 15.7 21.5H8.3a2.25 2.25 0 0 1-2.24-1.94L5 6.5h-.25a.75.75 0 0 1 0-1.5H9V3.5Zm1.5 1.5h3V3.5h-3V5ZM9.75 10a.75.75 0 0 0-.75.75v6.5a.75.75 0 0 0 1.5 0v-6.5a.75.75 0 0 0-.75-.75Zm4.5 0a.75.75 0 0 0-.75.75v6.5a.75.75 0 0 0 1.5 0v-6.5a.75.75 0 0 0-.75-.75Z"/></symbol>
 </svg>
 
-<!-- ══ หน้า login — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ══ -->
+<!-- ══ หน้า login — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ══
+     สองคอลัมน์: ซ้ายเป็นภาพประกอบแบรนด์ (ตกแต่งล้วนๆ aria-hidden ใช้รูปจริง /img/login-orb.png)
+     ขวาเป็นฟอร์มจริง — ไอดีของฟอร์ม/ช่องกรอกเดิมทั้งหมดยังอยู่ครบ จาวาสคริปต์ที่ล็อกอินไม่ต้องแก้อะไรเลย ══ -->
 <div class="login-screen" id="loginScreen" hidden>
-  <form class="login-card" id="loginForm">
-    <svg class="blogo" viewBox="0 0 232 74" role="img" aria-label="iPassion Professional Service">
-      <rect x="0" y="4" width="56" height="56" fill="#0078D4"/>
-      <text x="70" y="40" font-family="Segoe UI, Tahoma, Arial, sans-serif"
-            font-size="38" font-weight="700" fill="#0078D4" letter-spacing="-.5">iPassion</text>
-      <text x="72" y="62" font-family="Segoe UI, Tahoma, Arial, sans-serif"
-            font-size="17" fill="#8A8A8A" letter-spacing=".2">Professional Service</text>
-    </svg>
-    <h1>เข้าสู่ระบบ OBS</h1>
-    <p class="lc-sub">ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
-    <label>Username<input id="loginUser" type="text" autocomplete="username" required></label>
-    <label>รหัสผ่าน<input id="loginPass" type="password" autocomplete="current-password" required></label>
-    <div class="lc-err" id="loginErr" hidden></div>
-    <button class="btn pri" type="submit" id="loginBtn">เข้าสู่ระบบ</button>
-  </form>
+  <div class="login-art" aria-hidden="true"></div>
+  <div class="login-panel">
+    <form class="login-card" id="loginForm">
+      <h1>เข้าสู่ระบบ OBS</h1>
+      <p class="lc-sub">ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
+      <label>Username<input id="loginUser" type="text" autocomplete="username" required></label>
+      <label>รหัสผ่าน<input id="loginPass" type="password" autocomplete="current-password" required></label>
+      <div class="lc-err" id="loginErr" hidden></div>
+      <button class="btn pri" type="submit" id="loginBtn">เข้าสู่ระบบ</button>
+    </form>
+  </div>
 </div>
 
 <!-- ══ แถบบน — เต็มความกว้าง โลโก้อยู่ซ้ายสุดตรงกับเมนูข้างด้านล่าง ══ -->
@@ -63,15 +62,15 @@
   <div class="brand">
     <!-- โลโก้ iPassion วาดเป็น SVG จึงคมทุกความละเอียดและไม่ต้องโหลดไฟล์ภาพ -->
     <svg class="blogo" viewBox="0 0 232 74" role="img" aria-label="iPassion Professional Service">
-      <rect x="0" y="4" width="56" height="56" fill="#0078D4"/>
+      <rect x="0" y="4" width="56" height="56" fill="#0A78D4"/>
       <text x="70" y="40" font-family="Segoe UI, Tahoma, Arial, sans-serif"
-            font-size="38" font-weight="700" fill="#0078D4" letter-spacing="-.5">iPassion</text>
+            font-size="38" font-weight="700" fill="#0A78D4" letter-spacing="-.5">iPassion</text>
       <text x="72" y="62" font-family="Segoe UI, Tahoma, Arial, sans-serif"
             font-size="17" fill="#8A8A8A" letter-spacing=".2">Professional Service</text>
     </svg>
     <!-- ตราย่อ — ใช้ตอนหุบเมนู ย่อโลโก้เต็มลงมาจะอ่านตัวหนังสือไม่ออก -->
     <svg class="bmark" viewBox="0 0 56 56" role="img" aria-label="iPassion">
-      <rect width="56" height="56" fill="#0078D4"/>
+      <rect width="56" height="56" fill="#0A78D4"/>
     </svg>
   </div>
   <span class="obs">
@@ -79,6 +78,21 @@
     <span>ระบบวางบิล Outsource</span>
   </span>
   <div class="gap"></div>
+  <!-- ตัวเลือกบริษัท/ลูกค้าที่ "กำลังดำเนินการอยู่" — เปลี่ยนแล้วข้อมูลทั้งระบบ
+       (แดชบอร์ด/ตรวจ Manday/วางบิล/ใบแจ้งหนี้) จะกรองเหลือแค่สัญญานี้ทันที
+       ซ่อนไว้ก่อนจนกว่า startApp() จะดึงรายชื่อบริษัทมาใส่ให้ (กันแวบเห็นช่องเปล่า)
+       เดิมเป็น <select> ธรรมดา — รายการที่กางออกมาเป็นเมนูของเบราว์เซอร์เอง แต่งหน้าตาไม่ได้เลย
+       เปลี่ยนเป็นปุ่ม + แผงลอยแบบเดียวกับเมนูบัญชี (.whopop) ให้กดแล้วสวยเข้าธีมเดียวกันทั้งแอป -->
+  <div class="ctxwrap" id="contractSwitchWrap" hidden>
+    <button class="ctxbtn" id="contractSwitchBtn" type="button"
+            aria-haspopup="listbox" aria-expanded="false" aria-controls="contractSwitchPop">
+      <svg class="i sm"><use href="#i-bld"/></svg>
+      <span class="ctx-label" id="contractSwitchLabel">…</span>
+      <svg class="i sm cv"><use href="#i-cd"/></svg>
+    </button>
+    <div class="ctxpop" id="contractSwitchPop" role="listbox"
+         aria-label="เลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่" hidden></div>
+  </div>
   <span class="env dry" id="envChip"><i></i> …</span>
   <span class="mast-date" id="mastDate"></span>
   <div class="bellwrap">
@@ -127,7 +141,7 @@
       <span class="sgrp">อ้างอิง</span>
       <button class="mtab" data-view="invoices" title="ใบแจ้งหนี้">
         <svg class="i"><use href="#i-doc"/></svg> <span>ใบแจ้งหนี้</span></button>
-      <button class="mtab" data-view="master" title="ข้อมูลหลัก">
+      <button class="mtab" data-view="master" title="ข้อมูลหลัก" id="masterNavBtn" hidden>
         <svg class="i"><use href="#i-users"/></svg> <span>ข้อมูลหลัก</span></button>
       <button class="mtab" data-view="sysadmin" title="จัดการระบบ" id="sysAdminTab" hidden>
         <svg class="i"><use href="#i-cog"/></svg> <span>จัดการระบบ</span></button>

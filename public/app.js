@@ -148,6 +148,46 @@ function confirmModal({ iconName = 'trash-solid', danger = true, title, message,
   });
 }
 
+/**
+ * เปิดดู PDF ในหน้าเว็บเลย ไม่เปิดแท็บใหม่ — เพราะเบราว์เซอร์บางเครื่องตั้งค่าให้ดาวน์โหลด
+ * ไฟล์ PDF อัตโนมัติแทนเปิดดู (เจอจริงกับผู้ใช้บางคน) ต่อให้เซิร์ฟเวอร์ส่ง
+ * Content-Disposition: inline มาแล้วก็ตาม — ฝัง <iframe> เองตัดปัญหานี้ไปเลย
+ * เพราะเบราว์เซอร์ยังคงเปิดตัวอ่าน PDF ในตัวให้ดูภายใน iframe ได้ปกติ
+ */
+function openPdfPreview(url, filename) {
+  const root = el('modalRoot');
+  const dl = `${url}${url.includes('?') ? '&' : '?'}dl`;
+  root.innerHTML = `
+    <div class="modal-backdrop pdf">
+      <div class="modal-card pdf-card">
+        <div class="pdf-hd">
+          <span class="pdf-title">${icon('file', 'i sm')} ${esc(filename ?? 'เอกสาร PDF')}</span>
+          <div class="pdf-actions">
+            <a class="btn sm icon" href="${esc(dl)}" download="${esc(filename ?? 'document.pdf')}"
+               title="ดาวน์โหลดไฟล์นี้" aria-label="ดาวน์โหลด">${icon('cd')}</a>
+            <button class="btn sm icon" id="pdfClose" title="ปิด" aria-label="ปิด">${icon('x')}</button>
+          </div>
+        </div>
+        <iframe class="pdf-frame" src="${esc(url)}" title="${esc(filename ?? 'เอกสาร PDF')}"></iframe>
+      </div>
+    </div>`;
+  const close = () => { root.innerHTML = ''; };
+  el('pdfClose').addEventListener('click', close);
+  root.querySelector('.modal-backdrop').addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal-backdrop')) close();
+  });
+}
+
+/* ทุกที่ในระบบที่แสดงไฟล์ PDF ใช้ลิงก์ class="file" ตัวเดียวกันหมด — ดักคลิกตรงนี้จุดเดียว
+   แทนที่จะไปแก้ทีละจุดที่ render ไม่งั้นเพิ่มจุดใหม่ในอนาคตแล้วลืมผูกจะพลาดง่าย
+   Ctrl/Cmd/กลางคลิกยังปล่อยให้เบราว์เซอร์เปิดแท็บใหม่ตามปกติ (ผู้ใช้ตั้งใจเปิดแยก) */
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a.file[href]');
+  if (!link || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  openPdfPreview(link.href, link.textContent.replace(/^PDF/, '').trim());
+});
+
 // ─────────────────────────────────────────────────────────────
 
 const state = {
@@ -158,11 +198,17 @@ const state = {
   masterTab: 1, uploadTab: 1, sysTab: 1,
   /** role ของคนที่ login อยู่ — เติมจาก /pulse ทุกครั้งที่ syncBadges() คุยกับเซิร์ฟเวอร์ */
   role: null,
+  /* สัญญาที่ "กำลังดำเนินการอยู่" ที่เลือกจากตัวเลือกบริษัทบนแถบบน — null = ยังไม่มีสัญญา active เลย
+     (เช่นระบบใหม่ยังไม่ได้ตั้งใคร) แดชบอร์ด/ตรวจ Manday/ใบแจ้งหนี้จะกรองด้วยค่านี้เสมอ
+     ดู loadContractSwitch()/contractQuery() ท้ายไฟล์ */
+  contractId: null,
   /* แถวชื่อพ้อง/ตำแหน่งพ้องที่กำลังเพิ่มหรือแก้อยู่ — เปิดทีละอันเท่านั้น
      { empId, kind: 'name'|'position', mode: 'add'|'edit', original } (original ใช้ตอน mode 'edit') */
   aliasEdit: null,
   /** สัญญาจ้างที่กำลังแก้เรทอยู่ — เปิดทีละอันเท่านั้น: assignmentId หรือ null */
   rateEdit: null,
+  /** เปิด/ปิดฟอร์ม "เพิ่มลูกค้าใหม่" ในแท็บลูกค้า & สัญญา */
+  customerAdd: false,
   /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด/ดึงจาก Gmail — ยังไม่ได้บันทึกลงฐานข้อมูล
      อยู่ในหน่วยความจำหน้าจอจนกว่าคนจะกดยืนยัน รีเฟรชแล้วหาย ซึ่งถูกต้อง
      เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง
@@ -207,7 +253,7 @@ const SPLIT_COLOR = {
   mismatch: 'var(--cr)', partial: 'var(--tint2)', awaiting: 'var(--rule)',
 };
 async function renderDashboard() {
-  const data = await api('/dashboard');
+  const data = await api(`/dashboard${contractQuery()}`);
   const contract = data.contracts[0];
   const cycles = data.cycles;
 
@@ -491,7 +537,7 @@ const URGENCY = { mismatch: 0, verified: 1, received: 2, extracted: 3, rejected:
 
 
 async function renderQueue() {
-  const sheets = await api('/timesheets');
+  const sheets = await api(`/timesheets${contractQuery()}`);
 
   const byFilter = sheets.filter(QUEUE_FILTERS[state.queueFilter].test);
   const found = byFilter
@@ -798,6 +844,14 @@ async function openSheet(id) {
           </div>
         </div>
       </div>
+
+      <!-- เทียบวันลากับ HRDD — ยิงแยกจากข้อมูลหลักของหน้านี้ เพราะเป็นการเรียกออกไปนอกระบบ
+           (อาจช้า/ล่ม) ไม่ควรทำให้รอดูข้อมูล Timesheet หลักไม่ได้ ดูสถานะ 'loading' ด้านล่าง -->
+      <div class="card" id="hrddCard">
+        <div class="hd"><h3>เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</h3>
+          <span class="rt" id="hrddMeta"></span></div>
+        <div class="bd" id="hrddBody"><div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div></div>
+      </div>
     </div>
 
     <!-- อีเมล & Timesheet -->
@@ -828,13 +882,14 @@ async function openSheet(id) {
 
       <div class="card">
         <div class="hd"><h3>ป้ายกำกับรายวันที่อ่านได้</h3>
-          <span class="rt">เฉพาะวันที่ไม่ใช่วันทำงานปกติ</span></div>
-        <div class="bd flush"><div class="tw"><table style="min-width:520px">
-          <thead><tr><th>วันที่</th><th>ป้ายกำกับ</th><th>เวลาเข้า–ออก</th></tr></thead>
+          <span class="rt">ตารางทำงานทั้งเดือนตามที่ AI อ่านได้</span></div>
+        <div class="bd flush"><div class="tw"><table style="min-width:760px">
+          <thead><tr><th>วันที่</th><th>ป้ายกำกับ</th><th>เวลาเข้า–ออก</th><th>รายละเอียดงาน</th></tr></thead>
           <tbody>${sheet.dayLabels.length
             ? sheet.dayLabels.map((d) => `<tr><td class="n">${esc(d.date)}</td><td>${esc(d.label ?? '—')}</td>
-                <td class="n">${d.time_in ? `${esc(d.time_in)} – ${esc(d.time_out ?? '')}` : '—'}</td></tr>`).join('')
-            : '<tr><td colspan="3" class="empty">ไม่มีข้อมูล</td></tr>'}</tbody>
+                <td class="n">${d.time_in ? `${esc(d.time_in)} – ${esc(d.time_out ?? '')}` : '—'}</td>
+                <td style="white-space:pre-line">${esc(d.job_desc ?? d.remark ?? '—')}</td></tr>`).join('')
+            : '<tr><td colspan="4" class="empty">ไม่มีข้อมูล</td></tr>'}</tbody>
         </table></div></div>
       </div>
 
@@ -926,6 +981,84 @@ async function openSheet(id) {
       toast(error.message, true);
     }
   });
+
+  loadHrddCompare(id);
+}
+
+/* ── เทียบวันลากับ HRDD ─────────────────────────────────────────
+   ดูอย่างเดียว — เรียก HRDD ผ่าน API 2 เส้น (สถานะวันลา + รายการวันลา) ไม่มีเขียน/แก้/ลบ
+   ฝั่ง HRDD เด็ดขาด ตรรกะเทียบอยู่ที่ src/domain/leaveCompare.js (ฝั่งเซิร์ฟเวอร์)
+   หน้านี้แค่รับผลมาแสดง 4 สถานะต่อวัน: ตรงกัน/ประเภทไม่ตรง/ไม่พบใน Timesheet/ไม่พบใน HRDD */
+
+const HRDD_STATUS_LABEL = { ok: 'ตรงกัน', warn: 'ประเภทไม่ตรง', info: 'ไม่พบใน Timesheet', bad: 'ไม่พบใน HRDD' };
+const HRDD_STATUS_TONE = { ok: 'ok', warn: 'wn', info: 'pr', bad: 'cr' };
+
+async function loadHrddCompare(id) {
+  try {
+    const result = await api(`/timesheets/${encodeURIComponent(id)}/hrdd-compare`);
+    renderHrddCompare(result, id);
+  } catch (error) {
+    renderHrddCompare({ state: 'error', message: error.message }, id);
+  }
+}
+
+function renderHrddCompare(result, id) {
+  const meta = el('hrddMeta');
+  const body = el('hrddBody');
+  if (!meta || !body) return;   // คนกดออกจากหน้านี้ไปแล้วก่อนที่ HRDD จะตอบกลับมา
+
+  meta.textContent = result.checkedAt ? `ตรวจล่าสุด ${dt(result.checkedAt)}` : '';
+
+  if (result.state === 'not_connected' || result.state === 'error') {
+    body.innerHTML = `
+      <div class="empty">
+        ${icon('alt', 'i')}
+        <div>${esc(result.message)}</div>
+        ${result.state === 'error' ? `<button class="btn sm" id="hrddRetryBtn" style="margin-top:12px">ลองใหม่</button>` : ''}
+      </div>`;
+    el('hrddRetryBtn')?.addEventListener('click', () => {
+      body.innerHTML = '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>';
+      loadHrddCompare(id);
+    });
+    return;
+  }
+
+  const { rows, summary } = result;
+
+  if (!rows.length) {
+    body.innerHTML = `<div class="note">${icon('info')}<span>ไม่มีวันลาให้เทียบในรอบนี้ (ไม่มีทั้งฝั่ง Timesheet และ HRDD)</span></div>`;
+    return;
+  }
+
+  const banner = summary.mismatched > 0
+    ? `<div class="note wn">${icon('alt')}<span><b>พบความไม่ตรงกัน ${summary.mismatched} รายการ</b><br>
+        ระหว่างวันลาที่อ่านได้จาก Timesheet กับข้อมูลใน HRDD — กรุณาตรวจสอบก่อนวางบิล</span></div>`
+    : `<div class="note">${icon('chk')}<span><b>ข้อมูลวันลาตรงกันทั้งหมด</b><br>
+        ตรวจกับ HRDD แล้ว ${summary.counts.ok} จาก ${summary.total} รายการตรงกัน</span></div>`;
+
+  const stats = `
+    <div class="pair" style="margin-bottom:18px">
+      <div><span class="pl">ตรงกัน</span><span class="pv" style="color:var(--ok)">${summary.counts.ok}</span></div>
+      <div><span class="pl">ประเภทไม่ตรง</span><span class="pv" style="color:var(--wn)">${summary.counts.warn}</span></div>
+      <div><span class="pl">ไม่พบใน Timesheet</span><span class="pv" style="color:var(--pr)">${summary.counts.info}</span></div>
+      <div><span class="pl">ไม่พบใน HRDD</span><span class="pv" style="color:var(--cr)">${summary.counts.bad}</span></div>
+    </div>`;
+
+  const table = `
+    <div class="tw"><table style="min-width:0">
+      <thead><tr><th>วันที่</th><th>Timesheet</th><th>HRDD</th><th>สถานะ</th></tr></thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr>
+            <td class="n">${dateOnly(r.date)}</td>
+            <td>${r.tsType ? esc(r.tsType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
+            <td>${r.hrddType ? esc(r.hrddType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
+            <td><span class="st ${HRDD_STATUS_TONE[r.status]}">${HRDD_STATUS_LABEL[r.status]}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+
+  body.innerHTML = banner + stats + table;
 }
 
 // ── รอบบิล ──────────────────────────────────────────────────
@@ -1121,7 +1254,6 @@ async function openCycle(contractId, period) {
               <div class="mailacts">
                 <button class="btn sm" id="aiDraftBtn">${icon('rf')} ให้ AI เรียบเรียงใหม่</button>
                 <button class="btn sm" id="copyMailBtn">${icon('doc')} คัดลอกร่าง</button>
-                <button class="btn sm" id="openMailBtn">${icon('mail')} เปิดในโปรแกรมอีเมล</button>
                 <button class="btn sm" id="gmailDraftBtn">${icon('mail')} สร้างร่างใน Gmail</button>
               </div>
               ${data.emailDraft.highlights?.length ? `<div class="note info">${icon('info')}<span>
@@ -1143,8 +1275,10 @@ async function openCycle(contractId, period) {
                         ? `/api/timesheets/${encodeURIComponent(a.timesheetId)}/file`
                         : null;
                     return href
-                      ? `<a class="file" href="${esc(href)}" target="_blank" rel="noopener">
-                           <span class="pd">PDF</span> ${esc(a.label)}</a>`
+                      ? `<a class="file" href="${esc(href)}" target="_blank" rel="noopener"
+                           title="เปิดดูไฟล์นี้"><span class="pd">PDF</span> ${esc(a.label)}</a>
+                         <a class="btn sm icon" href="${esc(href)}?dl" download="${esc(a.label)}"
+                           title="ดาวน์โหลดไฟล์นี้" aria-label="ดาวน์โหลด">${icon('cd')}</a>`
                       : `<span class="file"><span class="pd">PDF</span> ${esc(a.label)}</span>`;
                   }).join('')}</div>
                 </div>
@@ -1304,15 +1438,6 @@ async function openCycle(contractId, period) {
     }
   });
 
-  el('openMailBtn')?.addEventListener('click', () => {
-    const to = data.contract.contact_email ?? '';
-    const url = `mailto:${encodeURIComponent(to)}`
-      + `?subject=${encodeURIComponent(data.emailDraft.subject)}`
-      + `&body=${encodeURIComponent(data.emailDraft.body)}`;
-    window.open(url, '_blank');
-    if (!to) toast('ยังไม่มีอีเมลผู้ประสานงานในระบบ — ใส่ผู้รับเองในโปรแกรมเมล');
-  });
-
   el('gmailDraftBtn')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     /* เปิดแท็บเปล่าไว้ก่อนตั้งแต่ตอนคลิก (ยังอยู่ใน user gesture เดิม) แล้วค่อยเปลี่ยน
@@ -1468,7 +1593,7 @@ async function renderUpload() {
     <!-- ผลที่ AI อ่านได้ — วางไว้นอกแท็บในโค้ด แต่โชว์เฉพาะของแท็บที่กำลังเปิดอยู่ (กรอง tab ตรงนี้)
          กันไม่ให้การ์ดจากแท็บอื่นโผล่มาปนตอนสับแท็บไปมา — แต่ละแท็บโชว์ได้พร้อมกันหลายใบ (คนละการ์ด)
          เพราะ 1 อีเมลอาจมีไฟล์แนบของหลายคน -->
-    ${reads.filter((r) => r.tab === state.uploadTab).map((r) => readResultHtml(r, employees)).join('')}
+    ${reads.filter((r) => r.tab === state.uploadTab).map((r) => (r.pending ? pendingReadHtml(r) : readResultHtml(r, employees))).join('')}
   </div>`;
 
   main.querySelectorAll('[data-utab]').forEach((btn) => {
@@ -1525,7 +1650,7 @@ function bindGmailTab() {
                       <a class="btn sm icon" href="${esc(src)}&dl" download="${esc(a.filename)}"
                          title="ดาวน์โหลดไฟล์นี้" aria-label="ดาวน์โหลด">${icon('cd')}</a>
                       <button class="btn sm pri" data-mail="${esc(m.id)}" data-att="${esc(a.filename)}">
-                        ${icon('srch')} ให้ AI อ่าน</button>
+                        ${icon('srch')} อ่านข้อมูล</button>
                     </div>`;
                   }).join('')}
                 </div>
@@ -1540,34 +1665,13 @@ function bindGmailTab() {
               แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`);
 
       el('gmailList').querySelectorAll('[data-mail]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          btn.textContent = 'AI กำลังอ่านเมลและไฟล์แนบ…';
-          try {
-            const result = await api('/gmail/read', {
-              method: 'POST',
-              body: JSON.stringify({
-                messageId: btn.dataset.mail,
-                attachmentFilename: btn.dataset.att || null,
-              }),
-            });
-            const added = readsFromResult(result, 3);
-            state.reads.push(...added);
-            /* อ่านจาก added[0] ไม่ใช่ result.data — added มาจาก readsFromResult() ซึ่งรับประกันว่ามี
-               อย่างน้อยหนึ่งใบเสมอ ส่วน result.data เป็นแค่สำเนาที่วางไว้ให้โค้ดเดิม ถ้าฝั่งระบบ
-               เปลี่ยนรูปแบบเมื่อไหร่ตรงนี้จะพังทั้งการ์ดทั้งที่ข้อมูลมาครบ */
-            const first = added[0].data;
-            toast(added.length > 1
-              ? `อ่านเสร็จ — ไฟล์นี้มี Timesheet ${added.length} คน แยกให้ตรวจทีละคนแล้ว`
-              : `อ่านเสร็จ — ${first.employeeName ?? ''} รอบ ${first.period ?? ''}`);
-            renderUpload();
-          } catch (error) {
-            btn.disabled = false;
-            btn.innerHTML = `${icon('srch')} ให้ AI อ่าน`;
-            toast(error.message, true);
-          }
-        });
+        btn.addEventListener('click', () => readOneAttachment(btn));
       });
+
+      /* ไล่อ่านให้เองทันทีที่เข้าแท็บ — ทีละไฟล์เรียงกัน ไม่ยิงพร้อมกัน เพราะ GPU มีตัวเดียว
+         ยิงพร้อมกันจะแย่งกันจนช้ากว่าเดิมและกินหน่วยความจำการ์ดจอเกิน
+         มีปุ่มหยุดให้กดได้ตลอด เพราะกล่องเมลอาจมีหลายฉบับและอ่านนานเป็นนาทีต่อฉบับ */
+      autoReadPending();
 
       el('gmailList').querySelectorAll('[data-dismiss]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -1749,6 +1853,169 @@ function rankEmployees(employees, readName) {
     .map(({ e, s }) => ({ e, close: s >= 0.6 }));
 }
 
+/* ── การ์ด "กำลังอ่าน" ───────────────────────────────────────────────
+   AI อ่าน Timesheet ใช้เวลาราวหนึ่งนาทีต่อหน้า เอกสารรวมหลายคนจึงกินหลายนาที
+   เดิมระหว่างนั้นเห็นแค่ปุ่มที่กดไม่ได้ ไม่มีอะไรบอกว่าคืบหน้าแค่ไหนหรือค้างไปแล้ว
+   ตอนนี้พอกดปุ๊บจะได้การ์ดขึ้นมาทันทีในที่เดียวกับที่ผลจะไปโผล่ พร้อมนาฬิกาเดินให้เห็นว่ายังทำงานอยู่ */
+
+const READ_SECONDS_PER_PAGE = 60;   // วัดจากของจริงบนเซิร์ฟเวอร์ ~54 วินาที/หน้า
+
+function pendingReadHtml(read) {
+  const secs = Math.floor((Date.now() - read.startedAt) / 1000);
+  const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+  const ss = String(secs % 60).padStart(2, '0');
+  return `
+  <div class="card pending" data-read-key="${esc(read._key)}">
+    <div class="hd"><h3>${icon('srch')} ระบบกำลังอ่าน${read.email ? 'เมลและไฟล์แนบ' : 'ไฟล์'}</h3>
+      <span class="rt n">${mm}:${ss}</span></div>
+    <div class="bd">
+      <div class="readwait">
+        <div class="bar"><i></i></div>
+        <b>${esc(read.fileName ?? 'ไฟล์ Timesheet')}</b>
+        <span>อ่านทีละหน้าแล้วรวมผล — เอกสารทั่วไปราว ${READ_SECONDS_PER_PAGE} วินาทีต่อหน้า
+          ไฟล์ที่รวม Timesheet หลายคนจะใช้เวลาหลายนาที ปล่อยหน้านี้ไว้ได้เลย</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** เดินนาฬิกาบนการ์ดที่กำลังอ่าน — เขียนทับเฉพาะตัวเลข ไม่วาดการ์ดใหม่ทั้งใบ */
+let readTicker = null;
+function tickPendingReads() {
+  clearInterval(readTicker);
+  readTicker = setInterval(() => {
+    const pending = state.reads.filter((r) => r.pending);
+    if (!pending.length) { clearInterval(readTicker); readTicker = null; return; }
+    for (const r of pending) {
+      const box = document.querySelector(`[data-read-key="${CSS.escape(r._key)}"] .hd .rt`);
+      if (!box) continue;
+      const secs = Math.floor((Date.now() - r.startedAt) / 1000);
+      box.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+    }
+  }, 1000);
+}
+
+/** วางการ์ด "กำลังอ่าน" ลงในรายการทันทีที่กดปุ่ม แล้วคืน key ไว้ใช้แทนที่ตอนอ่านเสร็จ */
+function startPendingRead({ fileName, email, tab }) {
+  const key = crypto.randomUUID();
+  state.reads.push({ _key: key, tab, pending: true, startedAt: Date.now(), fileName, email });
+  renderUpload();
+  document.querySelector(`[data-read-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center' });
+  tickPendingReads();
+  return key;
+}
+
+/** เอาการ์ด "กำลังอ่าน" ออก — ใช้ทั้งตอนสำเร็จและตอนพลาด */
+function endPendingRead(key) {
+  state.reads = state.reads.filter((r) => r._key !== key);
+}
+
+
+/* ── ไล่อ่านไฟล์แนบใน Gmail ให้เองอัตโนมัติ ────────────────────────────
+   เดิมต้องกด "ให้ AI อ่าน" ทีละไฟล์แล้วนั่งรอ ซึ่งเป็นขั้นที่ไม่ได้ตัดสินใจอะไรเลย —
+   ยังไงก็ต้องอ่านทุกไฟล์อยู่แล้ว ประตูของคนอยู่ที่ "ยืนยันและบันทึก" ทีหลังต่างหาก */
+
+let autoReadRunning = false;
+let autoReadStop = false;
+/* ไฟล์ที่ลองอ่านไปแล้วในรอบนี้ — จำเป็นมาก ไม่ใช่แค่ optimization
+   เพราะพออ่านเสร็จจะ renderUpload() ซึ่งวาดแท็บ Gmail ใหม่แล้วเรียก autoReadPending() อีกรอบ
+   ถ้าไม่จำไว้ ไฟล์เดิมจะถูกอ่านซ้ำไม่รู้จบ (ทดสอบแล้วเจอจริง — 2 ไฟล์ยิงไป 5 ครั้ง)
+   อีเมลยังอยู่ในรายการจนกว่าคนจะกดยืนยันบันทึก จึงพึ่งสถานะปุ่มอย่างเดียวไม่ได้ */
+const autoReadDone = new Set();
+const attachmentKey = (btn) => `${btn.dataset.mail}::${btn.dataset.att ?? ''}`;
+
+/** อ่านไฟล์แนบหนึ่งไฟล์จากปุ่มที่ระบุ — ใช้ร่วมกันทั้งตอนกดเองและตอนไล่อ่านอัตโนมัติ */
+async function readOneAttachment(btn) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'ระบบกำลังอ่านเมลและไฟล์แนบ…';
+  /* วางการ์ดรอไว้ก่อนเลย ไม่ต้องให้คนนั่งมองปุ่มที่กดไม่ได้เป็นนาทีๆ
+     โดยไม่รู้ว่าระบบยังทำงานอยู่หรือค้างไปแล้ว */
+  const pendingKey = startPendingRead({ fileName: btn.dataset.att || null, email: true, tab: 3 });
+  try {
+    const result = await api('/gmail/read', {
+      method: 'POST',
+      body: JSON.stringify({ messageId: btn.dataset.mail, attachmentFilename: btn.dataset.att || null }),
+    });
+    endPendingRead(pendingKey);
+    const added = readsFromResult(result, 3);
+    state.reads.push(...added);
+    /* อ่านจาก added[0] ไม่ใช่ result.data — added มาจาก readsFromResult() ซึ่งรับประกันว่ามี
+       อย่างน้อยหนึ่งใบเสมอ ส่วน result.data เป็นแค่สำเนาที่วางไว้ให้โค้ดเดิม ถ้าฝั่งระบบ
+       เปลี่ยนรูปแบบเมื่อไหร่ตรงนี้จะพังทั้งการ์ดทั้งที่ข้อมูลมาครบ */
+    const first = added[0].data;
+    toast(added.length > 1
+      ? `อ่านเสร็จ — ไฟล์นี้มี Timesheet ${added.length} คน แยกให้ตรวจทีละคนแล้ว`
+      : `อ่านเสร็จ — ${first.employeeName ?? ''} รอบ ${first.period ?? ''}`);
+    renderUpload();
+    return true;
+  } catch (error) {
+    endPendingRead(pendingKey);
+    renderUpload();
+    const back = document.querySelector(`[data-mail="${CSS.escape(btn.dataset.mail)}"][data-att="${CSS.escape(btn.dataset.att ?? '')}"]`);
+    if (back) { back.disabled = false; back.innerHTML = `${icon('srch')} อ่านข้อมูล`; }
+    toast(error.message, true);
+    return false;
+  }
+}
+
+/** ไล่อ่านทุกไฟล์ที่ยังไม่ได้อ่านในกล่อง ทีละไฟล์ */
+async function autoReadPending() {
+  // กำลังไล่อ่านอยู่แล้ว — แค่เอาแถบสถานะกลับขึ้นมา เพราะ renderUpload() เพิ่งลบทิ้งไป
+  if (autoReadRunning) { restoreAutoReadBar(); return; }
+
+  const queue = [...document.querySelectorAll('#gmailList [data-mail]')]
+    .filter((b) => !b.disabled && !autoReadDone.has(attachmentKey(b)));
+  if (!queue.length) return;
+
+  autoReadRunning = true;
+  autoReadStop = false;
+  try {
+    for (let i = 0; i < queue.length; i++) {
+      if (autoReadStop) break;
+      // ปุ่มถูกวาดใหม่ทุกครั้งที่ renderUpload() จึงต้องหาปุ่มตัวปัจจุบันจาก dataset ไม่ใช่ใช้ตัวเดิมที่เก็บไว้
+      const { mail, att } = queue[i].dataset;
+      const key = `${mail}::${att ?? ''}`;
+      if (autoReadDone.has(key)) continue;
+      autoReadDone.add(key);   // จำก่อนเริ่มอ่าน ไม่ใช่หลังอ่านเสร็จ — พลาดแล้วก็ไม่ต้องวนอ่านซ้ำเอง
+      const live = document.querySelector(`#gmailList [data-mail="${CSS.escape(mail)}"][data-att="${CSS.escape(att ?? '')}"]`);
+      if (!live || live.disabled) continue;
+      autoReadProgress = { current: i + 1, total: queue.length };
+      showAutoReadBar();
+      await readOneAttachment(live);
+    }
+  } finally {
+    autoReadRunning = false;
+    hideAutoReadBar();
+  }
+}
+
+let autoReadProgress = null;
+
+function showAutoReadBar() {
+  const list = el('gmailList');
+  if (!list || !autoReadProgress) return;
+  let bar = el('autoReadBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'autoReadBar';
+    bar.className = 'note info autoread';
+    list.prepend(bar);
+  }
+  const { current, total } = autoReadProgress;
+  bar.innerHTML = `${icon('srch')}<span>กำลังไล่อ่านให้อัตโนมัติ — ไฟล์ที่ ${int(current)} จาก ${int(total)}</span>
+    <button class="btn sm" id="autoReadStopBtn" type="button">หยุด</button>`;
+  el('autoReadStopBtn').addEventListener('click', () => {
+    autoReadStop = true;
+    toast('หยุดแล้ว — ไฟล์ที่กำลังอ่านอยู่จะอ่านให้จบก่อน ที่เหลือกดอ่านเองได้');
+  });
+}
+
+/** เอาแถบกลับขึ้นมาหลัง renderUpload() วาดรายการเมลใหม่ */
+function restoreAutoReadBar() { if (autoReadRunning) showAutoReadBar(); }
+
+function hideAutoReadBar() { autoReadProgress = null; el('autoReadBar')?.remove(); }
+
 function readsFromResult(result, tab) {
   const { documents, data, verification, matching, contract, blockers, documentNo, ...shared } = result;
   const list = documents?.length
@@ -1776,11 +2043,6 @@ function readResultHtml(read, employees = []) {
   const hardBlockers = read.blockers.filter((b) =>
     !b.startsWith('ช่องสรุประบุวันลา') && !b.startsWith('อีเมลระบุ'));
   const blocked = hardBlockers.length > 0;
-  const approvalRaw = read.email?.meta?.approvalStatus ?? null;
-  /* เทียบตรงตัวเป๊ะๆ ห้ามใช้ .includes — "รออนุมัติ" ก็มีคำว่า "อนุมัติ" อยู่ในนั้นเหมือนกัน
-     ถ้าเทียบแบบ substring จะเข้าใจผิดว่าอนุมัติแล้วทั้งที่ยังรออยู่ */
-  const approvalDefault = approvalRaw === 'อนุมัติ' ? 'อนุมัติ' : 'ไม่อนุมัติ';
-  const approvalBlocked = Boolean(read.email) && approvalDefault !== 'อนุมัติ';
   const docInput = `<input id="uDoc-${key}" type="text" placeholder="เช่น 2026020101" autocomplete="off"
                        value="${esc(read.documentNo ?? '')}">`;
   /* ไฟล์ต้นฉบับที่ AI อ่าน — เปิดดู/ดาวน์โหลดได้เฉพาะที่ดึงมาจาก Gmail เพราะยังอยู่ในเมล
@@ -1788,20 +2050,12 @@ function readResultHtml(read, employees = []) {
   const srcFile = read.sourceEmailId && read.fileName
     ? `/api/gmail/${encodeURIComponent(read.sourceEmailId)}/attachment?filename=${encodeURIComponent(read.fileName)}`
     : null;
-  // ดรอปดาวน์สถานะอนุมัติ — ย้ายมาไว้ที่หัวการ์ดแทนคำอธิบายชื่อโมเดล/สถานะยังไม่บันทึก
-  // (มีแค่ตอนอ่านจากอีเมล เพราะไฟล์อัปโหลดตรงไม่มีแนวคิดสถานะอนุมัติในเมล)
-  const approvalControl = read.email ? `
-    <span class="selectchip"><select id="rApproval-${key}">
-      <option value="อนุมัติ" ${approvalDefault === 'อนุมัติ' ? 'selected' : ''}>อนุมัติ</option>
-      <option value="ไม่อนุมัติ" ${approvalDefault === 'ไม่อนุมัติ' ? 'selected' : ''}>ไม่อนุมัติ</option>
-    </select>${icon('cd')}</span>` : '';
 
   return `
   <div class="card" data-read-key="${esc(key)}">
-    <div class="hd"><h3>สิ่งที่ AI อ่านได้${read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์'}${
+    <div class="hd"><h3>ข้อมูลที่อ่านได้${read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์'}${
       d.employeeName ? ` — ${esc(d.employeeName)}` : ''}</h3>
-      ${read.partOfFile ? `<span class="tg mu">ใบที่ ${read.partOfFile.index} จาก ${read.partOfFile.total} ในไฟล์เดียวกัน</span>` : ''}
-      ${approvalControl}</div>
+      ${read.partOfFile ? `<span class="tg mu">ใบที่ ${read.partOfFile.index} จาก ${read.partOfFile.total} ในไฟล์เดียวกัน</span>` : ''}</div>
     <div class="bd">
       ${srcFile ? `<div class="attrow" style="margin-bottom:14px">
         <a class="file" href="${esc(srcFile)}" target="_blank" rel="noopener"
@@ -1886,8 +2140,7 @@ function readResultHtml(read, employees = []) {
     </div>
     <div class="ft review-ft">
       <button class="btn ghost discardBtn" type="button">${icon('trash', 'i sm')} ทิ้งผลนี้</button>
-      <button class="btn pri lg confirmBtn" type="button" data-blocked="${blocked}"
-        ${(blocked || approvalBlocked) ? 'disabled' : ''}>
+      <button class="btn pri lg confirmBtn" type="button" data-blocked="${blocked}" ${blocked ? 'disabled' : ''}>
         ${icon('chk')} ยืนยันและบันทึกเข้าระบบ</button>
     </div>
   </div>`;
@@ -1920,18 +2173,17 @@ function bindUploadTab() {
   });
 
   el('readBtn').addEventListener('click', async () => {
+    let pendingKey = null;   // ประกาศนอก try เพื่อให้ catch เอาการ์ดรอออกได้ด้วย
     if (!picked) return;
     const btn = el('readBtn');
     btn.disabled = true;
-    btn.textContent = 'AI กำลังอ่านไฟล์… (อ่านทีละหน้า อาจใช้เวลาหลายนาทีถ้าไฟล์มีหลายหน้า)';
+    btn.textContent = 'ระบบกำลังอ่านไฟล์… (อ่านทีละหน้า อาจใช้เวลาหลายนาทีถ้าไฟล์มีหลายหน้า)';
     try {
-      const result = await api('/timesheets/read', {
-        method: 'POST',
-        body: JSON.stringify({
-          fileBase64: await fileToBase64(picked),
-          fileName: picked.name,
-        }),
-      });
+      const body = JSON.stringify({ fileBase64: await fileToBase64(picked), fileName: picked.name });
+      // การ์ดรอขึ้นทันทีเหมือนฝั่ง Gmail — ดูเหตุผลที่ startPendingRead()
+      pendingKey = startPendingRead({ fileName: picked.name, email: false, tab: 1 });
+      const result = await api('/timesheets/read', { method: 'POST', body });
+      endPendingRead(pendingKey);
       const added = readsFromResult(result, 1);
       state.reads.push(...added);
       const first = added[0].data;   // ดูเหตุผลที่ไม่ใช้ result.data ในตัวจัดการฝั่ง Gmail
@@ -1940,6 +2192,7 @@ function bindUploadTab() {
         : `อ่านไฟล์เสร็จ — ${first.employeeName ?? ''} รอบ ${first.period ?? ''}`);
       renderUpload();
     } catch (error) {
+      if (pendingKey) { endPendingRead(pendingKey); renderUpload(); }
       btn.disabled = false;
       btn.innerHTML = `${icon('srch')} อ่านไฟล์นี้`;
       toast(error.message, true);
@@ -2000,13 +2253,6 @@ function bindUploadTab() {
     card.querySelector('.rAddLeave')?.addEventListener('click', () => addLeaveRow(card.querySelector('.rLeaveRows')));
     card.querySelectorAll('.rLeaveRows .lrm').forEach((btn) => {
       btn.addEventListener('click', () => btn.closest('.lrow').remove());
-    });
-
-    // สถานะในเมลตอนนี้เลือกเองได้จริง (ไม่ใช่แค่โชว์ผลตอนอ่านครั้งแรก) — สลับแล้วปลดล็อกปุ่มยืนยันได้เลย
-    // ไม่ต้อง render หน้าใหม่ทั้งหน้า เพราะจะทำให้ช่องอื่นที่แก้ไปแล้วรีเซ็ตกลับเป็นค่าดิบจาก AI
-    card.querySelector(`#rApproval-${key}`)?.addEventListener('change', () => {
-      const btn = card.querySelector('.confirmBtn');
-      btn.disabled = btn.dataset.blocked === 'true' || field('rApproval').value !== 'อนุมัติ';
     });
 
     card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
@@ -2179,6 +2425,55 @@ function renderRateCell(e) {
       data-name="${esc(e.name_th)}">แก้เรท</button>`;
 }
 
+/**
+ * ฟอร์ม "เพิ่มลูกค้าใหม่" — สร้างลูกค้า + สัญญาแรกของลูกค้ารายนั้นในคราวเดียว เพราะในระบบนี้
+ * ลูกค้าที่ไม่มีสัญญาเลยใช้งานอะไรไม่ได้ (ไม่มีอัตราจ้าง ไม่มีรอบบิล) แยกเป็นสองปุ่มจะสร้างสถานะ
+ * "ลูกค้าลอยๆ ไม่มีสัญญา" ที่ไม่มีที่ไหนในระบบรองรับ
+ */
+function renderCustomerAddForm() {
+  return `
+  <div class="card">
+    <div class="hd"><h3>เพิ่มลูกค้าใหม่</h3>
+      <span class="rt">กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว</span></div>
+    <div class="bd">
+      <div class="frm">
+        <label>ชื่อบริษัท<input id="ncNameTh" type="text" placeholder="เช่น บริษัท ทดสอบ จำกัด" autocomplete="off"></label>
+        <label>เลขผู้เสียภาษี<input id="ncTaxId" type="text" autocomplete="off"></label>
+        <label>สาขา<input id="ncBranch" type="text" value="สำนักงานใหญ่" autocomplete="off"></label>
+        <label>เครดิต (วัน)<input id="ncCreditDays" type="number" min="0" value="30"></label>
+        <label>ผู้ประสานงาน<input id="ncContactName" type="text" autocomplete="off"></label>
+        <label>เบอร์ผู้ประสานงาน<input id="ncContactPhone" type="text" autocomplete="off"></label>
+        <label>อีเมลผู้ประสานงาน<input id="ncContactEmail" type="email" autocomplete="off"></label>
+        <label>สถานที่วางบิล<input id="ncBillingPlace" type="text" autocomplete="off"></label>
+      </div>
+      <div class="fsec">
+        <div class="fsec-h"><b>สัญญาแรก</b></div>
+        <div class="frm">
+          <label>เลขที่ใบว่าจ้าง (PO)<input id="ncPoNo" type="text" placeholder="เช่น 26/B0200" autocomplete="off"></label>
+          <label>เลขที่สัญญา<input id="ncContractNo" type="text" autocomplete="off"></label>
+          <label>ชื่อโครงการ<input id="ncProjectName" type="text" autocomplete="off"></label>
+          <label>ตัวหารอัตราต่อวัน
+            <span class="selectchip grow"><select id="ncDivisorMode">
+              <option value="fixed" selected>คงที่ (ระบุจำนวนวัน)</option>
+              <option value="actual_working_days">วันทำงานจริงของเดือน</option>
+            </select></span>
+          </label>
+          <label>จำนวนวัน (ถ้าคงที่)<input id="ncDivisorValue" type="number" min="1" value="20"></label>
+          <label>วันเริ่มสัญญา<input id="ncStartDate" type="date"></label>
+          <label>วันสิ้นสุดสัญญา<input id="ncEndDate" type="date"></label>
+          <label>VAT (%)<input id="ncVat" type="number" min="0" max="100" step="0.1" value="7"></label>
+          <label>หัก ณ ที่จ่าย (%)<input id="ncWht" type="number" min="0" max="100" step="0.1" value="3"></label>
+        </div>
+        <small class="fhint">พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน &amp; ชื่อพ้อง"</small>
+      </div>
+    </div>
+    <div class="ft">
+      <button class="btn" id="custAddCancel">ยกเลิก</button>
+      <button class="btn pri" id="custAddSave">บันทึกลูกค้าใหม่</button>
+    </div>
+  </div>`;
+}
+
 async function renderMaster() {
   const [employees, contracts, settings] = await Promise.all([
     api('/employees'), api('/contracts'), api('/settings'),
@@ -2211,10 +2506,26 @@ async function renderMaster() {
     </div>
 
     <div class="tp ${tab === 2 ? 'on' : ''}" data-mpane="2">
+      <div class="metabar">
+        <span class="ey">${contracts.length} บริษัท</span>
+        <button class="btn pri sm" id="custAddBtn">${icon('grid', 'i sm')} เพิ่มลูกค้าใหม่</button>
+      </div>
+
+      ${state.customerAdd ? renderCustomerAddForm() : ''}
+
       ${contracts.map((c) => `
         <div class="card">
           <div class="hd"><h3>${esc(c.po_no)} — ${esc(c.project_name)}</h3>
-            <span class="rt">${esc(c.status)}</span></div>
+            <label class="toggle ${c.status === 'active' ? 'on' : ''}"
+                   title="${c.status === 'active'
+                     ? 'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ'
+                     : 'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)'}">
+              <input type="checkbox" class="ctgAct" data-contract="${esc(c.id)}"
+                     ${c.status === 'active' ? 'checked' : ''}>
+              <span class="tk"></span>
+              <span class="tl">${c.status === 'active' ? 'กำลังดำเนินการ' : 'ปิดอยู่'}</span>
+            </label>
+          </div>
           <div class="bd"><div class="g2">
             <dl class="kv">
               <dt>ลูกค้า</dt><dd>${esc(c.customer_name)}</dd>
@@ -2406,6 +2717,84 @@ async function renderMaster() {
       } catch (error) { toast(error.message, true); }
     });
   });
+
+  /* ── แท็บ "ลูกค้า & สัญญา" — สลับ active / เพิ่มลูกค้าใหม่ ── */
+  el('custAddBtn')?.addEventListener('click', () => {
+    state.customerAdd = true;
+    renderMaster();
+  });
+  el('custAddCancel')?.addEventListener('click', () => {
+    state.customerAdd = false;
+    renderMaster();
+  });
+
+  el('custAddSave')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const nameTh = el('ncNameTh').value.trim();
+    const taxId = el('ncTaxId').value.trim();
+    const poNo = el('ncPoNo').value.trim();
+    const projectName = el('ncProjectName').value.trim();
+    const startDate = el('ncStartDate').value;
+    const endDate = el('ncEndDate').value;
+    if (!nameTh || !taxId || !poNo || !projectName || !startDate || !endDate) {
+      toast('กรอกชื่อบริษัท เลขผู้เสียภาษี เลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน', true);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const customer = await api('/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          nameTh, taxId,
+          branch: el('ncBranch').value.trim() || undefined,
+          creditDays: Number(el('ncCreditDays').value) || 30,
+          contactName: el('ncContactName').value.trim() || null,
+          contactPhone: el('ncContactPhone').value.trim() || null,
+          contactEmail: el('ncContactEmail').value.trim() || null,
+          billingPlace: el('ncBillingPlace').value.trim() || null,
+        }),
+      });
+      await api('/contracts', {
+        method: 'POST',
+        body: JSON.stringify({
+          customerId: customer.id, poNo, projectName,
+          contractNo: el('ncContractNo').value.trim() || null,
+          divisorMode: el('ncDivisorMode').value,
+          divisorValue: Number(el('ncDivisorValue').value) || 20,
+          startDate, endDate,
+          vatRate: (Number(el('ncVat').value) || 0) / 100,
+          whtRate: (Number(el('ncWht').value) || 0) / 100,
+        }),
+      });
+      toast(`เพิ่ม "${nameTh}" แล้ว`);
+      state.customerAdd = false;
+      await loadContractSwitch();   // สัญญาใหม่อาจกลายเป็น active (ถ้าเป็นสัญญาแรกของระบบ)
+      renderMaster();
+    } catch (error) {
+      toast(error.message, true);
+      btn.disabled = false;
+    }
+  });
+
+  main.querySelectorAll('.ctgAct').forEach((checkbox) => {
+    checkbox.addEventListener('change', async () => {
+      const contractId = checkbox.dataset.contract;
+      const turningOn = checkbox.checked;
+      checkbox.disabled = true;
+      try {
+        await api(`/contracts/${encodeURIComponent(contractId)}/active`, {
+          method: 'PATCH', body: JSON.stringify({ active: turningOn }),
+        });
+        toast(turningOn ? 'เปิดใช้งานบริษัทนี้แล้ว — บริษัทอื่นที่เปิดอยู่ถูกปิดให้อัตโนมัติ' : 'ปิดใช้งานแล้ว');
+        await loadContractSwitch();
+        renderMaster();
+      } catch (error) {
+        toast(error.message, true);
+        checkbox.checked = !turningOn;
+        checkbox.disabled = false;
+      }
+    });
+  });
 }
 
 /* ══ จัดการระบบ ══════════════════════════════════════════════
@@ -2488,7 +2877,7 @@ async function renderSystemAdmin() {
             <label>ชื่อ<input id="uName" type="text" autocomplete="off"></label>
             <label>รหัสผ่าน <small>(อย่างน้อย 8 ตัวอักษร)</small><input id="uPassword" type="password" autocomplete="new-password"></label>
             <label>Role<span class="selectchip"><select id="uRole">
-              <option value="operator">operator</option>
+              <option value="user">user</option>
               <option value="admin">admin</option>
             </select>${icon('cd')}</span></label>
           </div>
@@ -2505,7 +2894,7 @@ async function renderSystemAdmin() {
             <td>${esc(u.name_th)}</td>
             <td><span class="selectchip"><select class="uRoleSel" data-user="${esc(u.username)}"
                   ${isSelf ? 'disabled title="แก้ role ของตัวเองไม่ได้"' : ''}>
-                <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>operator</option>
+                <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
               </select>${icon('cd')}</span></td>
             <td><span class="tg ${u.active ? 'ok' : 'mu'}">${u.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</span></td>
@@ -2696,7 +3085,7 @@ async function renderSystemAdmin() {
    ซึ่งหน้ารอบบิลทำไม่ได้เพราะดูได้ทีละรอบ
    หมายเหตุ: นี่คือ "สิ่งที่เราส่งเข้าไป" ไม่ใช่สถานะล่าสุดใน FlowAccount */
 async function renderInvoices() {
-  const invoices = await api('/invoices');
+  const invoices = await api(`/invoices${contractQuery()}`);
   const sum = (k) => invoices
     .filter((i) => i.status === 'sent_to_flowaccount')
     .reduce((s, i) => s + (i[k] ?? 0), 0);
@@ -2710,9 +3099,16 @@ async function renderInvoices() {
       <thead><tr><th>เลขที่เอกสาร</th><th>รอบบิล</th><th>ลูกค้า</th>
         <th class="r">หลังส่วนลด</th><th class="r">VAT</th><th class="r">หัก ณ ที่จ่าย</th>
         <th class="r">ยอดรับชำระ</th><th style="width:150px">สถานะ</th></tr></thead>
-      <tbody>${invoices.length ? invoices.map((i) => `
+      <tbody>${invoices.length ? invoices.map((i) => {
+        const fileHref = i.document_no ? `/api/invoices/${encodeURIComponent(i.id)}/file` : null;
+        return `
         <tr class="rw" data-cycle="${esc(i.contract_id)}|${esc(i.period)}">
-          <td><span class="docid">${esc(i.document_no ?? '—')}</span>
+          <td>${fileHref
+            ? `<a class="file" href="${esc(fileHref)}" target="_blank" rel="noopener" title="เปิดดูใบวางบิล">
+                 <span class="docid">${esc(i.document_no)}</span></a>
+               <a class="btn sm icon" href="${esc(fileHref)}?dl" download="${esc(i.document_no)}.pdf"
+                 title="ดาวน์โหลดใบวางบิล" aria-label="ดาวน์โหลด">${icon('cd')}</a>`
+            : `<span class="docid">—</span>`}
               <span class="sub">${dateOnly(i.document_date)}</span></td>
           <td>${esc(i.periodLabel)}</td>
           <td>${esc(i.customer_name)}<span class="sub">${esc(i.po_no)}</span></td>
@@ -2723,7 +3119,8 @@ async function renderInvoices() {
           <td><span class="st ${i.status === 'sent_to_flowaccount' ? 'ok' : i.status === 'failed' ? 'cr' : 'wn'}">
             ${i.status === 'sent_to_flowaccount' ? 'สร้างร่างแล้ว' : i.status === 'failed' ? 'ส่งไม่สำเร็จ' : 'ร่าง'}</span>
             ${i.response?.mode === 'dry-run' ? '<span class="sub">dry-run</span>' : ''}
-            ${i.email_sent_at ? `<span class="sub">ส่งเมลแล้ว ${dt(i.email_sent_at)}</span>` : ''}</td></tr>`).join('')
+            ${i.email_sent_at ? `<span class="sub">ส่งเมลแล้ว ${dt(i.email_sent_at)}</span>` : ''}</td></tr>`;
+      }).join('')
         : '<tr><td colspan="8" class="empty">ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3</td></tr>'}</tbody>
       ${invoices.length ? `<tfoot><tr>
         <td colspan="3" style="font-weight:600">รวมยอดที่วางบิลแล้ว</td>
@@ -2791,7 +3188,7 @@ async function syncBadges() {
   chip.innerHTML = `<i></i> FlowAccount: ${esc(p.flowAccountMode)}`;
 
   /* ชื่อบนแถบบนต้องเป็นชื่อเดียวกับที่ audit log บันทึก ไม่ใช่ป้ายตกแต่ง — มาจาก session ที่ login เข้ามา */
-  const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', operator: 'พนักงานบัญชี' };
+  const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', user: 'ผู้ใช้งาน' };
   el('actorName').textContent = p.actor;
   el('actorAvatar').textContent = initials(p.actor);
   el('actorRole').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
@@ -2800,10 +3197,17 @@ async function syncBadges() {
   el('actorUser').textContent = state.username ?? p.actor;
   el('actorRole2').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
 
-  /* เมนู "จัดการระบบ" (ผู้ใช้/บันทึกระบบ) เห็นเฉพาะ admin — server บล็อก 403 ไว้อีกชั้นอยู่แล้ว
-     แต่ operator ไม่ควรเห็นปุ่มที่กดแล้วเจอ error ตั้งแต่แรก */
+  /* เมนู "จัดการระบบ" กับ "ข้อมูลหลัก" (เรทพนักงาน สัญญา ชื่อพ้อง วันหยุด) เห็นเฉพาะ admin —
+     server บล็อก 403 ไว้อีกชั้นอยู่แล้วที่ทุก endpoint เขียนข้อมูล (ดู requireAdmin ใน server.js)
+     ฝั่งนี้ซ่อนเมนูไว้เป็นแค่ความสะดวก ไม่ใช่ตัวกันหลัก — user ไม่ควรเห็นปุ่มที่กดแล้วเจอ error ตั้งแต่แรก
+     renderMaster()/renderSystemAdmin() เองก็เช็ค role ซ้ำอีกชั้น เผื่อมีคนสลับ view ตรงๆ ทาง URL/console */
   state.role = p.role;
   el('sysAdminTab').hidden = p.role !== 'admin';
+  el('masterNavBtn').hidden = p.role !== 'admin';
+  /* สลับบริษัทที่กำลังดำเนินการอยู่กระทบทั้งระบบ (เหมือนแก้ข้อมูลหลักอื่นๆ) จึงให้แค่ admin กดได้
+     server บล็อกไว้เป็นด่านหลักอยู่แล้ว (ดู requireAdmin ที่ PATCH /api/contracts/:id/active)
+     ที่นี่แค่ปิดปุ่มไว้ไม่ให้ user ทั่วไปกดแล้วเจอ error ทันที แต่ยังเห็นว่าตอนนี้ทำงานให้บริษัทไหนอยู่ */
+  el('contractSwitchBtn').disabled = p.role !== 'admin';
 }
 
 /* หนึ่งการกระทำมักบันทึกหลายเหตุการณ์ติดกัน (เช่นอนุมัติรอบบิล)
@@ -2991,9 +3395,10 @@ function renderBellPop(feed) {
 
 el('bellBtn').addEventListener('click', async (e) => {
   e.stopPropagation();
-  /* ต้องสั่งปิดเมนูบัญชีตรงนี้เอง — stopPropagation ข้างบนกันไม่ให้คลิกลอยไปถึง document
-     ตัวปิดเมนูบัญชีที่ดักไว้ที่ document จึงไม่มีวันได้ทำงาน แล้วสองแผงจะเปิดซ้อนกัน */
+  /* ต้องสั่งปิดเมนูอื่นตรงนี้เอง — stopPropagation ข้างบนกันไม่ให้คลิกลอยไปถึง document
+     ตัวปิดเมนูอื่นที่ดักไว้ที่ document จึงไม่มีวันได้ทำงาน แล้วสองแผงจะเปิดซ้อนกัน */
   closeWho();
+  closeCtx();
   const pop = el('bellPop');
   if (!pop.hidden) { closeBell(); return; }
   try {
@@ -3062,6 +3467,96 @@ function applyDeepLinkView() {
   return null;
 }
 
+/* ── ตัวเลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่ (แถบบน) ──────────
+   ค่านี้เป็นสถานะกลางของ "ทั้งระบบ" ไม่ใช่แค่ของคนที่กำลังดูอยู่คนเดียว — เก็บที่ contracts.status
+   ในฐานข้อมูล (ดู setActiveContract ใน src/service.js) เปลี่ยนแล้วทุกคนที่เปิดหน้าเว็บพร้อมกันเห็นตรงกัน */
+
+/** ต่อท้าย URL ของ /dashboard, /timesheets, /invoices ให้กรองเหลือแค่สัญญาที่เลือกอยู่ */
+function contractQuery() {
+  return state.contractId ? `?contractId=${encodeURIComponent(state.contractId)}` : '';
+}
+
+/** รายชื่อบริษัท/สัญญาที่ดึงมาล่าสุด — เก็บไว้ใช้ตอนวาดแผงลอยใหม่ทุกครั้งที่กดเปิด
+ * ไม่ต้องยิง /contracts ซ้ำทุกครั้งที่เปิด-ปิด (แค่ตอน loadContractSwitch() ครั้งแรก และหลังสลับ) */
+let ctxContracts = [];
+
+function closeCtx() {
+  el('contractSwitchPop').hidden = true;
+  el('contractSwitchBtn').setAttribute('aria-expanded', 'false');
+}
+
+function ctxLabel(c) {
+  return `${c.customer_name} — ${c.project_name}`;
+}
+
+function renderCtxPop() {
+  el('contractSwitchPop').innerHTML = ctxContracts.map((c) => {
+    const on = c.id === state.contractId;
+    return `
+    <button class="ctx-item ${on ? 'on' : ''}" role="option" aria-selected="${on}" data-ctx="${esc(c.id)}">
+      <span class="chk">${on ? icon('chk', 'i sm') : ''}</span>
+      <span class="tx"><b>${esc(c.customer_name)}</b><span>${esc(c.project_name)}</span></span>
+      <span class="tg ${c.status === 'active' ? 'ok' : 'mu'}">${c.status === 'active' ? 'กำลังดำเนินการ' : 'ปิดอยู่'}</span>
+    </button>`;
+  }).join('');
+
+  el('contractSwitchPop').querySelectorAll('[data-ctx]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const contractId = btn.dataset.ctx;
+      closeCtx();
+      if (contractId === state.contractId) return;   // กดอันที่เลือกอยู่แล้ว ไม่ต้องยิงซ้ำ
+      const target = ctxContracts.find((c) => c.id === contractId);
+      try {
+        await api(`/contracts/${encodeURIComponent(contractId)}/active`, {
+          method: 'PATCH', body: JSON.stringify({ active: true }),
+        });
+        state.contractId = contractId;
+        ctxContracts = ctxContracts.map((c) => ({ ...c, status: c.id === contractId ? 'active' : 'inactive' }));
+        el('contractSwitchLabel').textContent = target ? ctxLabel(target) : '…';
+        toast(`สลับไปทำงานกับ "${target ? ctxLabel(target) : contractId}" แล้ว`);
+        render();
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+  });
+}
+
+/** ดึงรายชื่อบริษัท/สัญญาทั้งหมดมาใส่ตัวเลือกบนแถบบน — เรียกครั้งเดียวตอนเปิดแอป
+ * ถ้ายังไม่มีสัญญาเลย (ระบบใหม่เอี่ยม) ซ่อนตัวเลือกไว้ ไม่มีอะไรให้เลือก */
+async function loadContractSwitch() {
+  const wrap = el('contractSwitchWrap');
+  try { ctxContracts = await api('/contracts'); } catch { ctxContracts = []; }
+
+  if (!ctxContracts.length) { wrap.hidden = true; state.contractId = null; return; }
+
+  const active = ctxContracts.find((c) => c.status === 'active') ?? null;
+  state.contractId = active?.id ?? null;
+  el('contractSwitchLabel').textContent = active ? ctxLabel(active) : 'ยังไม่มีบริษัทที่กำลังดำเนินการ';
+  wrap.hidden = false;
+}
+
+el('contractSwitchBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeBell();
+  closeWho();
+  const pop = el('contractSwitchPop');
+  if (!pop.hidden) { closeCtx(); return; }
+  renderCtxPop();
+  pop.hidden = false;
+  el('contractSwitchBtn').setAttribute('aria-expanded', 'true');
+});
+
+document.addEventListener('click', (e) => {
+  if (!el('contractSwitchPop').hidden && !e.target.closest('.ctxwrap')) closeCtx();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !el('contractSwitchPop').hidden) {
+    closeCtx();
+    el('contractSwitchBtn').focus();
+  }
+});
+
 async function startApp() {
   hideLoginScreen();
   applySideState(localStorage.getItem(SIDE_KEY) === '1');
@@ -3070,6 +3565,8 @@ async function startApp() {
   el('mastDate').textContent = new Date().toLocaleDateString('th-TH', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
+
+  await loadContractSwitch();
 
   if (deepCycle) {
     syncBadges();  // render() ปกติเป็นคนเรียกให้ แต่รอบนี้ข้าม render() ไปเปิดรอบบิลตรงๆ
@@ -3115,6 +3612,7 @@ el('whoBtn').addEventListener('click', () => {
   const pop = el('whoPop');
   if (pop.hidden) {
     closeBell();               // เปิดทีละอัน ไม่ให้สองแผงซ้อนกัน
+    closeCtx();
     pop.hidden = false;
     el('whoBtn').setAttribute('aria-expanded', 'true');
     el('logoutBtn').focus();   // เปิดมาแล้วกด Enter ต่อได้เลย ไม่ต้องไล่ Tab

@@ -18,11 +18,15 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 วัน — เคร�
 const SCRYPT_KEYLEN = 64;
 
 /**
- * admin    แก้ข้อมูลหลักได้ (เรทพนักงาน สัญญา ชื่อพ้อง วันหยุด) + จัดการบัญชีผู้ใช้คนอื่น
- * operator ทำงานประจำวันได้หมด (อัปโหลด Timesheet, ตรวจ Manday, อนุมัติวางบิล, ร่างอีเมล)
- *          แต่แก้ข้อมูลหลักไม่ได้ — กันไม่ให้เรท/สัญญาถูกเปลี่ยนโดยไม่ตั้งใจ กระทบทุกใบในอนาคต
+ * admin แก้ข้อมูลหลักได้ (เรทพนักงาน สัญญา ชื่อพ้อง วันหยุด) + จัดการบัญชีผู้ใช้คนอื่น
+ * user  ทำงานประจำวันได้หมด (อัปโหลด Timesheet, ตรวจ Manday, อนุมัติวางบิล, ร่างอีเมล)
+ *       แต่แก้ข้อมูลหลักไม่ได้ — กันไม่ให้เรท/สัญญาถูกเปลี่ยนโดยไม่ตั้งใจ กระทบทุกใบในอนาคต
+ *
+ * ตั้งใจให้มีแค่ 2 role นี้เท่านั้น — Employee (พนักงานที่มี Timesheet เช่น Sunee/Pongpun)
+ * เป็นข้อมูลในตาราง employees ไม่ใช่บัญชี login จึงไม่มี role ของตัวเอง และไม่ต้องเพิ่ม
+ * role อื่น (approver/manager/accountant) จนกว่าจะมี workflow ที่ต้องแยกสิทธิ์จริงๆ
  */
-export const ROLES = ['admin', 'operator'];
+export const ROLES = ['admin', 'user'];
 
 function hashPassword(password, salt = randomBytes(16).toString('hex')) {
   const hash = scryptSync(password, salt, SCRYPT_KEYLEN).toString('hex');
@@ -37,7 +41,7 @@ export function hasAnyUser() {
  * สร้างผู้ใช้ใหม่ — เรียกได้สองทาง: `scripts/create-user.js` (ตอนยังไม่มีใครในระบบ)
  * และ `POST /api/users` (admin เพิ่มคนใหม่จากหน้า "จัดการระบบ" — server.js บังคับ requireAdmin ก่อนเรียก)
  */
-export function createUser({ username, nameTh, password, role = 'operator', actor = 'cli' }) {
+export function createUser({ username, nameTh, password, role = 'user', actor = 'cli' }) {
   if (!username || !nameTh || !password) {
     throw Object.assign(new Error('ต้องระบุ username, ชื่อ, และรหัสผ่านให้ครบ'), { status: 400 });
   }

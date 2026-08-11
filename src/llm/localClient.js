@@ -77,6 +77,11 @@ async function callOnce({
           type: 'json_schema',
           json_schema: { name: 'result', strict: true, schema },
         },
+        /* โมเดลบางตัว (เช่น Gemma 3n) มีขั้น "คิดก่อนตอบ" ในตัว ซึ่งกับอินพุตยาวๆ
+           มีโอกาสวนซ้ำคำเดิมไม่เลิกจนโควตาคำตอบหมดก่อนได้ตอบ JSON จริง (วัดแล้วว่าเกิดขึ้นจริง)
+           ปิดขั้นนี้ตัดปัญหาทั้งสองอย่าง — เร็วขึ้น ~2-3 เท่า และไม่มีทางวนซ้ำ
+           ฟิลด์นี้ไม่มีผลกับโมเดลที่ไม่รองรับ (เซิร์ฟเวอร์ปกติจะข้าม flag ที่ไม่รู้จักไปเฉยๆ) */
+        reasoning_effort: 'none',
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: userContent },

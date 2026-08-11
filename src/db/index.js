@@ -32,7 +32,7 @@ export function getDb() {
 const ADDED_COLUMNS = [
   ['invoices', 'email_sent_at', 'TEXT'],
   ['invoices', 'email_sent_by', 'TEXT'],
-  ['users', 'role', "TEXT NOT NULL DEFAULT 'operator'"],
+  ['users', 'role', "TEXT NOT NULL DEFAULT 'user'"],
   ['invoices', 'share_link', 'TEXT'],
   ['users', 'active', 'INTEGER NOT NULL DEFAULT 1'],
   ['timesheets', 'source_file_bytes', 'BLOB'],
@@ -40,6 +40,8 @@ const ADDED_COLUMNS = [
   ['invoices', 'document_pdf', 'BLOB'],
   ['invoices', 'gmail_draft_id', 'TEXT'],
   ['invoices', 'gmail_thread_id', 'TEXT'],
+  // รหัสพนักงานฝั่ง HRDD (WorkDD) — ใช้จับคู่ตอนเทียบวันลากับ HRDD เท่านั้น ไม่เกี่ยวกับรหัส EMP-xxxx ของ OBS เอง
+  ['employees', 'hrdd_employee_code', 'TEXT'],
 ];
 
 function addMissingColumns(database) {

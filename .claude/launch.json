@@ -13,7 +13,7 @@
       "runtimeExecutable": "n8n",
       "runtimeArgs": ["start"],
       "port": 5678,
-      "autoPort": false
+      "autoPort": true
     }
   ]
 }
