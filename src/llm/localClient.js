@@ -42,6 +42,12 @@ export function localVisionModel() {
 const RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1500;
 
+/* ไม่มี timeout เดิมมาก่อน — ตอน dev เครื่อง LLM มีงานเดียวคือ OBS ช้าสุดก็แค่รอนาน
+   แต่บนเซิร์ฟเวอร์จริง LM Studio ตัวนี้ใช้ร่วมกับงาน vision ของอีกระบบ (BSCP) ถ้ามันแน่น/ค้าง
+   fetch() เปล่าๆจะรอเงียบไปเรื่อยๆไม่มีวันตัดสาย ปุ่ม "กำลังอ่าน" ค้างค้างชั่วนิรันดร์โดยไม่มี error ให้เห็นเลย
+   ตั้งไว้ยาวเพราะภาพต่อหน้าจริงวัดได้ ~54 วินาที ไม่อยากตัดกลางคันตอนโมเดลกำลังทำงานอยู่จริงๆ */
+const REQUEST_TIMEOUT_MS = 120_000;
+
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
 export async function callLocalJSON(args) {
@@ -63,12 +69,15 @@ async function callOnce({
   model, system, userContent, schema, maxTokens = 4000, fetchImpl = fetch,
 }) {
   const baseUrl = localLlmBaseUrl();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   let res;
   try {
     res = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
@@ -89,6 +98,15 @@ async function callOnce({
       }),
     });
   } catch (error) {
+    if (error.name === 'AbortError') {
+      throw Object.assign(
+        new Error(
+          `โมเดลในเครื่องไม่ตอบภายใน ${REQUEST_TIMEOUT_MS / 1000} วินาที ที่ ${baseUrl} — ` +
+          `เครื่องอาจกำลังทำงานหนัก (เช่นมีระบบอื่นแย่งใช้อยู่) หรือค้าง ลองใหม่อีกครั้ง`,
+        ),
+        { status: 504, retryable: true },
+      );
+    }
     throw Object.assign(
       new Error(
         `เชื่อมต่อโมเดลในเครื่องไม่ได้ที่ ${baseUrl} — ` +
@@ -96,6 +114,8 @@ async function callOnce({
       ),
       { status: 502, retryable: true },
     );
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (!res.ok) {
