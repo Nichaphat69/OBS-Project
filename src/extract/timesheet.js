@@ -200,12 +200,14 @@ const SYSTEM_PROMPT = `คุณคือผู้ช่วยฝ่ายบั
  */
 async function pdfToImages(pdfBuffer) {
   const dataUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
-  /* scale 3 ไม่ใช่ 2 — ตัวหนังสือในตาราง Timesheet เล็กมาก ภาพใหญ่ขึ้นอ่านง่ายขึ้น
-     ทดสอบกับเอกสารจริงแล้วพบว่า **ยังแก้ชื่ออ่านเพี้ยนไม่ได้** (Korawit Khamsuk ยังอ่านเป็น
-     Korweil Khamsiuk ทั้งที่ scale 2 และ 3) จึงไม่ใช่ทางแก้ของเรื่องนั้น — ที่แก้จริงคือ
-     การโหวตข้ามหน้า (pickByVote) กับชั้นจับคู่ด้วยตัวอักษรซ้ำใน domain/matching.js
-     เก็บ scale 3 ไว้เพราะเสียเวลาเพิ่มแค่ราว 4% แลกกับภาพที่อ่านง่ายขึ้น */
-  const doc = await pdf(dataUrl, { scale: 3 });
+  /* เดิมใช้ scale 3 — ตัวหนังสือในตาราง Timesheet เล็กมาก ภาพใหญ่ขึ้นอ่านง่ายขึ้น (ทดสอบแล้วว่า
+     ไม่ได้แก้ชื่ออ่านเพี้ยน เรื่องนั้นแก้ด้วยการโหวตข้ามหน้า pickByVote กับ domain/matching.js
+     อยู่แล้ว scale แค่ช่วยความคมชัดของตัวเลข/วันที่)
+     11 ส.ค. 69 — ลดกลับมาเป็น scale 2 เพราะ deploy ขึ้นเซิร์ฟเวอร์จริงแล้วพบว่าโมเดล vision ที่ใช้ร่วมกับ
+     ระบบอื่นตั้ง context ไว้แค่ 8192 token (ตอน dev เครื่องมี context กว้างกว่านี้) รูป scale 3 ของหน้าที่
+     เนื้อหาแน่นๆทำให้ token เกินจน LM Studio ตอบ "Context size has been exceeded" อ่านไม่ได้เลยทั้งหน้า
+     เลือกลด scale ฝั่งเราเองแทนการไปเพิ่ม context ที่เซิร์ฟเวอร์ เพราะเครื่องนั้นใช้ร่วมกับระบบอื่น */
+  const doc = await pdf(dataUrl, { scale: 2 });
   try {
     const pages = [];
     for await (const page of doc) pages.push(page);
