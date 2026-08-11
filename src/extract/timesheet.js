@@ -520,10 +520,28 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
       try {
         const result = await callLocalJSON({
           model: req.model, system: SYSTEM_PROMPT, userContent: req.userContent, schema: TIMESHEET_SCHEMA,
-          maxTokens: 6000, fetchImpl,
+          /* เดิม 6000 — บนเซิร์ฟเวอร์จริง context รวมแค่ 8192 token กันไว้เป็นคำตอบเยอะขนาดนี้
+             เหลือให้ภาพ+system prompt แค่ราว 2000 token ซึ่งน้อยเกินไปจนชน "Context size exceeded"
+             บ่อย ลดเหลือ 3000 ยังพอสำหรับตาราง 31 วัน (วัดจริงแล้วไม่เกิน ~1500 token) แลกกับที่ว่าง
+             ฝั่งอินพุตเพิ่มขึ้นเท่าตัว */
+          maxTokens: 3000, fetchImpl,
         });
         if (req.nameOverride) result.data.employeeName = req.nameOverride;
-        settled.push({ pageIndex, data: result.data, usage: result.usage });
+
+        /* บางหน้าโมเดลอ่านช่องชื่อพนักงานไม่ออกจริง แล้วไปคัดลอกข้อความจากช่องตำแหน่งมาใส่ชื่อแทน
+           แบบเผลอ (เจอจริง: employeeName กับ position เป็น "Java Programmer" เหมือนกันเป๊ะ) ถ้าปล่อยผ่าน
+           groupPagesByEmployee จะเข้าใจว่าเป็นพนักงานคนใหม่ กลายเป็นเอกสารผีที่จับคู่พนักงานไม่ได้
+           (บล็อกวางบิลเปล่าๆ ทั้งที่จริงมีคนเดียว) ถือว่าอ่านหน้านี้ไม่น่าเชื่อถือ นับเป็นอ่านไม่สำเร็จไปเลย
+           ดีกว่าปล่อยให้กลายเป็นเอกสารปลอมที่ต้องมาแก้ทีหลัง */
+        if (result.data.employeeName && result.data.position
+            && nameKey(result.data.employeeName) === nameKey(result.data.position)) {
+          settled.push({
+            pageIndex,
+            error: `อ่านชื่อพนักงานไม่น่าเชื่อถือ (ได้ "${result.data.employeeName}" ซ้ำกับตำแหน่งเป๊ะ) — น่าจะอ่านหน้านี้ผิด`,
+          });
+        } else {
+          settled.push({ pageIndex, data: result.data, usage: result.usage });
+        }
       } catch (error) {
         settled.push({ pageIndex, error: error.message });
       }

@@ -144,9 +144,14 @@ async function callOnce({
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    /* "Context size has been exceeded" มาเป็น HTTP 400 (ไม่ใช่ 5xx) เพราะ LM Studio ถือว่าเป็น
+       "คำขอไม่ถูกต้อง" แต่จริงๆแล้วเป็นอาการชั่วคราวจากการแบ่ง context ตามจำนวนคำขอพร้อมกัน
+       (ดูคอมเมนต์ MAX_CONCURRENT_PAGES ใน timesheet.js) — คำขอเดิมพอลองใหม่ตอนคำขอคู่ขนานอื่น
+       จบไปแล้วมักผ่าน ต้อง retryable ด้วยเหมือน 5xx ไม่งั้นพลาดครั้งเดียวจบเลยทั้งที่แก้ได้ด้วยการรอ */
+    const transientOverload = /context size has been exceeded/i.test(text);
     throw Object.assign(
       new Error(`โมเดลในเครื่องตอบผิดพลาด (${res.status}): ${text.slice(0, 300)}`),
-      { status: 502, retryable: res.status >= 500 },
+      { status: 502, retryable: res.status >= 500 || transientOverload },
     );
   }
 
