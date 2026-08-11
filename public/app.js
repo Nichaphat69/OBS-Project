@@ -25,6 +25,14 @@ const api = async (path, options) => {
 const el = (id) => document.getElementById(id);
 const main = el('main');
 
+/* crypto.randomUUID() ใช้ได้แค่ใน secure context (https หรือ localhost) — เซิร์ฟเวอร์นี้เปิดผ่าน
+   http ตรงๆที่ IP (ยังไม่ทำ HTTPS/domain) เบราว์เซอร์จึงตัด crypto.randomUUID ทิ้งเป็น undefined
+   ทำให้เรียกแล้ว throw "is not a function" ทันที ใช้ตัวนี้แทนทุกที่ — เป็นแค่ key ติดตามการ์ดบนจอ
+   ไม่ใช่ค่าที่ต้องเดายากระดับความปลอดภัย จึงไม่ต้องพึ่ง crypto จริงก็ได้ */
+const genId = () => (crypto.randomUUID
+  ? crypto.randomUUID()
+  : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+
 const esc = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1761,7 +1769,7 @@ function bindAiHistoryTab() {
           try {
             const detail = await api(`/ai-reads/${tr.dataset.histOpen}`);
             if (!detail.extraction) { toast('ไม่พบข้อมูลที่ AI อ่านไว้สำหรับรายการนี้', true); return; }
-            state.reads.push({ ...detail.extraction, _key: crypto.randomUUID(), tab: 4 });
+            state.reads.push({ ...detail.extraction, _key: genId(), tab: 4 });
             renderUpload();
           } catch (error) {
             toast(error.message, true);
@@ -1897,7 +1905,7 @@ function tickPendingReads() {
 
 /** วางการ์ด "กำลังอ่าน" ลงในรายการทันทีที่กดปุ่ม แล้วคืน key ไว้ใช้แทนที่ตอนอ่านเสร็จ */
 function startPendingRead({ fileName, email, tab }) {
-  const key = crypto.randomUUID();
+  const key = genId();
   state.reads.push({ _key: key, tab, pending: true, startedAt: Date.now(), fileName, email });
   renderUpload();
   document.querySelector(`[data-read-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center' });
@@ -2026,7 +2034,7 @@ function readsFromResult(result, tab) {
     ...shared,
     ...doc,
     documentNo: doc.documentNo ?? documentNo ?? null,
-    _key: crypto.randomUUID(),
+    _key: genId(),
     tab,
     /* บอกว่าเป็นใบที่เท่าไรจากไฟล์เดียวกัน — ไม่งั้นเห็นสองการ์ดแล้วนึกว่าอ่านซ้ำ */
     partOfFile: list.length > 1 ? { index: i + 1, total: list.length } : null,
