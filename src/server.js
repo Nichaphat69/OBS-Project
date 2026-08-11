@@ -18,7 +18,7 @@ import {
   SESSION_COOKIE, parseCookies, resolveSession, verifyLogin, createSession, destroySession, hasAnyUser,
   listUsers, createUser, updateUserRole, setUserActive,
 } from './auth.js';
-import { localLlmBaseUrl, localTextModel, localVisionModel } from './llm/localClient.js';
+import { localLlmBaseUrl, localTextModel, localVisionModel, keepModelWarm } from './llm/localClient.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, '..', 'public');
@@ -490,6 +490,11 @@ onChange((reason) => {
 /* สายที่เงียบนานมักถูกตัวกลางตัดทิ้ง เคาะเป็นบรรทัดคอมเมนต์ไว้ให้สายไม่ตาย
    unref เพื่อไม่ให้ตัวจับเวลานี้ค้างไว้ไม่ให้กระบวนการปิดตัวตอนสั่งหยุดเซิร์ฟเวอร์ */
 setInterval(() => broadcast(': beat\n\n'), 25_000).unref();
+
+/* กันโมเดล vision ในเครื่องหลุดจากหน่วยความจำตอนไม่มีใครเรียกนาน — บางเซิร์ฟเวอร์ตั้ง TTL ปลดโมเดล
+   ไว้ 1 ชม. (ใช้ LM Studio ร่วมกับระบบอื่น แก้ config เครื่องนั้นไม่ได้/ไม่อยากยุ่ง) ปิงถี่กว่านั้นมาก
+   พอให้โมเดลไม่ว่างจนถูกปลด ผิดพลาดได้ก็แค่ log เงียบๆ ไม่กระทบการทำงานหลัก (ดู keepModelWarm) */
+setInterval(() => { keepModelWarm(); }, 20 * 60_000).unref();
 
 /** ตั้ง/ถอนคุกกี้ session — HttpOnly กันอ่านจาก JS, SameSite=Lax กันแนบมาจากเว็บอื่น */
 function setSessionCookie(res, token, expiresAt) {

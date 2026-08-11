@@ -27,6 +27,30 @@ export function localVisionModel() {
 }
 
 /**
+ * ปิงโมเดล vision เบาๆเป็นระยะ กันไม่ให้ LM Studio ปลดโมเดลออกจากหน่วยความจำตาม TTL ที่ไม่ได้ใช้งาน
+ * (เจอจริงบนเซิร์ฟเวอร์ที่ใช้ LM Studio ร่วมกับระบบอื่น — ตั้ง jitModelTTL ไว้ 1 ชม. ถ้าไม่มีใครเรียกเลย
+ * ในชั่วโมงนั้นโมเดลจะหลุด พอมาเรียกใหม่ต้องโหลดจากดิสก์ใหม่ ~30+ วินาที)
+ *
+ * ไม่แก้ที่ config ของ LM Studio (เครื่องนั้นใช้ร่วมกับระบบอื่น ไม่อยากไปยุ่ง) แก้จากฝั่งเราเอง
+ * แทน — ส่ง request เล็กๆไปเป็นระยะให้โมเดลเห็นว่ามีการใช้งานอยู่ตลอด ผิดพลาดได้ก็แค่ log เงียบๆ
+ * ไม่ throw เพราะนี่เป็นแค่งาน optimize ไม่ใช่งานที่ต้องรอผลจริง
+ */
+export async function keepModelWarm({ fetchImpl = fetch } = {}) {
+  try {
+    await callOnce({
+      model: localVisionModel(),
+      system: 'You are a health check. Reply with the JSON schema given.',
+      userContent: 'ping',
+      schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
+      maxTokens: 30,
+      fetchImpl,
+    });
+  } catch (error) {
+    console.error(`[keepModelWarm] ปิงโมเดลไม่สำเร็จ (ไม่กระทบการทำงานหลัก): ${error.message}`);
+  }
+}
+
+/**
  * @param {object} args
  * @param {string} args.model
  * @param {string} args.system
