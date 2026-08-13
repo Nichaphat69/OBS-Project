@@ -234,8 +234,9 @@ svg.i.solid { stroke: none; fill: currentColor; }
 .sidetoggle:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 
 /* ═══ เมนูหุบ — เหลือแต่ไอคอน ═══
-   เปลี่ยนที่ตัวแปร --side-w ตัวเดียว ทั้งเมนูข้างและบล็อกโลโก้บนแถบบน
-   จึงหดพร้อมกันโดยอัตโนมัติ ไม่ต้องไล่แก้ทีละที่ */
+   --side-w คุมแค่ความกว้างเมนูข้าง (.side) เท่านั้น — บล็อกโลโก้บนแถบบน (.topbar .brand)
+   ตั้งความกว้างของตัวเองแยกไว้ต่างหาก ไม่ผูกกับตัวแปรนี้ เพราะโลโก้ใหม่เป็นภาพแนวนอนยาว
+   ย่อลงมาจะอ่านไม่ออก อยากให้เห็นเต็มเสมอไม่ว่าจะหุบเมนูหรือไม่ */
 body.side-collapsed { --side-w: 72px; }
 
 body.side-collapsed .mtab { justify-content: center; padding: 11px 0; gap: 0; }
@@ -263,10 +264,6 @@ body.side-collapsed .sidetoggle { justify-content: center; padding-left: 0; padd
 body.side-collapsed .sidetoggle > span { display: none; }
 body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 
-body.side-collapsed .topbar .brand { padding: 0; justify-content: center; }
-body.side-collapsed .topbar .blogo { display: none; }
-body.side-collapsed .topbar .bmark { display: block; }
-
 /* ═══ แถบบน — บางและเงียบ ไว้บอกสถานะระบบเท่านั้น ═══ */
 .topbar {
   height: var(--top-h); background: rgba(255,255,255,.86); border-bottom: 1px solid var(--rule);
@@ -276,13 +273,13 @@ body.side-collapsed .topbar .bmark { display: block; }
 }
 .topbar .gap { flex: 1; }
 
-/* บล็อกโลโก้กว้างเท่าเมนูข้าง เพื่อให้โลโก้อยู่ในแนวเดียวกับเมนูด้านล่าง — ไม่ตีเส้นคั่น */
+/* บล็อกโลโก้ตั้งความกว้างคงที่ของตัวเอง (ไม่ผูกกับ --side-w) เห็นโลโก้เต็มเสมอไม่ว่าจะหุบ
+   เมนูข้างหรือไม่ — แลกกับที่ตอนหุบเมนู เส้นขอบล่างของบล็อกนี้จะไม่ตรงกับเมนูข้างที่แคบกว่า */
 .topbar .brand {
-  width: var(--side-w); flex: none; height: 100%;
+  width: 264px; flex: none; height: 100%;
   display: flex; align-items: center; padding: 0 20px;
 }
 .topbar .blogo { width: 170px; height: auto; display: block; }
-.topbar .bmark { width: 28px; height: 28px; display: none; }
 
 .mast-date {
   font-size: 12px; color: var(--mut); font-variant-numeric: tabular-nums;
@@ -422,11 +419,9 @@ body.side-collapsed .topbar .bmark { display: block; }
      ต้องล้างสถานะหุบด้วย ไม่งั้นตัวหนังสือในเมนูหายทั้งแถบ */
   .sidetoggle { display: none; }
   body.side-collapsed { --side-w: 100%; }
-  body.side-collapsed .mtab > span,
-  body.side-collapsed .topbar .blogo { display: inline; }
+  body.side-collapsed .mtab > span { display: inline; }
   body.side-collapsed .mtab { justify-content: flex-start; padding: 11px 14px; gap: 12px; }
   body.side-collapsed .mtab .bdg { position: static; border: none; }
-  body.side-collapsed .topbar .bmark { display: none; }
 }
 
 /* หัวหน้า .phd / .greet กำหนดรวมกันไว้ที่หัวข้อ "หัวหน้าแบบเอกสารทางการ" ด้านล่าง */
