@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS customers (
   contact_name  TEXT,
   contact_phone TEXT,
   contact_email TEXT,
+  -- contactId ฝั่ง FlowAccount ของลูกค้ารายนี้ — เก็บไว้ตั้งแต่ครั้งแรกที่วางบิลสำเร็จแล้วใช้ซ้ำ
+  -- ทุกครั้งต่อไป กัน FlowAccount สร้าง contact ใหม่ซ้ำทุกเดือน (endpoint สร้างเอกสารไม่มีทาง
+  -- "ใช้ contact เดิม" ได้เลยถ้าส่งชื่อ/เลขผู้เสียภาษีไปด้วย ต้องส่ง contactId เปล่าๆแทน)
+  flowaccount_contact_id TEXT,
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 

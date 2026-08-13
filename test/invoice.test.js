@@ -327,6 +327,46 @@ test('payload ที่ส่งเข้า FlowAccount ครบทุกฟ�
   assert.match(payload.remarks, /2,647\.20 บาทต่อวัน/);
 });
 
+test('payload ส่งข้อมูลลูกค้าเต็มถ้ายังไม่มี flowAccountContactId — ให้ FlowAccount สร้าง contact ใหม่', () => {
+  const invoice = buildInvoice({
+    period: '2026-01',
+    documentDate: '2026-02-02',
+    customer: { name: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)', taxId: '0107555000104', branch: 'สำนักงานใหญ่' },
+    entries: [{ employee: DEV, manday: calculateManday({
+      period: '2026-01', monthlyRate: DEV.monthlyRate, reportedWorkDays: 20, leaveDays: [], holidays: HOLIDAYS_JAN_2026,
+    }) }],
+  });
+  const payload = toFlowAccountPayload(invoice);
+
+  assert.equal(payload.contactName, 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)');
+  assert.equal(payload.contactTaxId, '0107555000104');
+  assert.equal(payload.contactBranch, 'สำนักงานใหญ่');
+  assert.equal(payload.contactId, undefined, 'ยังไม่มี contactId เดิม ห้ามส่งฟิลด์นี้ไป');
+});
+
+test('payload ส่งแค่ contactId เปล่าๆถ้ามี flowAccountContactId แล้ว — กัน FlowAccount สร้าง contact ซ้ำ', () => {
+  /* ยิง sandbox จริงยืนยันแล้ว 13 ส.ค. 69: ส่ง contactId เปล่าๆ (ไม่ส่งชื่อ/เลขผู้เสียภาษีเลย)
+     FlowAccount ผูกเอกสารกับ contact เดิมได้จริง ไม่สร้างซ้ำ — ตรงข้ามกับส่ง contactCode ควบคู่
+     กับข้อมูลเต็มที่ลองแล้วไม่ได้ผล (ดูคอมเมนต์หัวไฟล์ flowaccount.js) */
+  const invoice = buildInvoice({
+    period: '2026-01',
+    documentDate: '2026-02-02',
+    customer: {
+      name: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)', taxId: '0107555000104', branch: 'สำนักงานใหญ่',
+      flowAccountContactId: '1068292',
+    },
+    entries: [{ employee: DEV, manday: calculateManday({
+      period: '2026-01', monthlyRate: DEV.monthlyRate, reportedWorkDays: 20, leaveDays: [], holidays: HOLIDAYS_JAN_2026,
+    }) }],
+  });
+  const payload = toFlowAccountPayload(invoice);
+
+  assert.equal(payload.contactId, 1068292, 'แปลงเป็นเลขให้ตรงชนิดที่ FlowAccount คาด');
+  assert.equal(payload.contactName, undefined, 'ห้ามส่งควบคู่กับ contactId ไม่งั้น FlowAccount สร้าง contact ใหม่อยู่ดี');
+  assert.equal(payload.contactTaxId, undefined);
+  assert.equal(payload.contactBranch, undefined);
+});
+
 test('ยอดใน PO 6 เดือนตรงกับเรทรายเดือนรวม', () => {
   const monthlyTotal = round2(DEV.monthlyRate + PM.monthlyRate);
   assert.equal(monthlyTotal, 176363.93);

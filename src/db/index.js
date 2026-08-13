@@ -42,6 +42,8 @@ const ADDED_COLUMNS = [
   ['invoices', 'gmail_thread_id', 'TEXT'],
   // รหัสพนักงานฝั่ง HRDD (WorkDD) — ใช้จับคู่ตอนเทียบวันลากับ HRDD เท่านั้น ไม่เกี่ยวกับรหัส EMP-xxxx ของ OBS เอง
   ['employees', 'hrdd_employee_code', 'TEXT'],
+  // contactId ฝั่ง FlowAccount ของลูกค้า — ดูคอมเมนต์ที่ schema.sql กัน contact ซ้ำทุกเดือน
+  ['customers', 'flowaccount_contact_id', 'TEXT'],
 ];
 
 function addMissingColumns(database) {

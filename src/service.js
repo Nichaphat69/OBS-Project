@@ -1999,7 +1999,8 @@ export function markTimesheetChecked(id, { actor }) {
 export function previewCycleInvoice(contractId, period) {
   const contract = get(
     `SELECT c.*, cu.name_th AS customer_name, cu.tax_id, cu.branch,
-            cu.billing_place, cu.contact_name, cu.contact_phone, cu.contact_email
+            cu.billing_place, cu.contact_name, cu.contact_phone, cu.contact_email,
+            cu.flowaccount_contact_id
        FROM contracts c JOIN customers cu ON cu.id = c.customer_id
       WHERE c.id = $contractId`,
     { contractId },
@@ -2054,6 +2055,7 @@ export function previewCycleInvoice(contractId, period) {
       name: contract.customer_name,
       taxId: contract.tax_id,
       branch: contract.branch,
+      flowAccountContactId: contract.flowaccount_contact_id,
     },
     entries,
     vatRate: contract.vat_rate,
@@ -2551,6 +2553,21 @@ export async function approveCycle(contractId, period, { actor, flowAccount } = 
       detail: { message: error.message, status: error.status ?? null },
     });
     throw error;
+  }
+
+  /* บันทึก contactId ของ FlowAccount ไว้ที่ลูกค้ารายนี้ครั้งแรกที่ได้มา (ดูเหตุผลใน
+     toFlowAccountPayload()) — ครั้งต่อไปจะส่ง contactId เปล่าๆแทนข้อมูลเต็ม กัน contact ซ้ำ
+     ไม่ทับถ้ามีอยู่แล้ว (กันเผลอสลับไปอ้าง contact ผิดตัวถ้า FlowAccount ตอบ id มาไม่ตรงกันสักครั้ง) */
+  if (result.contactId && !preview.contract.flowaccount_contact_id) {
+    run(
+      'UPDATE customers SET flowaccount_contact_id = $contactId WHERE id = $customerId',
+      { contactId: String(result.contactId), customerId: preview.contract.customer_id },
+    );
+    logAudit({
+      actor, action: 'flowaccount_contact_linked',
+      entityType: 'customer', entityId: preview.contract.customer_id,
+      detail: { contactId: result.contactId },
+    });
   }
 
   /* ข้อ 4.3 — ขอลิงก์ดูเอกสาร (แทน "ดาวน์โหลด PDF" เพราะ FlowAccount ไม่มี endpoint ให้ไฟล์ตรงๆ)

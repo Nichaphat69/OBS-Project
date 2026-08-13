@@ -112,14 +112,26 @@ export function buildInvoice({
  * **ไม่มีฟิลด์ status ในของจริง** — เอกสารที่สร้างจาก POST เป็นร่างอยู่แล้วโดยปริยาย
  * การอนุมัติเป็น endpoint แยก (POST /tax-invoices/{id}/status/awaiting) ซึ่งระบบนี้
  * ไม่มีโค้ดเรียกเลย นั่นคือที่มาของหลักประกัน "สร้างเป็นร่างเท่านั้น"
+ *
+ * เรื่อง contact ซ้ำ (ดูคอมเมนต์หัวไฟล์ flowaccount.js ข้อ 2) — ยิง sandbox จริงยืนยันแล้ว 13 ส.ค. 69
+ * ว่าถ้าส่ง **contactId เปล่าๆ** (อ้างถึง contact ที่มีอยู่แล้ว) โดยไม่ส่ง contactName/contactTaxId/
+ * contactBranch เลย FlowAccount จะผูกเอกสารกับ contact เดิมได้จริง ไม่สร้างซ้ำ (ก่อนหน้านี้ลองส่ง
+ * contactCode ควบคู่กับชื่อ/เลขผู้เสียภาษีแล้วไม่ได้ผล เพราะ FlowAccount ยังอ่านเป็น "สร้างใหม่" อยู่ดี
+ * ต่างจากการส่ง contactId เปล่าๆแบบนี้) จึงส่ง contactId เท่านั้นถ้ามีลูกค้ารายนี้ในระบบ FlowAccount
+ * อยู่แล้ว (customers.flowaccount_contact_id) ถ้ายังไม่มีค่อยส่งข้อมูลเต็มแบบเดิมให้สร้างใหม่ครั้งแรก
  */
 export function toFlowAccountPayload(invoice, { reference = null } = {}) {
   const { totals } = invoice;
+  const contactFields = invoice.customer.flowAccountContactId
+    ? { contactId: Number(invoice.customer.flowAccountContactId) }
+    : {
+        contactName: invoice.customer.name,
+        contactTaxId: invoice.customer.taxId,
+        contactBranch: invoice.customer.branch ?? 'สำนักงานใหญ่',
+      };
   return {
     recordId: 0,
-    contactName: invoice.customer.name,
-    contactTaxId: invoice.customer.taxId,
-    contactBranch: invoice.customer.branch ?? 'สำนักงานใหญ่',
+    ...contactFields,
     contactGroup: 1,                       // 1 = ลูกค้า
     publishedOn: invoice.documentDate,     // ของจริงชื่อ publishedOn ไม่ใช่ documentDate
     creditType: 1,                         // 1 = เครดิตเป็นจำนวนวัน

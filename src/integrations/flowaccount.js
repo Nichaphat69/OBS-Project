@@ -24,10 +24,15 @@
  * ⚠️ ที่ยังค้างก่อนเปิดโหมด live
  *   1. เลือก Billing Note หรือ Tax Invoice ให้ตรง flow บัญชีปัจจุบัน — ยิงได้ทั้งสองแบบทางเทคนิคแล้ว
  *      เหลือแค่ตัดสินใจ
- *   2. contact ซ้ำทุกครั้งที่สร้างเอกสาร — ยิงลูกค้าเดิม (ชื่อ+เลขผู้เสียภาษีตรงกัน) 2 ครั้งได้ contactId
- *      คนละตัว ไม่มีทางสั่ง "ใช้ contact เดิม" ผ่าน endpoint สร้างเอกสารได้เลย (ลองส่ง contactCode ซ้ำ
- *      ก็ยังสร้างใหม่ไม่ error แต่ถ้า contactCode นั้นถูกสร้างไว้ก่อนผ่าน POST /contacts จะ error
- *      CONTACT_CODE_DUPLICATE แทน) ต้องถามฝ่ายบัญชีว่ารับได้ไหมที่ทะเบียนลูกค้าจะซ้ำทุกเดือน
+ *
+ * ✅ แก้แล้ว 13 ส.ค. 69 — contact ซ้ำทุกครั้งที่สร้างเอกสาร
+ *   เดิมยิงลูกค้าเดิม (ชื่อ+เลขผู้เสียภาษีตรงกัน) 2 ครั้งได้ contactId คนละตัวทุกครั้ง ลองส่ง
+ *   contactCode ควบคู่กับชื่อ/เลขผู้เสียภาษีซ้ำก็ยังสร้างใหม่ไม่ error — จุดที่พลาดคือส่ง contactCode
+ *   "ควบคู่กับ" ข้อมูลเต็ม ไม่ใช่ส่ง "เปล่าๆ" ยิง sandbox จริงยืนยันแล้วว่าถ้าส่ง **contactId เปล่าๆ**
+ *   (ไม่ส่ง contactName/contactTaxId/contactBranch เลย) FlowAccount จะผูกเอกสารกับ contact เดิมได้จริง
+ *   ไม่สร้างซ้ำ (เช็คแล้ว: contact count ก่อน/หลังเท่ากันเป๊ะ, contactName/taxId ในผลลัพธ์ตรงกับของเดิม)
+ *   ดู toFlowAccountPayload() ใน domain/invoice.js — ใช้ contactId จาก customers.flowaccount_contact_id
+ *   ถ้ามี ถ้ายังไม่มีค่อยส่งข้อมูลเต็มให้สร้างใหม่ครั้งแรกแล้วเก็บ contactId ที่ได้กลับไว้ใช้ครั้งถัดไป
  *
  * โหมด dry-run (ค่าเริ่มต้น) ไม่เรียก API จริง แต่คืนผลลัพธ์เสมือนกลับมา
  * ทำให้รันระบบและทดสอบ flow ได้ครบโดยไม่ต้องมี credential
@@ -199,13 +204,17 @@ export class FlowAccountClient {
 
     /* ของจริงห่อทุกอย่างไว้ใต้ .data และเลขเอกสารที่คนอ่านคือ documentSerial (เช่น "BL2026020001")
        ไม่ใช่ documentNumber/documentNo — ยืนยันจากการยิง sandbox จริงเมื่อ 31 ก.ค. 2569
-       documentId คือรหัสภายในตัวเลข (เช่น 200154) เอาไว้ขอลิงก์ดูเอกสารต่อใน getShareLink() */
+       documentId คือรหัสภายในตัวเลข (เช่น 200154) เอาไว้ขอลิงก์ดูเอกสารต่อใน getShareLink()
+       contactId — FlowAccount ตอบกลับ id ของ contact ที่เอกสารนี้ผูกอยู่เสมอ (ทั้งกรณีอ้าง contact
+       เดิมด้วย contactId หรือสร้างใหม่จาก contactName/contactTaxId) ผู้เรียกใช้บันทึกไว้ที่ลูกค้า
+       รายนั้นได้เลย เพื่อส่ง contactId เปล่าๆแทนในเอกสารรอบถัดไป กัน contact ซ้ำ (ดู toFlowAccountPayload) */
     const data = body?.data ?? body;
     return {
       mode: this.mode,
       ok: true,
       documentNo: data?.documentSerial ?? null,
       documentId: data?.documentId ?? data?.recordId ?? null,
+      contactId: data?.contactId ?? null,
       documentType: this.documentType,
       status: data?.statusString ?? 'draft',
       requestBody: payload,
