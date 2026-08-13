@@ -269,6 +269,32 @@ const EMPTY_PAGE_DATA = {
 };
 
 /**
+ * หน้าอีเมลแจ้งอนุมัติ Timesheet ที่แนบท้ายไฟล์มาด้วย (ไม่ใช่ตารางรายวัน) — ตรวจจับด้วย regex ตรงๆ
+ * ไม่ต้องพึ่งโมเดลเลย เพราะข้อมูลที่ต้องการ (เลขเอกสาร/สถานะ) เขียนเป็นรูปแบบตายตัวอยู่แล้ว
+ *
+ * เจอจริง 13 ส.ค. 69 — หน้าแบบนี้ทำให้โมเดลตอบ content ว่างเปล่าซ้ำๆ (แม้ retry 3 ครั้งก็ไม่ผ่าน
+ * สักที) ที่น่าจะเป็นเพราะหน้านี้ไม่มีตารางให้กรอกอะไรเลย ตัดปัญหาที่ต้นตอด้วยการไม่เรียกโมเดล
+ * สำหรับหน้านี้ตั้งแต่แรก ทั้งเร็วกว่าและไม่มีทางพัง (ข้อมูลเดียวกันนี้ readApprovalEmail ก็อ่านจาก
+ * เนื้ออีเมลจริงแยกอยู่แล้ว หน้านี้ในไฟล์ PDF จึงเป็นแค่สำเนาซ้ำ ไม่ใช่ข้อมูลใหม่)
+ */
+function parseApprovalEmailPage(text) {
+  /* pdfjs ดึงตัวอักษรไทยมาเป็นชิ้นๆตามพิกัด บางทีแทรกช่องว่างกลางคำหรือหลุดวรรณยุกต์ไปเลย
+     (เจอจริง: "แจ้งอนุมัติเอกสาร" กลายเป็น "แ จ้ งอ นุ มั ติ เอกสาร", "เลขที่" กลายเป็น "เลข ที ")
+     เทียบแบบตัดช่องว่างทั้งหมดออกก่อน กันปัญหานี้ทั้งหมดในทีเดียว */
+  const compact = text.replace(/\s+/g, '');
+  if (!/แจ้งอนุมัติเอกสารTimeSheet/.test(compact)) return null;
+  /* "เลข" ไม่ค่อยหลุดวรรณยุกต์ (ไม่มีวรรณยุกต์ให้หลุด) ใช้เป็นจุดยึดแทน "เลขที่เอกสาร" ที่บาง
+     ครั้งขาดตัว ่ ไป แล้วไล่หาเลขที่ตามมาโดยไม่สนอักขระ/ช่องว่างระหว่างกลาง
+     สถานะเทียบจากค่าที่เป็นไปได้ตรงๆ (ดู src/llm/email.js) ไม่เหมาแค่ "อนุมัติ" เพราะหัวเรื่องอีเมล
+     ใช้คำว่า "แจ้งอนุมัติ" ซ้ำแม้สถานะจริงจะเป็น "ไม่อนุมัติ"/"รออนุมัติ" ก็ได้ */
+  return {
+    ...EMPTY_PAGE_DATA,
+    documentNo: text.match(/เลข[^\d]{0,20}(\d{5,})/)?.[1] ?? null,
+    approvalStatus: compact.match(/สถานะ:?(ไม่อนุมัติ|รออนุมัติ|อนุมัติ)/)?.[1] ?? null,
+  };
+}
+
+/**
  * รวมผลจากหลายหน้าเป็นก้อนเดียว — หลักการ: เอาค่าแรกที่ไม่ว่างของแต่ละฟิลด์หัวเอกสาร,
  * รวม days/leaveDays ทุกหน้าแล้ว dedupe ด้วยวันที่ (เก็บแถวที่มีข้อมูลครบกว่าไว้ถ้าเจอซ้ำ),
  * ลายเซ็นถือว่ามีถ้าหน้าไหนหน้าหนึ่งบอกว่ามี
@@ -449,14 +475,18 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
       if (text.hasText) {
         return await runPages(
           text.pages.length,
-          (i) => ({
-            model: localTextModel(),
-            userContent:
-              `ข้างล่างนี้คือข้อความที่ดึงมาจากหน้าที่ ${i + 1}/${text.pages.length} ของเอกสาร Timesheet ` +
-              `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}\n\n${text.pages[i]}`,
-            // ชื่อจากชั้นข้อความเชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ ไม่ได้ผ่านการเดา
-            nameOverride: employeeNameIn(text.pages[i]),
-          }),
+          (i) => {
+            const approvalPage = parseApprovalEmailPage(text.pages[i]);
+            if (approvalPage) return { shortCircuitData: approvalPage };
+            return {
+              model: localTextModel(),
+              userContent:
+                `ข้างล่างนี้คือข้อความที่ดึงมาจากหน้าที่ ${i + 1}/${text.pages.length} ของเอกสาร Timesheet ` +
+                `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}\n\n${text.pages[i]}`,
+              // ชื่อจากชั้นข้อความเชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ ไม่ได้ผ่านการเดา
+              nameOverride: employeeNameIn(text.pages[i]),
+            };
+          },
           { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model} (ชั้นข้อความ)` },
         );
       }
@@ -516,6 +546,10 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
       next += 1;
       const pageIndex = i + 1;
       const req = buildRequest(i);
+      if (req.shortCircuitData) {
+        settled.push({ pageIndex, data: req.shortCircuitData, usage: null });
+        continue;
+      }
       model = req.model;
       try {
         const result = await callLocalJSON({
