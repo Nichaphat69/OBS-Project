@@ -158,7 +158,12 @@ async function callOnce({
   const body = await res.json();
   const choice = body?.choices?.[0];
   const content = choice?.message?.content;
-  if (!content) throw new Error('โมเดลในเครื่องไม่คืนข้อความกลับมา');
+  /* โมเดลตอบ 200 มาแต่ content ว่างเปล่า เจอเป็นระยะบนเซิร์ฟเวอร์จริง (โมเดลสะดุดชั่วขณะ เช่นตอน
+     ถูกแย่งคิวจากคำขอพร้อมกันอื่น) ลองใหม่มักผ่าน — retryable เหมือน 5xx/context exceeded
+     ไม่งั้นพลาดครั้งเดียวหน้านั้นก็ต้องให้คนกดอ่านใหม่เองทั้งที่รอไม่ถึงวินาทีก็หายเอง */
+  if (!content) {
+    throw Object.assign(new Error('โมเดลในเครื่องไม่คืนข้อความกลับมา'), { retryable: true });
+  }
 
   if (choice?.finish_reason === 'length') {
     throw new Error('ผลลัพธ์จากโมเดลถูกตัดเพราะยาวเกิน max_tokens — เพิ่มค่าแล้วลองใหม่');
