@@ -772,6 +772,17 @@ function mergeDocumentGroup(group, { expectedPeriod }) {
 }
 
 /**
+ * วันลาแบบครึ่งวัน/เป็นชั่วโมง (เช่น "Leave 2 Hrs") มีเวลาเข้า-ออกจริงในตารางได้ตามปกติ —
+ * ลาแค่บางชั่วโมงแล้วมาทำงานต่อ ไม่ใช่ลาเต็มวัน ต่างจากวันลาเต็มวัน (rawLabel แค่ "Leave" เดี่ยวๆ)
+ * ที่ไม่ควรมีเวลาเข้า-ออกเลย เจอจริง: Sunee 16 ก.พ. — ลา 2 ชม. เช้า แล้วเข้างาน 10:30-17:30
+ */
+function isPartialDayLeave(leave) {
+  /* ไม่ใส่ \b ปิดท้าย — \b อิงจาก \w ซึ่งไม่รวมอักษรไทย ทำให้ขอบคำหลังตัวไทย (เช่น "ชม.")
+     ตรวจไม่ตรงตามที่ตั้งใจ ตัดทิ้งเพราะไม่จำเป็นต้องเป๊ะระดับขอบคำ แค่เจอรูปแบบนี้ก็พอ */
+  return /\d+(\.\d+)?\s*(hrs?|hours?|ชม\.?|ชั่วโมง)/i.test(leave.rawLabel ?? '');
+}
+
+/**
  * ตรวจผลที่โมเดลอ่านมาด้วยโค้ด — จับความไม่สอดคล้องภายในเอกสารเอง
  * ไม่ได้ตรวจกับปฏิทินหรือสัญญา (นั่นเป็นหน้าที่ของ calculateManday)
  */
@@ -829,7 +840,7 @@ export function verifyExtraction(data, { expectedPeriod } = {}) {
         severity: 'fail',
         message: `วันลา ${leave.date} ไม่มีแถวในตาราง`,
       });
-    } else if (row.timeIn || row.timeOut) {
+    } else if ((row.timeIn || row.timeOut) && !isPartialDayLeave(leave)) {
       issues.push({
         severity: 'fail',
         message: `${leave.date} เป็นวันลา แต่มีเวลาเข้า-ออกในตาราง`,
