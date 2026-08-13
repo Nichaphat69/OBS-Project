@@ -266,8 +266,6 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 body.side-collapsed .topbar .brand { padding: 0; justify-content: center; }
 body.side-collapsed .topbar .blogo { display: none; }
 body.side-collapsed .topbar .bmark { display: block; }
-/* ชื่อระบบบนแถบบนขยับมาชิดโลโก้ ไม่งั้นเหลือช่องว่างค้างตรงกลาง */
-body.side-collapsed .topbar .obs { padding-left: 4px; }
 
 /* ═══ แถบบน — บางและเงียบ ไว้บอกสถานะระบบเท่านั้น ═══ */
 .topbar {
@@ -283,18 +281,8 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
   width: var(--side-w); flex: none; height: 100%;
   display: flex; align-items: center; padding: 0 20px;
 }
-.topbar .blogo { width: 120px; height: auto; display: block; }
+.topbar .blogo { width: 170px; height: auto; display: block; }
 .topbar .bmark { width: 28px; height: 28px; display: none; }
-
-/* ชื่อระบบ อยู่ถัดจากโลโก้ในแถบบน */
-.topbar .obs { padding-left: 12px; }
-.topbar .obs b {
-  display: block; font-size: 14px; line-height: 1.25; color: var(--ink);
-  letter-spacing: -.015em; font-weight: 700;
-}
-.topbar .obs > span {
-  display: block; font-size: 11px; color: var(--mut); line-height: 1.3; margin-top: 1px;
-}
 
 .mast-date {
   font-size: 12px; color: var(--mut); font-variant-numeric: tabular-nums;
@@ -416,7 +404,6 @@ body.side-collapsed .topbar .obs { padding-left: 4px; }
 @media (max-width: 900px) {
   .topbar { padding: 0 16px 0 0; }
   .topbar .brand { width: auto; border-right: none; padding: 0 14px; }
-  .topbar .obs { display: none; }
   /* .shell ปกติใช้ align-items:flex-start (ตั้งใจให้เมนูข้างสูงเท่าเนื้อหาจริง ไม่ใช่เต็มจอ
      ตอนเรียงเป็นแถว) แต่พอสลับเป็น flex-direction:column ตอนจอแคบ ค่านี้กลายเป็นแกนขวาง
      ทำให้ .frame หุบตามความกว้าง "เนื้อหา" แทนความกว้างจอ — การ์ด/ตารางที่กว้างสุดในหน้า
