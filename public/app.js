@@ -2956,7 +2956,8 @@ async function renderSystemAdmin() {
           <tr><td><span class="tg ${r.channel === 'line' ? 'ok' : 'mu'}">${r.channel === 'line' ? 'LINE' : 'อีเมล'}</span></td>
             <td>${esc(label)}</td>
             <td class="n">${esc(r.target)}</td>
-            <td><button class="lk nrm" data-id="${r.id}" data-label="${esc(label)}">ลบ</button></td></tr>`;
+            <td><button class="btn sm icon dgr nrm" data-id="${r.id}" data-label="${esc(label)}"
+                  title="ลบผู้รับแจ้งเตือนนี้" aria-label="ลบ">${icon('trash')}</button></td></tr>`;
         }).join('')}</tbody>
       </table></div>
       ${(recipients ?? []).length === 0 ? '<div class="empty">ยังไม่มีผู้รับแจ้งเตือน</div>' : ''}</div>
@@ -3033,12 +3034,25 @@ async function renderSystemAdmin() {
 
     main.querySelectorAll('.nrm').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if (!confirm(`ลบผู้รับแจ้งเตือน "${btn.dataset.label}" ?`)) return;
+        /* เดิมใช้ confirm() ของเบราว์เซอร์ — บางเบราว์เซอร์/บางการตั้งค่าปิดกั้น dialog แบบนี้ไปเลย
+           กดแล้วเหมือนไม่มีอะไรเกิดขึ้น (ไม่มี error ให้เห็นด้วย) เปลี่ยนมาใช้ confirmModal ของแอปเอง
+           ที่ไม่ใช่ native dialog จึงไม่โดนบล็อกแบบนั้น */
+        const ok = await confirmModal({
+          iconName: 'trash-solid', danger: true,
+          title: 'ลบผู้รับแจ้งเตือนนี้?',
+          message: `ผู้รับแจ้งเตือน "<b>${esc(btn.dataset.label)}</b>" จะไม่ได้รับการแจ้งเตือนอีกต่อไป`,
+          confirmLabel: 'ลบ',
+        });
+        if (!ok) return;
+        btn.disabled = true;
         try {
           await api(`/notification-recipients/${encodeURIComponent(btn.dataset.id)}`, { method: 'DELETE' });
           toast('ลบแล้ว');
           renderSystemAdmin();
-        } catch (error) { toast(error.message, true); }
+        } catch (error) {
+          btn.disabled = false;
+          toast(error.message, true);
+        }
       });
     });
   }
