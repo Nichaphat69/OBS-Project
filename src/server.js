@@ -312,7 +312,13 @@ const routes = [
       : svc.setActiveContract(contractId, { actor: session.nameTh });
   }],
 
-  ['GET', /^\/api\/employees$/, () => svc.listEmployees()],
+  ['GET', /^\/api\/employees$/, (_m, url) =>
+    svc.listEmployees({ contractId: url.searchParams.get('contractId') ?? undefined })],
+
+  ['POST', /^\/api\/employees$/, (_m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.createEmployee({ ...body, actor: session.nameTh });
+  }],
   ['GET', /^\/api\/invoices$/, (_m, url) =>
     svc.listInvoices({ contractId: url.searchParams.get('contractId') ?? undefined })],
   ['GET', /^\/api\/activity$/, (_m, url) =>

@@ -3247,10 +3247,15 @@ export function settingsSnapshot() {
   };
 }
 
-export function listEmployees() {
+/**
+ * ไม่ระบุ contractId = พนักงานทุกบริษัท (ใช้ตอนจับคู่ชื่อ/ระบบหลังบ้าน)
+ * ระบุ contractId = เฉพาะพนักงานที่มีอัตราจ้างผูกกับสัญญานั้น — หน้า "พนักงาน & ชื่อพ้อง"
+ * ต้องกรองด้วยตัวนี้เสมอ ไม่งั้นสลับบริษัทบนแถบบนแล้วยังเห็นพนักงานของบริษัทอื่นค้างอยู่
+ */
+export function listEmployees({ contractId } = {}) {
   const employees = all(`
     SELECT e.id, e.name_th, e.name_en, e.invoice_position,
-           a.id AS assignment_id,
+           a.id AS assignment_id, a.contract_id,
            a.monthly_rate, a.quotation_no, a.start_date, a.end_date, a.status,
            c.po_no, c.contract_no, cu.name_th AS customer_name
       FROM employees e
@@ -3260,9 +3265,11 @@ export function listEmployees() {
      ORDER BY a.monthly_rate DESC
   `);
 
+  const rows = employees.filter((e) => (contractId ? e.contract_id === contractId : true));
+
   const aliases = all('SELECT employee_id, kind, alias, source FROM employee_aliases');
 
-  return employees.map((employee) => ({
+  return rows.map((employee) => ({
     ...employee,
     nameAliases: aliases
       .filter((a) => a.employee_id === employee.id && a.kind === 'name')
@@ -3271,6 +3278,49 @@ export function listEmployees() {
       .filter((a) => a.employee_id === employee.id && a.kind === 'position')
       .map((a) => ({ alias: a.alias, source: a.source })),
   }));
+}
+
+/**
+ * เพิ่มพนักงานใหม่ + อัตราจ้างแรกผูกกับสัญญาที่ระบุในคราวเดียว — พนักงาน outsource ทุกคนต้องมี
+ * อัตราจ้างกับสัญญาใดสัญญาหนึ่งเสมอ (ไม่มีเรท คำนวณ Manday ไม่ได้) จึงสร้างคู่กันเลยแบบเดียวกับ
+ * createCustomer + createContract
+ */
+export function createEmployee({
+  contractId, nameTh, nameEn = null, invoicePosition, hrddEmployeeCode = null,
+  quotationNo = null, monthlyRate, startDate, endDate = null, actor,
+}) {
+  const contract = get('SELECT id, end_date FROM contracts WHERE id = $id', { id: contractId });
+  if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
+  if (!nameTh || !invoicePosition || !monthlyRate || !startDate) {
+    throw Object.assign(
+      new Error('ต้องระบุชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และวันเริ่มงานให้ครบ'),
+      { status: 400 },
+    );
+  }
+  const id = nextId('EMP', 'employees');
+  const assignmentId = `ASG-${id.slice('EMP-'.length)}-${contractId}`;
+  tx(() => {
+    run(
+      `INSERT INTO employees (id, name_th, name_en, invoice_position, hrdd_employee_code)
+       VALUES ($id, $nameTh, $nameEn, $invoicePosition, $hrddEmployeeCode)`,
+      { id, nameTh, nameEn, invoicePosition, hrddEmployeeCode },
+    );
+    run(
+      `INSERT INTO assignments
+         (id, contract_id, employee_id, quotation_no, monthly_rate, start_date, end_date, status)
+       VALUES ($assignmentId, $contractId, $employeeId, $quotationNo, $monthlyRate,
+               $startDate, $endDate, 'active')`,
+      {
+        assignmentId, contractId, employeeId: id, quotationNo,
+        monthlyRate: Number(monthlyRate), startDate, endDate: endDate || contract.end_date,
+      },
+    );
+  });
+  logAudit({
+    actor, action: 'create_employee', entityType: 'employee', entityId: id,
+    detail: { nameTh, contractId, invoicePosition, monthlyRate },
+  });
+  return listEmployees({ contractId }).find((e) => e.id === id);
 }
 
 export function listHolidays(year) {

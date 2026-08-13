@@ -217,6 +217,8 @@ const state = {
   rateEdit: null,
   /** เปิด/ปิดฟอร์ม "เพิ่มลูกค้าใหม่" ในแท็บลูกค้า & สัญญา */
   customerAdd: false,
+  /** เปิด/ปิดฟอร์ม "เพิ่มพนักงานใหม่" ในแท็บพนักงาน & ชื่อพ้อง */
+  employeeAdd: false,
   /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด/ดึงจาก Gmail — ยังไม่ได้บันทึกลงฐานข้อมูล
      อยู่ในหน่วยความจำหน้าจอจนกว่าคนจะกดยืนยัน รีเฟรชแล้วหาย ซึ่งถูกต้อง
      เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง
@@ -2482,11 +2484,40 @@ function renderCustomerAddForm() {
   </div>`;
 }
 
+/**
+ * ฟอร์ม "เพิ่มพนักงานใหม่" — สร้างพนักงาน + อัตราจ้างแรกผูกกับบริษัทที่กำลังดำเนินการอยู่ในคราวเดียว
+ * (พนักงานทุกคนต้องมีอัตราจ้างกับสัญญาใดสัญญาหนึ่งเสมอ ไม่มีเรทคำนวณ Manday ไม่ได้)
+ */
+function renderEmployeeAddForm(activeContract) {
+  return `
+  <div class="card">
+    <div class="hd"><h3>เพิ่มพนักงานใหม่</h3>
+      <span class="rt">ผูกอัตราจ้างกับ "${esc(activeContract.customer_name)} — ${esc(activeContract.project_name)}"</span></div>
+    <div class="bd">
+      <div class="frm">
+        <label>ชื่อ-นามสกุล (ไทย)<input id="neNameTh" type="text" autocomplete="off"></label>
+        <label>ชื่อ-นามสกุล (อังกฤษ)<input id="neNameEn" type="text" autocomplete="off"></label>
+        <label>ตำแหน่งบนใบแจ้งหนี้<input id="neInvoicePosition" type="text" autocomplete="off"></label>
+        <label>รหัสพนักงาน HRDD<input id="neHrddCode" type="text" autocomplete="off"></label>
+        <label>เลขที่ใบเสนอราคา (QT)<input id="neQuotationNo" type="text" autocomplete="off"></label>
+        <label>เรทต่อเดือน (บาท)<input id="neMonthlyRate" type="number" min="0" step="0.01"></label>
+        <label>วันเริ่มงาน<input id="neStartDate" type="date"></label>
+        <label>วันสิ้นสุด (ถ้าไม่ระบุ = ตามสัญญา)<input id="neEndDate" type="date"></label>
+      </div>
+    </div>
+    <div class="ft">
+      <button class="btn" id="empAddCancel">ยกเลิก</button>
+      <button class="btn pri" id="empAddSave">บันทึกพนักงานใหม่</button>
+    </div>
+  </div>`;
+}
+
 async function renderMaster() {
   const [employees, contracts, settings] = await Promise.all([
-    api('/employees'), api('/contracts'), api('/settings'),
+    api(`/employees${contractQuery()}`), api('/contracts'), api('/settings'),
   ]);
   const tab = state.masterTab;
+  const activeContract = contracts.find((c) => c.id === state.contractId) ?? null;
 
   main.innerHTML = `
   <div class="page">
@@ -2499,6 +2530,13 @@ async function renderMaster() {
     </div>
 
     <div class="tp ${tab === 1 ? 'on' : ''}" data-mpane="1">
+      <div class="metabar">
+        <span class="ey">${activeContract ? `${employees.length} คน — ${activeContract.customer_name}` : `${employees.length} คน`}</span>
+        <button class="btn pri sm" id="empAddBtn" ${activeContract ? '' : 'disabled title="ยังไม่มีบริษัทที่กำลังดำเนินการอยู่"'}>${icon('grid', 'i sm')} เพิ่มพนักงาน</button>
+      </div>
+
+      ${state.employeeAdd && activeContract ? renderEmployeeAddForm(activeContract) : ''}
+
       <div class="card"><div class="tw"><table>
         <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ชื่อพ้อง</th><th>ตำแหน่งพ้อง</th>
           <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th></tr></thead>
@@ -2724,6 +2762,47 @@ async function renderMaster() {
         renderMaster();
       } catch (error) { toast(error.message, true); }
     });
+  });
+
+  /* ── แท็บ "พนักงาน & ชื่อพ้อง" — เพิ่มพนักงานใหม่ ── */
+  el('empAddBtn')?.addEventListener('click', () => {
+    state.employeeAdd = true;
+    renderMaster();
+  });
+  el('empAddCancel')?.addEventListener('click', () => {
+    state.employeeAdd = false;
+    renderMaster();
+  });
+
+  el('empAddSave')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const nameTh = el('neNameTh').value.trim();
+    const invoicePosition = el('neInvoicePosition').value.trim();
+    const monthlyRate = Number(el('neMonthlyRate').value);
+    const startDate = el('neStartDate').value;
+    if (!nameTh || !invoicePosition || !monthlyRate || !startDate) {
+      toast('กรอกชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และวันเริ่มงานให้ครบก่อน', true);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await api('/employees', {
+        method: 'POST',
+        body: JSON.stringify({
+          contractId: state.contractId, nameTh, invoicePosition, monthlyRate, startDate,
+          nameEn: el('neNameEn').value.trim() || null,
+          hrddEmployeeCode: el('neHrddCode').value.trim() || null,
+          quotationNo: el('neQuotationNo').value.trim() || null,
+          endDate: el('neEndDate').value || null,
+        }),
+      });
+      toast(`เพิ่ม "${nameTh}" แล้ว`);
+      state.employeeAdd = false;
+      renderMaster();
+    } catch (error) {
+      toast(error.message, true);
+      btn.disabled = false;
+    }
   });
 
   /* ── แท็บ "ลูกค้า & สัญญา" — สลับ active / เพิ่มลูกค้าใหม่ ── */
@@ -3493,7 +3572,7 @@ function applyDeepLinkView() {
    ค่านี้เป็นสถานะกลางของ "ทั้งระบบ" ไม่ใช่แค่ของคนที่กำลังดูอยู่คนเดียว — เก็บที่ contracts.status
    ในฐานข้อมูล (ดู setActiveContract ใน src/service.js) เปลี่ยนแล้วทุกคนที่เปิดหน้าเว็บพร้อมกันเห็นตรงกัน */
 
-/** ต่อท้าย URL ของ /dashboard, /timesheets, /invoices ให้กรองเหลือแค่สัญญาที่เลือกอยู่ */
+/** ต่อท้าย URL ของ /dashboard, /timesheets, /invoices, /employees ให้กรองเหลือแค่สัญญาที่เลือกอยู่ */
 function contractQuery() {
   return state.contractId ? `?contractId=${encodeURIComponent(state.contractId)}` : '';
 }
