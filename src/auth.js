@@ -121,6 +121,21 @@ export function setUserActive(username, active, { actor = 'cli' } = {}) {
   return { username, nameTh: user.name_th, active: Boolean(active) };
 }
 
+/**
+ * ลบผู้ใช้ทิ้งจริง (hard delete) — ต่างจาก setUserActive ที่แค่ปิดใช้งาน
+ * ปลอดภัยที่จะลบเพราะ audit_log เก็บ actor เป็น name_th (ข้อความ) ไม่ใช่ username ที่อ้างอิงกลับมา
+ * sessions ผูก FK ON DELETE CASCADE ไว้แล้ว ลบ user แล้วเซสชันที่ค้างอยู่หายไปเอง
+ * มีไว้เพื่อให้เอา username ที่พิมพ์ผิด/บัญชีทดสอบออกไปใช้ซ้ำได้จริง (ปิดใช้งานอย่างเดียวทำไม่ได้ ดู resetPassword)
+ */
+export function deleteUser(username, { actor = 'cli' } = {}) {
+  const user = get('SELECT username, name_th FROM users WHERE username = $username', { username });
+  if (!user) throw Object.assign(new Error(`ไม่พบผู้ใช้ "${username}"`), { status: 404 });
+
+  run('DELETE FROM users WHERE username = $username', { username });
+  logAudit({ actor, action: 'delete_user', entityType: 'user', entityId: username, detail: { nameTh: user.name_th } });
+  return { username, nameTh: user.name_th };
+}
+
 /** ตรวจ username/password — คืน null ถ้าไม่ตรงหรือถูกปิดใช้งาน (ไม่บอกว่าผิดที่จุดไหน) */
 export function verifyLogin(username, password) {
   const user = get('SELECT * FROM users WHERE username = $username', { username });

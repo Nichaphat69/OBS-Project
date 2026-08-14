@@ -3275,7 +3275,7 @@ export function settingsSnapshot() {
  */
 export function listEmployees({ contractId } = {}) {
   const employees = all(`
-    SELECT e.id, e.name_th, e.name_en, e.invoice_position,
+    SELECT e.id, e.name_th, e.name_en, e.invoice_position, e.hrdd_employee_code,
            a.id AS assignment_id, a.contract_id,
            a.monthly_rate, a.quotation_no, a.start_date, a.end_date, a.status,
            c.po_no, c.contract_no, cu.name_th AS customer_name
@@ -3342,6 +3342,48 @@ export function createEmployee({
     detail: { nameTh, contractId, invoicePosition, monthlyRate },
   });
   return listEmployees({ contractId }).find((e) => e.id === id);
+}
+
+/**
+ * แก้ข้อมูลพนักงานที่มีอยู่แล้ว — ทั้งข้อมูลตัวพนักงาน (ชื่อ/ตำแหน่ง/รหัส HRDD) และอัตราจ้าง
+ * ของสัญญาที่ระบุ (assignmentId) ในคราวเดียว ต่างจาก "แก้เรท" แบบเดิมที่แก้ได้แค่ monthly_rate
+ */
+export function updateEmployee({
+  employeeId, assignmentId = null, nameTh, nameEn = null, invoicePosition, hrddEmployeeCode = null,
+  quotationNo = null, monthlyRate, startDate, endDate, actor,
+}) {
+  const employee = get('SELECT id FROM employees WHERE id = $id', { id: employeeId });
+  if (!employee) throw Object.assign(new Error('ไม่พบพนักงานนี้'), { status: 404 });
+  if (!nameTh || !invoicePosition || !monthlyRate || !startDate || !endDate) {
+    throw Object.assign(
+      new Error('ต้องระบุชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และช่วงวันที่ให้ครบ'),
+      { status: 400 },
+    );
+  }
+  if (assignmentId) {
+    const assignment = get('SELECT id FROM assignments WHERE id = $id AND employee_id = $employeeId',
+      { id: assignmentId, employeeId });
+    if (!assignment) throw Object.assign(new Error('ไม่พบอัตราจ้างนี้'), { status: 404 });
+  }
+  tx(() => {
+    run(
+      `UPDATE employees SET name_th = $nameTh, name_en = $nameEn, invoice_position = $invoicePosition,
+         hrdd_employee_code = $hrddEmployeeCode WHERE id = $employeeId`,
+      { nameTh, nameEn, invoicePosition, hrddEmployeeCode, employeeId },
+    );
+    if (assignmentId) {
+      run(
+        `UPDATE assignments SET quotation_no = $quotationNo, monthly_rate = $monthlyRate,
+           start_date = $startDate, end_date = $endDate WHERE id = $assignmentId`,
+        { quotationNo, monthlyRate: Number(monthlyRate), startDate, endDate, assignmentId },
+      );
+    }
+  });
+  logAudit({
+    actor, action: 'update_employee', entityType: 'employee', entityId: employeeId,
+    detail: { nameTh, invoicePosition, monthlyRate },
+  });
+  return listEmployees({}).find((e) => e.id === employeeId && e.assignment_id === assignmentId);
 }
 
 /**

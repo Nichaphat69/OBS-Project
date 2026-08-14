@@ -16,7 +16,7 @@ import { getDb, closeDb } from './db/index.js';
 import { onChange } from './events.js';
 import {
   SESSION_COOKIE, parseCookies, resolveSession, verifyLogin, createSession, destroySession, hasAnyUser,
-  listUsers, createUser, updateUserRole, setUserActive,
+  listUsers, createUser, updateUserRole, setUserActive, deleteUser,
 } from './auth.js';
 import { localLlmBaseUrl, localTextModel, localVisionModel, keepModelWarm } from './llm/localClient.js';
 
@@ -92,6 +92,13 @@ const routes = [
     if (body?.active !== undefined) result = setUserActive(username, Boolean(body.active), { actor: session.nameTh });
     if (!result) throw httpError(400, 'ต้องระบุ role หรือ active อย่างใดอย่างหนึ่ง');
     return result;
+  }],
+
+  ['DELETE', /^\/api\/users\/([^/]+)$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    const username = decodeURIComponent(m[1]);
+    if (username === session.username) throw httpError(400, 'ลบบัญชีของตัวเองไม่ได้');
+    return deleteUser(username, { actor: session.nameTh });
   }],
 
   /** จัดการระบบ → บันทึกระบบ — log ของ audit_log ดิบ ไม่ผ่านการกรอง/แต่งข้อความแบบกระดิ่ง */
@@ -319,6 +326,11 @@ const routes = [
   ['POST', /^\/api\/employees$/, (_m, _url, body, session) => {
     requireAdmin(session);
     return svc.createEmployee({ ...body, actor: session.nameTh });
+  }],
+
+  ['PATCH', /^\/api\/employees\/([^/]+)$/, (m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.updateEmployee({ ...body, employeeId: decodeURIComponent(m[1]), actor: session.nameTh });
   }],
 
   ['DELETE', /^\/api\/assignments\/([^/]+)$/, (m, _url, _body, session) => {

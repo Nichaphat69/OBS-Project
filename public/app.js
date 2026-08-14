@@ -220,6 +220,8 @@ const state = {
   customerAdd: false,
   /** เปิด/ปิดฟอร์ม "เพิ่มพนักงานใหม่" ในแท็บพนักงาน & ชื่อพ้อง */
   employeeAdd: false,
+  /** แถวพนักงานที่กำลังกดไอคอนดินสอแก้ไขอยู่ — เปิดทีละคน: assignment_id (หรือ employee id ถ้าไม่มี) หรือ null */
+  employeeEdit: null,
   /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด/ดึงจาก Gmail — ยังไม่ได้บันทึกลงฐานข้อมูล
      อยู่ในหน่วยความจำหน้าจอจนกว่าคนจะกดยืนยัน รีเฟรชแล้วหาย ซึ่งถูกต้อง
      เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง
@@ -2513,6 +2515,34 @@ function renderEmployeeAddForm(activeContract) {
   </div>`;
 }
 
+/**
+ * ฟอร์ม "แก้ไขข้อมูลพนักงาน" — เปิดจากไอคอนดินสอในตาราง แก้ได้ทั้งข้อมูลตัวพนักงานและอัตราจ้าง
+ * ของแถวนั้นในคราวเดียว (ต่างจาก "แก้เรท" แบบเดิมที่แก้ได้แค่เรทต่อเดือน)
+ */
+function renderEmployeeEditForm(e) {
+  return `
+  <div class="card">
+    <div class="hd"><h3>แก้ไขข้อมูลพนักงาน</h3>
+      <span class="rt">${esc(e.customer_name ?? '—')}${e.quotation_no ? ` · ${esc(e.quotation_no)}` : ''}</span></div>
+    <div class="bd">
+      <div class="frm">
+        <label>ชื่อ-นามสกุล (ไทย)<input id="eeNameTh" type="text" value="${esc(e.name_th)}" autocomplete="off"></label>
+        <label>ชื่อ-นามสกุล (อังกฤษ)<input id="eeNameEn" type="text" value="${esc(e.name_en ?? '')}" autocomplete="off"></label>
+        <label>ตำแหน่งบนใบแจ้งหนี้<input id="eeInvoicePosition" type="text" value="${esc(e.invoice_position)}" autocomplete="off"></label>
+        <label>รหัสพนักงาน HRDD<input id="eeHrddCode" type="text" value="${esc(e.hrdd_employee_code ?? '')}" autocomplete="off"></label>
+        <label>เลขที่ใบเสนอราคา (QT)<input id="eeQuotationNo" type="text" value="${esc(e.quotation_no ?? '')}" autocomplete="off"></label>
+        <label>เรทต่อเดือน (บาท)<input id="eeMonthlyRate" type="number" min="0" step="0.01" value="${e.monthly_rate ?? ''}"></label>
+        <label>วันเริ่มงาน<input id="eeStartDate" type="date" value="${esc(e.start_date ?? '')}"></label>
+        <label>วันสิ้นสุด<input id="eeEndDate" type="date" value="${esc(e.end_date ?? '')}"></label>
+      </div>
+    </div>
+    <div class="ft">
+      <button class="btn" id="empEditCancel">ยกเลิก</button>
+      <button class="btn pri" id="empEditSave" data-emp="${esc(e.id)}" data-asg="${esc(e.assignment_id ?? '')}">บันทึกการแก้ไข</button>
+    </div>
+  </div>`;
+}
+
 async function renderMaster() {
   const [employees, contracts, settings] = await Promise.all([
     api(`/employees${contractQuery()}`), api('/contracts'), api('/settings'),
@@ -2538,9 +2568,14 @@ async function renderMaster() {
 
       ${state.employeeAdd && activeContract ? renderEmployeeAddForm(activeContract) : ''}
 
+      ${(() => {
+        const editing = employees.find((e) => (e.assignment_id ?? e.id) === state.employeeEdit);
+        return editing ? renderEmployeeEditForm(editing) : '';
+      })()}
+
       <div class="card"><div class="tw"><table>
         <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ชื่อพ้อง</th><th>ตำแหน่งพ้อง</th>
-          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th><th style="width:50px"></th></tr></thead>
+          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th><th style="width:80px"></th></tr></thead>
         <tbody>${employees.map((e) => `
           <tr><td class="n">${esc(e.id)}</td>
             <td><span class="nm">${esc(e.name_th)}</span><span class="sub">${esc(e.name_en ?? '')}</span></td>
@@ -2549,8 +2584,12 @@ async function renderMaster() {
             <td>${esc(e.invoice_position)}</td>
             <td class="r n">${renderRateCell(e)}</td>
             <td>${esc(e.customer_name ?? '—')}<span class="sub">${esc(e.quotation_no ?? '')}</span></td>
-            <td>${e.assignment_id ? `<button class="btn sm icon dgr" data-rm-asg="${esc(e.assignment_id)}"
-                data-emp-name="${esc(e.name_th)}" title="นำออกจากโครงการนี้" aria-label="ลบ">${icon('trash')}</button>` : ''}</td></tr>`).join('')}</tbody>
+            <td><div class="rowacts">
+              <button class="btn sm icon" data-edit-emp="${esc(e.assignment_id ?? e.id)}"
+                title="แก้ไขข้อมูลพนักงาน" aria-label="แก้ไข">${icon('edit')}</button>
+              ${e.assignment_id ? `<button class="btn sm icon dgr" data-rm-asg="${esc(e.assignment_id)}"
+                data-emp-name="${esc(e.name_th)}" title="นำออกจากโครงการนี้" aria-label="ลบ">${icon('trash')}</button>` : ''}
+            </div></td></tr>`).join('')}</tbody>
       </table></div></div>
     </div>
 
@@ -2791,6 +2830,48 @@ async function renderMaster() {
     });
   });
 
+  main.querySelectorAll('[data-edit-emp]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.employeeEdit = btn.dataset.editEmp;
+      renderMaster();
+    });
+  });
+  el('empEditCancel')?.addEventListener('click', () => {
+    state.employeeEdit = null;
+    renderMaster();
+  });
+
+  el('empEditSave')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const nameTh = el('eeNameTh').value.trim();
+    const invoicePosition = el('eeInvoicePosition').value.trim();
+    const monthlyRate = Number(el('eeMonthlyRate').value);
+    const startDate = el('eeStartDate').value;
+    const endDate = el('eeEndDate').value;
+    if (!nameTh || !invoicePosition || !monthlyRate || !startDate || !endDate) {
+      toast('กรอกชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และช่วงวันที่ให้ครบก่อน', true);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await api(`/employees/${encodeURIComponent(btn.dataset.emp)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          assignmentId: btn.dataset.asg || null, nameTh, invoicePosition, monthlyRate, startDate, endDate,
+          nameEn: el('eeNameEn').value.trim() || null,
+          hrddEmployeeCode: el('eeHrddCode').value.trim() || null,
+          quotationNo: el('eeQuotationNo').value.trim() || null,
+        }),
+      });
+      toast(`บันทึกการแก้ไข "${nameTh}" แล้ว`);
+      state.employeeEdit = null;
+      renderMaster();
+    } catch (error) {
+      toast(error.message, true);
+      btn.disabled = false;
+    }
+  });
+
   /* ── แท็บ "พนักงาน & ชื่อพ้อง" — เพิ่มพนักงานใหม่ ── */
   el('empAddBtn')?.addEventListener('click', () => {
     state.employeeAdd = true;
@@ -3011,11 +3092,17 @@ async function renderSystemAdmin() {
                 <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
               </select>${icon('cd')}</span></td>
-            <td><span class="tg ${u.active ? 'ok' : 'mu'}">${u.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</span></td>
+            <td><label class="toggle ${u.active ? 'on' : ''}"
+                  title="${isSelf ? 'ปิดใช้งานบัญชีตัวเองไม่ได้'
+                    : u.active ? 'ใช้งานอยู่ — กดเพื่อปิดใช้งาน' : 'ปิดใช้งานอยู่ — กดเพื่อเปิดใช้งาน'}">
+                <input type="checkbox" class="uActiveToggle" data-user="${esc(u.username)}"
+                  ${u.active ? 'checked' : ''} ${isSelf ? 'disabled' : ''}>
+                <span class="tk"></span>
+                <span class="tl">${u.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</span>
+              </label></td>
             <td>${dt(u.created_at)}</td>
-            <td><button class="lk uToggle" data-user="${esc(u.username)}" data-active="${u.active}"
-                ${isSelf ? 'disabled title="ปิดใช้งานบัญชีตัวเองไม่ได้"' : ''}>
-                ${u.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</button></td></tr>`;
+            <td><button class="btn sm icon dgr" data-del-user="${esc(u.username)}" data-name="${esc(u.name_th)}"
+                ${isSelf ? 'disabled title="ลบบัญชีของตัวเองไม่ได้"' : ''} aria-label="ลบ">${icon('trash')}</button></td></tr>`;
         }).join('')}</tbody>
       </table></div></div>
     </div>
@@ -3193,15 +3280,45 @@ async function renderSystemAdmin() {
     });
   });
 
-  main.querySelectorAll('.uToggle').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const active = btn.dataset.active === 'true';
-      if (active && !confirm(`ปิดใช้งานผู้ใช้ "${btn.dataset.user}" ? เซสชันที่ล็อกอินอยู่ตอนนี้จะถูกเลิกทันที`)) return;
-      try {
-        await api(`/users/${encodeURIComponent(btn.dataset.user)}`, {
-          method: 'PATCH', body: JSON.stringify({ active: !active }),
+  main.querySelectorAll('.uActiveToggle').forEach((checkbox) => {
+    checkbox.addEventListener('change', async () => {
+      const turningOn = checkbox.checked;
+      if (!turningOn) {
+        const ok = await confirmModal({
+          iconName: 'trash-solid', danger: true,
+          title: 'ปิดใช้งานผู้ใช้นี้?',
+          message: `ผู้ใช้ "<b>${esc(checkbox.dataset.user)}</b>" จะล็อกอินไม่ได้ทันที และเซสชันที่ล็อกอินอยู่ตอนนี้จะถูกเลิกทันที`,
+          confirmLabel: 'ปิดใช้งาน',
         });
-        toast(active ? `ปิดใช้งาน ${btn.dataset.user} แล้ว` : `เปิดใช้งาน ${btn.dataset.user} แล้ว`);
+        if (!ok) { checkbox.checked = true; return; }
+      }
+      checkbox.disabled = true;
+      try {
+        await api(`/users/${encodeURIComponent(checkbox.dataset.user)}`, {
+          method: 'PATCH', body: JSON.stringify({ active: turningOn }),
+        });
+        toast(turningOn ? `เปิดใช้งาน ${checkbox.dataset.user} แล้ว` : `ปิดใช้งาน ${checkbox.dataset.user} แล้ว`);
+        renderSystemAdmin();
+      } catch (error) {
+        toast(error.message, true);
+        checkbox.checked = !turningOn;
+        checkbox.disabled = false;
+      }
+    });
+  });
+
+  main.querySelectorAll('[data-del-user]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: 'ลบผู้ใช้นี้?',
+        message: `บัญชี "<b>${esc(btn.dataset.name)}</b>" (${esc(btn.dataset.delUser)}) จะถูกลบทิ้งถาวร ล็อกอินไม่ได้อีก — กู้คืนไม่ได้`,
+        confirmLabel: 'ลบ',
+      });
+      if (!ok) return;
+      try {
+        await api(`/users/${encodeURIComponent(btn.dataset.delUser)}`, { method: 'DELETE' });
+        toast(`ลบผู้ใช้ ${btn.dataset.delUser} แล้ว`);
         renderSystemAdmin();
       } catch (error) { toast(error.message, true); }
     });
