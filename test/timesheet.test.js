@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractTimesheet, verifyExtraction, mergeDocumentsByEmployee } from '../src/extract/timesheet.js';
+import { localTextModel } from '../src/llm/localClient.js';
 
 // PDF ขั้นต่ำ 1 หน้า — พอให้ pdf-to-img แปลงเป็นรูปได้จริง เนื้อหาในหน้าไม่สำคัญ
 // เพราะการทดสอบนี้ไม่ได้พึ่งความแม่นของโมเดลจริง (จำลองคำตอบด้วย fakeFetch)
@@ -262,6 +263,40 @@ test('extractTimesheet โยน error รวมถ้าทุกหน้า�
     () => extractTimesheet(TWO_PAGE_PDF, { fetchImpl }),
     /ไม่สำเร็จเลยสักหน้า/,
   );
+});
+
+// PDF ที่มีชั้นข้อความยาวพอผ่านเกณฑ์ hasText (MIN_CHARS_PER_PAGE = 150) และมีป้าย "Employee Name:"
+// ให้ employeeNameIn() จับได้ — ใช้ทดสอบว่า nameOverride ยังถูกใช้ต่อได้แม้ต้องถอยไปทาง vision
+// MediaBox ต้องกว้างพอ (ไม่ใช่ 200 เหมือน PDF ทดสอบตัวอื่น) ไม่งั้น pdfjs ตัดชั้นข้อความทิ้งกลางคัน
+// เมื่อบรรทัดยาวเกินความกว้างหน้าโดยไม่มีการตัดขึ้นบรรทัดใหม่ (เจอจริงตอนเขียนเทสต์นี้)
+const NAME_LABEL_PDF = Buffer.from(
+  '%PDF-1.1\n' +
+  '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n' +
+  '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n' +
+  '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 5000 100] /Contents 4 0 R ' +
+  '/Resources << /Font << /F1 5 0 R >> >> >> endobj\n' +
+  '4 0 obj << /Length 220 >>\nstream\nBT /F1 10 Tf 20 40 Td ' +
+  `(Employee Name: Pitikorn Chumphuchanapai Project Name: BAU Outsource ${'X'.repeat(120)}) Tj ET\n` +
+  'endstream\nendobj\n' +
+  '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n' +
+  'xref\n0 6\n0000000000 65535 f \ntrailer << /Size 6 /Root 1 0 R >>\nstartxref\n0\n%%EOF',
+);
+
+test('ชั้นข้อความอ่านชื่อได้ถูกแต่โมเดลตอบ schema พังทั้งหน้า — ถอยไปทาง vision ต้องยังใช้ชื่อจากชั้นข้อความ ไม่ใช่ชื่อที่ vision เดา', async () => {
+  // เจอจริง: 26/07-Pitikorn chumphuchanapai.pdf — ชั้นข้อความมีชื่อถูกต้องอยู่แล้ว แต่โมเดลฝั่ง
+  // ข้อความตอบผิด schema จนทั้งหน้าถือว่าอ่านไม่สำเร็จ ต้องถอยไปทาง vision ซึ่งเดิมไม่ได้ nameOverride
+  // มาด้วย ทำให้ vision เดาชื่อเอง (เจอจริง: "Pattison Chumphacharnou")
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.model === localTextModel()) throw new Error('model returned invalid schema');
+    // โมเดล vision เดาชื่อผิด (จำลองเคสจริงที่มองรูปแล้วเดาพลาด)
+    return okResponse(fakeTimesheetData('2026-01'));
+  };
+
+  const result = await extractTimesheet(NAME_LABEL_PDF, { expectedPeriod: '2026-01', fetchImpl });
+
+  assert.equal(result.data.employeeName, 'Pitikorn Chumphuchanapai',
+    'ต้องใช้ชื่อจากชั้นข้อความ (nameOverride) ไม่ใช่ชื่อที่ vision เดาผิด (Pongpun Mamak จาก fakeTimesheetData)');
 });
 
 test('verifyExtraction จับได้เมื่อรอบเดือนไม่ตรงกับที่ระบบคาดไว้', () => {

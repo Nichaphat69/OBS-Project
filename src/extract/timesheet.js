@@ -473,9 +473,13 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
     ? ` รอบบิลที่ระบบคาดไว้คือ ${expectedPeriod} — ถ้าเอกสารไม่ใช่เดือนนี้ ให้ใส่เดือนตามเอกสารและบันทึกลง notes`
     : '';
 
+  // เก็บผลไว้ใช้ต่อได้แม้ตกไปทาง vision ด้านล่าง — ชั้นข้อความอาจดึงได้ปกติ (มีชื่อให้ nameOverride)
+  // ทั้งที่โมเดลอ่านข้อความล้วนแล้วตอบผิด schema/ตัด token จนต้องยอมแพ้ทั้งหน้า (ดูเหตุผลเต็มด้านล่าง)
+  let text = null;
+
   if (!forceVision) {
     try {
-      const text = await extractPdfText(pdfBuffer);
+      text = await extractPdfText(pdfBuffer);
       if (text.hasText) {
         return await runPages(
           text.pages.length,
@@ -514,6 +518,11 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
             `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}`,
         },
       ],
+      /* โมเดล vision มองรูปแล้วอ่านชื่อผิดบ่อยกว่าชั้นข้อความมาก (เจอจริง: "Pitikorn chumphuchanapai"
+         → "Pattison Chumphacharnou") ทั้งที่ชั้นข้อความของหน้าเดิมอ่านชื่อได้ถูกต้องอยู่แล้ว แค่โมเดล
+         ฝั่งข้อความตอบ schema พังจนต้องยอมแพ้ทั้งหน้าไปเท่านั้น — เอา nameOverride ตัวเดียวกันมาใช้ซ้ำ
+         ที่นี่ด้วย ดีกว่าปล่อยให้ vision เดาชื่อเองทั้งที่มีคำตอบที่แน่นอนกว่าอยู่แล้ว */
+      nameOverride: text?.pages?.[i] ? employeeNameIn(text.pages[i]) : null,
     }),
     { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model}` },
   );
