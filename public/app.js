@@ -857,17 +857,6 @@ async function openSheet(id) {
           </div>
         </div>
       </div>
-
-      <!-- เทียบวันลากับ HRDD — ยิงแยกจากข้อมูลหลักของหน้านี้ เพราะเป็นการเรียกออกไปนอกระบบ
-           (อาจช้า/ล่ม) ไม่ควรทำให้รอดูข้อมูล Timesheet หลักไม่ได้ ดูสถานะ 'loading' ด้านล่าง -->
-      <div class="card" id="hrddCard">
-        <div class="hd"><h3>เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</h3>
-          <div class="rt" style="display:flex; align-items:center; gap:10px">
-            <span id="hrddMeta"></span>
-            <button class="btn sm" id="hrddRefreshBtn">${icon('rf', 'i sm')} รีเฟรชจาก HRDD</button>
-          </div></div>
-        <div class="bd" id="hrddBody"><div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div></div>
-      </div>
     </div>
 
     <!-- อีเมล & Timesheet -->
@@ -997,36 +986,54 @@ async function openSheet(id) {
       toast(error.message, true);
     }
   });
-
-  el('hrddRefreshBtn')?.addEventListener('click', () => {
-    el('hrddBody').innerHTML = '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>';
-    loadHrddCompare(id);
-  });
-  loadHrddCompare(id);
 }
 
 /* ── เทียบวันลากับ HRDD ─────────────────────────────────────────
-   ดูอย่างเดียว — เรียก HRDD ผ่าน API 2 เส้น (สถานะวันลา + รายการวันลา) ไม่มีเขียน/แก้/ลบ
-   ฝั่ง HRDD เด็ดขาด ตรรกะเทียบอยู่ที่ src/domain/leaveCompare.js (ฝั่งเซิร์ฟเวอร์)
-   หน้านี้แค่รับผลมาแสดง 4 สถานะต่อวัน: ตรงกัน/ประเภทไม่ตรง/ไม่พบใน Timesheet/ไม่พบใน HRDD */
+   อยู่ในหน้า "อัปโหลด Timesheet" ตอนรีวิวก่อนบันทึก (ไม่ใช่หลังยืนยันแล้ว) เพราะจะได้แก้วันลาให้
+   ตรงกับ HRDD ก่อนกดยืนยันเข้าระบบเลย ไม่ต้องย้อนมาแก้ทีหลัง — ยิงแยกจากข้อมูลหลักของการ์ด
+   เพราะเป็นการเรียกออกไปนอกระบบ (อาจช้า/ล่ม) ไม่ควรทำให้รอดูข้อมูลที่อ่านได้หลักไม่ได้
+   ดูอย่างเดียว — เรียก HRDD ผ่าน API 2 เส้น (สถานะวันลา + รายการวันลา) ไม่มีเขียน/แก้/ลบฝั่ง HRDD
+   ตรรกะเทียบอยู่ที่ src/domain/leaveCompare.js (ฝั่งเซิร์ฟเวอร์) หน้านี้แค่รับผลมาแสดง
+   4 สถานะต่อวัน: ตรงกัน/ประเภทไม่ตรง/ไม่พบใน Timesheet/ไม่พบใน HRDD */
 
 const HRDD_STATUS_LABEL = { ok: 'ตรงกัน', warn: 'ประเภทไม่ตรง', info: 'ไม่พบใน Timesheet', bad: 'ไม่พบใน HRDD' };
 const HRDD_STATUS_TONE = { ok: 'ok', warn: 'wn', info: 'pr', bad: 'cr' };
 
-async function loadHrddCompare(id) {
-  try {
-    const result = await api(`/timesheets/${encodeURIComponent(id)}/hrdd-compare`);
-    renderHrddCompare(result, id);
-  } catch (error) {
-    renderHrddCompare({ state: 'error', message: error.message }, id);
+/** อ่าน employeeId/period/วันลาปัจจุบันบนจอของการ์ดนี้ แล้วยิงไปเทียบกับ HRDD */
+async function runHrddPreviewCompare(card, entry) {
+  const meta = card.querySelector('.hrddMeta');
+  const body = card.querySelector('.hrddBody');
+  if (!meta || !body) return;
+
+  const employeeId = entry().matching.employee?.id;
+  const period = card.querySelector('[id^="rPeriod-"]').value;
+  if (!employeeId) {
+    body.innerHTML = `<div class="note">${icon('info')}<span>จับคู่ชื่อพนักงานกับคนในระบบก่อน (ด้านบน) ถึงจะเทียบกับ HRDD ได้</span></div>`;
+    return;
   }
+  if (!/^\d{4}-\d{2}$/.test(period ?? '')) {
+    body.innerHTML = `<div class="note">${icon('info')}<span>รอบเดือนยังไม่ถูกต้อง แก้ "รอบเดือน" ด้านบนก่อน</span></div>`;
+    return;
+  }
+
+  body.innerHTML = '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>';
+  const leaveDays = [...card.querySelectorAll('.rLeaveRows .lrow')]
+    .map((r) => ({ date: r.querySelector('.ldate').value, type: r.querySelector('.ltype').value }))
+    .filter((l) => l.date);
+
+  let result;
+  try {
+    result = await api('/hrdd-compare-preview', {
+      method: 'POST',
+      body: JSON.stringify({ employeeId, period, leaveDays }),
+    });
+  } catch (error) {
+    result = { state: 'error', message: error.message };
+  }
+  renderHrddCompareInto(result, { card, meta, body });
 }
 
-function renderHrddCompare(result, id) {
-  const meta = el('hrddMeta');
-  const body = el('hrddBody');
-  if (!meta || !body) return;   // คนกดออกจากหน้านี้ไปแล้วก่อนที่ HRDD จะตอบกลับมา
-
+function renderHrddCompareInto(result, { card, meta, body }) {
   meta.textContent = result.checkedAt ? `ซิงค์ล่าสุด ${dt(result.checkedAt)}` : '';
 
   if (result.state === 'not_connected' || result.state === 'error') {
@@ -1034,11 +1041,10 @@ function renderHrddCompare(result, id) {
       <div class="empty">
         ${icon('alt', 'i')}
         <div>${esc(result.message)}</div>
-        ${result.state === 'error' ? `<button class="btn sm" id="hrddRetryBtn" style="margin-top:12px">ลองใหม่</button>` : ''}
+        ${result.state === 'error' ? `<button class="btn sm hrddRetryBtn" type="button" style="margin-top:12px">ลองใหม่</button>` : ''}
       </div>`;
-    el('hrddRetryBtn')?.addEventListener('click', () => {
-      body.innerHTML = '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>';
-      loadHrddCompare(id);
+    body.querySelector('.hrddRetryBtn')?.addEventListener('click', () => {
+      card.querySelector('.hrddRefreshBtn')?.click();
     });
     return;
   }
@@ -1075,19 +1081,31 @@ function renderHrddCompare(result, id) {
             <td>${r.tsType ? esc(r.tsType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
             <td>${r.hrddType ? esc(r.hrddType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
             <td><span class="st ${HRDD_STATUS_TONE[r.status]}">${HRDD_STATUS_LABEL[r.status]}</span></td>
-            <td>${r.status !== 'ok' ? `<button class="btn sm hrddFix" data-id="${esc(id)}">แก้ไข</button>` : ''}</td>
+            <td>${r.status !== 'ok' ? `<button class="btn sm hrddFix" type="button" data-date="${esc(r.date)}">แก้ไข</button>` : ''}</td>
           </tr>`).join('')}
       </tbody>
     </table></div>`;
 
   body.innerHTML = banner + stats + table;
 
-  /* "แก้ไข" เปิดไฟล์ Timesheet ต้นฉบับให้เทียบเอง — ระบบนี้ยังไม่มีจุดแก้วันลาของ Timesheet
-     ที่ยืนยันเข้าระบบแล้วโดยตรง (แก้ได้แค่ตอนก่อนยืนยันในหน้าอัปโหลด) การแก้ที่ถูกต้องคือคนต้อง
-     คุยกับพนักงานก่อนว่าอันไหนถูก เปิดไฟล์ต้นฉบับให้ดูจึงมีประโยชน์กว่าปุ่มที่ไม่มีผลอะไรจริง */
+  /* "แก้ไข" พาไปที่แถววันลาของวันนั้นในตาราง "วันลาที่อ่านได้" ด้านบน (แก้ตรงนั้นได้เลย เพราะ
+     ยังไม่ยืนยันเข้าระบบ) ถ้าวันนั้นยังไม่มีแถวเลย (สถานะ "ไม่พบใน Timesheet") เพิ่มแถวใหม่ให้เลย
+     พร้อมวันที่กรอกไว้แล้ว คนกรอกแค่เลือกประเภทวันลาต่อ */
   body.querySelectorAll('.hrddFix').forEach((btn) => {
     btn.addEventListener('click', () => {
-      openPdfPreview(`/api/timesheets/${encodeURIComponent(btn.dataset.id)}/file`, 'Timesheet ต้นฉบับ');
+      const rows2 = card.querySelector('.rLeaveRows');
+      const existing = [...rows2.querySelectorAll('.lrow')]
+        .find((r) => r.querySelector('.ldate').value === btn.dataset.date);
+      let target = existing;
+      if (!target) {
+        addLeaveRow(rows2);
+        target = rows2.lastElementChild;
+        target.querySelector('.ldate').value = btn.dataset.date;
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('flash');
+      setTimeout(() => target.classList.remove('flash'), 1600);
+      target.querySelector('.ltype').focus();
     });
   });
 }
@@ -2168,6 +2186,17 @@ function readResultHtml(read, employees = []) {
       </div>
 
       <div class="fsec">
+        <div class="fsec-h"><b>เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</b>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="hrddMeta" style="font-size:12px;color:var(--mut)"></span>
+            <button class="btn sm hrddRefreshBtn" type="button">${icon('rf', 'i sm')} รีเฟรชจาก HRDD</button>
+          </div></div>
+        <div class="hrddBody">${read.matching.employee
+          ? '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>'
+          : `<div class="note">${icon('info')}<span>จับคู่ชื่อพนักงานกับคนในระบบก่อน (ด้านบน) ถึงจะเทียบกับ HRDD ได้</span></div>`}</div>
+      </div>
+
+      <div class="fsec">
         <div class="fsec-h"><b>ลายเซ็น</b></div>
         <ul class="cks">
           <li><span class="l">พนักงาน</span>
@@ -2300,6 +2329,9 @@ function bindUploadTab() {
     card.querySelectorAll('.rLeaveRows .lrm').forEach((btn) => {
       btn.addEventListener('click', () => btn.closest('.lrow').remove());
     });
+
+    card.querySelector('.hrddRefreshBtn')?.addEventListener('click', () => runHrddPreviewCompare(card, entry));
+    if (entry().matching.employee) runHrddPreviewCompare(card, entry);
 
     card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
       const btn = card.querySelector('.confirmBtn');

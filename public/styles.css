@@ -1572,6 +1572,12 @@ td.n, .docid { white-space: nowrap; }
   background:var(--paper); border:1px solid var(--rule); border-radius:var(--r-ctl);
   height:var(--h-ctl-sm); padding:0 10px; min-width:0; }
 .lrow input:focus, .lrow select:focus{ outline:2px solid var(--brand); outline-offset:-1px; }
+/* กระพริบเน้นแถวที่ปุ่ม "แก้ไข" ของ HRDD พาคนมาดู ให้รู้ว่าใช่แถวนี้ */
+.lrow.flash{ animation: lrow-flash 1.6s ease; border-radius: var(--r-ctl); }
+@keyframes lrow-flash {
+  0%, 100% { background: transparent; }
+  15%, 60% { background: var(--wnb); }
+}
 
 @media (max-width: 900px){
   .frm{ grid-template-columns:1fr; }

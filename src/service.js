@@ -430,7 +430,8 @@ async function resolveHrddApprovedStatusCodes(client) {
 }
 
 /**
- * เทียบวันลาที่ Timesheet ฉบับนี้รายงาน กับวันลาที่อนุมัติแล้วจริงใน HRDD ของพนักงานคนเดียวกัน
+ * แกนกลางเทียบวันลากับ HRDD — ใช้ทั้งจาก Timesheet ที่บันทึกเข้าระบบแล้ว (checkTimesheetAgainstHrdd)
+ * และจากหน้ารีวิวก่อนบันทึกใน "อัปโหลด Timesheet" (checkLeavesAgainstHrdd) ที่ยังไม่มี timesheetId
  *
  * จับคู่ "พนักงานคนไหนในบริษัท" ด้วยชื่อ (ไม่ใช่ employeeCode) เพราะ endpoint ของ HRDD ที่ใช้
  * (POST /leavetransaction/findByCompany) ไม่คืนค่า employeeCode มาให้เลย — ยืนยันจากซอร์สโค้ด
@@ -440,10 +441,7 @@ async function resolveHrddApprovedStatusCodes(client) {
  * ไม่มีผลข้างเคียงใดๆกับ HRDD — เรียกแค่ endpoint อ่านข้อมูล (สถานะวันลา + รายการวันลา)
  * ไม่มีเขียน/แก้/ลบฝั่ง HRDD เด็ดขาด
  */
-export async function checkTimesheetAgainstHrdd(timesheetId) {
-  const sheet = getTimesheet(timesheetId);
-  if (!sheet) throw Object.assign(new Error(`ไม่พบ Timesheet ${timesheetId}`), { status: 404 });
-
+async function compareLeavesWithHrdd({ employeeId, employeeName, period, tsLeaves }) {
   if (!hasHrddCredentials()) {
     return {
       state: 'not_connected',
@@ -451,8 +449,8 @@ export async function checkTimesheetAgainstHrdd(timesheetId) {
     };
   }
 
-  const [year, month] = sheet.period.split('-').map(Number);
-  const dateFrom = `${sheet.period}-01`;
+  const [year, month] = period.split('-').map(Number);
+  const dateFrom = `${period}-01`;
   const dateTo = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 
   const client = new HrddClient({});
@@ -466,24 +464,48 @@ export async function checkTimesheetAgainstHrdd(timesheetId) {
   }
 
   const employees = employeesForMatching();
-  const targetId = sheet.employee.id;
   const hrddLeaves = companyLeaves.filter((rec) => {
     const result = matchEmployee(stripHrddNickname(rec.requestName), employees);
-    return result.employee?.id === targetId;
+    return result.employee?.id === employeeId;
   });
 
-  const tsLeaves = sheet.leaveDays.map((d) => ({ date: d.date, type: d.leave_type }));
   const rows = compareLeaves(tsLeaves, hrddLeaves);
   const summary = summarizeLeaveComparison(rows);
 
   return {
     state: summary.mismatched > 0 ? 'diff' : 'match',
-    period: sheet.period,
-    employeeName: sheet.employee.nameTh,
+    period,
+    employeeName,
     rows,
     summary,
     checkedAt: new Date().toISOString(),
   };
+}
+
+/** เทียบวันลาของ Timesheet ที่บันทึกเข้าระบบแล้ว — ใช้ข้อมูลวันลาที่เก็บไว้ตอนยืนยัน */
+export async function checkTimesheetAgainstHrdd(timesheetId) {
+  const sheet = getTimesheet(timesheetId);
+  if (!sheet) throw Object.assign(new Error(`ไม่พบ Timesheet ${timesheetId}`), { status: 404 });
+
+  const tsLeaves = sheet.leaveDays.map((d) => ({ date: d.date, type: d.leave_type }));
+  return compareLeavesWithHrdd({
+    employeeId: sheet.employee.id, employeeName: sheet.employee.nameTh, period: sheet.period, tsLeaves,
+  });
+}
+
+/**
+ * เทียบวันลาตอนยัง "รีวิวก่อนบันทึก" ในหน้าอัปโหลด Timesheet — ยังไม่มี timesheetId เพราะยังไม่ได้
+ * ยืนยันเข้าระบบ ใช้ employeeId ที่จับคู่ได้ (หรือคนเลือกเองถ้าจับคู่อัตโนมัติไม่ได้) กับ period/
+ * วันลาที่เห็นอยู่บนจอตอนนี้แทน (คนแก้ตารางวันลาบนจอได้ก่อนกดยืนยัน ผลเทียบจึงต้องอิงค่าล่าสุดบนจอ)
+ */
+export async function checkLeavesAgainstHrdd({ employeeId, period, leaveDays = [] }) {
+  const employee = get('SELECT id, name_th FROM employees WHERE id = $id', { id: employeeId });
+  if (!employee) throw Object.assign(new Error('ไม่พบพนักงานนี้'), { status: 404 });
+  if (!/^\d{4}-\d{2}$/.test(period ?? '')) {
+    throw Object.assign(new Error('รอบเดือนไม่ถูกต้อง'), { status: 400 });
+  }
+  const tsLeaves = leaveDays.map((d) => ({ date: d.date, type: d.type }));
+  return compareLeavesWithHrdd({ employeeId, employeeName: employee.name_th, period, tsLeaves });
 }
 
 function buildMatchingReport(row) {

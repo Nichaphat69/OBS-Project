@@ -157,6 +157,13 @@ const routes = [
   ['GET', /^\/api\/timesheets\/([^/]+)\/hrdd-compare$/, (m) =>
     svc.checkTimesheetAgainstHrdd(decodeURIComponent(m[1]))],
 
+  /** เทียบวันลากับ HRDD ตอนรีวิวก่อนบันทึกในหน้า "อัปโหลด Timesheet" — ยังไม่มี timesheetId
+   * (ดูคอมเมนต์ที่ svc.checkLeavesAgainstHrdd) อ่านอย่างเดียวเหมือนกัน ไม่มีเขียน/แก้/ลบฝั่ง HRDD */
+  ['POST', /^\/api\/hrdd-compare-preview$/, (_m, _url, body) =>
+    svc.checkLeavesAgainstHrdd({
+      employeeId: body?.employeeId, period: body?.period, leaveDays: body?.leaveDays ?? [],
+    })],
+
   ['POST', /^\/api\/timesheets\/([^/]+)\/reject$/, (m, _url, body, session) => {
     if (!body?.reason) throw httpError(400, 'ต้องระบุเหตุผลที่ตีกลับ');
     return svc.rejectTimesheet(decodeURIComponent(m[1]), { actor: session.nameTh, reason: body.reason });
