@@ -115,8 +115,9 @@ const auditActorLabel = (actor) => AUDIT_ACTOR_LABEL[actor] ?? actor;
 
 function toast(message, isError = false) {
   const node = el('tst');
-  node.textContent = message;
   node.classList.toggle('err', isError);
+  node.innerHTML = `<span class="tst-ic">${icon(isError ? 'alt' : 'chk')}</span><span class="tst-msg"></span>`;
+  node.querySelector('.tst-msg').textContent = message;
   node.classList.add('on');
   clearTimeout(node._timer);
   node._timer = setTimeout(() => node.classList.remove('on'), isError ? 8000 : 6000);
@@ -561,7 +562,7 @@ async function renderQueue() {
 
   main.innerHTML = `
   <div class="page">
-    <h1 class="sr-only">กล่องงาน</h1>
+    <div class="phd"><div><span class="ey">ขั้นที่ 2 จาก 4</span><h1>ตรวจ Manday</h1></div></div>
 
     <div class="card">
       <div class="filterbar">
@@ -1089,7 +1090,7 @@ async function renderCycles() {
 
   main.innerHTML = `
   <div class="page">
-    <h1 class="sr-only">รอบบิล</h1>
+    <div class="phd"><div><span class="ey">ขั้นที่ 3 จาก 4</span><h1>วางบิล &amp; ร่างอีเมล</h1></div></div>
 
     ${data.contracts.map((ct) => `
       <div class="card">

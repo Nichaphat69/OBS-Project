@@ -1188,14 +1188,20 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 
 #tst {
   position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%) translateY(14px);
-  color: #fff; padding: 14px 22px; border-radius: var(--r-card); font-size: 13px;
-  font-weight: 500; box-shadow: 0 16px 40px -12px rgba(20,32,47,.55);
+  display: flex; align-items: center; gap: 11px;
+  color: var(--ink); padding: 13px 20px 13px 16px; border-radius: var(--r-card); font-size: 13px;
+  font-weight: 500; box-shadow: 0 16px 40px -14px rgba(20,32,47,.35), var(--sh1);
   opacity: 0; pointer-events: none; transition: opacity .22s, transform .22s;
   z-index: 80; max-width: min(580px, 90vw); line-height: 1.6;
-  background: var(--ink);
+  background: var(--paper); border: 1px solid var(--rule);
 }
 #tst.on { opacity: 1; transform: translateX(-50%) translateY(0); }
-#tst.err { background: #8E2A1D; }
+#tst .tst-ic {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--okb); color: var(--ok);
+}
+#tst .tst-ic svg { width: 13px; height: 13px; }
+#tst.err .tst-ic { background: var(--crb); color: var(--cr); }
 @media (prefers-reduced-motion: reduce) { #tst { transition: none; } }
 
 /* ── สถานะว่าง / โหลด ───────────────────────────────────── */
