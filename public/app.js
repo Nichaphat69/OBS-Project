@@ -1082,7 +1082,7 @@ const CYCLE_FILTERS = {
 };
 
 async function renderCycles() {
-  const data = await api('/cycles');
+  const data = await api(`/cycles${contractQuery()}`);
 
   const all = data.cycles.slice().sort((a, b) => a.period.localeCompare(b.period));
   const filtered = all.filter(CYCLE_FILTERS[state.cycleFilter].test);
@@ -1729,7 +1729,7 @@ function bindAiHistoryTab() {
   const load = async () => {
     wrap.innerHTML = '<div class="loading">กำลังโหลด…</div>';
     try {
-      const rows = await api('/ai-reads');
+      const rows = await api(`/ai-reads${contractQuery()}`);
       wrap.innerHTML = rows.length
         ? `<div class="tw"><table style="min-width:760px">
             <thead><tr>
@@ -3598,7 +3598,7 @@ function applyDeepLinkView() {
    ค่านี้เป็นสถานะกลางของ "ทั้งระบบ" ไม่ใช่แค่ของคนที่กำลังดูอยู่คนเดียว — เก็บที่ contracts.status
    ในฐานข้อมูล (ดู setActiveContract ใน src/service.js) เปลี่ยนแล้วทุกคนที่เปิดหน้าเว็บพร้อมกันเห็นตรงกัน */
 
-/** ต่อท้าย URL ของ /dashboard, /timesheets, /invoices, /employees ให้กรองเหลือแค่สัญญาที่เลือกอยู่ */
+/** ต่อท้าย URL ของ /dashboard, /timesheets, /invoices, /employees, /cycles, /ai-reads ให้กรองเหลือแค่สัญญาที่เลือกอยู่ */
 function contractQuery() {
   return state.contractId ? `?contractId=${encodeURIComponent(state.contractId)}` : '';
 }

@@ -1153,23 +1153,44 @@ function markAiReadConfirmed(documentNo) {
   );
 }
 
-export function listAiReads() {
+/**
+ * ไม่ระบุ contractId = ทุกฉบับที่ AI เคยอ่าน · ระบุ = กรองเหลือแค่ฉบับของพนักงานที่มีอัตราจ้าง
+ * ผูกกับสัญญานั้น (ai_reads ไม่มีคอลัมน์ contract_id ตรงๆ — ต้องจับคู่ชื่อผ่าน matchEmployee()
+ * ตัวเดียวกับที่ใช้จับคู่ Timesheet จริงก่อน แล้วเช็คว่าพนักงานคนนั้นมีอัตราจ้างกับสัญญานี้ไหม)
+ * ฉบับที่จับคู่ชื่อไม่ติดเลย (employee_name เพี้ยน/ยังไม่มีในระบบ) ถูกกรองออกไปด้วยเมื่อระบุ contractId
+ * เพราะบอกไม่ได้ว่าเป็นของบริษัทไหน
+ */
+export function listAiReads({ contractId } = {}) {
   // ไม่โชว์ฉบับที่ทิ้งแล้ว (status = 'discarded') — เหมือน gmail_dismissed: กดถังขยะแล้วต้องหายจากรายการ
   // ยังเก็บแถวไว้ในตาราง (ไม่ hard-delete) เผื่อย้อนดูทีหลังผ่าน SQL ตรง ไม่มีช่องทางเรียกดูผ่านหน้าเว็บ
-  return all("SELECT * FROM ai_reads WHERE status != 'discarded' ORDER BY read_at DESC LIMIT 200").map((r) => ({
-    id: r.id,
-    source: r.source,
-    sourceEmailId: r.source_email_id,
-    fileName: r.file_name,
-    employeeName: r.employee_name,
-    period: r.period,
-    periodLabel: r.period ? thaiMonth(r.period) : null,
-    documentNo: r.document_no,
-    status: r.status,
-    model: r.model,
-    readAt: r.read_at,
-    readBy: r.read_by,
-  }));
+  const rows = all("SELECT * FROM ai_reads WHERE status != 'discarded' ORDER BY read_at DESC LIMIT 200");
+
+  const belongsToContract = (employeeName) => {
+    if (!employeeName) return false;
+    const { employee } = matchEmployee(employeeName, employeesForMatching());
+    if (!employee) return false;
+    return Boolean(get(
+      'SELECT 1 FROM assignments WHERE employee_id = $emp AND contract_id = $contractId',
+      { emp: employee.id, contractId },
+    ));
+  };
+
+  return rows
+    .filter((r) => (contractId ? belongsToContract(r.employee_name) : true))
+    .map((r) => ({
+      id: r.id,
+      source: r.source,
+      sourceEmailId: r.source_email_id,
+      fileName: r.file_name,
+      employeeName: r.employee_name,
+      period: r.period,
+      periodLabel: r.period ? thaiMonth(r.period) : null,
+      documentNo: r.document_no,
+      status: r.status,
+      model: r.model,
+      readAt: r.read_at,
+      readBy: r.read_by,
+    }));
 }
 
 export function getAiRead(id) {
@@ -3353,11 +3374,17 @@ export function listHolidays(year) {
  *
  * แยกออกมาจาก dashboard() เดิมที่ถูกลบทิ้ง เพราะแดชบอร์ดเป็นหน้ารายงาน
  * ที่ไม่มีอยู่ในเอกสารออกแบบ ส่วนรอบบิลคือจุดที่เอกสารข้อ 4.2 บังคับให้มีคนอนุมัติ
+ *
+ * ไม่ระบุ contractId = รวมทุกสัญญา · ระบุ = กรองเหลือแค่สัญญาของบริษัทที่กำลังดำเนินการอยู่
+ * (ตอนแยกออกจาก dashboard() ไม่ได้ติดตัวกรองนี้มาด้วย ทำให้หน้าเว็บเห็นการ์ดของทุกบริษัท
+ * แม้สลับบริษัทบนแถบบนแล้วก็ตาม — เหมือน dashboard()/listTimesheets())
  */
-export function billingCycles() {
+export function billingCycles({ contractId } = {}) {
   const today = isoToday();
 
-  const contracts = listContracts().map((contract) => {
+  const contracts = listContracts()
+    .filter((c) => (contractId ? c.id === contractId : true))
+    .map((contract) => {
     const periods = contractCycles(contract.id, { today });
     const billed = periods.filter((p) => p.state === CYCLE_STATE.BILLED);
     const contractValue = round2((contract.monthly_total ?? 0) * periods.length);

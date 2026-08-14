@@ -180,7 +180,8 @@ const routes = [
     svc.confirmTimesheet({ ...body, actor: session.nameTh })],
 
   /** ประวัติที่ AI เคยอ่านแล้ว ทั้งจากอัปโหลดไฟล์เองและดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง */
-  ['GET', /^\/api\/ai-reads$/, () => svc.listAiReads()],
+  ['GET', /^\/api\/ai-reads$/, (_m, url) =>
+    svc.listAiReads({ contractId: url.searchParams.get('contractId') ?? undefined })],
 
   ['GET', /^\/api\/ai-reads\/([^/]+)$/, (m) => {
     const row = svc.getAiRead(Number(m[1]));
@@ -330,7 +331,8 @@ const routes = [
     svc.activityFeed({ limit: Number(url.searchParams.get('limit') ?? 30) })],
   ['GET', /^\/api\/settings$/, () => svc.settingsSnapshot()],
   ['GET', /^\/api\/pulse$/, (_m, _url, _body, session) => svc.pulse({ actor: session.nameTh, role: session.role })],
-  ['GET', /^\/api\/cycles$/, () => svc.billingCycles()],
+  ['GET', /^\/api\/cycles$/, (_m, url) =>
+    svc.billingCycles({ contractId: url.searchParams.get('contractId') ?? undefined })],
 
   /* cycleDetail ไม่ใช่ previewCycleInvoice ตรงๆ เพราะต้องแวะเช็คกล่อง Gmail ก่อนว่าร่างถูกส่งไปหรือยัง
      แล้วขึ้นแถบ "ส่งเมลแล้ว" ให้เองโดยไม่ต้องมีคนมากดบอก (ดู syncEmailSent) */
