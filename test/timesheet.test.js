@@ -291,6 +291,24 @@ test('verifyExtraction เจอวันลาที่ไม่มีแถว
   assert.ok(result.issues.some((i) => /ไม่มีแถวในตาราง/.test(i.message)));
 });
 
+test('verifyExtraction ไม่ฟ้องวันที่ซ้ำทุกแถวถ้ารอบเดือนเองก็ผิดรูปแบบอยู่แล้ว', () => {
+  // โมเดลบางครั้งคืนสตริง "null" ที่ nullifyLiteralNullStrings แปลงเป็น null จริงแล้วก่อนถึงจุดนี้
+  const data = fakeTimesheetData('2026-01');
+  data.period = null;
+  data.days = [
+    { date: '2026-01-05', timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: null },
+    { date: '2026-01-06', timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: null },
+    { date: '2026-01-07', timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: null },
+  ];
+
+  const result = verifyExtraction(data, {});
+
+  const periodIssues = result.issues.filter((i) => /รูปแบบเดือนไม่ถูกต้อง/.test(i.message));
+  const dateIssues = result.issues.filter((i) => /ไม่อยู่ในเดือน/.test(i.message));
+  assert.equal(periodIssues.length, 1, 'ฟ้องรอบเดือนผิดแค่ครั้งเดียว');
+  assert.equal(dateIssues.length, 0, 'ไม่ต้องฟ้องซ้ำทุกแถวอีก เพราะข้อบนฟ้องแล้ว');
+});
+
 /* ── รองรับฟอร์มของลูกค้าหลายราย ───────────────────────────────────────
    ค่าที่ใช้ทดสอบคัดจากเอกสารจริง 14 ฉบับ รอบ ม.ค. 2026 (BigC · CP Axtra · Fujitsu ·
    T8 · TSG) — จำลองว่าโมเดลคัดข้อความมาตามที่เขียนในเอกสาร แล้วดูว่าโค้ดแปลงต่อได้ถูกไหม */
@@ -502,6 +520,19 @@ test('หน้าแรกอ่านชื่อเพี้ยน แต่�
   const result = await extractTimesheet(makePdf(4), { expectedPeriod: '2026-01', fetchImpl });
   assert.equal(result.data.employeeName, 'Sunee Maneekasemsuk', '3 เสียงต้องชนะ 1 เสียง');
   assert.equal(result.documents.length, 1, 'ชื่อเพี้ยนหน้าเดียวต้องไม่ทำให้แตกเป็นสองฉบับ');
+});
+
+test('โมเดลคืนสตริง "null" แทนช่องที่ไม่รู้จะใส่อะไร — "null" ปลอมต้องไม่ชนะโหวตชื่อ/รอบเดือน', async () => {
+  // เจอจริง: 26/07-Pitikorn chumphuchanapai.pdf — หน้าที่อ่านพังคืน employeeName/period เป็น
+  // สตริง "null" ทั้งที่อีกหน้าอ่านถูก ถ้าไม่กรองออก "null" จะไปแข่งโหวตแล้วชนะได้ (ดู mergePageResults)
+  const fetchImpl = fakeVisionFetchSequence([
+    pageWith({ employeeName: 'null', position: 'null', period: 'null' }),
+    pageWith({ employeeName: 'Pitikorn Chumphuchanapai', position: 'Developer', period: 'July 2026' }),
+  ]);
+
+  const result = await extractTimesheet(TWO_PAGE_PDF, { expectedPeriod: '2026-07', fetchImpl });
+  assert.equal(result.data.employeeName, 'Pitikorn Chumphuchanapai', '"null" ปลอมต้องไม่ชนะโหวต');
+  assert.equal(result.data.period, '2026-07');
 });
 
 test('ชื่อข้างลายเซ็นเป็นอีกเสียงหนึ่ง — ช่วยชี้ขาดเมื่อหัวเอกสารอ่านได้ไม่ตรงกัน', async () => {

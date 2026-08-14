@@ -539,6 +539,24 @@ const MAX_CONCURRENT_PAGES = 2;
  * @param {number} pageCount
  * @param {(pageIndex0: number) => {model: string, userContent: any, nameOverride?: string|null}} buildRequest
  */
+/**
+ * โมเดลบางครั้งไม่คืน JSON null สำหรับช่องที่มันไม่รู้จะใส่อะไร แต่คืนสตริง "null" (4 ตัวอักษร)
+ * แทน — เจอจริง: employeeName/period เป็น "null" ทั้งที่ควรว่างเปล่า ถ้าปล่อยผ่านไป mergePageResults
+ * เห็นสตริงนี้เป็นค่าจริง (truthy) จึงเอาไปนับโหวตแข่งกับคำตอบที่ถูกของหน้าอื่นได้ (ดู pickByVote)
+ * "null" ชนะโหวตได้ถ้าหน้าที่อ่านพังมีมากกว่าหรือเท่ากับหน้าที่อ่านถูก ทำให้ทั้งเอกสารพังไปด้วย
+ * (เจอจริง: 26/07-Pitikorn chumphuchanapai.pdf — period กลายเป็น "null" ทำให้ทุกวันในตาราง
+ * โดนเช็คว่า "ไม่อยู่ในเดือน null" ทั้งที่จริงมีหน้าอื่นอ่าน period ถูกอยู่) แปลงเป็น null จริงตั้งแต่
+ * รับผลจากโมเดลมาเลย กันไม่ให้ "null" ปลอมไปแข่งโหวตกับคำตอบจริงได้ตั้งแต่ต้น
+ */
+function nullifyLiteralNullStrings(value) {
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'null' ? null : value;
+  if (Array.isArray(value)) return value.map(nullifyLiteralNullStrings);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, nullifyLiteralNullStrings(v)]));
+  }
+  return value;
+}
+
 async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, modelLabel }) {
   let model;
   const settled = [];
@@ -564,6 +582,7 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
              ฝั่งอินพุตเพิ่มขึ้นเท่าตัว */
           maxTokens: 3000, fetchImpl,
         });
+        result.data = nullifyLiteralNullStrings(result.data);
         if (req.nameOverride) result.data.employeeName = req.nameOverride;
 
         /* บางหน้าโมเดลอ่านช่องชื่อพนักงานไม่ออกจริง แล้วไปคัดลอกข้อความจากช่องตำแหน่งมาใส่ชื่อแทน
@@ -808,8 +827,9 @@ export function verifyExtraction(data, { expectedPeriod } = {}) {
     });
   }
 
-  if (!/^\d{4}-\d{2}$/.test(data.period ?? '')) {
-    issues.push({ severity: 'fail', message: `รูปแบบเดือนไม่ถูกต้อง: "${data.period}"` });
+  const periodOk = /^\d{4}-\d{2}$/.test(data.period ?? '');
+  if (!periodOk) {
+    issues.push({ severity: 'fail', message: `รูปแบบเดือนไม่ถูกต้อง: "${data.period ?? 'ไม่มีข้อมูล'}"` });
   }
 
   // จำนวนวันลาในรายการต้องเท่ากับเลขสรุปท้ายตาราง
@@ -848,13 +868,17 @@ export function verifyExtraction(data, { expectedPeriod } = {}) {
     }
   }
 
-  // วันที่ทุกช่องต้องอยู่ในเดือนเดียวกัน
-  for (const row of data.days) {
-    if (!row.date?.startsWith(data.period)) {
-      issues.push({
-        severity: 'fail',
-        message: `วันที่ ${row.date} ไม่อยู่ในเดือน ${data.period}`,
-      });
+  /* วันที่ทุกช่องต้องอยู่ในเดือนเดียวกัน — ข้ามเช็คนี้ถ้ารอบเดือนเองก็ผิดรูปแบบอยู่แล้ว (ข้อบนฟ้องแล้ว)
+     ไม่งั้นเอกสารที่อ่าน period ไม่ออกเลยจะโดนฟ้องซ้ำวันละ 1 ข้อทั้งตาราง (เจอจริง 30 ข้อจาก 30 วัน
+     ทั้งที่ต้นเหตุจริงมีจุดเดียว) ทำให้ดูเหมือนพังทั้งเอกสารทั้งที่จริงมีแค่ช่องรอบเดือนช่องเดียว */
+  if (periodOk) {
+    for (const row of data.days) {
+      if (!row.date?.startsWith(data.period)) {
+        issues.push({
+          severity: 'fail',
+          message: `วันที่ ${row.date} ไม่อยู่ในเดือน ${data.period}`,
+        });
+      }
     }
   }
 

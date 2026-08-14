@@ -1035,7 +1035,7 @@ function enrichDocument(data, verification) {
         }
       : null,
     blockers: [
-      ...(employee ? [] : [`จับคู่ชื่อ "${data.employeeName}" กับพนักงานในระบบไม่ได้ — ไปเพิ่มชื่อพ้องที่หน้าข้อมูลหลักก่อน`]),
+      ...(employee ? [] : [`จับคู่ชื่อ "${data.employeeName ?? 'ไม่มีข้อมูล'}" กับพนักงานในระบบไม่ได้ — ไปเพิ่มชื่อพ้องที่หน้าข้อมูลหลักก่อน`]),
       ...(employee && !assignment ? [`${employee.nameTh} ไม่มีสัญญาที่ครอบรอบ ${data.period}`] : []),
       ...verification.issues.filter((i) => i.severity === 'fail').map((i) => i.message),
     ],
