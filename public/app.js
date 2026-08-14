@@ -2613,8 +2613,9 @@ async function renderMaster() {
           <tbody>${settings.holidays.map((h) => `
             <tr><td class="n">${dateOnly(h.date)}</td><td>${esc(h.name)}</td>
               <td>${h.customer_id ? esc(h.customer_id) : '<span class="tg mu">ทุกลูกค้า</span>'}</td>
-              <td><button class="lk hrm" data-date="${esc(h.date)}"
-                data-cus="${esc(h.customer_id ?? '')}">ลบ</button></td></tr>`).join('')}</tbody>
+              <td><button class="btn sm icon dgr hrm" data-date="${esc(h.date)}"
+                data-name="${esc(h.name)}" data-cus="${esc(h.customer_id ?? '')}"
+                title="ลบวันหยุดนี้" aria-label="ลบ">${icon('trash')}</button></td></tr>`).join('')}</tbody>
         </table></div></div>
       </div>
     </div>
@@ -2755,7 +2756,13 @@ async function renderMaster() {
 
   main.querySelectorAll('.hrm').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      if (!confirm(`ลบวันหยุดวันที่ ${dateOnly(btn.dataset.date)} ?`)) return;
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: 'ลบวันหยุดนี้?',
+        message: `"<b>${esc(btn.dataset.name)}</b>" วันที่ ${dateOnly(btn.dataset.date)} จะหายไปจากปฏิทินวันหยุด`,
+        confirmLabel: 'ลบ',
+      });
+      if (!ok) return;
       try {
         const q = new URLSearchParams({ date: btn.dataset.date });
         if (btn.dataset.cus) q.set('customerId', btn.dataset.cus);
@@ -2768,7 +2775,13 @@ async function renderMaster() {
 
   main.querySelectorAll('[data-rm-asg]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      if (!confirm(`นำ "${btn.dataset.empName}" ออกจากโครงการนี้ ?`)) return;
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: 'นำพนักงานออกจากโครงการนี้?',
+        message: `"<b>${esc(btn.dataset.empName)}</b>" จะหายไปจากรายการของโครงการนี้ — ข้อมูลพนักงาน/ชื่อพ้องเดิมยังอยู่ เผื่อย้ายไปผูกโครงการอื่นทีหลัง`,
+        confirmLabel: 'นำออก',
+      });
+      if (!ok) return;
       try {
         await api(`/assignments/${encodeURIComponent(btn.dataset.rmAsg)}`, { method: 'DELETE' });
         toast('นำออกจากโครงการแล้ว');
