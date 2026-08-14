@@ -921,6 +921,24 @@ td .nm { font-weight: 600; }
 .st.pr { color: var(--pr); background: var(--prb); border-color: var(--prl); }
 .st.mu { color: var(--mut); background: var(--hov); border-color: var(--rule); }
 
+/* ── กล่องสรุปตัวเลข 4 ช่อง (เทียบ HRDD) ── */
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.stat-tile { border: 1px solid var(--rule); border-radius: var(--r-ctl); padding: 14px 16px; background: var(--sunk); }
+.stat-tile .stv { display: block; font-size: 24px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.stat-tile .stl { display: block; margin-top: 4px; font-size: 12.5px; color: var(--mut); }
+.stat-tile.ok .stv { color: var(--ok); }
+.stat-tile.wn .stv { color: var(--wn); }
+.stat-tile.pr .stv { color: var(--pr); }
+.stat-tile.cr .stv { color: var(--cr); }
+
+/* ── แถบสีข้างแถวตารางเทียบ HRDD บอกสถานะโดยไม่ต้องอ่านป้ายก็รู้ ── */
+.hrdd-row { border-left: 3px solid var(--rule); }
+.hrdd-row.ok { border-left-color: var(--ok); }
+.hrdd-row.wn { border-left-color: var(--wn); }
+.hrdd-row.pr { border-left-color: var(--pr); }
+.hrdd-row.cr { border-left-color: var(--cr); }
+.hrdd-row .why { display: block; margin-top: 4px; font-size: 12px; color: var(--mut); line-height: 1.6; }
+
 .tg {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
   font-weight: 700; padding: 4px 10px; border-radius: var(--r-pill);

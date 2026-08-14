@@ -862,7 +862,10 @@ async function openSheet(id) {
            (อาจช้า/ล่ม) ไม่ควรทำให้รอดูข้อมูล Timesheet หลักไม่ได้ ดูสถานะ 'loading' ด้านล่าง -->
       <div class="card" id="hrddCard">
         <div class="hd"><h3>เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</h3>
-          <span class="rt" id="hrddMeta"></span></div>
+          <div class="rt" style="display:flex; align-items:center; gap:10px">
+            <span id="hrddMeta"></span>
+            <button class="btn sm" id="hrddRefreshBtn">${icon('rf', 'i sm')} รีเฟรชจาก HRDD</button>
+          </div></div>
         <div class="bd" id="hrddBody"><div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div></div>
       </div>
     </div>
@@ -995,6 +998,10 @@ async function openSheet(id) {
     }
   });
 
+  el('hrddRefreshBtn')?.addEventListener('click', () => {
+    el('hrddBody').innerHTML = '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>';
+    loadHrddCompare(id);
+  });
   loadHrddCompare(id);
 }
 
@@ -1020,7 +1027,7 @@ function renderHrddCompare(result, id) {
   const body = el('hrddBody');
   if (!meta || !body) return;   // คนกดออกจากหน้านี้ไปแล้วก่อนที่ HRDD จะตอบกลับมา
 
-  meta.textContent = result.checkedAt ? `ตรวจล่าสุด ${dt(result.checkedAt)}` : '';
+  meta.textContent = result.checkedAt ? `ซิงค์ล่าสุด ${dt(result.checkedAt)}` : '';
 
   if (result.state === 'not_connected' || result.state === 'error') {
     body.innerHTML = `
@@ -1050,28 +1057,54 @@ function renderHrddCompare(result, id) {
         ตรวจกับ HRDD แล้ว ${summary.counts.ok} จาก ${summary.total} รายการตรงกัน</span></div>`;
 
   const stats = `
-    <div class="pair" style="margin-bottom:18px">
-      <div><span class="pl">ตรงกัน</span><span class="pv" style="color:var(--ok)">${summary.counts.ok}</span></div>
-      <div><span class="pl">ประเภทไม่ตรง</span><span class="pv" style="color:var(--wn)">${summary.counts.warn}</span></div>
-      <div><span class="pl">ไม่พบใน Timesheet</span><span class="pv" style="color:var(--pr)">${summary.counts.info}</span></div>
-      <div><span class="pl">ไม่พบใน HRDD</span><span class="pv" style="color:var(--cr)">${summary.counts.bad}</span></div>
+    <div class="stat-tiles">
+      <div class="stat-tile ok"><span class="stv">${summary.counts.ok}</span><span class="stl">ตรงกัน</span></div>
+      <div class="stat-tile wn"><span class="stv">${summary.counts.warn}</span><span class="stl">ประเภทไม่ตรง</span></div>
+      <div class="stat-tile pr"><span class="stv">${summary.counts.info}</span><span class="stl">ไม่พบใน Timesheet</span></div>
+      <div class="stat-tile cr"><span class="stv">${summary.counts.bad}</span><span class="stl">ไม่พบใน HRDD</span></div>
     </div>`;
 
   const table = `
     <div class="tw"><table style="min-width:0">
-      <thead><tr><th>วันที่</th><th>Timesheet</th><th>HRDD</th><th>สถานะ</th></tr></thead>
+      <thead><tr><th>วันที่</th><th>Timesheet</th><th>HRDD</th><th>สถานะ</th><th></th></tr></thead>
       <tbody>
         ${rows.map((r) => `
-          <tr>
-            <td class="n">${dateOnly(r.date)}</td>
+          <tr class="hrdd-row ${HRDD_STATUS_TONE[r.status]}">
+            <td class="n">${dateOnly(r.date)}
+              ${r.status !== 'ok' ? `<span class="why">${hrddMismatchNote(r)}</span>` : ''}</td>
             <td>${r.tsType ? esc(r.tsType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
             <td>${r.hrddType ? esc(r.hrddType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
             <td><span class="st ${HRDD_STATUS_TONE[r.status]}">${HRDD_STATUS_LABEL[r.status]}</span></td>
+            <td>${r.status !== 'ok' ? `<button class="btn sm hrddFix" data-id="${esc(id)}">แก้ไข</button>` : ''}</td>
           </tr>`).join('')}
       </tbody>
     </table></div>`;
 
   body.innerHTML = banner + stats + table;
+
+  /* "แก้ไข" เปิดไฟล์ Timesheet ต้นฉบับให้เทียบเอง — ระบบนี้ยังไม่มีจุดแก้วันลาของ Timesheet
+     ที่ยืนยันเข้าระบบแล้วโดยตรง (แก้ได้แค่ตอนก่อนยืนยันในหน้าอัปโหลด) การแก้ที่ถูกต้องคือคนต้อง
+     คุยกับพนักงานก่อนว่าอันไหนถูก เปิดไฟล์ต้นฉบับให้ดูจึงมีประโยชน์กว่าปุ่มที่ไม่มีผลอะไรจริง */
+  body.querySelectorAll('.hrddFix').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      openPdfPreview(`/api/timesheets/${encodeURIComponent(btn.dataset.id)}/file`, 'Timesheet ต้นฉบับ');
+    });
+  });
+}
+
+/** ข้อความอธิบายว่าทำไมแถวนี้ไม่ตรงกัน — 3 แบบตามสถานะ (ดู HRDD_STATUS_LABEL) */
+function hrddMismatchNote(r) {
+  if (r.status === 'warn') {
+    return `Timesheet ระบุ "${esc(r.tsType)}" แต่ HRDD บันทึกเป็น "${esc(r.hrddType)}" `
+      + `— ควรยืนยันประเภทวันลาที่ถูกต้องกับพนักงานก่อนวางบิล`;
+  }
+  if (r.status === 'info') {
+    return `พบวันลาที่อนุมัติแล้วใน HRDD แต่ไม่ถูกระบุในตาราง Timesheet — จำนวนวันทำงานที่คำนวณได้อาจไม่ถูกต้อง`;
+  }
+  if (r.status === 'bad') {
+    return `พนักงานระบุว่าลาในตาราง Timesheet แต่ไม่พบการอนุมัติใน HRDD — อาจยังไม่ได้ยื่นคำขอลาในระบบเช็คชื่อ`;
+  }
+  return '';
 }
 
 // ── รอบบิล ──────────────────────────────────────────────────
