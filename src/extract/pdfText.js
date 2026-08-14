@@ -129,3 +129,30 @@ export function employeeNameIn(text) {
   }
   return null;
 }
+
+const EN_MONTH_ABBR = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+};
+
+/**
+ * อ่านเดือน/ปีตรงจากหัวเอกสารฟอร์มไทย "เดือน / ปี : Jul-26" — เชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็น
+ * ตัวอักษรตรงๆ ไม่ต้องผ่านการเดา ใช้ทับ period ที่โมเดลอ่านมาได้ คืนค่าเป็น "YYYY-MM" หรือ null
+ * ถ้าไม่เจอรูปแบบที่รู้จัก
+ *
+ * ".{0,2}" หลัง "ป" กันฟอนต์พังตัวเดียวกับที่ทำให้ employeeNameIn ต้องตัดที่ "ตำแหน" — เจอจริงว่า
+ * "ี" ของคำว่า "ปี" ถูก pdfjs ดึงมาเป็นโค้ด Private Use Area (U+F702) ในไฟล์เดียวกับที่ "ตำแหน่ง"
+ * พัง (U+F70A) จึงไม่ยึดสะกดคำว่า "ปี" ตรงตัว
+ *
+ * ปีที่เขียนเป็น 2 หลักท้าย ("26") หมายถึง ค.ศ. 2026 ไม่ใช่ พ.ศ. — ยืนยันจากชื่อไฟล์จริงที่ขึ้นต้น
+ * ด้วย "2026_07" คู่กับ "Jul-26" ในเนื้อไฟล์ (2026_07 - O291-Pitikorn chumphuchanapai.pdf)
+ *
+ * @returns {string|null}
+ */
+export function periodIn(text) {
+  const m = text.match(/เดือน\s*\/?\s*ป.{0,2}:?\s*([A-Za-z]{3})-(\d{2})/);
+  if (!m) return null;
+  const month = EN_MONTH_ABBR[m[1].toLowerCase()];
+  if (!month) return null;
+  return `20${m[2]}-${month}`;
+}

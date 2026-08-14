@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { employeeNameIn } from '../src/extract/pdfText.js';
+import { employeeNameIn, periodIn } from '../src/extract/pdfText.js';
 
 /* ข้อความด้านล่างคัดจากผลจริงของ extractPdfText() กับ
    "2026_07 - O291-Pitikorn chumphuchanapai.pdf" (ยืนยันด้วยการรันตรงกับไฟล์จริง 14 ส.ค. 69) —
@@ -41,4 +41,25 @@ test('employeeNameIn ยังอ่านฟอร์มภาษาอัง�
 
 test('employeeNameIn คืน null ถ้าไม่มีป้ายชื่อที่รู้จักเลย', () => {
   assert.equal(employeeNameIn('some random text with no name label at all'), null);
+});
+
+/* ยืนยันด้วยการรันตรงกับไฟล์ "2026_07 - O291-Pitikorn chumphuchanapai.pdf" (14 ส.ค. 69):
+   หัวเอกสารเขียน "เดือน / ปี : Jul-26" — ปีเป็น ค.ศ. 2 หลักท้าย ("26" = 2026 ไม่ใช่ พ.ศ.)
+   ยืนยันจากชื่อไฟล์จริงที่ขึ้นต้นด้วย "2026_07" ตรงกับ "Jul-26" ในเนื้อไฟล์ */
+test('periodIn อ่านเดือน/ปีจากหัวเอกสารฟอร์มไทย "เดือน / ปี : Jul-26" ได้ (ปี 2 หลัก = ค.ศ.)', () => {
+  const text = 'รายงานการปฏิบัติงาน\nเดือน / ปี : Jul-26\nชื่อ - สกุล : Pitikorn chumphuchanapai';
+  assert.equal(periodIn(text), '2026-07');
+});
+
+/* เจอจริง: ตัว "ี" ของ "ปี" ถูก pdfjs ดึงมาเป็นโค้ด Private Use Area (U+F702) — ฟอนต์เดียวกับที่ทำให้
+   "ตำแหน่ง" พังเป็น U+F70A (ดูเทสต์ employeeNameIn ด้านบน) เขียนด้วย fromCharCode กันเครื่องมือ
+   แปลงอักขระกลับเป็นรูปสะกดปกติโดยไม่ตั้งใจเหมือนที่เคยเจอตอนเขียนเทสต์ตัวนั้น */
+test('periodIn ทนต่อ glyph พังในคำว่า "ปี" (เจอจริง: U+F702 แทนตัว ี)', () => {
+  const brokenPii = String.fromCharCode(0x0e1b, 0xf702); // ป [U+F702 แทนที่ ี]
+  const text = `เดือน / ${brokenPii} : May-26`;
+  assert.equal(periodIn(text), '2026-05');
+});
+
+test('periodIn คืน null ถ้าไม่เจอรูปแบบเดือน/ปีที่รู้จักเลย', () => {
+  assert.equal(periodIn('some random text with no period label at all'), null);
 });

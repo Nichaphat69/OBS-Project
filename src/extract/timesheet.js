@@ -26,7 +26,7 @@ import { readFile } from 'node:fs/promises';
 import { pdf } from 'pdf-to-img';
 import { callLocalJSON, localVisionModel, localTextModel } from '../llm/localClient.js';
 import { normalizePeriod, normalizeDate, classifyDayKind, classifyLeaveType } from './normalize.js';
-import { extractPdfText, employeeNameIn } from './pdfText.js';
+import { extractPdfText, employeeNameIn, periodIn } from './pdfText.js';
 
 const TIMESHEET_SCHEMA = {
   type: 'object',
@@ -491,8 +491,9 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
               userContent:
                 `ข้างล่างนี้คือข้อความที่ดึงมาจากหน้าที่ ${i + 1}/${text.pages.length} ของเอกสาร Timesheet ` +
                 `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}\n\n${text.pages[i]}`,
-              // ชื่อจากชั้นข้อความเชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ ไม่ได้ผ่านการเดา
+              // ชื่อ/เดือนจากชั้นข้อความเชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ ไม่ได้ผ่านการเดา
               nameOverride: employeeNameIn(text.pages[i]),
+              periodOverride: periodIn(text.pages[i]),
             };
           },
           { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model} (ชั้นข้อความ)` },
@@ -518,11 +519,13 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
             `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}`,
         },
       ],
-      /* โมเดล vision มองรูปแล้วอ่านชื่อผิดบ่อยกว่าชั้นข้อความมาก (เจอจริง: "Pitikorn chumphuchanapai"
-         → "Pattison Chumphacharnou") ทั้งที่ชั้นข้อความของหน้าเดิมอ่านชื่อได้ถูกต้องอยู่แล้ว แค่โมเดล
-         ฝั่งข้อความตอบ schema พังจนต้องยอมแพ้ทั้งหน้าไปเท่านั้น — เอา nameOverride ตัวเดียวกันมาใช้ซ้ำ
-         ที่นี่ด้วย ดีกว่าปล่อยให้ vision เดาชื่อเองทั้งที่มีคำตอบที่แน่นอนกว่าอยู่แล้ว */
+      /* โมเดล vision มองรูปแล้วอ่านชื่อ/เดือนผิดบ่อยกว่าชั้นข้อความมาก (เจอจริง: ชื่อ "Pitikorn
+         chumphuchanapai" → "Pattison Chumphacharnou", เดือน "2026-05" → "2020-05") ทั้งที่ชั้น
+         ข้อความของหน้าเดิมอ่านได้ถูกต้องอยู่แล้ว แค่โมเดลฝั่งข้อความตอบ schema พังจนต้องยอมแพ้ทั้ง
+         หน้าไปเท่านั้น — เอา override ตัวเดียวกันมาใช้ซ้ำที่นี่ด้วย ดีกว่าปล่อยให้ vision เดาเองทั้งที่
+         มีคำตอบที่แน่นอนกว่าอยู่แล้ว */
       nameOverride: text?.pages?.[i] ? employeeNameIn(text.pages[i]) : null,
+      periodOverride: text?.pages?.[i] ? periodIn(text.pages[i]) : null,
     }),
     { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model}` },
   );
@@ -546,7 +549,7 @@ const MAX_CONCURRENT_PAGES = 2;
  * groupPagesByEmployee ต้องได้ผลเรียงตามลำดับหน้า จึงเรียง pageResults กลับก่อนใช้งาน
  *
  * @param {number} pageCount
- * @param {(pageIndex0: number) => {model: string, userContent: any, nameOverride?: string|null}} buildRequest
+ * @param {(pageIndex0: number) => {model: string, userContent: any, nameOverride?: string|null, periodOverride?: string|null}} buildRequest
  */
 /**
  * โมเดลบางครั้งไม่คืน JSON null สำหรับช่องที่มันไม่รู้จะใส่อะไร แต่คืนสตริง "null" (4 ตัวอักษร)
@@ -593,6 +596,7 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
         });
         result.data = nullifyLiteralNullStrings(result.data);
         if (req.nameOverride) result.data.employeeName = req.nameOverride;
+        if (req.periodOverride) result.data.period = req.periodOverride;
 
         /* บางหน้าโมเดลอ่านช่องชื่อพนักงานไม่ออกจริง แล้วไปคัดลอกข้อความจากช่องตำแหน่งมาใส่ชื่อแทน
            แบบเผลอ (เจอจริง: employeeName กับ position เป็น "Java Programmer" เหมือนกันเป๊ะ) ถ้าปล่อยผ่าน
