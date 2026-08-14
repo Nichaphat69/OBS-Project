@@ -1795,6 +1795,12 @@ td.n, .docid { white-space: nowrap; }
   display: flex; gap: 10px; justify-content: flex-end; width: 100%;
   padding: 22px 28px; border-top: 1px solid var(--hair); margin-top: 20px;
 }
+.modal-prompt-input {
+  display: block; width: 100%; margin-top: 16px; font: inherit; font-size: 13.5px;
+  color: var(--ink); background: var(--paper); border: 1px solid var(--rule);
+  border-radius: var(--r-ctl); padding: 10px 12px; resize: vertical; text-align: left;
+}
+.modal-prompt-input:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: var(--brand); }
 
 /* ── ดูไฟล์ PDF ในหน้า — .modal-backdrop.pdf ใช้ backdrop เดียวกันแต่การ์ดใหญ่เต็มจอ ─── */
 .pdf-card {

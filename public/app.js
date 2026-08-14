@@ -158,6 +158,47 @@ function confirmModal({ iconName = 'trash-solid', danger = true, title, message,
 }
 
 /**
+ * กล่องขอข้อความสั้นๆแบบมีดีไซน์ — ใช้แทน prompt() ของเบราว์เซอร์ (เหตุผลเดียวกับ confirmModal —
+ * prompt() ก็เป็น native dialog แบบเดียวกับ confirm() ถูกบล็อกได้เหมือนกันในบางเบราว์เซอร์/ส่วนขยาย
+ * กดปุ่มแล้วเหมือนไม่มีอะไรเกิดขึ้นเลย ทั้งที่จริงกำลังรอ dialog ที่ไม่มีวันโผล่มา)
+ * คืนค่าเป็น Promise<string|null> — string (ตัดช่องว่างหัวท้ายแล้ว) ถ้ากรอกแล้วกดยืนยัน
+ * null ถ้ายกเลิก/กดนอกกล่อง/กดยืนยันตอนช่องว่างเปล่า
+ */
+function promptModal({ title, message = '', placeholder = '', confirmLabel = 'ตกลง', cancelLabel = 'ยกเลิก' } = {}) {
+  return new Promise((resolve) => {
+    const root = el('modalRoot');
+    root.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-banner"></div>
+          <span class="modal-ic"><span class="modal-ic-badge brand">${icon('doc', 'i')}</span></span>
+          <div class="modal-body">
+            <h3>${esc(title)}</h3>
+            ${message ? `<p>${message}</p>` : ''}
+            <textarea id="modalPromptInput" class="modal-prompt-input" rows="3"
+              placeholder="${esc(placeholder)}"></textarea>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" id="modalCancel">${esc(cancelLabel)}</button>
+            <button class="btn pri" id="modalConfirm">${esc(confirmLabel)}</button>
+          </div>
+        </div>
+      </div>`;
+    const input = el('modalPromptInput');
+    const close = (result) => { root.innerHTML = ''; resolve(result); };
+    el('modalCancel').addEventListener('click', () => close(null));
+    el('modalConfirm').addEventListener('click', () => close(input.value.trim() || null));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) close(input.value.trim() || null);
+    });
+    root.querySelector('.modal-backdrop').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-backdrop')) close(null);
+    });
+    input.focus();
+  });
+}
+
+/**
  * เปิดดู PDF ในหน้าเว็บเลย ไม่เปิดแท็บใหม่ — เพราะเบราว์เซอร์บางเครื่องตั้งค่าให้ดาวน์โหลด
  * ไฟล์ PDF อัตโนมัติแทนเปิดดู (เจอจริงกับผู้ใช้บางคน) ต่อให้เซิร์ฟเวอร์ส่ง
  * Content-Disposition: inline มาแล้วก็ตาม — ฝัง <iframe> เองตัดปัญหานี้ไปเลย
@@ -690,7 +731,9 @@ async function renderQueue() {
   main.querySelectorAll('[data-reject]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const reason = prompt('เหตุผลที่ตีกลับให้แก้ Timesheet:');
+      const reason = await promptModal({
+        title: 'ตีกลับให้แก้ Timesheet', placeholder: 'เหตุผลที่ตีกลับ…', confirmLabel: 'ตีกลับ',
+      });
       if (!reason) return;
       try {
         await api(`/timesheets/${encodeURIComponent(btn.dataset.reject)}/reject`, {
@@ -957,7 +1000,9 @@ async function openSheet(id) {
   });
 
   el('rejectBtn').addEventListener('click', async () => {
-    const reason = prompt('เหตุผลที่ตีกลับให้แก้ Timesheet:');
+    const reason = await promptModal({
+      title: 'ตีกลับให้แก้ Timesheet', placeholder: 'เหตุผลที่ตีกลับ…', confirmLabel: 'ตีกลับ',
+    });
     if (!reason) return;
     try {
       await api(`/timesheets/${encodeURIComponent(id)}/reject`, {
@@ -2759,7 +2804,13 @@ async function renderMaster() {
     btn.addEventListener('click', async (event) => {
       event.stopPropagation();
       const label = btn.dataset.kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง';
-      if (!confirm(`ลบ${label} "${btn.dataset.alias}" ?`)) return;
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: `ลบ${label}นี้?`,
+        message: `"<b>${esc(btn.dataset.alias)}</b>" จะหายไปจากรายการ${label}`,
+        confirmLabel: 'ลบ',
+      });
+      if (!ok) return;
       try {
         const q = new URLSearchParams({ kind: btn.dataset.kind, alias: btn.dataset.alias });
         await api(`/employees/${encodeURIComponent(btn.dataset.emp)}/aliases?${q}`, { method: 'DELETE' });
