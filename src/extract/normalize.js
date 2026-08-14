@@ -164,7 +164,7 @@ export function normalizeDate(raw, period = null) {
 const KIND_PATTERNS = [
   ['weekend', [/weekend/i, /^sat$/i, /^sun$/i, /เสาร์/, /อาทิตย์/]],
   ['holiday', [/public\s*holiday/i, /holiday/i, /วันหยุด/, /นักขัตฤกษ์/, /new\s*year/i]],
-  ['leave', [/leave/i, /ลา(ป่วย|กิจ|พักร้อน)?/, /absent/i]],
+  ['leave', [/leave/i, /ลา(?!น)(ป่วย|กิจ|พักร้อน)?/, /absent/i]],
 ];
 
 const LEAVE_TYPES = [
@@ -183,9 +183,14 @@ const LEAVE_TYPES = [
  * อยู่ด้วย ต้องนับเป็นเสาร์อาทิตย์
  *
  * ห้ามส่ง jobDescription เข้ามาเป็นหนึ่งใน labels — jobDescription เป็นย่อหน้าบรรยายงาน
- * อิสระ ไม่ใช่ป้ายสถานะ regex ของวันลา (/ลา(ป่วย|กิจ|พักร้อน)?/) ไม่มีขอบเขตคำในภาษาไทย
+ * อิสระ ไม่ใช่ป้ายสถานะ regex ของวันลา (/ลา(?!น)(ป่วย|กิจ|พักร้อน)?/) ไม่มีขอบเขตคำในภาษาไทย
  * จึงจับ "ลา" ที่แทรกอยู่กลางคำอื่นได้ง่ายมาก (เจอจริง: "เวลา" และ "บุคลากร" ใน ThaiLife
  * 1-2026-Pongpun.pdf ถูกจับผิดว่าเป็นวันลา ทั้งที่เป็นวันทำงานปกติ)
+ *
+ * กันคำว่า "ลาน" (เช่น "Onsite ลานโหลด" — สถานที่ทำงาน ไม่ใช่วันลา) ด้วย negative lookahead
+ * (?!น) เพราะ jobDescription สั้นๆ แบบนี้ผ่านเข้ามาที่ classifyDayKind ได้ (ดู statusLikeJobDescription
+ * ใน mergePageResults) เจอจริง: 26/07 - Pitikorn chumphuchanapai.pdf ทำให้วันทำงานปกติ 6 วัน
+ * ถูกจับเป็นวันลาผิดๆ ทั้งที่มีเวลาเข้า-ออกจริงในตาราง (บันทึกไม่ผ่านเพราะ validate เห็นว่าขัดกัน)
  */
 export function classifyDayKind(...labels) {
   const text = labels.filter(Boolean).join(' ');

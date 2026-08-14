@@ -86,6 +86,8 @@ test('classifyDayKind จัดกลุ่มคำเรียกวันห�
   assert.equal(classifyDayKind('Vacation Leave/'), 'leave', 'Fujitsu มี / ติดท้าย');
   assert.equal(classifyDayKind(null, '', 'Working'), 'work');
   assert.equal(classifyDayKind(null), 'work', 'ไม่มีป้าย = วันทำงาน');
+  assert.equal(classifyDayKind('Onsite ลานโหลด'), 'work',
+    '"ลาน" (สถานที่) ไม่ใช่ "ลา" (วันลา) — Pitikorn chumphuchanapai.pdf');
 });
 
 test('classifyDayKind ดูป้ายจากหลายคอลัมน์รวมกัน เพราะแต่ละฟอร์มวางไว้คนละที่', () => {
