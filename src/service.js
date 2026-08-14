@@ -3323,6 +3323,24 @@ export function createEmployee({
   return listEmployees({ contractId }).find((e) => e.id === id);
 }
 
+/**
+ * นำพนักงานออกจากโครงการนี้ — ลบแค่ "อัตราจ้าง" (assignment) ที่ผูกกับสัญญานี้เท่านั้น
+ * ไม่ได้ลบตัวพนักงานออกจากระบบ (ชื่อพ้อง/ประวัติ Timesheet เดิมยังอยู่ เผื่อย้ายไปผูกสัญญาอื่นทีหลัง)
+ */
+export function removeAssignment(assignmentId, { actor }) {
+  const assignment = get(
+    'SELECT id, employee_id, contract_id FROM assignments WHERE id = $id',
+    { id: assignmentId },
+  );
+  if (!assignment) throw Object.assign(new Error('ไม่พบอัตราจ้างนี้'), { status: 404 });
+  run('DELETE FROM assignments WHERE id = $id', { id: assignmentId });
+  logAudit({
+    actor, action: 'remove_assignment', entityType: 'assignment', entityId: assignmentId,
+    detail: { employeeId: assignment.employee_id, contractId: assignment.contract_id },
+  });
+  return { ok: true };
+}
+
 export function listHolidays(year) {
   const rows = year
     ? all('SELECT * FROM holidays WHERE date LIKE $like ORDER BY date', { like: `${year}-%` })

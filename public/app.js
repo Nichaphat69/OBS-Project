@@ -2539,7 +2539,7 @@ async function renderMaster() {
 
       <div class="card"><div class="tw"><table>
         <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ชื่อพ้อง</th><th>ตำแหน่งพ้อง</th>
-          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th></tr></thead>
+          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th><th style="width:50px"></th></tr></thead>
         <tbody>${employees.map((e) => `
           <tr><td class="n">${esc(e.id)}</td>
             <td><span class="nm">${esc(e.name_th)}</span><span class="sub">${esc(e.name_en ?? '')}</span></td>
@@ -2547,7 +2547,9 @@ async function renderMaster() {
             <td>${renderAliasCell(e, 'position', e.positionAliases)}</td>
             <td>${esc(e.invoice_position)}</td>
             <td class="r n">${renderRateCell(e)}</td>
-            <td>${esc(e.customer_name ?? '—')}<span class="sub">${esc(e.quotation_no ?? '')}</span></td></tr>`).join('')}</tbody>
+            <td>${esc(e.customer_name ?? '—')}<span class="sub">${esc(e.quotation_no ?? '')}</span></td>
+            <td>${e.assignment_id ? `<button class="btn sm icon dgr" data-rm-asg="${esc(e.assignment_id)}"
+                data-emp-name="${esc(e.name_th)}" title="นำออกจากโครงการนี้" aria-label="ลบ">${icon('trash')}</button>` : ''}</td></tr>`).join('')}</tbody>
       </table></div></div>
     </div>
 
@@ -2759,6 +2761,17 @@ async function renderMaster() {
         if (btn.dataset.cus) q.set('customerId', btn.dataset.cus);
         await api(`/holidays?${q}`, { method: 'DELETE' });
         toast('ลบแล้ว');
+        renderMaster();
+      } catch (error) { toast(error.message, true); }
+    });
+  });
+
+  main.querySelectorAll('[data-rm-asg]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`นำ "${btn.dataset.empName}" ออกจากโครงการนี้ ?`)) return;
+      try {
+        await api(`/assignments/${encodeURIComponent(btn.dataset.rmAsg)}`, { method: 'DELETE' });
+        toast('นำออกจากโครงการแล้ว');
         renderMaster();
       } catch (error) { toast(error.message, true); }
     });

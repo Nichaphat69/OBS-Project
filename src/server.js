@@ -319,6 +319,11 @@ const routes = [
     requireAdmin(session);
     return svc.createEmployee({ ...body, actor: session.nameTh });
   }],
+
+  ['DELETE', /^\/api\/assignments\/([^/]+)$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.removeAssignment(decodeURIComponent(m[1]), { actor: session.nameTh });
+  }],
   ['GET', /^\/api\/invoices$/, (_m, url) =>
     svc.listInvoices({ contractId: url.searchParams.get('contractId') ?? undefined })],
   ['GET', /^\/api\/activity$/, (_m, url) =>
