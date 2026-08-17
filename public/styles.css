@@ -69,8 +69,16 @@
   --cr: #DC2626; --crb: #FEF3F2; --crl: #FECDCA;
   --lv: #EA580C; --lvb: #FFF6ED; --lvl: #F9DBAF;
   --pr: #7C3AED; --prb: #F4F3FF; --prl: #D9D6FE;
-  --pk: #DB2777; --pkb: #FDF2FA; --pkl: #FCCEEE;   /* ชมพู — ลากิจ (ตามที่ขอให้ใช้ไอคอนรถสีชมพู) */
+  --pk: #DB2777; --pkb: #FDF2FA; --pkl: #FCCEEE;
   --red: #D92D20;   /* ป้ายตัวเลขแจ้งเตือน */
+
+  /* สีไอคอนปฏิทินโดยเฉพาะ — ให้ตรงตามที่ระบุมาเป๊ะๆ (คนละชุดจากสีสถานะทั่วไปด้านบน เพราะพาสเทล
+     จางกว่ามาก ใช้เป็นตัวหนังสือ/พื้นหลังทั่วไปไม่ได้ อ่านไม่ออก) ใช้เฉพาะกับตัวไอคอนในปฏิทินเท่านั้น
+     ตัวเลขวันที่/ป้ายกำกับยังใช้สีสถานะปกติด้านบนเพื่อให้อ่านง่ายอยู่ */
+  --cal-work: #B5F88C;      /* ทำงาน (บ้าน) */
+  --cal-sick: #FF5473;      /* ลาป่วย (หัวใจแตก) */
+  --cal-personal: #DEA1FF;  /* ลากิจ (รถ) */
+  --cal-vacation: #FFAB3B;  /* ลาพักร้อน (จรวด) */
 
   /* เงาแบบนุ่มหลายชั้น ให้การ์ดดูลอยแบบสะอาด ไม่ใช่ตีกรอบหนัก
      เพิ่ม sh3 (ยกตัวตอนโฮเวอร์) กับ sh-brand (แสงฟุ้งสีแบรนด์ให้ปุ่มหลัก/จุดสำคัญเด่นขึ้น) */
@@ -103,11 +111,11 @@ body {
   color: var(--ink);
   font-size: 14px;
   line-height: 1.6;
-  font-weight: 500;
-  /* "Prompt" ฟอนต์ไทยแบบไม่มีหัว (loopless) รองรับละตินในตัวเดียวกัน ดูทันสมัยกว่าฟอนต์ระบบเดิม
-     ทั้งไทย/อังกฤษหน้าตาเป็นชุดเดียวกัน (ต่างจากเดิมที่ละตินกับไทยคนละฟอนต์ คนละน้ำหนักเส้น)
-     โหลดไม่ได้ (ออฟไลน์/บล็อก CDN) ร่วงกลับไปใช้ฟอนต์ระบบเดิมเหมือนก่อนหน้านี้ */
-  font-family: "Prompt", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+  font-weight: 400;
+  /* "Mitr" ฟอนต์ไทย+ละตินโค้งมนกว่า Prompt ที่ใช้ก่อนหน้านี้ อ่านสบายตากว่าตามที่ขอ ("ฟอนต์ที่อ่านง่าย
+     มนๆ ให้ความสบายตา") ลดน้ำหนักตัวอักษรพื้นฐานลงจาก 500 เป็น 400 ตามที่ขอ ("ความหนาน้อยลงหน่อย")
+     โหลดไม่ได้ (ออฟไลน์/บล็อก CDN) ร่วงกลับไปใช้ฟอนต์ระบบเดิมได้ตามปกติ */
+  font-family: "Mitr", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
                "Sukhumvit Set", "Leelawadee UI", "Noto Sans Thai", "IBM Plex Sans Thai",
                "Sarabun", "Thonburi", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -149,7 +157,7 @@ svg.i {
 }
 svg.i.sm { width: 13px; height: 13px; }
 svg.i.xs { width: 9px; height: 9px; stroke-width: 2; }
-svg.i.lg { width: 22px; height: 22px; stroke-width: 2.2; }
+svg.i.lg { width: 25px; height: 25px; stroke-width: 2.6; }
 svg.i.solid { stroke: none; fill: currentColor; }
 
 /* ═══ โครงหน้า — เมนูข้างถาวร + เนื้อหาเลื่อนได้ ═══ */
@@ -212,18 +220,9 @@ svg.i.solid { stroke: none; fill: currentColor; }
 #queueBadge.zero, #cycleBadge.zero { display: none; }
 
 
-/* เลขขั้นมุมไอคอน — ลำดับงานยังอ่านออกแม้หุบเมนูจนเหลือแต่ไอคอน */
-.mtab[data-step] { position: relative; }
-.mtab[data-step]::before {
-  content: attr(data-step);
-  position: absolute; left: 25px; top: 6px;
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--fnt); color: var(--paper);
-  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
-  border: 1.5px solid var(--paper);
-  font-variant-numeric: tabular-nums; transition: background .13s;
-}
-.mtab[data-step].on::before { background: var(--brand-d); border-color: #fff; }
+/* เลขขั้นมุมไอคอนถูกตัดออกตามที่ขอ ("ลบเลข 1 2 3 ออก ให้เหลือแค่ไอคอน") — เหลือแค่ไอคอนเปล่าๆ
+   ขยายใหญ่ขึ้น+หนาขึ้นแทน ให้เด่นชัดโดยไม่ต้องพึ่งตัวเลขกำกับ */
+.mtab svg.i { width: 20px; height: 20px; stroke-width: 2.1; }
 
 /* ── ท้ายเมนูข้าง ── */
 /* ปุ่มและป้ายในเมนูข้างคงมุมโค้งไว้ให้เข้ากับรายการเมนู */
@@ -247,10 +246,7 @@ body.side-collapsed { --side-w: 72px; }
 
 body.side-collapsed .mtab { justify-content: center; padding: 11px 0; gap: 0; }
 body.side-collapsed .mtab > span { display: none; }
-body.side-collapsed .mtab svg.i { width: 19px; height: 19px; }
-/* ตอนหุบ เลขขั้นกับป้ายจำนวนงานค้างแย่งมุมเดียวกันจนทับกัน
-   ป้ายจำนวนสำคัญกว่า (บอกว่ามีของค้าง) เลขขั้นย้ายไปอยู่ใน tooltip แทน */
-body.side-collapsed .mtab[data-step]::before { display: none; }
+body.side-collapsed .mtab svg.i { width: 20px; height: 20px; }
 
 /* ป้ายตัวเลขลอยมุมไอคอน — ตอนหุบไม่มีที่ให้วางเป็นแถวเดียวกับตัวหนังสือ */
 body.side-collapsed .mtab .bdg {
@@ -941,15 +937,29 @@ td .nm { font-weight: 600; }
 .st.mu { color: var(--mut); background: var(--hov); border-color: var(--rule); }
 
 /* ── กล่องสรุปตัวเลข 4 ช่อง (เทียบ HRDD) ── */
+/* กล่องสรุปตัวเลข — เดิมไอคอน+ป้ายอยู่แถวบนแล้วตัวเลขใหญ่อยู่ล่าง ทำให้กล่องดูสูงยาว
+   ("ไม่ใช่ดูยาว ให้ออกด้านข้างด้วย") เปลี่ยนเป็นไอคอนอยู่ข้าง (ซ้าย) + ตัวเลข/ป้ายซ้อนกันด้านขวา
+   แทน กล่องจึงเตี้ยลงและดูสมมาตรกว่าเดิม (ใช้ .sti/.stx คู่ใหม่ — การ์ดเทียบ HRDD ที่ใช้แค่ .stv/.stl
+   ตัวเปล่าไม่มีไอคอนไม่กระทบ) */
 .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 18px; }
-.stat-tile { border: 1px solid var(--rule); border-radius: var(--r-ctl); padding: 14px 16px; background: var(--sunk); }
-.stat-tile .stt { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; font-size: 11.5px; font-weight: 600; color: var(--mut); }
-.stat-tile .stv { display: block; font-size: 24px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
-.stat-tile .stl { display: block; margin-top: 2px; font-size: 12.5px; color: var(--mut); }
-.stat-tile.ok .stv, .stat-tile.ok .stt { color: var(--ok); }
-.stat-tile.wn .stv, .stat-tile.wn .stt { color: var(--wn); }
-.stat-tile.pr .stv, .stat-tile.pr .stt { color: var(--pr); }
-.stat-tile.cr .stv, .stat-tile.cr .stt { color: var(--cr); }
+.stat-tile {
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); padding: 14px 16px;
+  background: var(--sunk); display: flex; align-items: center; gap: 12px;
+}
+.stat-tile .sti { flex: none; display: flex; align-items: center; justify-content: center; }
+.stat-tile .stx { display: flex; flex-direction: column; min-width: 0; }
+.stat-tile .stv { font-size: 22px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1.15; }
+.stat-tile .stl { margin-top: 2px; font-size: 12px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-tile.ok .stv { color: var(--ok); }
+.stat-tile.wn .stv { color: var(--wn); }
+.stat-tile.pr .stv { color: var(--pr); }
+.stat-tile.cr .stv { color: var(--cr); }
+.stat-tile.pk .stv { color: var(--pk); }
+/* ไอคอนในกล่องสรุปใช้สีพาสเทลเดียวกับไอคอนในปฏิทิน ให้เป็นชุดสีเดียวกันทั้งหน้า */
+.stat-tile.ok .sti svg.i { color: var(--cal-work); }
+.stat-tile.cr .sti svg.i { color: var(--cal-sick); }
+.stat-tile.pr .sti svg.i { color: var(--cal-personal); }
+.stat-tile.wn .sti svg.i { color: var(--cal-vacation); }
 
 /* ── แถบสีข้างแถวตารางเทียบ HRDD บอกสถานะโดยไม่ต้องอ่านป้ายก็รู้ ── */
 .hrdd-row { border-left: 3px solid var(--rule); }
@@ -1081,25 +1091,26 @@ dl.kv dd { margin: 0; font-weight: 600; }
    เพราะขอ "สีไม่เข้ม ขอสีน่ารักๆ" */
 .cl.lv-sick { background: var(--crb); }
 .cl.lv-sick .dn { color: var(--cr); font-weight: 700; }
-.cl.lv-personal { background: var(--pkb); }
-.cl.lv-personal .dn { color: var(--pk); font-weight: 700; }
+/* ลากิจเปลี่ยนจากโทนชมพูเป็นโทนม่วงตามที่ขอล่าสุด ("ลากิจไอคอนรถยนต์ สีม่วง") */
+.cl.lv-personal { background: var(--prb); }
+.cl.lv-personal .dn { color: var(--pr); font-weight: 700; }
 .cl.lv-vacation { background: var(--wnb); }
 .cl.lv-vacation .dn { color: var(--wn); font-weight: 700; }
-.cl.lv-unpaid { background: var(--prb); }
-.cl.lv-unpaid .dn { color: var(--pr); font-weight: 700; }
+.cl.lv-unpaid { background: var(--pkb); }
+.cl.lv-unpaid .dn { color: var(--pk); font-weight: 700; }
 
-/* ไอคอนต่อวัน — เอาแค่ตัวไอคอนเปล่าๆ ใหญ่ หนา สีสด ไม่มีพื้นหลัง/ป้ายทึบครอบ (ตามที่ขอ "ไม่เอาพื้นหลัง
-   เอาแค่ตัวอิโมจิ ขอใหญ่ขึ้น หนากว่านี้") ทำงาน(บ้าน)=เขียว, ลาป่วย(หัวใจ)=แดง, ลากิจ(รถ)=ชมพู,
-   ลาพักร้อน(จรวด)=ส้ม — สีตรงตามที่ขอทุกประการ ไม่มีข้อความกำกับต่อวันอีกต่อไป (ดูคำอธิบายที่แถบ
-   ใต้ปฏิทินแทน) */
+/* ไอคอนต่อวัน — เอาแค่ตัวไอคอนเปล่าๆ ใหญ่ หนา ไม่มีพื้นหลัง/ป้ายทึบครอบ สีตรงตามที่ระบุมาเป๊ะๆ
+   (ทำงาน=#B5F88C, ลาป่วย=#FF5473, ลากิจ=#DEA1FF, ลาพักร้อน=#FFAB3B) ใช้ตัวแปรสีเฉพาะปฏิทิน
+   (--cal-*) แยกจากสีสถานะทั่วไป เพราะพาสเทลจางกว่ามาก เอาไปใช้เป็นตัวหนังสือ/ปุ่มที่อื่นจะอ่านไม่ออก
+   ไม่มีข้อความกำกับต่อวันอีกต่อไป (ดูคำอธิบายที่แถบใต้ปฏิทินแทน) */
 .dbadge {
   margin-left: auto; flex: none; display: inline-flex; align-items: center; justify-content: center;
 }
-.dbadge.workday { color: var(--ok); }
-.dbadge.lv-sick { color: var(--cr); }
-.dbadge.lv-personal { color: var(--pk); }
-.dbadge.lv-vacation { color: var(--wn); }
-.dbadge.lv-unpaid { color: var(--pr); }
+.dbadge.workday { color: var(--cal-work); }
+.dbadge.lv-sick { color: var(--cal-sick); }
+.dbadge.lv-personal { color: var(--cal-personal); }
+.dbadge.lv-vacation { color: var(--cal-vacation); }
+.dbadge.lv-unpaid { color: var(--pk); }
 
 /* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ สีแดงเหมือน HRDD (ของ HRDD เองก็ทึบแบบนี้
    ไม่ได้อยู่ในกลุ่มไอคอน "อ่อนน่ารักๆ" ที่ขอเปลี่ยน) */
@@ -1110,8 +1121,9 @@ dl.kv dd { margin: 0; font-weight: 600; }
 }
 
 /* แถบคำอธิบายไอคอนใต้ปฏิทิน — ก็อปสไตล์ HRDD เป๊ะๆ: ไอคอนอยู่ในกล่องมุมมนสีอ่อนแยกจากตัวหนังสือ
-   (ไม่ใช่ป้ายรวมทึบแบบ .dbadge) ตัวหนังสือติดสีเดียวกับไอคอน ยกเว้นวันหยุดที่เป็นป้ายทึบสีแดงล้วน
-   เหมือน HRDD เป๊ะ (ของ HRDD เองก็ไม่มีไอคอนในป้ายวันหยุดเช่นกัน) */
+   (ไม่ใช่ป้ายรวมทึบแบบ .dbadge) ยกเว้นวันหยุดที่เป็นป้ายทึบสีแดงล้วนเหมือน HRDD เป๊ะ (ของ HRDD เองก็
+   ไม่มีไอคอนในป้ายวันหยุดเช่นกัน) ตัวหนังสือใช้สีสถานะปกติให้อ่านง่าย ส่วนไอคอนใช้สีพาสเทลเฉพาะปฏิทิน
+   ตามที่ขอ (แยกกันเพราะพาสเทลจางเกินจะใช้เป็นตัวหนังสือ) */
 .cal-legend {
   display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
   margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair);
@@ -1119,9 +1131,13 @@ dl.kv dd { margin: 0; font-weight: 600; }
 /* ไอคอนแถบคำอธิบายก็เอาแค่ตัวเปล่าๆเหมือนกัน (ไม่มีกล่องสีครอบ) ใหญ่ หนา สีสด ตามที่ขอ */
 .legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; }
 .legend-item.workday { color: var(--ok); }
+.legend-item.workday svg.i { color: var(--cal-work); }
 .legend-item.sick { color: var(--cr); }
-.legend-item.personal { color: var(--pk); }
+.legend-item.sick svg.i { color: var(--cal-sick); }
+.legend-item.personal { color: var(--pr); }
+.legend-item.personal svg.i { color: var(--cal-personal); }
 .legend-item.vacation { color: var(--wn); }
+.legend-item.vacation svg.i { color: var(--cal-vacation); }
 .legend-item.holiday {
   padding: 5px 14px; border-radius: var(--r-pill); background: var(--cr); color: #fff;
 }
@@ -1572,8 +1588,9 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
 .pair .pv.c { color: var(--cr); }
 
 /* แถวที่ต้องรีบ */
-tbody tr.urgent { background: #FFFAF3; }
-tbody tr.urgent:hover { background: #FFF5E8; }
+/* พื้นหลังแถวด่วนเปลี่ยนเป็นขาวล้วนตามที่ขอ ("เปลี่ยนพื้นหลัง...เป็นสีขาวทั้งหมด") — ความเร่งด่วน
+   ยังเห็นได้จากป้าย "เลยกำหนดวางบิล"/"เกินกำหนด" ในแถวอยู่แล้ว ไม่ต้องพึ่งสีพื้นหลังช่วยอีกชั้น */
+tbody tr.urgent:hover { background: var(--hov); }
 
 /* ── มือถือ ─────────────────────────────────────────────── */
 @media (max-width: 880px) {
@@ -1660,7 +1677,23 @@ td.n, .docid { white-space: nowrap; }
 }
 
 /* ═══ ปุ่มแก้ข้อมูลหลักในตาราง ═══ */
-/* ปุ่มแก้ไขวางไว้ในเซลล์เดียวกับข้อมูล คนแก้ตรงจุดที่เห็นปัญหาได้เลย */
+/* ปุ่ม "+ ชื่อพ้อง/ตำแหน่งพ้อง" กับ "แก้เรท" (.lk) ไม่เคยมีสไตล์พื้นฐานมาก่อน — เดิมเป็นปุ่ม
+   <button> เปล่าๆที่ยืมหน้าตาปุ่มดิบของเบราว์เซอร์มาตรงๆ (ที่มาของความ "โบราณมาก") ทำเป็นกรอบ
+   ไม่มีพื้นหลัง เส้นขอบสีฟ้า มุมมนละมุนตามที่ขอ */
+.lk {
+  display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 12px;
+  font-weight: 600; color: var(--brand); background: var(--paper);
+  border: 1.5px solid var(--brand); border-radius: var(--r-pill);
+  padding: 4px 12px; cursor: pointer; transition: background .13s var(--ease);
+}
+.lk:hover { background: var(--tint); }
+.lk.edrate{ display:inline-flex; margin-top:3px; }
+
+/* แท็กชื่อพ้อง/ตำแหน่งพ้อง — เดิมเป็นสีเทาอ่อนเรียบๆ (.tg.mu) เปลี่ยนเป็นสีพาสเทลแยกชนิดตามที่ขอ:
+   ชื่อพ้อง = ฟ้าอ่อน, ตำแหน่งพ้อง = เหลืองอ่อน ให้แยกแยะง่ายและดูสดใสขึ้น */
+.tg.alias-name { color: var(--brand-d); background: #DDFEFF; border-color: #B8F3F5; }
+.tg.alias-position { color: #8A6D00; background: #FFFDDD; border-color: #F5EFA8; }
+
 .tg.alias{ display:inline-flex; align-items:center; gap:4px; }
 .tg.alias .ax{ border:none; background:none; cursor:pointer; padding:0 0 0 2px;
   color:var(--mut); font-size:13px; line-height:1; font-family:inherit; }
@@ -1691,7 +1724,6 @@ td.n, .docid { white-space: nowrap; }
 .rateEditRow .cancel{ color:var(--mut); }
 .rateEditRow .save:hover{ color:var(--brand); }
 .rateEditRow .cancel:hover{ color:var(--cr); }
-.lk.edrate{ display:block; margin-top:3px; font-weight:400; }
 
 /* แถวเพิ่มวันหยุด */
 .hadd{ display:grid; grid-template-columns:170px 1fr auto; gap:8px; align-items:center; }

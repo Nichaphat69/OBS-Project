@@ -814,6 +814,9 @@ async function openSheet(id) {
   const sheet = await api(`/timesheets/${encodeURIComponent(id)}`);
   const manday = sheet.manday;
   const dayCounts = manday?.calendar?.counts ?? { workday: 0, leave: 0, holiday: 0, weekend: 0 };
+  // สรุปประจำเดือนขอให้แยกวันลาแต่ละประเภทแทนยอดรวม "ลา" อันเดียว ("ขอให้มีครบทุกสถานะ")
+  const leaveCounts = { sick: 0, personal: 0, vacation: 0, unpaid: 0 };
+  for (const l of manday?.leaveDays ?? []) leaveCounts[l.type] = (leaveCounts[l.type] ?? 0) + 1;
   const failures = (manday?.checks ?? []).filter((c) => c.severity === 'fail');
   const step = sheet.status === 'billed' ? 4
     : failures.length || !sheet.check?.checked ? 2
@@ -976,10 +979,12 @@ async function openSheet(id) {
         <div class="hd"><h3>สรุปประจำเดือน</h3></div>
         <div class="bd">
           <div class="stat-tiles">
-            <div class="stat-tile ok"><span class="stt">${icon('home', 'i sm')} ทำงาน</span><span class="stv">${int(dayCounts.workday)}</span><span class="stl">วัน</span></div>
-            <div class="stat-tile wn"><span class="stt">${icon('heart', 'i sm')} ลา</span><span class="stv">${int(dayCounts.leave)}</span><span class="stl">วัน</span></div>
-            <div class="stat-tile pr"><span class="stt">${icon('bell', 'i sm')} วันหยุด</span><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วัน</span></div>
-            <div class="stat-tile"><span class="stt">${icon('cal', 'i sm')} เสาร์–อาทิตย์</span><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">วัน</span></div>
+            <div class="stat-tile ok"><span class="sti">${icon('home', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">ทำงาน (วัน)</span></span></div>
+            <div class="stat-tile cr"><span class="sti">${icon('heart', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.sick)}</span><span class="stl">ลาป่วย (วัน)</span></span></div>
+            <div class="stat-tile pr"><span class="sti">${icon('car', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.personal)}</span><span class="stl">ลากิจ (วัน)</span></span></div>
+            <div class="stat-tile wn"><span class="sti">${icon('rocket', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.vacation)}</span><span class="stl">ลาพักร้อน (วัน)</span></span></div>
+            <div class="stat-tile"><span class="sti">${icon('cal', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">เสาร์–อาทิตย์ (วัน)</span></span></div>
+            <div class="stat-tile pk"><span class="sti">${icon('bell', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วันหยุด (วัน)</span></span></div>
           </div>
           <div class="fsec" style="margin-top:0">
             <div class="fsec-h"><b>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</b></div>
@@ -2541,7 +2546,7 @@ function renderAliasCell(e, kind, aliases) {
         <button class="ax cancel" title="ยกเลิก">×</button>
       </span>`;
     }
-    return `<span class="tg mu alias aliastag" title="${esc(a.source ?? '')} — คลิกเพื่อแก้ไข"
+    return `<span class="tg alias-${kind} alias aliastag" title="${esc(a.source ?? '')} — คลิกเพื่อแก้ไข"
         data-emp="${esc(e.id)}" data-kind="${kind}" data-alias="${esc(a.alias)}">${esc(a.alias)}<button
         class="ax rm" data-emp="${esc(e.id)}" data-kind="${kind}"
         data-alias="${esc(a.alias)}" title="ลบ${label}นี้">×</button></span>`;
