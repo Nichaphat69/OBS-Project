@@ -3562,7 +3562,7 @@ async function syncBadges() {
 
   const chip = el('envChip');
   chip.className = `env ${p.flowAccountMode === 'dry-run' ? 'dry' : 'live'}`;
-  chip.innerHTML = `<i></i> FlowAccount: ${esc(p.flowAccountMode)}`;
+  chip.innerHTML = `<span class="sw"></span> FlowAccount: ${esc(p.flowAccountMode)}`;
 
   /* ชื่อบนแถบบนต้องเป็นชื่อเดียวกับที่ audit log บันทึก ไม่ใช่ป้ายตกแต่ง — มาจาก session ที่ login เข้ามา */
   const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', user: 'ผู้ใช้งาน' };

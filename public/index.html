@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ระบบวางบิล Outsource — iPassion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- ฟอนต์ "Prompt" — sans-serif ไทยแบบไม่มีหัว (loopless) ดูทันสมัยกว่าฟอนต์ระบบเดิม ตามที่ขอให้
+     หน้าตาใกล้เคียง HRDD — โหลดไม่ได้ (ออฟไลน์/บล็อก) ก็ยังร่วงกลับไปใช้ฟอนต์ระบบเดิมได้ตามปกติ -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/styles.css?v=__BUILD__">
 </head>
 <body>
@@ -79,7 +84,7 @@
     <div class="ctxpop" id="contractSwitchPop" role="listbox"
          aria-label="เลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่" hidden></div>
   </div>
-  <span class="env dry" id="envChip"><i></i> …</span>
+  <span class="env dry" id="envChip"><span class="sw"></span> …</span>
   <span class="mast-date" id="mastDate"></span>
   <div class="bellwrap">
     <button class="bell" id="bellBtn" title="การแจ้งเตือน" aria-label="การแจ้งเตือน"

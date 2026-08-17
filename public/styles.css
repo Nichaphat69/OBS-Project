@@ -101,9 +101,11 @@ body {
   color: var(--ink);
   font-size: 14px;
   line-height: 1.6;
-  /* ละตินและตัวเลขจากฟอนต์ระบบ (SF Pro บน mac · Segoe UI บน Windows)
-     ตัวไทยตกไปที่ฟอนต์ UI ของแต่ละ OS — Sukhumvit Set บน mac · Leelawadee UI บน Windows */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+  font-weight: 500;
+  /* "Prompt" ฟอนต์ไทยแบบไม่มีหัว (loopless) รองรับละตินในตัวเดียวกัน ดูทันสมัยกว่าฟอนต์ระบบเดิม
+     ทั้งไทย/อังกฤษหน้าตาเป็นชุดเดียวกัน (ต่างจากเดิมที่ละตินกับไทยคนละฟอนต์ คนละน้ำหนักเส้น)
+     โหลดไม่ได้ (ออฟไลน์/บล็อก CDN) ร่วงกลับไปใช้ฟอนต์ระบบเดิมเหมือนก่อนหน้านี้ */
+  font-family: "Prompt", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
                "Sukhumvit Set", "Leelawadee UI", "Noto Sans Thai", "IBM Plex Sans Thai",
                "Sarabun", "Thonburi", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -386,14 +388,27 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   .login-art { display: none; }
 }
 
+/* พื้นหลังขาว+เส้นกรอบสี (ไม่ใช่พื้นทึบ) แล้วใช้สวิต on/off แทนจุดกลมเดิม บอกสถานะเชื่อมต่อ
+   FlowAccount ชัดเจนกว่า: live = สวิตติด (สีเขียว เลื่อนขวา), sandbox/dry-run = สวิตดับ (เทา เลื่อนซ้าย) */
 .env {
-  display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px;
-  font-weight: 600; padding: 5px 13px; border-radius: var(--r-pill);
-  letter-spacing: .01em;
+  display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px;
+  font-weight: 600; padding: 5px 12px 5px 6px; border-radius: var(--r-pill);
+  letter-spacing: .01em; background: var(--paper);
 }
-.env i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.env.dry { color: var(--wn); background: var(--wnb); border: 1px solid var(--wnl); }
-.env.live { color: var(--ok); background: var(--okb); border: 1px solid var(--okl); }
+.env .sw {
+  position: relative; width: 26px; height: 15px; border-radius: 999px; flex: none;
+  transition: background .15s var(--ease);
+}
+.env .sw::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+  border-radius: 50%; background: #fff; transition: left .15s var(--ease);
+  box-shadow: 0 1px 2px rgba(16,24,40,.25);
+}
+.env.dry { color: var(--wn); border: 1.5px solid var(--wnl); }
+.env.dry .sw { background: var(--rule); }
+.env.live { color: var(--ok); border: 1.5px solid var(--okl); }
+.env.live .sw { background: var(--ok); }
+.env.live .sw::after { left: 13px; }
 
 /* ── หน้า ───────────────────────────────────────────────── */
 .page { padding: 32px 36px 100px; max-width: var(--wrap); }
@@ -584,7 +599,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 .ctxbtn {
   display: flex; align-items: center; gap: 9px; font: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer; height: var(--h-ctl); padding: 0 14px; color: var(--brand-d);
-  border: 1px solid var(--bline); background: var(--tint); border-radius: var(--r-ctl);
+  border: 1.5px solid var(--bline); background: var(--paper); border-radius: var(--r-ctl);
   min-width: 200px; max-width: 280px; transition: background .13s var(--ease), border-color .13s var(--ease);
 }
 .ctxbtn svg.i:first-child { color: var(--brand); flex: none; }

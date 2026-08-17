@@ -3251,15 +3251,15 @@ const FEED_SHAPE = {
 };
 
 export function activityFeed({ limit = 30 } = {}) {
+  /* action ที่ไม่ได้กำหนดหน้าตาไว้ใน FEED_SHAPE = เรื่องหลังบ้าน/ตั้งค่าระบบ (เช่น set_active_contract,
+     notify_line_needs_check) ไม่ใช่เหตุการณ์ที่คนใช้งานต้องรู้ — เดิม fallback โชว์ชื่อ action ดิบๆ
+     ทำให้แจ้งเตือนปนกันไปหมด ตอนนี้ตัดออกจากฟีดไปเลย เหลือแค่รายการที่คัดไว้ใน FEED_SHAPE เท่านั้น */
   const rows = auditLog({ limit: limit * 3 })
-    .filter((r) => !FEED_SKIP.has(r.action))
+    .filter((r) => !FEED_SKIP.has(r.action) && FEED_SHAPE[r.action])
     .slice(0, limit);
 
   const items = rows.map((r) => {
-    const shape = FEED_SHAPE[r.action];
-    const base = shape
-      ? shape(r.detail, r.entity_id)
-      : { level: 'info', title: r.action, detail: r.entity_id ?? '', link: null };
+    const base = FEED_SHAPE[r.action](r.detail, r.entity_id);
     return { ...base, id: r.id, at: r.at, by: ACTOR_LABEL[r.actor] ?? r.actor };
   });
 
