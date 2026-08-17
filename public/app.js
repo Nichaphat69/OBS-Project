@@ -751,9 +751,13 @@ async function renderQueue() {
 const DOW = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const KIND_LABEL = { workday: 'ทำงาน', weekend: null, holiday: null, leave: 'ลา' };
 
+/* ไอคอน+ป้ายต่อวันในปฏิทิน ทำตามแบบปฏิทิน HRDD (ที่มีป้าย "⌂ WFH" กำกับทุกวัน) แต่ใช้โทนสีฟ้า
+   ของระบบเราเองแทนสีม่วงชมพูของ HRDD — วันทำงาน/วันหยุดขึ้นป้าย ส่วนเสาร์-อาทิตย์ไม่ขึ้น (เหมือน HRDD) */
+const DAY_BADGE_ICON = { workday: 'chk', holiday: 'bell', leave: 'cal' };
+
 function calendarHtml(manday) {
   if (!manday?.calendar) return '<div class="empty">ยังไม่ได้คำนวณ</div>';
-  const { days, counts } = manday.calendar;
+  const { days } = manday.calendar;
   // ปฏิทินเริ่มวันจันทร์: getUTCDay() 0=อาทิตย์ → คอลัมน์ 6
   const firstCol = (days[0].dayOfWeek + 6) % 7;
   const leaveByDate = new Map(manday.leaveDays.map((l) => [l.date, l.type]));
@@ -767,8 +771,11 @@ function calendarHtml(manday) {
         : d.kind === 'holiday' ? d.label
         : d.kind === 'weekend' ? (d.dayOfWeek === 6 ? 'เสาร์' : 'อาทิตย์')
         : KIND_LABEL[d.kind];
-      return `<div class="cl ${d.kind}"><span class="dn">${d.day}</span>
-        ${label ? `<span class="dl">${esc(label)}</span>` : ''}</div>`;
+      const badgeIcon = DAY_BADGE_ICON[d.kind];
+      const badge = badgeIcon
+        ? `<span class="dbadge ${d.kind}">${icon(badgeIcon, 'i xs')}${label ? esc(label) : ''}</span>`
+        : (label ? `<span class="dl">${esc(label)}</span>` : '');
+      return `<div class="cl ${d.kind}"><span class="dn">${d.day}</span>${badge}</div>`;
     }),
   ];
 
@@ -776,12 +783,6 @@ function calendarHtml(manday) {
     <div class="cal">
       ${DOW.map((d) => `<div class="dw">${d}</div>`).join('')}
       ${cells.join('')}
-    </div>
-    <div class="lgd">
-      <span><i style="background:#fff;border-color:var(--rule)"></i> ทำงาน <b>${counts.workday}</b> วัน</span>
-      <span><i style="background:var(--lvb);border-color:var(--lvl)"></i> ลา <b>${counts.leave}</b> วัน</span>
-      <span><i style="background:var(--tint);border-color:var(--bline)"></i> วันหยุด <b>${counts.holiday}</b> วัน</span>
-      <span><i style="background:var(--snk)"></i> เสาร์–อาทิตย์ <b>${counts.weekend}</b> วัน</span>
     </div>`;
 }
 
@@ -795,6 +796,7 @@ async function openSheet(id) {
   syncBadges();
   const sheet = await api(`/timesheets/${encodeURIComponent(id)}`);
   const manday = sheet.manday;
+  const dayCounts = manday?.calendar?.counts ?? { workday: 0, leave: 0, holiday: 0, weekend: 0 };
   const failures = (manday?.checks ?? []).filter((c) => c.severity === 'fail');
   const step = sheet.status === 'billed' ? 4
     : failures.length || !sheet.check?.checked ? 2
@@ -909,7 +911,7 @@ async function openSheet(id) {
         <div class="bd">
           <dl class="kv" style="margin-bottom:16px">
             <dt>ไฟล์ที่อัปโหลด</dt><dd>${esc(sheet.sourceFile ?? '—')}</dd>
-            <dt>อ้างอิงอีเมล</dt><dd class="n">${esc(sheet.sourceEmailId ?? 'ไม่ได้ระบุ')}</dd>
+            <dt>อ้างอิงอีเมล</dt><dd>${esc(sheet.sourceEmailSubject ?? sheet.sourceEmailId ?? 'ไม่ได้ระบุ')}</dd>
             <dt>ชื่อที่เขียนในไฟล์</dt><dd>${esc(sheet.rawEmployeeName ?? '—')}</dd>
             <dt>ตำแหน่งที่เขียนในไฟล์</dt><dd>${esc(sheet.rawPosition ?? '—')}</dd>
             <dt>Total Work days</dt><dd class="n">${int(sheet.reportedWorkDays)}</dd>
@@ -929,8 +931,7 @@ async function openSheet(id) {
       </div>
 
       <div class="card">
-        <div class="hd"><h3>ป้ายกำกับรายวันที่อ่านได้</h3>
-          <span class="rt">ตารางทำงานทั้งเดือนตามที่ AI อ่านได้</span></div>
+        <div class="hd"><h3>รายละเอียด</h3></div>
         <div class="bd flush"><div class="tw"><table style="min-width:760px">
           <thead><tr><th>วันที่</th><th>ป้ายกำกับ</th><th>เวลาเข้า–ออก</th><th>รายละเอียดงาน</th></tr></thead>
           <tbody>${sheet.dayLabels.length
@@ -949,16 +950,29 @@ async function openSheet(id) {
 
     <!-- คำนวณ Manday -->
     <div class="tp ${state.tab === 3 ? 'on' : ''}" data-pane="3">
-      <div class="card">
-        <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3></div>
-        <div class="bd">${calendarHtml(manday)}</div>
-      </div>
+      <div class="g3">
+        <div class="card">
+          <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3></div>
+          <div class="bd">${calendarHtml(manday)}</div>
+        </div>
 
-      <div class="card">
-        <div class="hd"><h3>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</h3></div>
-        <div class="bd">${manday?.remarkLines?.length
-          ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
-          : '<div class="empty">ไม่มีวันลา จึงไม่มีหมายเหตุ</div>'}</div>
+        <div class="card">
+          <div class="hd"><h3>สรุปประจำเดือน</h3></div>
+          <div class="bd">
+            <div class="stat-tiles">
+              <div class="stat-tile ok"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">ทำงาน (วัน)</span></div>
+              <div class="stat-tile wn"><span class="stv">${int(dayCounts.leave)}</span><span class="stl">ลา (วัน)</span></div>
+              <div class="stat-tile pr"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วันหยุด (วัน)</span></div>
+              <div class="stat-tile"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">เสาร์–อาทิตย์ (วัน)</span></div>
+            </div>
+            <div class="fsec" style="margin-top:0">
+              <div class="fsec-h"><b>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</b></div>
+              ${manday?.remarkLines?.length
+                ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
+                : '<div class="empty">ไม่มีวันลา จึงไม่มีหมายเหตุ</div>'}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2419,8 +2433,9 @@ function bindUploadTab() {
             fileName: current.fileName,
             readModel: current.model,
             approvedBy: field('rBy').value.trim() || null,
-            // มาจาก Gmail ก็ผูกเลขอีเมลไว้ด้วย จะได้รู้ว่าใบนี้มาจากเมลฉบับไหน
+            // มาจาก Gmail ก็ผูกเลขอีเมล+หัวข้อไว้ด้วย จะได้รู้ว่าใบนี้มาจากเมลฉบับไหน
             sourceEmailId: current.sourceEmailId ?? null,
+            sourceEmailSubject: current.email?.subject ?? null,
             approvedAt: current.approvedAt ?? null,
           }),
         });

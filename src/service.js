@@ -381,6 +381,7 @@ export function getTimesheet(id) {
     approvedBy: row.approved_by,
     approvedAt: row.approved_at,
     sourceEmailId: row.source_email_id,
+    sourceEmailSubject: row.source_email_subject,
     extraction: row.extraction ? JSON.parse(row.extraction) : null,
     manday: computed,
     leaveDays: leave,
@@ -1053,6 +1054,7 @@ export async function confirmTimesheet({
   extraction,
   fileName = null,
   sourceEmailId = null,
+  sourceEmailSubject = null,
   approvedBy = null,
   approvedAt = null,
   readModel = null,
@@ -1092,6 +1094,7 @@ export async function confirmTimesheet({
       ? { fileBase64: Buffer.from(fileBytes).toString('base64') }
       : { filePath: `upload://${documentNo}` }),
     sourceEmailId,
+    sourceEmailSubject,
     approvedBy,
     approvedAt,
     expectedPeriod: data.period,
@@ -1695,6 +1698,7 @@ async function notifyNeedsCheck({ client } = {}) {
  * @param {string} [input.fileBase64]          ไฟล์เป็น base64 (ถ้า n8n อยู่ต่างเครื่อง)
  * @param {string} [input.fileName]
  * @param {string} [input.sourceEmailId]
+ * @param {string} [input.sourceEmailSubject]  หัวข้ออีเมลต้นทาง — ใช้โชว์หน้า "ที่มาของข้อมูล" เท่านั้น
  * @param {string} [input.receivedAt]          ISO datetime ที่รับอีเมล
  * @param {string} [input.approvedBy]          ผู้อนุมัติฝั่งลูกค้า
  * @param {string} [input.expectedPeriod]      'YYYY-MM'
@@ -1707,6 +1711,7 @@ export async function ingestTimesheet({
   fileBase64,
   fileName = null,
   sourceEmailId = null,
+  sourceEmailSubject = null,
   receivedAt = new Date().toISOString(),
   approvedBy = null,
   /* วันที่ลูกค้าอนุมัติ Timesheet — ถ้าไม่ส่งมาจะเดาเป็นวันที่ 28 ของรอบ
@@ -1822,10 +1827,10 @@ export async function ingestTimesheet({
 
     run(
       `INSERT INTO timesheets
-         (id, contract_id, employee_id, period, source_email_id, source_file, source_file_bytes,
-          received_at, approved_by, approved_at, raw_employee_name, raw_position,
+         (id, contract_id, employee_id, period, source_email_id, source_email_subject, source_file,
+          source_file_bytes, received_at, approved_by, approved_at, raw_employee_name, raw_position,
           reported_workdays, reported_leave, extraction, status)
-       VALUES ($id, $contract, $emp, $period, $emailId, $file, $fileBytes,
+       VALUES ($id, $contract, $emp, $period, $emailId, $emailSubject, $file, $fileBytes,
                $receivedAt, $approvedBy, $approvedAt, $rawName, $rawPos,
                $workdays, $leave, $extraction, 'extracted')`,
       {
@@ -1834,6 +1839,7 @@ export async function ingestTimesheet({
         emp: employee.id,
         period,
         emailId: sourceEmailId,
+        emailSubject: sourceEmailSubject,
         file: fileName ?? (typeof filePath === 'string' ? filePath : null),
         fileBytes,
         receivedAt,

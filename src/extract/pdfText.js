@@ -171,6 +171,57 @@ export function periodIn(text) {
  *
  * @returns {{employeeSignatureName: string|null, projectManagerSignatureName: string|null}}
  */
+/* วันในเดือนของ period ("YYYY-MM") — ใช้เป็นเกณฑ์ความมั่นใจของ dayRowsIn ด้านล่าง:
+   ถ้าพาร์สแถวได้ไม่ครบทุกวันตามจำนวนนี้ แปลว่ายังไม่แน่ใจว่าใช่ฟอร์มนี้จริงหรือพาร์สพลาดบางแถว
+   ไม่ควร override ครึ่งๆกลางๆ */
+function daysInMonth(period) {
+  const m = period.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]), 0).getDate();
+}
+
+/**
+ * แยกแต่ละแถวของตาราง Timesheet ฟอร์ม "TIMESHEET" (คอลัมน์ No./Date/Day/Project/Normal In/
+ * Normal Out/Break/OT In/OT Out/OT Break/Job Description/Remark/Normal/OT/Total) ตรงจากชั้น
+ * ข้อความ — เชื่อถือได้กว่าที่โมเดลตอบมามาก
+ *
+ * เจอจริง (17 ส.ค. 69, "Timesheet_Pitikorn_Chumphuchanapai_May_2026.pdf"): โมเดลในเครื่อง
+ * (google/gemma-4-e4b) "หมดแรง" กลางตารางที่มีหลายสิบแถว แล้วเดาซ้ำค่าชุดเดียวกันทั้งเดือน — ทุกวัน
+ * ได้ "เวลาเข้า-ออก 9:00-18:00" และ "รายละเอียดงาน OT" เหมือนกันหมด (แม้แต่วันที่ 1 พ.ค. ซึ่งเป็น
+ * วันหยุดแรงงานในไฟล์จริงก็โดนใส่ค่าเดียวกันด้วย) ทั้งที่แต่ละวันในไฟล์จริงเวลาและงานไม่เหมือนกันเลย
+ *
+ * แต่ละแถวจริงมีรูปแบบ "<ลำดับ> <DD/MM/YY> <วัน> [<โปรเจกต์>] [<เข้า> <ออก> <พัก> <งาน>] <ปกติ> <OT> <รวม>"
+ * ตัดตัวเลข 3 ตัวท้าย (คอลัมน์สรุปชั่วโมงของแถวนั้น) ออกก่อน ส่วนที่เหลือถ้ามีรูปแบบเวลา "H:MM H:MM"
+ * ถือว่าเป็นวันทำงาน ดึงเวลาเข้า-ออกกับข้อความหลังเวลาพักมาเป็นรายละเอียดงาน ไม่มีรูปแบบเวลาถือว่า
+ * ไม่ได้ทำงาน (เสาร์–อาทิตย์/วันหยุด)
+ *
+ * คืน null ถ้าพาร์สแถวไม่ได้ครบทุกวันในเดือนตาม period ที่ให้มา — ไม่มั่นใจว่าใช่ฟอร์มนี้จริงทั้งหมด
+ * ไม่ควร override ครึ่งๆกลางๆ ดีกว่าปล่อยให้โมเดลตอบเองทั้งหมด
+ *
+ * @returns {{date: string, timeIn: string|null, timeOut: string|null, jobDescription: string|null}[]|null}
+ */
+export function dayRowsIn(text, period) {
+  const expectedCount = period ? daysInMonth(period) : null;
+  if (!expectedCount) return null;
+
+  const rows = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\d{1,2}\s+(\d{2})\/(\d{2})\/(\d{2})\s+\p{L}{2,3}\s+(.*)$/u);
+    if (!m) continue;
+    const [, dd, mm, yy, rest] = m;
+    const trail = rest.match(/^(.*?)\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*$/);
+    if (!trail) continue;
+    const work = trail[1].trim().match(/(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s+[\d.]+\s*(.*)$/);
+    rows.push({
+      date: `20${yy}-${mm}-${dd}`,
+      timeIn: work ? work[1] : null,
+      timeOut: work ? work[2] : null,
+      jobDescription: work ? (work[3].trim() || null) : null,
+    });
+  }
+  return rows.length === expectedCount ? rows : null;
+}
+
 export function signatureNamesIn(text, employeeName) {
   const headerIdx = text.search(/Employee'?s?\s*Signature\s+Project\s*Manager'?s?\s*Signature\s*\(TLI\)/i);
   if (headerIdx === -1) return { employeeSignatureName: null, projectManagerSignatureName: null };

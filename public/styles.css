@@ -144,6 +144,7 @@ svg.i {
   stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
 }
 svg.i.sm { width: 13px; height: 13px; }
+svg.i.xs { width: 9px; height: 9px; stroke-width: 2; }
 svg.i.solid { stroke: none; fill: currentColor; }
 
 /* ═══ โครงหน้า — เมนูข้างถาวร + เนื้อหาเลื่อนได้ ═══ */
@@ -1055,13 +1056,16 @@ dl.kv dd { margin: 0; font-weight: 600; }
 }
 .cl.leave .dn, .cl.leave .dl { color: var(--lv); font-weight: 700; }
 
-.lgd {
-  display: flex; gap: 22px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px;
-  border-top: 1px solid var(--hair); font-size: 12.5px; color: var(--ink2);
+/* ป้ายไอคอน+ข้อความต่อวัน — ทำตามปฏิทิน HRDD (ป้าย "⌂ WFH" กำกับทุกวัน) แต่ใช้โทนสีฟ้าของระบบเราเอง
+   แทนสีม่วงชมพูของ HRDD วันลายังคงใช้สีแดง/ส้ม (var(--lv)) เหมือนเดิมเพราะเป็นวันที่ต้องสะดุดตา */
+.dbadge {
+  display: inline-flex; align-items: center; gap: 4px; width: fit-content;
+  font-size: 10px; font-weight: 700; padding: 2px 7px 2px 6px; border-radius: var(--r-pill);
+  white-space: nowrap;
 }
-.lgd span { display: inline-flex; align-items: center; gap: 8px; }
-.lgd i { width: 13px; height: 13px; flex: none; border: 1px solid var(--rule); }
-.lgd b { font-variant-numeric: tabular-nums; }
+.dbadge.workday { background: var(--tint); color: var(--brand-d); }
+.dbadge.holiday { background: var(--brand); color: #fff; }
+.dbadge.leave { background: var(--lv); color: #fff; }
 
 /* ── สมุดคำนวณ ──────────────────────────────────────────── */
 .ldg td { padding: 13px 22px; font-size: 13.5px; }

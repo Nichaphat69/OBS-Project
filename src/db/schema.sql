@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS timesheets (
   contract_id       TEXT NOT NULL REFERENCES contracts(id),
   employee_id       TEXT REFERENCES employees(id),
   period            TEXT NOT NULL,        -- 'YYYY-MM'
-  source_email_id   TEXT,
+  source_email_id      TEXT,
+  source_email_subject TEXT,
   source_file       TEXT,
   source_file_bytes BLOB,               -- ไฟล์ PDF ต้นฉบับ — เก็บไว้ให้แนบอีเมล/ดูย้อนหลังได้
   received_at       TEXT NOT NULL,

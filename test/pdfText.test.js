@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { employeeNameIn, periodIn, signatureNamesIn } from '../src/extract/pdfText.js';
+import { employeeNameIn, periodIn, signatureNamesIn, dayRowsIn } from '../src/extract/pdfText.js';
 
 /* ข้อความด้านล่างคัดจากผลจริงของ extractPdfText() กับ
    "2026_07 - O291-Pitikorn chumphuchanapai.pdf" (ยืนยันด้วยการรันตรงกับไฟล์จริง 14 ส.ค. 69) —
@@ -94,4 +94,48 @@ test('signatureNamesIn คืน null ทั้งคู่ถ้าไม่เ
     employeeSignatureName: null,
     projectManagerSignatureName: null,
   });
+});
+
+/* เจอจริง (17 ส.ค. 69, "Timesheet_Pitikorn_Chumphuchanapai_May_2026.pdf" — รันตรงกับไฟล์จริงยืนยันแล้ว):
+   โมเดลในเครื่อง (google/gemma-4-e4b) หมดแรงกลางตารางที่มี 31 แถว แล้วเดาซ้ำ "เวลาเข้า-ออก 9:00-18:00"
+   กับ "รายละเอียดงาน OT" เหมือนกันทุกวัน (แม้แต่วันแรงงานที่ไม่ได้ทำงานก็โดนใส่ค่าปลอมด้วย) ทั้งที่ในไฟล์
+   จริงแต่ละวันเวลาเข้า-ออกและงานไม่เหมือนกันเลย — ต้องพาร์สตารางตรงจากชั้นข้อความแทนการเชื่อโมเดล */
+test('dayRowsIn พาร์สตารางฟอร์ม "TIMESHEET" ได้ครบทุกวันในเดือน แยกวันทำงานจริง/วันหยุดถูกต้อง', () => {
+  const lines = [];
+  // กุมภาพันธ์ 2569 (ค.ศ. 2026) มี 28 วัน (ไม่ใช่ปีอธิกสุรทิน)
+  for (let day = 1; day <= 28; day += 1) {
+    const dow = new Date(2026, 1, day).getDay(); // 0=อาทิตย์ .. 6=เสาร์
+    const dd = String(day).padStart(2, '0');
+    lines.push(dow === 0 || dow === 6
+      ? `${day} ${dd}/02/26 ${dow === 0 ? 'Sun' : 'Sat'} 0.00 0.00 0.00`
+      : `${day} ${dd}/02/26 Wed PRJ1 9:00 18:00 1.00 งานวันที่ ${dd} กุมภาพันธ์ 8.00 0.00 8.00`);
+  }
+  const text =
+    'No. Date Day Project Normal In Normal Out Break (hrs) OT In OT Out OT Break (hrs) Job Description / Remark Normal OT Total\n' +
+    `${lines.join('\n')}\nTOTAL 160.00 0.00 160.00\n` +
+    "Employee's Signature Project Manager's Signature (TLI)\nSomchai Jaidee Someone Else\n28/02/2026 28/02/2026";
+
+  const rows = dayRowsIn(text, '2026-02');
+  assert.equal(rows.length, 28);
+  assert.deepEqual(rows.find((r) => r.date === '2026-02-02'), {
+    date: '2026-02-02', timeIn: '9:00', timeOut: '18:00', jobDescription: 'งานวันที่ 02 กุมภาพันธ์',
+  });
+  const offDay = rows.find((r) => new Date(2026, 1, Number(r.date.slice(-2))).getDay() % 6 === 0);
+  assert.deepEqual(offDay, { date: offDay.date, timeIn: null, timeOut: null, jobDescription: null });
+});
+
+/* เจอจริงกับ "Timesheet_Pitikorn_Chumphuchanapai_June_2026.pdf": บางแถวมีรายละเอียดงานยาวจน
+   ขึ้นบรรทัดใหม่หลายบรรทัด (มี URL คั่นเป็นบรรทัดๆ) ทำให้ตัวเลข 3 ตัวท้าย (Normal/OT/Total) ของแถว
+   นั้นไม่อยู่บรรทัดเดียวกับวันที่ พาร์สแถวนั้นไม่ได้ — ต้องคืน null ทั้งก้อน ไม่ override ครึ่งๆกลางๆ
+   ดีกว่าใช้ข้อมูลที่พาร์สได้ไม่ครบ */
+test('dayRowsIn คืน null ถ้าพาร์สแถวไม่ได้ครบทุกวันในเดือน (ไม่มั่นใจว่ารูปแบบตารางตรงกันทั้งหมด)', () => {
+  const text =
+    'No. Date Day Project Normal In Normal Out Break (hrs) OT In OT Out OT Break (hrs) Job Description / Remark Normal OT Total\n' +
+    '1 01/06/26 Mon PRJ1 9:00 18:00 1.00 งานปกติ 8.00 0.00 8.00\n' +
+    '2 02/06/26 Tue PRJ1 9:00 18:00 1.00\nhttps://example.com/a\nงานที่มีลิงก์คั่นบรรทัด\n8.00 0.00 8.00';
+  assert.equal(dayRowsIn(text, '2026-06'), null);
+});
+
+test('dayRowsIn คืน null ถ้าไม่มี period ให้คำนวณจำนวนวันในเดือน', () => {
+  assert.equal(dayRowsIn('1 01/05/26 Fri PRJ1 9:00 18:00 1.00 งาน 8.00 0.00 8.00', null), null);
 });

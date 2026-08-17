@@ -26,7 +26,7 @@ import { readFile } from 'node:fs/promises';
 import { pdf } from 'pdf-to-img';
 import { callLocalJSON, localVisionModel, localTextModel } from '../llm/localClient.js';
 import { normalizePeriod, normalizeDate, classifyDayKind, classifyLeaveType } from './normalize.js';
-import { extractPdfText, employeeNameIn, periodIn, signatureNamesIn } from './pdfText.js';
+import { extractPdfText, employeeNameIn, periodIn, signatureNamesIn, dayRowsIn } from './pdfText.js';
 
 const TIMESHEET_SCHEMA = {
   type: 'object',
@@ -488,6 +488,7 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
             if (approvalPage) return { shortCircuitData: approvalPage };
             const nameOverride = employeeNameIn(text.pages[i]);
             const signatures = signatureNamesIn(text.pages[i], nameOverride);
+            const periodOverride = periodIn(text.pages[i]);
             return {
               model: localTextModel(),
               userContent:
@@ -495,9 +496,10 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
                 `(เอกสารอาจถูกแบ่งเป็นหลายหน้า) อ่านเฉพาะข้อมูลที่เห็นในหน้านี้ตาม schema ที่กำหนด${hint}\n\n${text.pages[i]}`,
               // ชื่อ/เดือน/ชื่อผู้เซ็นจากชั้นข้อความเชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ ไม่ได้ผ่านการเดา
               nameOverride,
-              periodOverride: periodIn(text.pages[i]),
+              periodOverride,
               employeeSignatureNameOverride: signatures.employeeSignatureName,
               projectManagerSignatureNameOverride: signatures.projectManagerSignatureName,
+              dayRowsOverride: dayRowsIn(text.pages[i], periodOverride ?? expectedPeriod ?? null),
             };
           },
           { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model} (ชั้นข้อความ)` },
@@ -526,9 +528,10 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
       /* โมเดล vision มองรูปแล้วอ่านชื่อ/เดือน/ชื่อผู้เซ็นผิดบ่อยกว่าชั้นข้อความมาก (เจอจริง: ชื่อ "Pitikorn
          chumphuchanapai" → "Pattison Chumphacharnou", เดือน "2026-05" → "2020-05", ชื่อผู้อนุมัติ
          ฝั่งลูกค้าในช่อง Project Manager's Signature (TLI) → หลุดไปอ่านคำว่า "Employee" ที่เป็นป้ายชื่อ
-         ฝั่งซ้ายของบรรทัดเดียวกันมาแทน) ทั้งที่ชั้นข้อความของหน้าเดิมอ่านได้ถูกต้องอยู่แล้ว แค่โมเดลฝั่ง
-         ข้อความตอบ schema พังจนต้องยอมแพ้ทั้งหน้าไปเท่านั้น — เอา override ตัวเดียวกันมาใช้ซ้ำที่นี่ด้วย
-         ดีกว่าปล่อยให้ vision เดาเองทั้งที่มีคำตอบที่แน่นอนกว่าอยู่แล้ว */
+         ฝั่งซ้ายของบรรทัดเดียวกันมาแทน, ตารางรายวัน 31 แถว → เดาซ้ำค่าเดียวกันทั้งเดือน "9:00-18:00"/
+         "OT" ดู dayRowsIn ใน pdfText.js) ทั้งที่ชั้นข้อความของหน้าเดิมอ่านได้ถูกต้องอยู่แล้ว แค่โมเดล
+         ฝั่งข้อความตอบ schema พังจนต้องยอมแพ้ทั้งหน้าไปเท่านั้น — เอา override ตัวเดียวกันมาใช้ซ้ำที่นี่
+         ด้วย ดีกว่าปล่อยให้ vision เดาเองทั้งที่มีคำตอบที่แน่นอนกว่าอยู่แล้ว */
       nameOverride: text?.pages?.[i] ? employeeNameIn(text.pages[i]) : null,
       periodOverride: text?.pages?.[i] ? periodIn(text.pages[i]) : null,
       employeeSignatureNameOverride: text?.pages?.[i]
@@ -536,6 +539,9 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
         : null,
       projectManagerSignatureNameOverride: text?.pages?.[i]
         ? signatureNamesIn(text.pages[i], employeeNameIn(text.pages[i])).projectManagerSignatureName
+        : null,
+      dayRowsOverride: text?.pages?.[i]
+        ? dayRowsIn(text.pages[i], periodIn(text.pages[i]) ?? expectedPeriod ?? null)
         : null,
     }),
     { expectedPeriod, fetchImpl, modelLabel: (model) => `local:${model}` },
@@ -561,7 +567,8 @@ const MAX_CONCURRENT_PAGES = 2;
  *
  * @param {number} pageCount
  * @param {(pageIndex0: number) => {model: string, userContent: any, nameOverride?: string|null, periodOverride?: string|null,
- *   employeeSignatureNameOverride?: string|null, projectManagerSignatureNameOverride?: string|null}} buildRequest
+ *   employeeSignatureNameOverride?: string|null, projectManagerSignatureNameOverride?: string|null,
+ *   dayRowsOverride?: {date: string, timeIn: string|null, timeOut: string|null, jobDescription: string|null}[]|null}} buildRequest
  */
 /**
  * โมเดลบางครั้งไม่คืน JSON null สำหรับช่องที่มันไม่รู้จะใส่อะไร แต่คืนสตริง "null" (4 ตัวอักษร)
@@ -612,6 +619,20 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
         if (req.employeeSignatureNameOverride) result.data.employeeSignatureName = req.employeeSignatureNameOverride;
         if (req.projectManagerSignatureNameOverride) {
           result.data.projectManagerSignatureName = req.projectManagerSignatureNameOverride;
+        }
+        /* dayRowsOverride มีก็ต่อเมื่อพาร์สแถวได้ครบทุกวันในเดือนเท่านั้น (ดู dayRowsIn) — มั่นใจพอที่
+           จะแทนที่ days ทั้งก้อนของโมเดล ดีกว่าจะไปไล่ merge ทีละวัน เพราะโมเดลอาจไม่ได้คืนวันที่จริง
+           มาครบด้วยซ้ำ (เจอจริง: เดาซ้ำ 19 แถวแรกของเดือนแทนที่จะเป็น 19 วันทำงานจริงที่กระจายทั้งเดือน)
+           เอาเฉพาะแถววันทำงานจริง (มีเวลาเข้า) — วันหยุด/เสาร์-อาทิตย์ไม่ต้องมีแถวใน days เลย เหมือน
+           พฤติกรรมเดิมตอนอ่านถูก (ingestTimesheet ก็กรองแถวไม่มี label/timeIn ทิ้งอยู่แล้ว) และเลี่ยง
+           ปัญหา classifyDayKind เข้าใจผิดว่าวันหยุดเป็นวันทำงานเพราะไม่มีป้ายกำกับให้เดา */
+        if (req.dayRowsOverride) {
+          result.data.days = req.dayRowsOverride
+            .filter((r) => r.timeIn)
+            .map((r) => ({
+              date: r.date, timeIn: r.timeIn, timeOut: r.timeOut,
+              label: null, type: null, remark: null, jobDescription: r.jobDescription,
+            }));
         }
 
         /* บางหน้าโมเดลอ่านช่องชื่อพนักงานไม่ออกจริง แล้วไปคัดลอกข้อความจากช่องตำแหน่งมาใส่ชื่อแทน

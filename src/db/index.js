@@ -44,6 +44,9 @@ const ADDED_COLUMNS = [
   ['employees', 'hrdd_employee_code', 'TEXT'],
   // contactId ฝั่ง FlowAccount ของลูกค้า — ดูคอมเมนต์ที่ schema.sql กัน contact ซ้ำทุกเดือน
   ['customers', 'flowaccount_contact_id', 'TEXT'],
+  // หัวข้ออีเมลต้นทาง — source_email_id เดิมเก็บแค่ message id (อ่านไม่รู้เรื่อง) หน้า "ที่มาของข้อมูล"
+  // จะได้โชว์ชื่ออีเมลจริงแทนรหัสดิบได้ ใบเก่าก่อนมีคอลัมน์นี้จะเป็น NULL (ไม่มีให้ย้อนไปหา ไม่ใช่บั๊ก)
+  ['timesheets', 'source_email_subject', 'TEXT'],
 ];
 
 function addMissingColumns(database) {
