@@ -940,12 +940,13 @@ td .nm { font-weight: 600; }
 /* ── กล่องสรุปตัวเลข 4 ช่อง (เทียบ HRDD) ── */
 .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 18px; }
 .stat-tile { border: 1px solid var(--rule); border-radius: var(--r-ctl); padding: 14px 16px; background: var(--sunk); }
+.stat-tile .stt { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; font-size: 11.5px; font-weight: 600; color: var(--mut); }
 .stat-tile .stv { display: block; font-size: 24px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
-.stat-tile .stl { display: block; margin-top: 4px; font-size: 12.5px; color: var(--mut); }
-.stat-tile.ok .stv { color: var(--ok); }
-.stat-tile.wn .stv { color: var(--wn); }
-.stat-tile.pr .stv { color: var(--pr); }
-.stat-tile.cr .stv { color: var(--cr); }
+.stat-tile .stl { display: block; margin-top: 2px; font-size: 12.5px; color: var(--mut); }
+.stat-tile.ok .stv, .stat-tile.ok .stt { color: var(--ok); }
+.stat-tile.wn .stv, .stat-tile.wn .stt { color: var(--wn); }
+.stat-tile.pr .stv, .stat-tile.pr .stt { color: var(--pr); }
+.stat-tile.cr .stv, .stat-tile.cr .stt { color: var(--cr); }
 
 /* ── แถบสีข้างแถวตารางเทียบ HRDD บอกสถานะโดยไม่ต้องอ่านป้ายก็รู้ ── */
 .hrdd-row { border-left: 3px solid var(--rule); }
@@ -1051,25 +1052,24 @@ dl.kv dd { margin: 0; font-weight: 600; }
   font-size: 11.5px; font-weight: 600; letter-spacing: 0;
   color: var(--fnt); text-align: center; padding-bottom: 8px;
 }
+/* เลขวันที่กับไอคอนป้ายอยู่แถวเดียวกัน (เลขซ้าย ป้ายชิดขวา) ตามแบบ HRDD เป๊ะๆ — ใช้ flex-wrap
+   แล้วดัน .dbadge ไปชิดขวาด้วย margin-left:auto ส่วนวันหยุดมีแบนเนอร์เต็มความกว้างเพิ่มอีกแถว
+   (.dbanner ตั้ง flex-basis:100% บังคับขึ้นบรรทัดใหม่) เหมือนที่ HRDD ทำกับวันหยุดนักขัตฤกษ์ */
 .cl {
-  min-height: 64px; border: 1px solid var(--hair);
-  background: var(--paper); padding: 8px 9px;
-  display: flex; flex-direction: column; gap: 3px;
+  min-height: 68px; border: 1px solid var(--hair);
+  background: var(--paper); padding: 8px 8px 9px;
+  display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 5px;
 }
-.cl .dn { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.cl .dl { font-size: 10px; line-height: 1.35; color: var(--mut); }
+.cl .dn { flex: none; font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cl .dbadge { margin-left: auto; }
 .cl.vd { border-style: dashed; background: transparent; opacity: .4; }
 .cl.workday { border-color: var(--rule); }
-.cl.workday .dl { color: var(--ok); font-weight: 600; }
 .cl.weekend { background: var(--sunk); border-color: var(--hair); }
 .cl.weekend .dn { color: var(--fnt); font-weight: 600; }
-.cl.holiday { background: var(--tint); border-color: var(--bline); }
-.cl.holiday .dn { color: var(--brand-d); }
-.cl.holiday .dl { color: var(--brand-d); font-weight: 600; }
-.cl.leave {
-  background: var(--lvb); border-color: var(--lv); border-width: 1.5px;
-}
-.cl.leave .dn, .cl.leave .dl { color: var(--lv); font-weight: 700; }
+.cl.holiday { background: var(--crb); border-color: var(--crl); }
+.cl.holiday .dn { color: var(--cr); }
+.cl.leave { background: var(--lvb); border-color: var(--lv); border-width: 1.5px; }
+.cl.leave .dn { color: var(--lv); font-weight: 700; }
 
 /* ป้ายไอคอน+ข้อความต่อวัน — ทำตามปฏิทิน HRDD (ป้าย "⌂ WFH" กำกับทุกวัน) แต่ใช้โทนสีฟ้าของระบบเราเอง
    แทนสีม่วงชมพูของ HRDD วันลายังคงใช้สีแดง/ส้ม (var(--lv)) เหมือนเดิมเพราะเป็นวันที่ต้องสะดุดตา */
@@ -1079,8 +1079,16 @@ dl.kv dd { margin: 0; font-weight: 600; }
   white-space: nowrap;
 }
 .dbadge.workday { background: var(--tint); color: var(--brand-d); }
-.dbadge.holiday { background: var(--brand); color: #fff; }
+.dbadge.holiday { background: var(--cr); color: #fff; }
 .dbadge.leave { background: var(--lv); color: #fff; }
+
+/* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ สีแดงเหมือน HRDD (ไม่ได้ขอให้เปลี่ยนสีนี้ แค่ป้าย
+   ทำงานที่ขอให้เปลี่ยนจากม่วงเป็นน้ำเงินเท่านั้น) */
+.dbanner {
+  display: flex; align-items: center; gap: 5px; flex-basis: 100%;
+  font-size: 9.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px;
+  background: var(--cr); color: #fff; line-height: 1.3;
+}
 
 /* แถบคำอธิบายไอคอนใต้ปฏิทิน — ตามแบบ HRDD ที่มีแถบนี้ใต้ตารางเดือนเสมอ */
 .cal-legend {

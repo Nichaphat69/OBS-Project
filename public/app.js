@@ -748,38 +748,42 @@ async function renderQueue() {
 
 // ── รายละเอียด Timesheet ────────────────────────────────────
 
-const DOW = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
-const KIND_LABEL = { workday: 'ทำงาน', weekend: null, holiday: null, leave: 'ลา' };
+const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-/* ไอคอน+ป้ายต่อวันในปฏิทิน ทำตามแบบปฏิทิน HRDD (ที่มีป้ายไอคอน+ข้อความกำกับทุกวัน เช่น "⌂ WFH")
-   แต่ระบบนี้ไม่มีข้อมูลตำแหน่งงาน (WFH/Onsite) เหมือน HRDD — เป็นระบบคำนวณ Manday ไม่ใช่ระบบเช็คชื่อ
-   จึงให้ไอคอนแยกตามชนิดวันที่มีข้อมูลจริงแทน: วันทำงาน/วันหยุด/วันลาแต่ละประเภท (ป่วย/กิจ/พักร้อน)
-   ส่วนเสาร์-อาทิตย์ไม่ขึ้นป้าย (เหมือน HRDD ที่เสาร์-อาทิตย์ก็ไม่มีป้ายเช่นกัน) */
-const DAY_BADGE_ICON = { workday: 'chk', holiday: 'bell' };
+/* ไอคอน+ป้ายต่อวันในปฏิทิน ทำตามแบบปฏิทิน HRDD เป๊ะๆ ตามที่ขอ: ไอคอนสีอยู่มุมขวาบนของวันนั้นๆ
+   (แถวเดียวกับเลขวันที่ ไม่ใช่วางไว้ใต้เลขวันแบบเดิม), วันหยุดขึ้นแบนเนอร์เต็มความกว้างใต้เลขวันที่
+   (แบบเดียวกับที่ HRDD ทำกับวันหยุดนักขัตฤกษ์), เสาร์-อาทิตย์ไม่มีป้ายเลย — ใช้โทนสีฟ้าของระบบเราเอง
+   แทนสีม่วงของ HRDD (ตามที่ขอ "เปลี่ยนแค่สีจากม่วงเป็นน้ำเงิน") ส่วนวันหยุดคงสีแดงไว้เหมือน HRDD
+
+   ระบบนี้ไม่มีข้อมูลตำแหน่งงาน (WFH/Onsite) เหมือน HRDD เพราะเป็นระบบคำนวณ Manday ไม่ใช่ระบบเช็คชื่อ
+   เข้า-ออกงาน จึงให้ไอคอนแยกตามชนิดวันที่มีข้อมูลจริงในระบบแทน: ทำงาน/วันหยุด/วันลาแต่ละประเภท
+   (ป่วย/กิจ/พักร้อน) — ไม่ใส่ WFH/Onsite ปลอมๆที่ไม่มีข้อมูลจริงรองรับ */
 const LEAVE_ICON = { sick: 'heart', personal: 'case', vacation: 'send', unpaid: 'cal' };
 const LEAVE_TH = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง' };
 
 function calendarHtml(manday) {
   if (!manday?.calendar) return '<div class="empty">ยังไม่ได้คำนวณ</div>';
   const { days } = manday.calendar;
-  // ปฏิทินเริ่มวันจันทร์: getUTCDay() 0=อาทิตย์ → คอลัมน์ 6
-  const firstCol = (days[0].dayOfWeek + 6) % 7;
+  // ปฏิทินเริ่มวันอาทิตย์: getUTCDay() 0=อาทิตย์ ตรงกับคอลัมน์แรกพอดี ไม่ต้องเลื่อน
+  const firstCol = days[0].dayOfWeek;
   const leaveByDate = new Map(manday.leaveDays.map((l) => [l.date, l.type]));
 
   const cells = [
     ...Array.from({ length: firstCol }, () => '<div class="cl vd"></div>'),
     ...days.map((d) => {
-      const leaveType = leaveByDate.get(d.date);
-      const label = d.kind === 'leave'
-        ? (LEAVE_TH[leaveType] ?? 'ลา')
-        : d.kind === 'holiday' ? d.label
-        : d.kind === 'weekend' ? (d.dayOfWeek === 6 ? 'เสาร์' : 'อาทิตย์')
-        : KIND_LABEL[d.kind];
-      const badgeIcon = d.kind === 'leave' ? (LEAVE_ICON[leaveType] ?? 'cal') : DAY_BADGE_ICON[d.kind];
-      const badge = badgeIcon
-        ? `<span class="dbadge ${d.kind}">${icon(badgeIcon, 'i xs')}${label ? esc(label) : ''}</span>`
-        : (label ? `<span class="dl">${esc(label)}</span>` : '');
-      return `<div class="cl ${d.kind}"><span class="dn">${d.day}</span>${badge}</div>`;
+      if (d.kind === 'holiday') {
+        return `<div class="cl holiday"><span class="dn">${d.day}</span>
+          <span class="dbanner">${icon('bell', 'i xs')}${esc(d.label ?? 'วันหยุด')}</span></div>`;
+      }
+      // เสาร์-อาทิตย์ไม่มีป้ายเลย เหมือน HRDD เป๊ะๆ — คอลัมน์ก็บอกอยู่แล้วว่าเป็นวันไหน
+      if (d.kind === 'weekend') return `<div class="cl weekend"><span class="dn">${d.day}</span></div>`;
+      if (d.kind === 'leave') {
+        const leaveType = leaveByDate.get(d.date);
+        return `<div class="cl leave"><span class="dn">${d.day}</span>
+          <span class="dbadge leave">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i xs')}${esc(LEAVE_TH[leaveType] ?? 'ลา')}</span></div>`;
+      }
+      return `<div class="cl workday"><span class="dn">${d.day}</span>
+        <span class="dbadge workday">${icon('chk', 'i xs')}ทำงาน</span></div>`;
     }),
   ];
 
@@ -857,7 +861,7 @@ async function openSheet(id) {
     </div>
 
     <div class="tabs" role="tablist">
-      ${['ภาพรวม', 'ไฟล์ต้นทาง', 'คำนวณ Manday'].map((t, i) =>
+      ${['ภาพรวม', 'รายละเอียด', 'ปฏิทิน'].map((t, i) =>
         `<button class="tab ${state.tab === i + 1 ? 'on' : ''}" data-tab="${i + 1}">${t}</button>`).join('')}
     </div>
 
@@ -971,10 +975,10 @@ async function openSheet(id) {
         <div class="hd"><h3>สรุปประจำเดือน</h3></div>
         <div class="bd">
           <div class="stat-tiles">
-            <div class="stat-tile ok"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">ทำงาน (วัน)</span></div>
-            <div class="stat-tile wn"><span class="stv">${int(dayCounts.leave)}</span><span class="stl">ลา (วัน)</span></div>
-            <div class="stat-tile pr"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วันหยุด (วัน)</span></div>
-            <div class="stat-tile"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">เสาร์–อาทิตย์ (วัน)</span></div>
+            <div class="stat-tile ok"><span class="stt">${icon('chk', 'i sm')} ทำงาน</span><span class="stv">${int(dayCounts.workday)}</span><span class="stl">วัน</span></div>
+            <div class="stat-tile wn"><span class="stt">${icon('heart', 'i sm')} ลา</span><span class="stv">${int(dayCounts.leave)}</span><span class="stl">วัน</span></div>
+            <div class="stat-tile pr"><span class="stt">${icon('bell', 'i sm')} วันหยุด</span><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วัน</span></div>
+            <div class="stat-tile"><span class="stt">${icon('cal', 'i sm')} เสาร์–อาทิตย์</span><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">วัน</span></div>
           </div>
           <div class="fsec" style="margin-top:0">
             <div class="fsec-h"><b>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</b></div>
