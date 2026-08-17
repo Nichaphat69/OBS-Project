@@ -2230,10 +2230,10 @@ function readResultHtml(read, employees = []) {
           </div>`).join('')}</div>
       </div>
 
-      <div class="fsec">
-        <div class="fsec-h"><b>เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</b>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="hrddMeta" style="font-size:12px;color:var(--mut)"></span>
+      <div class="fsec hrdd">
+        <div class="fsec-h"><b>${icon('list-chk', 'i sm')} เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</b>
+          <div class="hrdd-actions">
+            <span class="hrddMeta"></span>
             <button class="btn sm hrddRefreshBtn" type="button">${icon('rf', 'i sm')} รีเฟรชจาก HRDD</button>
           </div></div>
         <div class="hrddBody">${read.matching.employee
@@ -2250,7 +2250,7 @@ function readResultHtml(read, employees = []) {
               : '—'}</span></li>
           <li><span class="l">ผู้อนุมัติฝั่งลูกค้า</span>
             <span class="v ${d.signedByProjectManager ? '' : 'mu'}">${d.signedByProjectManager
-              ? esc(d.projectManagerSignatureName || read.approvedBy || d.position || 'พบลายเซ็น')
+              ? esc(d.projectManagerSignatureName || read.approvedBy || 'พบลายเซ็น')
               : '—'}</span></li>
         </ul>
       </div>

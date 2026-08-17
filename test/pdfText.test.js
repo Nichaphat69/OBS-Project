@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { employeeNameIn, periodIn } from '../src/extract/pdfText.js';
+import { employeeNameIn, periodIn, signatureNamesIn } from '../src/extract/pdfText.js';
 
 /* ข้อความด้านล่างคัดจากผลจริงของ extractPdfText() กับ
    "2026_07 - O291-Pitikorn chumphuchanapai.pdf" (ยืนยันด้วยการรันตรงกับไฟล์จริง 14 ส.ค. 69) —
@@ -62,4 +62,36 @@ test('periodIn ทนต่อ glyph พังในคำว่า "ปี" (�
 
 test('periodIn คืน null ถ้าไม่เจอรูปแบบเดือน/ปีที่รู้จักเลย', () => {
   assert.equal(periodIn('some random text with no period label at all'), null);
+});
+
+/* ยืนยันด้วยการรันตรงกับไฟล์ "Timesheet_Pitikorn_Chumphuchanapai_May_2026.pdf" (17 ส.ค. 69):
+   ท้ายฟอร์ม "TIMESHEET" (ต่างจากฟอร์ม "รายงานการปฏิบัติงาน" ที่ทดสอบไว้ด้านบน) มีบรรทัดชื่อผู้เซ็น
+   2 คอลัมน์ที่ pdfjs ต่อรวมเป็นสตริงเดียว ("Pitikorn Chumphuchanapai Nichaphat Chokrak") — เจอจริงว่า
+   โมเดล vision อ่านชื่อผู้อนุมัติฝั่งลูกค้าผิดเป็นคำว่า "Employee" (หลุดมาจากป้ายฝั่งซ้ายของบรรทัด
+   หัวตาราง "Employee's Signature") ต้องใช้ employeeName ที่อ่านได้แม่นแล้วเป็นหมุดตัดบรรทัดนี้แทน */
+test('signatureNamesIn แยกชื่อผู้เซ็น 2 คอลัมน์ที่ถูกต่อรวมเป็นบรรทัดเดียว โดยใช้ employeeName เป็นหมุดตัด', () => {
+  const text =
+    'Total Work days : 19 Leave / Sick (days) : 0 Total Hours : 152.00\n' +
+    "Employee's Signature Project Manager's Signature (TLI)\n" +
+    'Pitikorn Chumphuchanapai Nichaphat Chokrak\n' +
+    '31/05/2026 31/05/2026';
+  assert.deepEqual(signatureNamesIn(text, 'Pitikorn Chumphuchanapai'), {
+    employeeSignatureName: 'Pitikorn Chumphuchanapai',
+    projectManagerSignatureName: 'Nichaphat Chokrak',
+  });
+});
+
+test('signatureNamesIn คืนบรรทัดทั้งหมดเป็นชื่อผู้อนุมัติถ้าไม่มี employeeName ให้ใช้ตัดบรรทัด', () => {
+  const text = "Employee's Signature Project Manager's Signature (TLI)\nSomeone Someone2\n01/01/2026 01/01/2026";
+  assert.deepEqual(signatureNamesIn(text, null), {
+    employeeSignatureName: null,
+    projectManagerSignatureName: 'Someone Someone2',
+  });
+});
+
+test('signatureNamesIn คืน null ทั้งคู่ถ้าไม่เจอหัวตาราง Employee\'s Signature / Project Manager\'s Signature (TLI) เลย', () => {
+  assert.deepEqual(signatureNamesIn('some random text with no signature block at all', 'Pitikorn Chumphuchanapai'), {
+    employeeSignatureName: null,
+    projectManagerSignatureName: null,
+  });
 });

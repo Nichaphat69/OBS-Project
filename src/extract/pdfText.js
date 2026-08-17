@@ -156,3 +156,31 @@ export function periodIn(text) {
   if (!month) return null;
   return `20${m[2]}-${month}`;
 }
+
+/**
+ * อ่านชื่อผู้เซ็นตรงจากท้ายฟอร์ม "TIMESHEET" ที่มีรูปแบบตายตัว 3 บรรทัดติดกัน:
+ *   Employee's Signature   Project Manager's Signature (TLI)
+ *   <ชื่อพนักงาน>           <ชื่อผู้อนุมัติฝั่งลูกค้า>
+ *   <วันที่>                 <วันที่>
+ * เชื่อถือได้กว่าที่โมเดลตอบมา เพราะเป็นตัวอักษรตรงๆ จากชั้นข้อความ (เจอจริง: โมเดล vision อ่านชื่อ
+ * ผู้อนุมัติผิดเป็นคำว่า "Employee" ที่หลุดมาจากป้ายชื่อฝั่งซ้ายของบรรทัดเดียวกัน)
+ *
+ * pdfjs ต่อสองคอลัมน์ในบรรทัดชื่อเป็นสตริงเดียว ("Pitikorn Chumphuchanapai Nichaphat Chokrak")
+ * แยกไม่ได้จากช่องว่างอย่างเดียวว่าตัดตรงไหน — ใช้ employeeName ที่อ่านได้แม่นแล้วจากหัวเอกสาร
+ * (พารามิเตอร์ employeeName) เป็นหมุดตัดหน้า เหลือส่วนท้ายคือชื่อผู้อนุมัติฝั่งลูกค้า
+ *
+ * @returns {{employeeSignatureName: string|null, projectManagerSignatureName: string|null}}
+ */
+export function signatureNamesIn(text, employeeName) {
+  const headerIdx = text.search(/Employee'?s?\s*Signature\s+Project\s*Manager'?s?\s*Signature\s*\(TLI\)/i);
+  if (headerIdx === -1) return { employeeSignatureName: null, projectManagerSignatureName: null };
+
+  const namesLine = text.slice(headerIdx).split('\n')[1]?.trim();
+  if (!namesLine) return { employeeSignatureName: null, projectManagerSignatureName: null };
+
+  if (employeeName && namesLine.toLowerCase().startsWith(employeeName.toLowerCase())) {
+    const rest = namesLine.slice(employeeName.length).trim();
+    return { employeeSignatureName: employeeName, projectManagerSignatureName: rest || null };
+  }
+  return { employeeSignatureName: null, projectManagerSignatureName: namesLine || null };
+}
