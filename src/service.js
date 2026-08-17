@@ -2360,7 +2360,7 @@ export async function draftEmailWithAi(contractId, period, { actor, drafter = dr
     highlights: draft.highlights ?? [],
     source: 'llm',
     model: draft.model,
-    note: 'AI เรียบเรียงจากตัวเลขที่ระบบคำนวณ — ระบบไม่ส่งอีเมลเอง ต้องอ่านทวนก่อนคัดลอกไปส่ง',
+    note: 'ระบบเรียบเรียงจากตัวเลขที่คำนวณไว้ — ระบบไม่ส่งอีเมลเอง ต้องอ่านทวนก่อนคัดลอกไปส่ง',
   };
 
   if (preview.existing) {
@@ -3172,19 +3172,19 @@ export function auditLog({ limit = 200 } = {}) {
   ).map((a) => ({ ...a, detail: a.detail ? JSON.parse(a.detail) : null }));
 }
 
-const ACTOR_LABEL = { llm: 'AI', n8n: 'n8n', system: 'ระบบ' };
+const ACTOR_LABEL = { llm: 'ระบบ', n8n: 'n8n', system: 'ระบบ' };
 
 /** เหตุการณ์ที่ไม่ต้องแจ้ง — เป็นการตั้งค่าระบบ ไม่ใช่งานประจำวัน */
 const FEED_SKIP = new Set(['seed']);
 
 const FEED_SHAPE = {
   read_timesheet_file: (d) => ({
-    level: 'info', title: 'AI อ่านไฟล์ที่อัปโหลด',
+    level: 'info', title: 'ระบบอ่านไฟล์ที่อัปโหลด',
     detail: `${d?.employeeName ?? '—'}${d?.period ? ` · รอบ ${thaiMonth(d.period)}` : ''} — ยังไม่บันทึก รอคนยืนยัน`,
     link: null,
   }),
   extract_timesheet: (d, id) => ({
-    level: 'info', title: 'AI อ่านไฟล์ Timesheet เสร็จ',
+    level: 'info', title: 'ระบบอ่านไฟล์ Timesheet เสร็จ',
     detail: `${d?.employeeName ?? id}${d?.period ? ` · รอบ ${thaiMonth(d.period)}` : ''}`,
     link: { view: 'detail', id },
   }),
@@ -3224,7 +3224,7 @@ const FEED_SHAPE = {
       ? { view: 'cycle', contractId: d.contractId, period: d.period } : null,
   }),
   draft_email_llm: (d) => ({
-    level: 'info', title: 'AI ร่างอีเมลวางบิล',
+    level: 'info', title: 'ระบบร่างอีเมลวางบิล',
     detail: `รอบ ${d?.period ? thaiMonth(d.period) : '—'} · ยังไม่ส่ง รออ่านทวนก่อนคัดลอก`,
     link: null,
   }),

@@ -94,9 +94,9 @@ const dateOnly = (iso) => {
 /* ประวัติการดำเนินการ (audit_log.action) เก็บเป็นชื่อฟังก์ชันภาษาอังกฤษ — คนอ่านหน้าเว็บไม่ควรต้องรู้
    ชื่อฟังก์ชันในโค้ด แปลงเป็นประโยคสั้นๆ บอกว่าระบบทำอะไรไปแทน ชื่อที่ไม่รู้จักยังโชว์ได้ (แทน _ ด้วยเว้นวรรค) */
 const AUDIT_ACTION_LABEL = {
-  extract_timesheet: 'AI อ่านไฟล์ Timesheet',
-  read_timesheet_file: 'AI อ่านไฟล์ Timesheet',
-  read_email_approval: 'AI อ่านอีเมลอนุมัติ',
+  extract_timesheet: 'ระบบอ่านไฟล์ Timesheet',
+  read_timesheet_file: 'ระบบอ่านไฟล์ Timesheet',
+  read_email_approval: 'ระบบอ่านอีเมลอนุมัติ',
   ingest_timesheet: 'นำเข้าระบบวางบิล',
   ingest_timesheet_replaced: 'นำเข้าระบบวางบิล (แทนที่ฉบับเดิม)',
   ingest_failed_no_match: 'นำเข้าไม่ได้ — จับคู่ชื่อพนักงานไม่พบ',
@@ -110,7 +110,7 @@ const AUDIT_ACTION_LABEL = {
   notify_line_check_failed_error: 'แจ้ง LINE ไม่สำเร็จ (ตรวจไม่ผ่าน)',
 };
 const auditActionLabel = (action) => AUDIT_ACTION_LABEL[action] ?? action.replace(/_/g, ' ');
-const AUDIT_ACTOR_LABEL = { llm: 'AI', system: 'ระบบอัตโนมัติ' };
+const AUDIT_ACTOR_LABEL = { llm: 'ระบบ', system: 'ระบบอัตโนมัติ' };
 const auditActorLabel = (actor) => AUDIT_ACTOR_LABEL[actor] ?? actor;
 
 function toast(message, isError = false) {
@@ -751,9 +751,13 @@ async function renderQueue() {
 const DOW = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const KIND_LABEL = { workday: 'ทำงาน', weekend: null, holiday: null, leave: 'ลา' };
 
-/* ไอคอน+ป้ายต่อวันในปฏิทิน ทำตามแบบปฏิทิน HRDD (ที่มีป้าย "⌂ WFH" กำกับทุกวัน) แต่ใช้โทนสีฟ้า
-   ของระบบเราเองแทนสีม่วงชมพูของ HRDD — วันทำงาน/วันหยุดขึ้นป้าย ส่วนเสาร์-อาทิตย์ไม่ขึ้น (เหมือน HRDD) */
-const DAY_BADGE_ICON = { workday: 'chk', holiday: 'bell', leave: 'cal' };
+/* ไอคอน+ป้ายต่อวันในปฏิทิน ทำตามแบบปฏิทิน HRDD (ที่มีป้ายไอคอน+ข้อความกำกับทุกวัน เช่น "⌂ WFH")
+   แต่ระบบนี้ไม่มีข้อมูลตำแหน่งงาน (WFH/Onsite) เหมือน HRDD — เป็นระบบคำนวณ Manday ไม่ใช่ระบบเช็คชื่อ
+   จึงให้ไอคอนแยกตามชนิดวันที่มีข้อมูลจริงแทน: วันทำงาน/วันหยุด/วันลาแต่ละประเภท (ป่วย/กิจ/พักร้อน)
+   ส่วนเสาร์-อาทิตย์ไม่ขึ้นป้าย (เหมือน HRDD ที่เสาร์-อาทิตย์ก็ไม่มีป้ายเช่นกัน) */
+const DAY_BADGE_ICON = { workday: 'chk', holiday: 'bell' };
+const LEAVE_ICON = { sick: 'heart', personal: 'case', vacation: 'send', unpaid: 'cal' };
+const LEAVE_TH = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง' };
 
 function calendarHtml(manday) {
   if (!manday?.calendar) return '<div class="empty">ยังไม่ได้คำนวณ</div>';
@@ -761,17 +765,17 @@ function calendarHtml(manday) {
   // ปฏิทินเริ่มวันจันทร์: getUTCDay() 0=อาทิตย์ → คอลัมน์ 6
   const firstCol = (days[0].dayOfWeek + 6) % 7;
   const leaveByDate = new Map(manday.leaveDays.map((l) => [l.date, l.type]));
-  const LEAVE_TH = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง' };
 
   const cells = [
     ...Array.from({ length: firstCol }, () => '<div class="cl vd"></div>'),
     ...days.map((d) => {
+      const leaveType = leaveByDate.get(d.date);
       const label = d.kind === 'leave'
-        ? (LEAVE_TH[leaveByDate.get(d.date)] ?? 'ลา')
+        ? (LEAVE_TH[leaveType] ?? 'ลา')
         : d.kind === 'holiday' ? d.label
         : d.kind === 'weekend' ? (d.dayOfWeek === 6 ? 'เสาร์' : 'อาทิตย์')
         : KIND_LABEL[d.kind];
-      const badgeIcon = DAY_BADGE_ICON[d.kind];
+      const badgeIcon = d.kind === 'leave' ? (LEAVE_ICON[leaveType] ?? 'cal') : DAY_BADGE_ICON[d.kind];
       const badge = badgeIcon
         ? `<span class="dbadge ${d.kind}">${icon(badgeIcon, 'i xs')}${label ? esc(label) : ''}</span>`
         : (label ? `<span class="dl">${esc(label)}</span>` : '');
@@ -783,6 +787,14 @@ function calendarHtml(manday) {
     <div class="cal">
       ${DOW.map((d) => `<div class="dw">${d}</div>`).join('')}
       ${cells.join('')}
+    </div>
+    <div class="cal-legend">
+      <span class="dbadge workday">${icon('chk', 'i xs')}ทำงาน</span>
+      <span class="dbadge holiday">${icon('bell', 'i xs')}วันหยุด</span>
+      <span class="dbadge leave">${icon('heart', 'i xs')}ลาป่วย</span>
+      <span class="dbadge leave">${icon('case', 'i xs')}ลากิจ</span>
+      <span class="dbadge leave">${icon('send', 'i xs')}ลาพักร้อน</span>
+      <span class="cal-legend-mu">เสาร์–อาทิตย์ไม่มีป้าย</span>
     </div>`;
 }
 
@@ -822,7 +834,7 @@ async function openSheet(id) {
       <div class="pstep dn">
         <span class="cir">${icon('chk')}</span>
         <span class="cap">Step 01</span>
-        <span class="pl">อัปโหลด · AI อ่านไฟล์</span>
+        <span class="pl">อัปโหลด · ระบบอ่านไฟล์</span>
       </div>
       <div class="pline dn"></div>
       <div class="pstep ${step >= 3 ? 'dn' : 'cu'}">
@@ -950,27 +962,25 @@ async function openSheet(id) {
 
     <!-- คำนวณ Manday -->
     <div class="tp ${state.tab === 3 ? 'on' : ''}" data-pane="3">
-      <div class="g3">
-        <div class="card">
-          <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3></div>
-          <div class="bd">${calendarHtml(manday)}</div>
-        </div>
+      <div class="card">
+        <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3></div>
+        <div class="bd">${calendarHtml(manday)}</div>
+      </div>
 
-        <div class="card">
-          <div class="hd"><h3>สรุปประจำเดือน</h3></div>
-          <div class="bd">
-            <div class="stat-tiles">
-              <div class="stat-tile ok"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">ทำงาน (วัน)</span></div>
-              <div class="stat-tile wn"><span class="stv">${int(dayCounts.leave)}</span><span class="stl">ลา (วัน)</span></div>
-              <div class="stat-tile pr"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วันหยุด (วัน)</span></div>
-              <div class="stat-tile"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">เสาร์–อาทิตย์ (วัน)</span></div>
-            </div>
-            <div class="fsec" style="margin-top:0">
-              <div class="fsec-h"><b>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</b></div>
-              ${manday?.remarkLines?.length
-                ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
-                : '<div class="empty">ไม่มีวันลา จึงไม่มีหมายเหตุ</div>'}
-            </div>
+      <div class="card">
+        <div class="hd"><h3>สรุปประจำเดือน</h3></div>
+        <div class="bd">
+          <div class="stat-tiles">
+            <div class="stat-tile ok"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">ทำงาน (วัน)</span></div>
+            <div class="stat-tile wn"><span class="stv">${int(dayCounts.leave)}</span><span class="stl">ลา (วัน)</span></div>
+            <div class="stat-tile pr"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วันหยุด (วัน)</span></div>
+            <div class="stat-tile"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">เสาร์–อาทิตย์ (วัน)</span></div>
+          </div>
+          <div class="fsec" style="margin-top:0">
+            <div class="fsec-h"><b>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</b></div>
+            ${manday?.remarkLines?.length
+              ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
+              : '<div class="empty">ไม่มีวันลา จึงไม่มีหมายเหตุ</div>'}
           </div>
         </div>
       </div>
@@ -1375,12 +1385,12 @@ async function openCycle(contractId, period) {
             <div class="hd"><h3>ร่างอีเมลวางบิล</h3></div>
             <div class="bd">
               <div class="mailacts">
-                <button class="btn sm" id="aiDraftBtn">${icon('rf')} ให้ AI เรียบเรียงใหม่</button>
+                <button class="btn sm" id="aiDraftBtn">${icon('rf')} ให้ระบบเรียบเรียงใหม่</button>
                 <button class="btn sm" id="copyMailBtn">${icon('doc')} คัดลอกร่าง</button>
                 <button class="btn sm" id="gmailDraftBtn">${icon('mail')} สร้างร่างใน Gmail</button>
               </div>
               ${data.emailDraft.highlights?.length ? `<div class="note info">${icon('info')}<span>
-                <strong>ข้อสังเกตจาก AI</strong><br>${data.emailDraft.highlights.map(esc).join('<br>')}
+                <strong>ข้อสังเกตจากระบบ</strong><br>${data.emailDraft.highlights.map(esc).join('<br>')}
               </span></div>` : ''}
               <div class="cmp">
                 <div class="f"><span class="l">ถึง</span><span id="mailTo">${esc(data.emailDraft.to)}</span></div>
@@ -1539,14 +1549,14 @@ async function openCycle(contractId, period) {
   el('aiDraftBtn')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
-    btn.textContent = 'AI กำลังเรียบเรียง…';
+    btn.textContent = 'ระบบกำลังเรียบเรียง…';
     try {
       await api(`/cycles/${encodeURIComponent(contractId)}/${period}/email-draft`, { method: 'POST' });
-      toast('AI ร่างอีเมลใหม่แล้ว — อ่านทวนก่อนคัดลอกไปส่ง');
+      toast('ระบบร่างอีเมลใหม่แล้ว — อ่านทวนก่อนคัดลอกไปส่ง');
       openCycle(contractId, period);
     } catch (error) {
       btn.disabled = false;
-      btn.innerHTML = `${icon('rf')} ให้ AI เรียบเรียงใหม่`;
+      btn.innerHTML = `${icon('rf')} ให้ระบบเรียบเรียงใหม่`;
       toast(error.message, true);
     }
   });
@@ -1707,7 +1717,7 @@ async function renderUpload() {
     <!-- ── ประวัติที่ AI เคยอ่านแล้ว ── -->
     <div class="tp ${state.uploadTab === 4 ? 'on' : ''}" data-upane="4">
       <div class="card">
-        <div class="hd"><h3>ประวัติที่ AI เคยอ่านแล้ว</h3>
+        <div class="hd"><h3>ประวัติที่ระบบเคยอ่านแล้ว</h3>
           <span class="rt">ทั้งจากอัปโหลดไฟล์และดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง</span></div>
         <div class="bd flush"><div id="aiHistoryList"><div class="loading">กำลังโหลด…</div></div></div>
       </div>
@@ -1782,7 +1792,7 @@ function bindGmailTab() {
                 title="ลบอีเมลนี้ทิ้งทั้งฉบับ รวมทุกไฟล์แนบ (ไม่ลบอีเมลจริงใน Gmail)">${icon('trash')}</button>
             </li>`).join('')}</ul>`
         : inbox.ingested.length
-          ? `<div class="empty">${icon('mail', 'i')}<div>ไม่มีรายการใหม่ — ที่ตรงกับคำค้นให้ AI อ่านไปหมดแล้ว
+          ? `<div class="empty">${icon('mail', 'i')}<div>ไม่มีรายการใหม่ — ที่ตรงกับคำค้นให้ระบบอ่านไปหมดแล้ว
               (ดูประวัติที่เคยทำด้านล่างได้)</div></div>`
           : `<div class="empty">${icon('mail', 'i')}<div>ไม่พบอีเมลที่ตรงกับคำค้น —
               แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`);
@@ -1873,7 +1883,7 @@ function bindAiHistoryTab() {
               </tr>`;
             }).join('')}</tbody>
           </table></div>`
-        : `<div class="empty">${icon('file', 'i')}<div>ยังไม่มีประวัติ — ให้ AI อ่านไฟล์หรือดึงจาก Gmail ก่อน</div></div>`;
+        : `<div class="empty">${icon('file', 'i')}<div>ยังไม่มีประวัติ — ให้ระบบอ่านไฟล์หรือดึงจาก Gmail ก่อน</div></div>`;
 
       // คลิกที่แถว (หรือปุ่ม "ดูรายละเอียด" ในแถวเดียวกัน) → ดูรายละเอียดในแถบประวัติเลย ไม่ต้องสับไปแท็บอื่น
       // เอา extraction ที่เก็บไว้ตอนอ่านครั้งนั้นมาเป็นการ์ดใหม่ใน state.reads ได้เลย เพราะเก็บ shape เดียวกัน
@@ -1883,7 +1893,7 @@ function bindAiHistoryTab() {
           if (e.target.closest('[data-hist-del]')) return;
           try {
             const detail = await api(`/ai-reads/${tr.dataset.histOpen}`);
-            if (!detail.extraction) { toast('ไม่พบข้อมูลที่ AI อ่านไว้สำหรับรายการนี้', true); return; }
+            if (!detail.extraction) { toast('ไม่พบข้อมูลที่ระบบอ่านไว้สำหรับรายการนี้', true); return; }
             state.reads.push({ ...detail.extraction, _key: genId(), tab: 4 });
             renderUpload();
           } catch (error) {
@@ -2182,7 +2192,7 @@ function readResultHtml(read, employees = []) {
     <div class="bd">
       ${srcFile ? `<div class="attrow" style="margin-bottom:14px">
         <a class="file" href="${esc(srcFile)}" target="_blank" rel="noopener"
-           title="เปิดดูไฟล์ต้นฉบับที่ AI อ่าน"><span class="pd">PDF</span> ${esc(read.fileName)}</a>
+           title="เปิดดูไฟล์ต้นฉบับที่ระบบอ่าน"><span class="pd">PDF</span> ${esc(read.fileName)}</a>
         <a class="btn sm icon" href="${esc(srcFile)}&dl" download="${esc(read.fileName)}"
            title="ดาวน์โหลดไฟล์ต้นฉบับ" aria-label="ดาวน์โหลด">${icon('cd')}</a>
       </div>` : ''}
@@ -2270,7 +2280,7 @@ function readResultHtml(read, employees = []) {
         </ul>
       </div>
 
-      <details class="raw"><summary>ดู JSON ดิบที่ AI อ่านออกมา</summary>
+      <details class="raw"><summary>ดู JSON ดิบที่ระบบอ่านออกมา</summary>
         <pre class="code">${esc(JSON.stringify(d, null, 2))}</pre></details>
     </div>
     <div class="ft review-ft">
@@ -3170,7 +3180,7 @@ async function renderSystemAdmin() {
                 ? `<span class="n">${esc(settings.env.appBaseUrl)}</span>`
                 : `<span class="tg wn">ยังไม่ตั้ง</span>
                    <small style="display:block">ข้อความแจ้งเตือนจะไม่มีปุ่มกดเข้าระบบ</small>`}</dd>
-            <dt>AI ในเครื่อง</dt><dd class="n">${esc(settings.env.localLlmBaseUrl)}</dd>
+            <dt>ระบบในเครื่อง</dt><dd class="n">${esc(settings.env.localLlmBaseUrl)}</dd>
             ${settings.env.localTextModel === settings.env.localVisionModel
               // ตัวเดียวกันทั้งอ่านไฟล์และร่างข้อความ — แยกสองแถวก็เห็นค่าซ้ำกันเปล่าๆ
               ? `<dt>โมเดล</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>`
