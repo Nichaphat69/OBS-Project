@@ -778,9 +778,9 @@ function calendarHtml(manday) {
       // เสาร์-อาทิตย์ไม่มีป้ายเลย เหมือน HRDD เป๊ะๆ — คอลัมน์ก็บอกอยู่แล้วว่าเป็นวันไหน
       if (d.kind === 'weekend') return `<div class="cl weekend"><span class="dn">${d.day}</span></div>`;
       if (d.kind === 'leave') {
-        const leaveType = leaveByDate.get(d.date);
-        return `<div class="cl leave"><span class="dn">${d.day}</span>
-          <span class="dbadge leave">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i xs')}${esc(LEAVE_TH[leaveType] ?? 'ลา')}</span></div>`;
+        const leaveType = leaveByDate.get(d.date) ?? 'unpaid';
+        return `<div class="cl lv-${leaveType}"><span class="dn">${d.day}</span>
+          <span class="dbadge lv-${leaveType}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i xs')}${esc(LEAVE_TH[leaveType] ?? 'ลา')}</span></div>`;
       }
       return `<div class="cl workday"><span class="dn">${d.day}</span>
         <span class="dbadge workday">${icon('chk', 'i xs')}ทำงาน</span></div>`;
@@ -793,11 +793,11 @@ function calendarHtml(manday) {
       ${cells.join('')}
     </div>
     <div class="cal-legend">
-      <span class="dbadge workday">${icon('chk', 'i xs')}ทำงาน</span>
-      <span class="dbadge holiday">${icon('bell', 'i xs')}วันหยุด</span>
-      <span class="dbadge leave">${icon('heart', 'i xs')}ลาป่วย</span>
-      <span class="dbadge leave">${icon('case', 'i xs')}ลากิจ</span>
-      <span class="dbadge leave">${icon('send', 'i xs')}ลาพักร้อน</span>
+      <span class="legend-item workday"><span class="legend-ic">${icon('chk', 'i sm')}</span>ทำงาน</span>
+      <span class="legend-item holiday">วันหยุด</span>
+      <span class="legend-item sick"><span class="legend-ic">${icon('heart', 'i sm')}</span>ลาป่วย</span>
+      <span class="legend-item personal"><span class="legend-ic">${icon('case', 'i sm')}</span>ลากิจ</span>
+      <span class="legend-item vacation"><span class="legend-ic">${icon('send', 'i sm')}</span>ลาพักร้อน</span>
       <span class="cal-legend-mu">เสาร์–อาทิตย์ไม่มีป้าย</span>
     </div>`;
 }

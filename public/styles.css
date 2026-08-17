@@ -68,6 +68,7 @@
   --cr: #B42318; --crb: #FEF3F2; --crl: #FECDCA;
   --lv: #C4320A; --lvb: #FFF6ED; --lvl: #F9DBAF;
   --pr: #5925DC; --prb: #F4F3FF; --prl: #D9D6FE;
+  --tl: #0E7490; --tlb: #ECFEFF; --tll: #A5F3FC;   /* เขียวอมฟ้า — ลาพักร้อน (ตามโทน HRDD) */
   --red: #D92D20;   /* ป้ายตัวเลขแจ้งเตือน */
 
   /* เงาแบบนุ่มหลายชั้น ให้การ์ดดูลอยแบบสะอาด ไม่ใช่ตีกรอบหนัก
@@ -1068,19 +1069,29 @@ dl.kv dd { margin: 0; font-weight: 600; }
 .cl.weekend .dn { color: var(--fnt); font-weight: 600; }
 .cl.holiday { background: var(--crb); border-color: var(--crl); }
 .cl.holiday .dn { color: var(--cr); }
-.cl.leave { background: var(--lvb); border-color: var(--lv); border-width: 1.5px; }
-.cl.leave .dn { color: var(--lv); font-weight: 700; }
+/* วันลาแยกสีตามประเภทเหมือน HRDD เป๊ะๆ — ป่วยแดง กิจส้ม พักร้อนเขียวอมฟ้า (ไม่รับค่าจ้างม่วง เพิ่มเอง
+   เพราะ HRDD ไม่มีประเภทนี้ให้เทียบ) แทนที่จะใช้สีส้มแดงเดียว (var(--lv)) กับวันลาทุกประเภทแบบเดิม */
+.cl.lv-sick { background: var(--crb); border-color: var(--cr); border-width: 1.5px; }
+.cl.lv-sick .dn { color: var(--cr); font-weight: 700; }
+.cl.lv-personal { background: var(--wnb); border-color: var(--wn); border-width: 1.5px; }
+.cl.lv-personal .dn { color: var(--wn); font-weight: 700; }
+.cl.lv-vacation { background: var(--tlb); border-color: var(--tl); border-width: 1.5px; }
+.cl.lv-vacation .dn { color: var(--tl); font-weight: 700; }
+.cl.lv-unpaid { background: var(--prb); border-color: var(--pr); border-width: 1.5px; }
+.cl.lv-unpaid .dn { color: var(--pr); font-weight: 700; }
 
 /* ป้ายไอคอน+ข้อความต่อวัน — ทำตามปฏิทิน HRDD (ป้าย "⌂ WFH" กำกับทุกวัน) แต่ใช้โทนสีฟ้าของระบบเราเอง
-   แทนสีม่วงชมพูของ HRDD วันลายังคงใช้สีแดง/ส้ม (var(--lv)) เหมือนเดิมเพราะเป็นวันที่ต้องสะดุดตา */
+   แทนสีม่วงของ HRDD (ตามที่ขอ "เปลี่ยนแค่สีจากม่วงเป็นน้ำเงิน") */
 .dbadge {
   display: inline-flex; align-items: center; gap: 4px; width: fit-content;
   font-size: 10px; font-weight: 700; padding: 2px 7px 2px 6px; border-radius: var(--r-pill);
   white-space: nowrap;
 }
 .dbadge.workday { background: var(--tint); color: var(--brand-d); }
-.dbadge.holiday { background: var(--cr); color: #fff; }
-.dbadge.leave { background: var(--lv); color: #fff; }
+.dbadge.lv-sick { background: var(--cr); color: #fff; }
+.dbadge.lv-personal { background: var(--wn); color: #fff; }
+.dbadge.lv-vacation { background: var(--tl); color: #fff; }
+.dbadge.lv-unpaid { background: var(--pr); color: #fff; }
 
 /* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ สีแดงเหมือน HRDD (ไม่ได้ขอให้เปลี่ยนสีนี้ แค่ป้าย
    ทำงานที่ขอให้เปลี่ยนจากม่วงเป็นน้ำเงินเท่านั้น) */
@@ -1090,12 +1101,29 @@ dl.kv dd { margin: 0; font-weight: 600; }
   background: var(--cr); color: #fff; line-height: 1.3;
 }
 
-/* แถบคำอธิบายไอคอนใต้ปฏิทิน — ตามแบบ HRDD ที่มีแถบนี้ใต้ตารางเดือนเสมอ */
+/* แถบคำอธิบายไอคอนใต้ปฏิทิน — ก็อปสไตล์ HRDD เป๊ะๆ: ไอคอนอยู่ในกล่องมุมมนสีอ่อนแยกจากตัวหนังสือ
+   (ไม่ใช่ป้ายรวมทึบแบบ .dbadge) ตัวหนังสือติดสีเดียวกับไอคอน ยกเว้นวันหยุดที่เป็นป้ายทึบสีแดงล้วน
+   เหมือน HRDD เป๊ะ (ของ HRDD เองก็ไม่มีไอคอนในป้ายวันหยุดเช่นกัน) */
 .cal-legend {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
   margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair);
 }
-.cal-legend .dbadge { font-size: 11px; padding: 3px 9px 3px 8px; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; }
+.legend-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px; flex: none;
+}
+.legend-item.workday { color: var(--ink); }
+.legend-item.workday .legend-ic { background: var(--tint); color: var(--brand-d); }
+.legend-item.sick { color: var(--cr); }
+.legend-item.sick .legend-ic { background: var(--crb); color: var(--cr); }
+.legend-item.personal { color: var(--wn); }
+.legend-item.personal .legend-ic { background: var(--wnb); color: var(--wn); }
+.legend-item.vacation { color: var(--tl); }
+.legend-item.vacation .legend-ic { background: var(--tlb); color: var(--tl); }
+.legend-item.holiday {
+  padding: 5px 14px; border-radius: var(--r-pill); background: var(--cr); color: #fff;
+}
 .cal-legend-mu { font-size: 11.5px; color: var(--mut); }
 
 /* ── สมุดคำนวณ ──────────────────────────────────────────── */
