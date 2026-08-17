@@ -781,10 +781,10 @@ function calendarHtml(manday) {
       if (d.kind === 'leave') {
         const leaveType = leaveByDate.get(d.date) ?? 'unpaid';
         return `<div class="cl lv-${leaveType}"><span class="dn">${d.day}</span>
-          <span class="dbadge lv-${leaveType}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i xs')}${esc(LEAVE_TH[leaveType] ?? 'ลา')}</span></div>`;
+          <span class="dbadge lv-${leaveType}" title="${esc(LEAVE_TH[leaveType] ?? 'ลา')}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i lg')}</span></div>`;
       }
       return `<div class="cl workday"><span class="dn">${d.day}</span>
-        <span class="dbadge workday">${icon('home', 'i xs')}ทำงาน</span></div>`;
+        <span class="dbadge workday" title="ทำงาน">${icon('home', 'i lg')}</span></div>`;
     }),
   ];
 
@@ -794,11 +794,11 @@ function calendarHtml(manday) {
       ${cells.join('')}
     </div>
     <div class="cal-legend">
-      <span class="legend-item workday"><span class="legend-ic">${icon('home', 'i sm')}</span>ทำงาน</span>
+      <span class="legend-item workday">${icon('home', 'i lg')}ทำงาน</span>
       <span class="legend-item holiday">วันหยุด</span>
-      <span class="legend-item sick"><span class="legend-ic">${icon('heart', 'i sm')}</span>ลาป่วย</span>
-      <span class="legend-item personal"><span class="legend-ic">${icon('car', 'i sm')}</span>ลากิจ</span>
-      <span class="legend-item vacation"><span class="legend-ic">${icon('rocket', 'i sm')}</span>ลาพักร้อน</span>
+      <span class="legend-item sick">${icon('heart', 'i lg')}ลาป่วย</span>
+      <span class="legend-item personal">${icon('car', 'i lg')}ลากิจ</span>
+      <span class="legend-item vacation">${icon('rocket', 'i lg')}ลาพักร้อน</span>
       <span class="cal-legend-mu">เสาร์–อาทิตย์ไม่มีป้าย</span>
     </div>`;
 }
