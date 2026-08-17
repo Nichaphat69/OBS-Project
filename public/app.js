@@ -752,13 +752,14 @@ const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
 /* ไอคอน+ป้ายต่อวันในปฏิทิน ทำตามแบบปฏิทิน HRDD เป๊ะๆ ตามที่ขอ: ไอคอนสีอยู่มุมขวาบนของวันนั้นๆ
    (แถวเดียวกับเลขวันที่ ไม่ใช่วางไว้ใต้เลขวันแบบเดิม), วันหยุดขึ้นแบนเนอร์เต็มความกว้างใต้เลขวันที่
-   (แบบเดียวกับที่ HRDD ทำกับวันหยุดนักขัตฤกษ์), เสาร์-อาทิตย์ไม่มีป้ายเลย — ใช้โทนสีฟ้าของระบบเราเอง
-   แทนสีม่วงของ HRDD (ตามที่ขอ "เปลี่ยนแค่สีจากม่วงเป็นน้ำเงิน") ส่วนวันหยุดคงสีแดงไว้เหมือน HRDD
+   (แบบเดียวกับที่ HRDD ทำกับวันหยุดนักขัตฤกษ์), เสาร์-อาทิตย์ไม่มีป้ายเลย — ไอคอน/สีตรงตามที่ขอเป๊ะๆ:
+   บ้าน=เขียวอ่อน (ทำงาน), หัวใจ=แดงอ่อน (ลาป่วย), รถ=ชมพูอ่อน (ลากิจ), จรวด=ส้มอ่อน (ลาพักร้อน)
+   โทนอ่อนทั้งหมดตามที่ขอ "สีไม่เข้ม ขอสีน่ารักๆ"
 
    ระบบนี้ไม่มีข้อมูลตำแหน่งงาน (WFH/Onsite) เหมือน HRDD เพราะเป็นระบบคำนวณ Manday ไม่ใช่ระบบเช็คชื่อ
-   เข้า-ออกงาน จึงให้ไอคอนแยกตามชนิดวันที่มีข้อมูลจริงในระบบแทน: ทำงาน/วันหยุด/วันลาแต่ละประเภท
-   (ป่วย/กิจ/พักร้อน) — ไม่ใส่ WFH/Onsite ปลอมๆที่ไม่มีข้อมูลจริงรองรับ */
-const LEAVE_ICON = { sick: 'heart', personal: 'case', vacation: 'send', unpaid: 'cal' };
+   เข้า-ออกงาน จึงให้ไอคอน "บ้าน" ตัวเดียวแทนวันทำงานทุกวัน ไม่แยก WFH/Onsite เพราะไม่มีข้อมูลจริงรองรับ
+   ว่าวันไหนทำงานที่บ้านหรือเข้าออฟฟิศ — ไม่ใส่ข้อมูลปลอมๆที่ไม่มีจริงเข้าไป */
+const LEAVE_ICON = { sick: 'heart', personal: 'car', vacation: 'rocket', unpaid: 'cal' };
 const LEAVE_TH = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง' };
 
 function calendarHtml(manday) {
@@ -783,7 +784,7 @@ function calendarHtml(manday) {
           <span class="dbadge lv-${leaveType}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i xs')}${esc(LEAVE_TH[leaveType] ?? 'ลา')}</span></div>`;
       }
       return `<div class="cl workday"><span class="dn">${d.day}</span>
-        <span class="dbadge workday">${icon('chk', 'i xs')}ทำงาน</span></div>`;
+        <span class="dbadge workday">${icon('home', 'i xs')}ทำงาน</span></div>`;
     }),
   ];
 
@@ -793,11 +794,11 @@ function calendarHtml(manday) {
       ${cells.join('')}
     </div>
     <div class="cal-legend">
-      <span class="legend-item workday"><span class="legend-ic">${icon('chk', 'i sm')}</span>ทำงาน</span>
+      <span class="legend-item workday"><span class="legend-ic">${icon('home', 'i sm')}</span>ทำงาน</span>
       <span class="legend-item holiday">วันหยุด</span>
       <span class="legend-item sick"><span class="legend-ic">${icon('heart', 'i sm')}</span>ลาป่วย</span>
-      <span class="legend-item personal"><span class="legend-ic">${icon('case', 'i sm')}</span>ลากิจ</span>
-      <span class="legend-item vacation"><span class="legend-ic">${icon('send', 'i sm')}</span>ลาพักร้อน</span>
+      <span class="legend-item personal"><span class="legend-ic">${icon('car', 'i sm')}</span>ลากิจ</span>
+      <span class="legend-item vacation"><span class="legend-ic">${icon('rocket', 'i sm')}</span>ลาพักร้อน</span>
       <span class="cal-legend-mu">เสาร์–อาทิตย์ไม่มีป้าย</span>
     </div>`;
 }
@@ -975,7 +976,7 @@ async function openSheet(id) {
         <div class="hd"><h3>สรุปประจำเดือน</h3></div>
         <div class="bd">
           <div class="stat-tiles">
-            <div class="stat-tile ok"><span class="stt">${icon('chk', 'i sm')} ทำงาน</span><span class="stv">${int(dayCounts.workday)}</span><span class="stl">วัน</span></div>
+            <div class="stat-tile ok"><span class="stt">${icon('home', 'i sm')} ทำงาน</span><span class="stv">${int(dayCounts.workday)}</span><span class="stl">วัน</span></div>
             <div class="stat-tile wn"><span class="stt">${icon('heart', 'i sm')} ลา</span><span class="stv">${int(dayCounts.leave)}</span><span class="stl">วัน</span></div>
             <div class="stat-tile pr"><span class="stt">${icon('bell', 'i sm')} วันหยุด</span><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วัน</span></div>
             <div class="stat-tile"><span class="stt">${icon('cal', 'i sm')} เสาร์–อาทิตย์</span><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">วัน</span></div>

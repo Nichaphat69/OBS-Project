@@ -68,7 +68,7 @@
   --cr: #B42318; --crb: #FEF3F2; --crl: #FECDCA;
   --lv: #C4320A; --lvb: #FFF6ED; --lvl: #F9DBAF;
   --pr: #5925DC; --prb: #F4F3FF; --prl: #D9D6FE;
-  --tl: #0E7490; --tlb: #ECFEFF; --tll: #A5F3FC;   /* เขียวอมฟ้า — ลาพักร้อน (ตามโทน HRDD) */
+  --pk: #C11574; --pkb: #FDF2FA; --pkl: #FCCEEE;   /* ชมพู — ลากิจ (ตามที่ขอให้ใช้ไอคอนรถสีชมพู) */
   --red: #D92D20;   /* ป้ายตัวเลขแจ้งเตือน */
 
   /* เงาแบบนุ่มหลายชั้น ให้การ์ดดูลอยแบบสะอาด ไม่ใช่ตีกรอบหนัก
@@ -1048,53 +1048,60 @@ dl.kv dd { margin: 0; font-weight: 600; }
 .note.cr svg.i { color: var(--cr); }
 
 /* ── ปฏิทิน ─────────────────────────────────────────────── */
-.cal { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; }
+/* เดิม gap ระหว่างเซลล์ทำให้ดูเป็นการ์ดลอยแยกกัน (โบราณ) — เปลี่ยนมาใช้เทคนิค "gap 1px + สีพื้นหลัง
+   คอนเทนเนอร์เป็นสีเส้น" แทน ได้เส้นตารางบางๆคั่นระหว่างเซลล์แบบตารางปกติ เรียบง่าย ทันสมัย ตรงตาม
+   ที่ขอ ("ไม่เอาเว้นช่องว่างแบบนี้ ... ขอเป็นเส้นตารางปกติ") ไม่ต้องพึ่ง border ซ้อนกันแบบเดิม */
+.cal {
+  display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 1px;
+  background: var(--hair); border: 1px solid var(--hair);
+  border-radius: 10px; overflow: hidden;
+}
 .dw {
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0;
-  color: var(--fnt); text-align: center; padding-bottom: 8px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0; background: var(--paper);
+  color: var(--fnt); text-align: center; padding: 10px 0;
 }
 /* เลขวันที่กับไอคอนป้ายอยู่แถวเดียวกัน (เลขซ้าย ป้ายชิดขวา) ตามแบบ HRDD เป๊ะๆ — ใช้ flex-wrap
    แล้วดัน .dbadge ไปชิดขวาด้วย margin-left:auto ส่วนวันหยุดมีแบนเนอร์เต็มความกว้างเพิ่มอีกแถว
    (.dbanner ตั้ง flex-basis:100% บังคับขึ้นบรรทัดใหม่) เหมือนที่ HRDD ทำกับวันหยุดนักขัตฤกษ์ */
 .cl {
-  min-height: 68px; border: 1px solid var(--hair);
-  background: var(--paper); padding: 8px 8px 9px;
+  min-height: 68px; background: var(--paper); padding: 8px 8px 9px;
   display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 5px;
 }
 .cl .dn { flex: none; font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .cl .dbadge { margin-left: auto; }
-.cl.vd { border-style: dashed; background: transparent; opacity: .4; }
-.cl.workday { border-color: var(--rule); }
-.cl.weekend { background: var(--sunk); border-color: var(--hair); }
+.cl.vd { background: var(--sunk); }
+.cl.weekend { background: var(--sunk); }
 .cl.weekend .dn { color: var(--fnt); font-weight: 600; }
-.cl.holiday { background: var(--crb); border-color: var(--crl); }
+.cl.holiday { background: var(--crb); }
 .cl.holiday .dn { color: var(--cr); }
-/* วันลาแยกสีตามประเภทเหมือน HRDD เป๊ะๆ — ป่วยแดง กิจส้ม พักร้อนเขียวอมฟ้า (ไม่รับค่าจ้างม่วง เพิ่มเอง
-   เพราะ HRDD ไม่มีประเภทนี้ให้เทียบ) แทนที่จะใช้สีส้มแดงเดียว (var(--lv)) กับวันลาทุกประเภทแบบเดิม */
-.cl.lv-sick { background: var(--crb); border-color: var(--cr); border-width: 1.5px; }
+/* วันลาแยกสีตามประเภทเหมือน HRDD เป๊ะๆ — ป่วยแดง(หัวใจ) กิจชมพู(รถ) พักร้อนส้ม(จรวด) ตามที่ขอเป๊ะๆ
+   (ไม่รับค่าจ้างม่วง เพิ่มเองเพราะ HRDD ไม่มีประเภทนี้ให้เทียบ) พื้นหลังใช้โทนอ่อนทั้งหมด ไม่ใช้สีทึบ
+   เพราะขอ "สีไม่เข้ม ขอสีน่ารักๆ" */
+.cl.lv-sick { background: var(--crb); }
 .cl.lv-sick .dn { color: var(--cr); font-weight: 700; }
-.cl.lv-personal { background: var(--wnb); border-color: var(--wn); border-width: 1.5px; }
-.cl.lv-personal .dn { color: var(--wn); font-weight: 700; }
-.cl.lv-vacation { background: var(--tlb); border-color: var(--tl); border-width: 1.5px; }
-.cl.lv-vacation .dn { color: var(--tl); font-weight: 700; }
-.cl.lv-unpaid { background: var(--prb); border-color: var(--pr); border-width: 1.5px; }
+.cl.lv-personal { background: var(--pkb); }
+.cl.lv-personal .dn { color: var(--pk); font-weight: 700; }
+.cl.lv-vacation { background: var(--wnb); }
+.cl.lv-vacation .dn { color: var(--wn); font-weight: 700; }
+.cl.lv-unpaid { background: var(--prb); }
 .cl.lv-unpaid .dn { color: var(--pr); font-weight: 700; }
 
-/* ป้ายไอคอน+ข้อความต่อวัน — ทำตามปฏิทิน HRDD (ป้าย "⌂ WFH" กำกับทุกวัน) แต่ใช้โทนสีฟ้าของระบบเราเอง
-   แทนสีม่วงของ HRDD (ตามที่ขอ "เปลี่ยนแค่สีจากม่วงเป็นน้ำเงิน") */
+/* ป้ายไอคอน+ข้อความต่อวัน — โทนอ่อนน่ารักๆทั้งหมด (พื้นอ่อน+ตัวหนังสือ/ไอคอนสี ไม่ใช้พื้นทึบ) ตามที่ขอ
+   "สีไม่เข้ม ขอสีน่ารักๆ": ทำงาน(บ้าน)=เขียวอ่อน, ลาป่วย(หัวใจ)=แดงอ่อน, ลากิจ(รถ)=ชมพูอ่อน,
+   ลาพักร้อน(จรวด)=ส้มอ่อน — สีตรงตามที่ขอทุกประการ */
 .dbadge {
   display: inline-flex; align-items: center; gap: 4px; width: fit-content;
   font-size: 10px; font-weight: 700; padding: 2px 7px 2px 6px; border-radius: var(--r-pill);
   white-space: nowrap;
 }
-.dbadge.workday { background: var(--tint); color: var(--brand-d); }
-.dbadge.lv-sick { background: var(--cr); color: #fff; }
-.dbadge.lv-personal { background: var(--wn); color: #fff; }
-.dbadge.lv-vacation { background: var(--tl); color: #fff; }
-.dbadge.lv-unpaid { background: var(--pr); color: #fff; }
+.dbadge.workday { background: var(--okb); color: var(--ok); }
+.dbadge.lv-sick { background: var(--crb); color: var(--cr); }
+.dbadge.lv-personal { background: var(--pkb); color: var(--pk); }
+.dbadge.lv-vacation { background: var(--wnb); color: var(--wn); }
+.dbadge.lv-unpaid { background: var(--prb); color: var(--pr); }
 
-/* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ สีแดงเหมือน HRDD (ไม่ได้ขอให้เปลี่ยนสีนี้ แค่ป้าย
-   ทำงานที่ขอให้เปลี่ยนจากม่วงเป็นน้ำเงินเท่านั้น) */
+/* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ สีแดงเหมือน HRDD (ของ HRDD เองก็ทึบแบบนี้
+   ไม่ได้อยู่ในกลุ่มไอคอน "อ่อนน่ารักๆ" ที่ขอเปลี่ยน) */
 .dbanner {
   display: flex; align-items: center; gap: 5px; flex-basis: 100%;
   font-size: 9.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px;
@@ -1113,14 +1120,14 @@ dl.kv dd { margin: 0; font-weight: 600; }
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 8px; flex: none;
 }
-.legend-item.workday { color: var(--ink); }
-.legend-item.workday .legend-ic { background: var(--tint); color: var(--brand-d); }
+.legend-item.workday { color: var(--ok); }
+.legend-item.workday .legend-ic { background: var(--okb); color: var(--ok); }
 .legend-item.sick { color: var(--cr); }
 .legend-item.sick .legend-ic { background: var(--crb); color: var(--cr); }
-.legend-item.personal { color: var(--wn); }
-.legend-item.personal .legend-ic { background: var(--wnb); color: var(--wn); }
-.legend-item.vacation { color: var(--tl); }
-.legend-item.vacation .legend-ic { background: var(--tlb); color: var(--tl); }
+.legend-item.personal { color: var(--pk); }
+.legend-item.personal .legend-ic { background: var(--pkb); color: var(--pk); }
+.legend-item.vacation { color: var(--wn); }
+.legend-item.vacation .legend-ic { background: var(--wnb); color: var(--wn); }
 .legend-item.holiday {
   padding: 5px 14px; border-radius: var(--r-pill); background: var(--cr); color: #fff;
 }
