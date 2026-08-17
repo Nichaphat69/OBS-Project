@@ -2210,7 +2210,8 @@ function readResultHtml(read, employees = []) {
             <input id="rLeave-${key}" type="number" min="0" max="31" value="${int(d.totalLeaveDays)}">
           </label>
           <label>ผู้อนุมัติฝั่งลูกค้า
-            <input id="rBy-${key}" type="text" value="${esc(read.approvedBy ?? 'Project Manager (TLI)')}">
+            <input id="rBy-${key}" type="text"
+              value="${esc(read.approvedBy ?? d.projectManagerSignatureName ?? 'Project Manager (TLI)')}">
             ${read.approvedAt ? `<small>อีเมลระบุวันที่อนุมัติ ${dateOnly(read.approvedAt)}</small>` : ''}
           </label>
         </div>
