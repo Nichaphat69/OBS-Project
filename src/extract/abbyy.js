@@ -9,10 +9,17 @@
  *   3. GET  {base}/api/publicapi/v1/transactions/{id}                  เช็คสถานะ (poll)
  *   4. GET  {base}/api/publicapi/v1/transactions/{id}/files/{fileId}/download   โหลดผลลัพธ์ (JSON)
  *
- * ⚠️ ยังไม่รู้โครงสร้าง field ในไฟล์ผลลัพธ์ (ชื่อพนักงาน/วันที่/เวลาเข้า-ออก ฯลฯ) เพราะยังไม่เคยเห็น
- * ผลลัพธ์จริงจาก Skill "Timesheet" — extractViaAbbyy() ด้านล่างคืนค่า JSON ดิบตรงๆ ที่ ABBYY ส่งมา
- * ยังไม่ map เข้ากับ schema ของเราเอง (TIMESHEET_SCHEMA ใน timesheet.js) ต้องรอตัวอย่างผลลัพธ์จริง
- * ก่อนถึงจะเขียนส่วน map ต่อได้ถูกต้อง ไม่งั้นจะเป็นการเดาชื่อ field ที่เสี่ยงผิด
+ * โครงสร้างผลลัพธ์ (ยืนยันจากการทดสอบจริงกับไฟล์ Timesheet จริง 17 ส.ค. 69) —
+ * `Transaction.Documents[0].ExtractedData.RootObject.Fields` เป็น array ของ
+ * `{Name, List: [{Value, Annotations}]}` — field ระดับเอกสาร (Employee Name, Approver, Role,
+ * Man Day, Total Hours, Year ฯลฯ) มี List แค่ 1 ค่า ตรงไปตรงมา แต่ field ตารางรายวัน (Time In,
+ * Time Out, Work Hour per Day, OT Hour per Day) กลับได้ List แค่ 1 ค่าเหมือนกัน แต่ค่านั้นเป็น
+ * ข้อความก้อนเดียวคั่นด้วย "\n" ต่อวัน (ไม่ได้แยกเป็นแถวจริงๆ) และ field "Date" ว่างเปล่าเสมอ —
+ * Skill ยังไม่ train ให้อ่านวันที่ต่อแถว ดู mapAbbyyResult()/buildDayRows() ด้านล่างสำหรับวิธี
+ * แก้ปัญหานี้ (ใช้ "Work Hour per Day" ที่มีค่าครบทุกวันในเดือนเป็นตัวระบุว่าวันไหนเป็นวันทำงาน
+ * แล้วจับคู่ตำแหน่งกับ Time In/Time Out ที่มีแค่ค่าของวันทำงานจริง — ยืนยันด้วยไฟล์จริงแล้วว่าตำแหน่ง
+ * วันทำงานที่ได้ตรงกับที่รู้อยู่ก่อนแล้ว 100%) ใช้เฉพาะตอนจำนวนค่าที่พาร์สได้ตรงกับที่คาดไว้เป๊ะเท่านั้น
+ * (จำนวนวันในเดือน / จำนวนวันทำงานเท่ากันทั้งสองฝั่ง) ไม่งั้นคืน [] ไปเลย ดีกว่าจับคู่ผิดแถวแบบเงียบๆ
  */
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -225,6 +232,114 @@ export class AbbyyClient {
     const rawResult = await this.downloadResultFile(transactionId, resultFile.fileId);
     return { transactionId, manualReviewLink: transaction.manualReviewLink ?? null, rawResult };
   }
+}
+
+const EN_MONTH = {
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+};
+
+/** "May 2026" (ค่าจริงในฟิลด์ที่ Skill ตั้งชื่อว่า "Year" แต่จริงๆเป็นเดือน+ปีรวมกัน) → "2026-05" */
+function parsePeriodFromYearField(value) {
+  const m = String(value ?? '').match(/([A-Za-z]+)\s+(\d{4})/);
+  if (!m) return null;
+  const month = EN_MONTH[m[1].toLowerCase()];
+  if (!month) return null;
+  return `${m[2]}-${String(month).padStart(2, '0')}`;
+}
+
+function daysInMonth(period) {
+  const m = String(period ?? '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]), 0).getDate();
+}
+
+/** ดึงค่าแรกของแต่ละ field ชื่อ (RootObject.Fields[].List[0].Value) มาเป็น { [ชื่อฟิลด์]: ค่า } */
+function fieldMap(rootObject) {
+  const map = {};
+  for (const field of rootObject?.Fields ?? []) {
+    const value = field.List?.[0]?.Value;
+    if (value != null && value !== '') map[field.Name] = value;
+  }
+  return map;
+}
+
+/** ค่าฟิลด์ตารางรายวันที่ ABBYY คืนมาเป็นก้อนเดียวคั่นด้วยขึ้นบรรทัดใหม่ ให้แยกเป็น array */
+function splitLines(value) {
+  if (!value) return [];
+  return String(value).split('\n').map((s) => s.trim());
+}
+
+/**
+ * สร้าง days[] โดยจับคู่ตำแหน่ง — ดูคอมเมนต์หัวไฟล์อธิบายเหตุผล/ข้อจำกัดเต็มๆ
+ * คืน [] (ไม่ใช่ข้อมูลครึ่งๆกลางๆ) ทันทีที่จำนวนค่าไม่ตรงกับที่คาดไว้ ไม่มั่นใจว่าจะจับคู่ถูกแถวจริง
+ */
+function buildDayRows(fields, period) {
+  const totalDays = daysInMonth(period);
+  if (!totalDays) return [];
+
+  const workHourPerDay = splitLines(fields['Work Hour per Day']);
+  if (workHourPerDay.length !== totalDays) return [];
+
+  const workdayPositions = [];
+  workHourPerDay.forEach((v, i) => { if (Number(v) > 0) workdayPositions.push(i); });
+
+  const timeIn = splitLines(fields['Time In']);
+  const timeOut = splitLines(fields['Time Out']);
+  if (timeIn.length !== workdayPositions.length || timeOut.length !== workdayPositions.length) return [];
+
+  return workdayPositions.map((dayIndex, i) => ({
+    date: `${period}-${String(dayIndex + 1).padStart(2, '0')}`,
+    timeIn: timeIn[i] || null,
+    timeOut: timeOut[i] || null,
+    label: null,
+    type: null,
+    remark: null,
+    // ยังไม่ผูก "Description" — จำนวนค่าที่ Skill อ่านได้ไม่ตรงกับจำนวนวันทำงานจริง (ดูคอมเมนต์หัวไฟล์)
+    jobDescription: null,
+  }));
+}
+
+/**
+ * แปลงผลลัพธ์ดิบจาก ABBYY (Transaction.Documents[0].ExtractedData.RootObject) ให้ตรงกับ
+ * TIMESHEET_SCHEMA ที่ src/extract/timesheet.js ใช้ต่อ (verifyExtraction, calculateManday ฯลฯ
+ * ใช้ schema เดียวกันไม่ว่าจะมาจาก ABBYY หรือโมเดลในเครื่อง)
+ */
+export function mapAbbyyResult(rawResult) {
+  const rootObject = rawResult?.Transaction?.Documents?.[0]?.ExtractedData?.RootObject;
+  const fields = fieldMap(rootObject);
+
+  const period = parsePeriodFromYearField(fields['Year']);
+  const employeeName = fields['Employee Name'] ?? null;
+  const projectManagerSignatureName = fields['Approver'] ?? null;
+  const totalWorkDays = fields['Man Day'] ? Number(fields['Man Day']) : 0;
+  const totalHours = fields['Total Hours'] ? Number(fields['Total Hours']) : null;
+  const days = buildDayRows(fields, period);
+
+  return {
+    vendor: fields['Vendor'] ?? null,
+    clientName: fields['Client Name'] ?? null,
+    projectName: fields['Project Name'] ?? null,
+    employeeName,
+    position: fields['Role'] ?? null,
+    period,
+    documentNo: null,
+    approvalStatus: null,
+    totalWorkDays: Number.isFinite(totalWorkDays) ? totalWorkDays : 0,
+    totalLeaveDays: 0,
+    totalHours: Number.isFinite(totalHours) ? totalHours : null,
+    days,
+    leaveDays: [],
+    // ไม่มีฟิลด์ชื่อกำกับลายเซ็นพนักงานแยกต่างหาก (ฟิลด์ "Employee's signature" เป็นรูปภาพ ไม่ใช่ตัวอักษร)
+    // ใช้ Employee Name เป็นตัวแทน — มีชื่อพนักงานแปลว่าน่าจะมีลายเซ็นกำกับอยู่ในเอกสารเดียวกัน
+    signedByEmployee: Boolean(employeeName),
+    employeeSignatureName: employeeName,
+    signedByProjectManager: Boolean(projectManagerSignatureName),
+    projectManagerSignatureName,
+    notes: fields['Time In'] && days.length === 0
+      ? ['ABBYY อ่านตารางรายวันได้ แต่จำนวนค่าที่ได้ไม่ตรงกับจำนวนวันในเดือน/วันทำงาน — ไม่ได้ใส่ตารางรายวันให้ ต้องกรอกเพิ่มเอง']
+      : [],
+  };
 }
 
 function safeJson(text) {

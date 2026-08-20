@@ -27,6 +27,7 @@ import { pdf } from 'pdf-to-img';
 import { callLocalJSON, localVisionModel, localTextModel } from '../llm/localClient.js';
 import { normalizePeriod, normalizeDate, classifyDayKind, classifyLeaveType } from './normalize.js';
 import { extractPdfText, employeeNameIn, periodIn, signatureNamesIn, dayRowsIn } from './pdfText.js';
+import { AbbyyClient, hasAbbyyCredentials, mapAbbyyResult } from './abbyy.js';
 
 const TIMESHEET_SCHEMA = {
   type: 'object',
@@ -466,6 +467,14 @@ function mergePageResults(pageResults) {
 export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forceVision = false } = {}) {
   const pdfBuffer = Buffer.isBuffer(source) ? source : await readFile(source);
 
+  /* เปลี่ยนไปใช้ ABBYY Vantage แทนโมเดลในเครื่องตาม requirement 14/08/2569 — เช็คจาก .env สด
+     ทุกครั้ง (เหมือน hasHrddCredentials()/hasGmailCredentials() ที่อื่น) ใส่ครบ 4 ตัวเมื่อไหร่
+     ก็สลับมาทางนี้ทันทีไม่ต้องแก้โค้ด ไม่ใส่ = ยังใช้โมเดลในเครื่องด้านล่างเหมือนเดิม (เทสต์เดิม
+     ทั้งหมดไม่ได้ import env.js จึงไม่มี ABBYY_* ใน process.env ตอนรันเทสต์ ไม่กระทบเทสต์เดิม) */
+  if (hasAbbyyCredentials()) {
+    return extractViaAbbyy(pdfBuffer, expectedPeriod, fetchImpl);
+  }
+
   /* ทางเร็ว — เอกสารส่วนใหญ่ export มาจาก Excel จึงมีชั้นข้อความอยู่แล้ว ไม่ต้องให้โมเดลมองรูป
      วัดกับของจริง 15 ฉบับ: 14 ฉบับมีชั้นข้อความ ดึงได้ใน 30–150 มิลลิวินาที และแม่นกว่ามาก
      ฉบับที่เป็นภาพสแกนจริง (hasText=false) ค่อยถอยไปใช้ทางโมเดล vision ด้านล่างเหมือนเดิม */
@@ -695,6 +704,26 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
     verification: documents[0].verification,
     usage: totalUsage,
     model: modelLabel(model),
+  };
+}
+
+/**
+ * ทางอ่านผ่าน ABBYY Vantage — เอกสารเดียว ไม่ได้แบ่งหลายหน้าเหมือนทางโมเดลในเครื่อง (ABBYY อ่านทั้ง
+ * ไฟล์ในคำขอเดียวแล้วส่งกลับมาเป็นผลลัพธ์เดียว) รูปทรงผลลัพธ์ที่คืนออกไปเหมือนกับทางโมเดลในเครื่อง
+ * ทุกประการ (documents/data/verification/usage/model) ผู้เรียก (service.js) จึงไม่ต้องรู้เลยว่า
+ * ใช้ทางไหนอยู่ — verifyExtraction() ตัวเดียวกันตรวจทั้งสองทาง
+ */
+async function extractViaAbbyy(pdfBuffer, expectedPeriod, fetchImpl) {
+  const client = new AbbyyClient({ fetchImpl });
+  const { rawResult } = await client.extractDocument(pdfBuffer, 'timesheet.pdf');
+  const data = mapAbbyyResult(rawResult);
+  const verification = verifyExtraction(data, { expectedPeriod });
+  return {
+    documents: [{ data, pageRange: [1, 1], verification }],
+    data,
+    verification,
+    usage: null,
+    model: 'abbyy:Timesheet',
   };
 }
 
