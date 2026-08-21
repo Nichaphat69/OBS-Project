@@ -9,17 +9,22 @@
  *   3. GET  {base}/api/publicapi/v1/transactions/{id}                  เช็คสถานะ (poll)
  *   4. GET  {base}/api/publicapi/v1/transactions/{id}/files/{fileId}/download   โหลดผลลัพธ์ (JSON)
  *
- * โครงสร้างผลลัพธ์ (ยืนยันจากการทดสอบจริงกับไฟล์ Timesheet จริง 17 ส.ค. 69) —
- * `Transaction.Documents[0].ExtractedData.RootObject.Fields` เป็น array ของ
- * `{Name, List: [{Value, Annotations}]}` — field ระดับเอกสาร (Employee Name, Approver, Role,
- * Man Day, Total Hours, Year ฯลฯ) มี List แค่ 1 ค่า ตรงไปตรงมา แต่ field ตารางรายวัน (Time In,
- * Time Out, Work Hour per Day, OT Hour per Day) กลับได้ List แค่ 1 ค่าเหมือนกัน แต่ค่านั้นเป็น
- * ข้อความก้อนเดียวคั่นด้วย "\n" ต่อวัน (ไม่ได้แยกเป็นแถวจริงๆ) และ field "Date" ว่างเปล่าเสมอ —
- * Skill ยังไม่ train ให้อ่านวันที่ต่อแถว ดู mapAbbyyResult()/buildDayRows() ด้านล่างสำหรับวิธี
- * แก้ปัญหานี้ (ใช้ "Work Hour per Day" ที่มีค่าครบทุกวันในเดือนเป็นตัวระบุว่าวันไหนเป็นวันทำงาน
- * แล้วจับคู่ตำแหน่งกับ Time In/Time Out ที่มีแค่ค่าของวันทำงานจริง — ยืนยันด้วยไฟล์จริงแล้วว่าตำแหน่ง
- * วันทำงานที่ได้ตรงกับที่รู้อยู่ก่อนแล้ว 100%) ใช้เฉพาะตอนจำนวนค่าที่พาร์สได้ตรงกับที่คาดไว้เป๊ะเท่านั้น
- * (จำนวนวันในเดือน / จำนวนวันทำงานเท่ากันทั้งสองฝั่ง) ไม่งั้นคืน [] ไปเลย ดีกว่าจับคู่ผิดแถวแบบเงียบๆ
+ * โครงสร้างผลลัพธ์ (ยืนยันจากการทดสอบจริงกับไฟล์ Timesheet จริง 17 ส.ค. 69 และอีกครั้ง 21 ส.ค. 69
+ * ตอนสลับไปใช้ Skill "Timesheet2") — `Transaction.Documents[0].ExtractedData.RootObject.Fields`
+ * เป็น array ของ `{Name, List: [{Value, Annotations}]}` field ระดับเอกสาร (Employee Name, Approver,
+ * Position/Role, Vendor, Client Name, Total Work days/Man Day, Total Hours, Month Year/Year ฯลฯ)
+ * มี List แค่ 1 ค่าตรงไปตรงมา — Skill "Timesheet2" ยัง train ไม่ครบทุกฟิลด์พร้อมกัน (ฟิลด์ไหนยังมั่นใจ
+ * ไม่พอ ABBYY จะไม่ส่งชื่อฟิลด์นั้นมาเลยในคำตอบ ไม่ใช่ส่งมาเป็นค่าว่าง) เห็นฟิลด์โผล่มาเพิ่มเรื่อยๆทีละตัว
+ * ตามจำนวนเอกสารตัวอย่างที่ label เพิ่ม — mapAbbyyResult() จึงต้องรับมือกับฟิลด์ที่หายไปได้ (null/0 ไปก่อน)
+ *
+ * ตารางรายวัน ("New Table" ใน Timesheet2 / ฟิลด์ Time In-Time Out-Work Hour per Day แยกกันใน
+ * Skill "Timesheet" รุ่นแรก) มี 2 รูปแบบที่ต้องรองรับพร้อมกัน:
+ *   1) รุ่นแรก — field ตารางแต่ละคอลัมน์เป็น "ก้อนข้อความเดียว" คั่นด้วย "\n" ต่อวัน ไม่ใช่แถวจริง
+ *      และ field "Date" ว่างเปล่าเสมอ ต้องจับคู่ตำแหน่งเอาเอง ดู buildDayRowsFromFlatFields()
+ *   2) Timesheet2 — ได้ตารางเป็นแถวจริงแล้ว (RootObject.Fields[].List[].Value.Fields[] ต่อแถว)
+ *      แต่ตรวจกับผลจริงพบว่าค่าในคอลัมน์ยังสลับตำแหน่งกันไม่คงที่ต่อแถว (ไม่ใช่ shift แบบตายตัวที่แก้
+ *      โค้ดตามได้) ดูคอมเมนต์ hasStructuredTable() ด้านล่าง — ยังไม่ดึงเวลาเข้า-ออกจากตารางนี้เลย
+ * ทั้งสองแบบ: ไม่มั่นใจว่าจับคู่ถูกแถวจริงเมื่อไหร่ ให้คืน [] ดีกว่าใส่ข้อมูลผิดแบบเงียบๆ
  */
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -271,10 +276,13 @@ function splitLines(value) {
 }
 
 /**
- * สร้าง days[] โดยจับคู่ตำแหน่ง — ดูคอมเมนต์หัวไฟล์อธิบายเหตุผล/ข้อจำกัดเต็มๆ
- * คืน [] (ไม่ใช่ข้อมูลครึ่งๆกลางๆ) ทันทีที่จำนวนค่าไม่ตรงกับที่คาดไว้ ไม่มั่นใจว่าจะจับคู่ถูกแถวจริง
+ * สร้าง days[] จากฟิลด์ตารางแบบก้อนข้อความเดิม (Skill "Timesheet" รุ่นแรก) — จับคู่ตำแหน่ง
+ * ดูคอมเมนต์หัวไฟล์อธิบายเหตุผล/ข้อจำกัดเต็มๆ คืน [] ทันทีที่จำนวนค่าไม่ตรงกับที่คาดไว้
+ * ไม่มั่นใจว่าจะจับคู่ถูกแถวจริง — ใช้เฉพาะตอน field เป็นก้อนข้อความ (fields['Work Hour per Day']
+ * เป็น string) เท่านั้น ถ้า Skill ใหม่คืนตารางมาเป็นแถวจริงแล้ว (ดู extractDayRowsFromTable)
+ * ให้ใช้ทางนั้นแทน
  */
-function buildDayRows(fields, period) {
+function buildDayRowsFromFlatFields(fields, period) {
   const totalDays = daysInMonth(period);
   if (!totalDays) return [];
 
@@ -301,32 +309,75 @@ function buildDayRows(fields, period) {
 }
 
 /**
+ * ตาราง "New Table" ของ Skill "Timesheet2" (21 ส.ค. 69) — ตอนนี้ ABBYY คืนมาเป็นแถวจริงแล้ว
+ * (ไม่ใช่ก้อนข้อความเหมือนเดิม) แต่ตรวจกับผลจริงแล้วพบว่า**ค่าในแต่ละคอลัมน์ยังสลับตำแหน่งกันไม่คงที่
+ * ต่างกันไปทุกแถว** (เช่นแถวหนึ่ง "Time Out" ดันมีค่าที่ควรเป็นเวลาเข้า อีกแถว "Type" ดันมีค่าเวลาออก)
+ * ไม่ใช่การสลับแบบตายตัวที่เขียนโค้ดแก้ตามได้ — ถ้าอ่านค่าคอลัมน์ตรงชื่อไปเลยจะได้เวลา/รายละเอียดผิด
+ * แบบดูสมเหตุสมผลแต่ผิดจริง อันตรายกว่าตารางว่างเปล่า จึง**ไม่ดึงเวลาเข้า-ออก/รายละเอียดงานจากตารางนี้
+ * เลยตอนนี้** — ปล่อยให้ [] ไว้ก่อน (คนตรวจพิมพ์เพิ่มเองได้) จนกว่า Skill จะ train ตารางนี้ให้
+ * คอลัมน์ตรงตำแหน่งสม่ำเสมอทุกแถวก่อน
+ *
+ * สิ่งเดียวที่ดึงมาใช้ได้อย่างปลอดภัยจากตารางนี้คือ "แถวไหนเป็นวันจริงในเดือน" (ฟิลด์ "Date" เป็น
+ * เลขล้วนๆ) เพื่อกันไม่ให้แถวหัวตาราง/แถวลายเซ็นที่หลุดเข้ามาปนถูกนับเป็นวันทำงาน — ใช้แค่นับ
+ * จำนวนแถวเป็นตัวเช็คคร่าวๆเท่านั้น ไม่ได้ใช้คำนวณอะไรที่กระทบยอดเงิน
+ */
+function hasStructuredTable(rootObject) {
+  const table = rootObject?.Fields?.find((f) => f.Name === 'New Table');
+  return Array.isArray(table?.List) && table.List.length > 0 && table.List[0]?.Value?.Fields;
+}
+
+/**
  * แปลงผลลัพธ์ดิบจาก ABBYY (Transaction.Documents[0].ExtractedData.RootObject) ให้ตรงกับ
  * TIMESHEET_SCHEMA ที่ src/extract/timesheet.js ใช้ต่อ (verifyExtraction, calculateManday ฯลฯ
  * ใช้ schema เดียวกันไม่ว่าจะมาจาก ABBYY หรือโมเดลในเครื่อง)
+ *
+ * รองรับทั้งชื่อฟิลด์เก่า (Skill "Timesheet") และใหม่ (Skill "Timesheet2") พร้อมกัน เพราะทั้งสอง
+ * Skill อาจสลับกันใช้งานได้ตาม ABBYY_SKILL_ID — Timesheet2 ยัง train ไม่ครบทุกฟิลด์ (ดูคอมเมนต์
+ * หัวไฟล์ 21 ส.ค. 69) ฟิลด์ไหนที่ ABBYY ยังไม่ส่งมาจะเป็น null/0 ไปก่อน ไม่ใช่ error — ต้องกรอกเพิ่มเอง
  */
 export function mapAbbyyResult(rawResult) {
   const rootObject = rawResult?.Transaction?.Documents?.[0]?.ExtractedData?.RootObject;
   const fields = fieldMap(rootObject);
 
-  const period = parsePeriodFromYearField(fields['Year']);
+  const period = parsePeriodFromYearField(fields['Month Year'] ?? fields['Year']);
   const employeeName = fields['Employee Name'] ?? null;
+  const position = fields['Position'] ?? fields['Role'] ?? null;
   const projectManagerSignatureName = fields['Approver'] ?? null;
-  const totalWorkDays = fields['Man Day'] ? Number(fields['Man Day']) : 0;
-  const totalHours = fields['Total Hours'] ? Number(fields['Total Hours']) : null;
-  const days = buildDayRows(fields, period);
+  const rawTotalWorkDays = fields['Total Work days'] ?? fields['Man Day'];
+  const totalWorkDays = rawTotalWorkDays ? Number(rawTotalWorkDays) : 0;
+  const rawTotalHours = fields['Total Hours'];
+  const totalHours = rawTotalHours ? Number(rawTotalHours) : null;
+  const rawLeaveSick = fields['Leave Sick'];
+  const totalLeaveDays = rawLeaveSick ? Number(rawLeaveSick) : 0;
+
+  // ตารางแถวจริงของ Timesheet2 ยังไม่น่าเชื่อพอจะดึงเวลาเข้า-ออกอัตโนมัติ (ดูคอมเมนต์ hasStructuredTable)
+  // ส่วนตารางก้อนข้อความของ Timesheet รุ่นแรกยังลองแบบเดิมได้ตามปกติ
+  const days = hasStructuredTable(rootObject) ? [] : buildDayRowsFromFlatFields(fields, period);
+
+  const missingFieldNotes = [];
+  if (hasStructuredTable(rootObject)) {
+    missingFieldNotes.push(
+      'ABBYY อ่านตารางรายวันมาเป็นแถวแล้ว แต่คอลัมน์ยังสลับตำแหน่งกันไม่คงที่ต่อแถว — ไม่ได้ดึงเวลาเข้า-ออก/รายละเอียดงานให้อัตโนมัติ ต้องกรอกเพิ่มเอง',
+    );
+  } else if (fields['Time In'] && days.length === 0) {
+    missingFieldNotes.push(
+      'ABBYY อ่านตารางรายวันได้ แต่จำนวนค่าที่ได้ไม่ตรงกับจำนวนวันในเดือน/วันทำงาน — ไม่ได้ใส่ตารางรายวันให้ ต้องกรอกเพิ่มเอง',
+    );
+  }
+  if (!rawTotalWorkDays) missingFieldNotes.push('ABBYY ยังไม่ส่งจำนวนวันทำงานมา (ฟิลด์ "Total Work days") — ต้องกรอกเพิ่มเอง');
+  if (!period) missingFieldNotes.push('ABBYY ยังไม่ส่งรอบเดือนมา (ฟิลด์ "Month Year") — ต้องเลือก "รอบเดือน" เอง');
 
   return {
     vendor: fields['Vendor'] ?? null,
     clientName: fields['Client Name'] ?? null,
     projectName: fields['Project Name'] ?? null,
     employeeName,
-    position: fields['Role'] ?? null,
+    position,
     period,
     documentNo: null,
     approvalStatus: null,
     totalWorkDays: Number.isFinite(totalWorkDays) ? totalWorkDays : 0,
-    totalLeaveDays: 0,
+    totalLeaveDays: Number.isFinite(totalLeaveDays) ? totalLeaveDays : 0,
     totalHours: Number.isFinite(totalHours) ? totalHours : null,
     days,
     leaveDays: [],
@@ -336,9 +387,7 @@ export function mapAbbyyResult(rawResult) {
     employeeSignatureName: employeeName,
     signedByProjectManager: Boolean(projectManagerSignatureName),
     projectManagerSignatureName,
-    notes: fields['Time In'] && days.length === 0
-      ? ['ABBYY อ่านตารางรายวันได้ แต่จำนวนค่าที่ได้ไม่ตรงกับจำนวนวันในเดือน/วันทำงาน — ไม่ได้ใส่ตารางรายวันให้ ต้องกรอกเพิ่มเอง']
-      : [],
+    notes: missingFieldNotes,
   };
 }
 
