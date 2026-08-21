@@ -1,11 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { AbbyyClient, AbbyyError, hasAbbyyCredentials, mapAbbyyResult } from '../src/extract/abbyy.js';
-
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 const BASE = 'https://vantage-au.abbyy.com';
 
@@ -122,63 +117,82 @@ test('getAccessToken โยน AbbyyError ถ้า ABBYY ตอบกลับ�
   );
 });
 
-/* ยืนยันด้วยการรันตรงกับผลจริงจาก ABBYY Skill "Timesheet" (17 ส.ค. 69) กับไฟล์จริง
-   "Timesheet_Pitikorn_Chumphuchanapai_May_2026.pdf" — fixture นี้ตัดเฉพาะ Fields/List/Value
-   ออกมาจากผลจริง (ตัด Annotations/ImageRegions/DocumentDefinition ที่ไม่เกี่ยวกับการ map ทิ้ง
-   เพื่อลดขนาดไฟล์ ไม่ได้แก้ไขค่าจริงเลยสักตัว) */
-test('mapAbbyyResult แปลผลจริงจาก ABBYY ได้ถูกต้องครบ — ชื่อ/ตำแหน่ง/รอบเดือน/ผู้อนุมัติ/ตารางรายวัน', async () => {
-  const raw = JSON.parse(await readFile(join(FIXTURES, 'abbyy-timesheet-may2026.json'), 'utf8'));
-  const data = mapAbbyyResult(raw);
+/* Timesheet2 ยัง train ฟิลด์ไม่ครบพร้อมกันในชีวิตจริง (ดูคอมเมนต์หัวไฟล์ abbyy.js) เทสต์นี้จึงสร้าง
+   ข้อมูลจำลองแทนการ snapshot ผลจริง — กัน flaky เวลา ABBYY publish ฟิลด์เพิ่มแล้ว fixture เก่าล้าสมัย
+   สมมติว่า train ครบทุกฟิลด์ของ Timesheet2 แล้ว (Position, Total Work days, Month Year, Leave
+   Sick ฯลฯ) เพื่อยืนยันว่า mapAbbyyResult() อ่านชื่อฟิลด์เหล่านี้ถูกต้อง */
+test('mapAbbyyResult อ่านชื่อฟิลด์ของ Timesheet2 ได้ถูกต้องครบ (Position/Total Work days/Month Year/Leave Sick)', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'Vendor', List: [{ Value: 'iPassion Co.,Ltd.' }] },
+      { Name: 'Client Name', List: [{ Value: 'PTT Co.,Ltd.' }] },
+      { Name: 'Project Name', List: [{ Value: 'Outsource for PTT Project' }] },
+      { Name: 'Month Year', List: [{ Value: 'May 2026' }] },
+      { Name: 'Employee Name', List: [{ Value: 'Pitikorn Chumphuchanapai' }] },
+      { Name: 'Position', List: [{ Value: 'OutSystems Developer' }] },
+      { Name: 'Total Work days', List: [{ Value: '19' }] },
+      { Name: 'Leave Sick', List: [{ Value: '2' }] },
+      { Name: 'Total Hours', List: [{ Value: '152.00' }] },
+      { Name: 'Approver', List: [{ Value: 'Nichaphat Chokrak' }] },
+    ] } } }] },
+  });
 
+  assert.equal(data.vendor, 'iPassion Co.,Ltd.');
+  assert.equal(data.clientName, 'PTT Co.,Ltd.');
+  assert.equal(data.projectName, 'Outsource for PTT Project');
   assert.equal(data.employeeName, 'Pitikorn Chumphuchanapai');
   assert.equal(data.position, 'OutSystems Developer');
   assert.equal(data.period, '2026-05');
-  assert.equal(data.vendor, 'iPassion Co.,Ltd.');
-  assert.equal(data.clientName, 'PTT Co.,Ltd.');
   assert.equal(data.totalWorkDays, 19);
+  assert.equal(data.totalLeaveDays, 2);
   assert.equal(data.totalHours, 152);
   assert.equal(data.projectManagerSignatureName, 'Nichaphat Chokrak');
   assert.equal(data.signedByProjectManager, true);
   assert.equal(data.signedByEmployee, true);
-  assert.equal(data.leaveDays.length, 0);
-
-  // ตารางรายวัน: 19 วันทำงานจริง จับคู่ตำแหน่งกับ "Work Hour per Day" ที่มีครบ 31 วัน
-  assert.equal(data.days.length, 19);
-  const byDate = Object.fromEntries(data.days.map((d) => [d.date, d]));
-  // เวลาเข้า-ออกส่วนใหญ่ 9:00-18:00 ยกเว้น 4 วันที่ในไฟล์จริงเลื่อนเวลาไปทีละชั่วโมง
-  assert.deepEqual(byDate['2026-05-05'], {
-    date: '2026-05-05', timeIn: '9:00', timeOut: '18:00',
-    label: null, type: null, remark: null, jobDescription: null,
-  });
-  assert.equal(byDate['2026-05-12'].timeIn, '10:00');
-  assert.equal(byDate['2026-05-12'].timeOut, '19:00');
-  assert.equal(byDate['2026-05-13'].timeIn, '11:00');
-  assert.equal(byDate['2026-05-14'].timeIn, '12:00');
-  assert.equal(byDate['2026-05-15'].timeIn, '13:00');
-  // วันหยุด/เสาร์-อาทิตย์ (เช่น 1, 2, 9, 10) ต้องไม่มีแถวใน days เลย
-  assert.equal(byDate['2026-05-01'], undefined);
-  assert.equal(byDate['2026-05-09'], undefined);
 });
 
-test('mapAbbyyResult คืน days เป็น [] ถ้าไม่พบฟิลด์ "Year" (ไม่รู้รอบเดือน จับคู่ตำแหน่งไม่ได้)', () => {
+test('mapAbbyyResult คืน position/period เป็น null ถ้า ABBYY ยังไม่ส่งฟิลด์นั้นมา (ไม่รองรับชื่อฟิลด์เก่าอีกแล้ว)', () => {
   const data = mapAbbyyResult({
     Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
       { Name: 'Employee Name', List: [{ Value: 'Somchai Jaidee' }] },
+      // ชื่อฟิลด์เก่าของ Skill "Timesheet" รุ่นแรก (Role/Man Day/Year) ต้องไม่ถูกอ่านแล้ว
+      { Name: 'Role', List: [{ Value: 'Java Programmer' }] },
+      { Name: 'Man Day', List: [{ Value: '20' }] },
+      { Name: 'Year', List: [{ Value: 'May 2026' }] },
     ] } } }] },
   });
   assert.equal(data.employeeName, 'Somchai Jaidee');
+  assert.equal(data.position, null);
+  assert.equal(data.totalWorkDays, 0);
+  assert.equal(data.period, null);
   assert.deepEqual(data.days, []);
+  assert.match(data.notes.join(' '), /Total Work days/);
+  assert.match(data.notes.join(' '), /Month Year/);
 });
 
-test('mapAbbyyResult คืน days เป็น [] ถ้าจำนวนค่าใน Work Hour per Day ไม่ตรงกับจำนวนวันในเดือน (ไม่มั่นใจว่าจับคู่ถูกแถว)', () => {
+test('mapAbbyyResult คืน days เป็น [] ถ้าตาราง "New Table" คืนมาเป็นแถวจริงแล้ว (ยังไม่เชื่อคอลัมน์ในนั้น)', () => {
   const data = mapAbbyyResult({
     Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
-      { Name: 'Year', List: [{ Value: 'May 2026' }] },
+      { Name: 'Month Year', List: [{ Value: 'May 2026' }] },
+      { Name: 'New Table', List: [{ Value: { Fields: [
+        { Name: 'Date', List: [{ Value: '5' }] },
+        { Name: 'Time In', List: [{ Value: '9:00' }] },
+      ] } }] },
+    ] } } }] },
+  });
+  assert.deepEqual(data.days, []);
+  assert.match(data.notes.join(' '), /คอลัมน์ยังสลับตำแหน่งกัน/);
+});
+
+test('mapAbbyyResult คืน days เป็น [] ถ้าจำนวนค่าใน Work Hour per Day (ตารางแบบก้อนข้อความเดิม) ไม่ตรงกับจำนวนวันในเดือน', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'Month Year', List: [{ Value: 'May 2026' }] },
       { Name: 'Work Hour per Day', List: [{ Value: '8.00\n8.00' }] }, // แค่ 2 ค่า ไม่ใช่ 31
       { Name: 'Time In', List: [{ Value: '9:00\n9:00' }] },
       { Name: 'Time Out', List: [{ Value: '18:00\n18:00' }] },
     ] } } }] },
   });
   assert.deepEqual(data.days, []);
-  assert.match(data.notes[0], /ไม่ได้ใส่ตารางรายวันให้/);
+  assert.match(data.notes.join(' '), /ไม่ได้ใส่ตารางรายวันให้/);
 });

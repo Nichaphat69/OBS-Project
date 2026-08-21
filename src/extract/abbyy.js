@@ -331,19 +331,20 @@ function hasStructuredTable(rootObject) {
  * TIMESHEET_SCHEMA ที่ src/extract/timesheet.js ใช้ต่อ (verifyExtraction, calculateManday ฯลฯ
  * ใช้ schema เดียวกันไม่ว่าจะมาจาก ABBYY หรือโมเดลในเครื่อง)
  *
- * รองรับทั้งชื่อฟิลด์เก่า (Skill "Timesheet") และใหม่ (Skill "Timesheet2") พร้อมกัน เพราะทั้งสอง
- * Skill อาจสลับกันใช้งานได้ตาม ABBYY_SKILL_ID — Timesheet2 ยัง train ไม่ครบทุกฟิลด์ (ดูคอมเมนต์
- * หัวไฟล์ 21 ส.ค. 69) ฟิลด์ไหนที่ ABBYY ยังไม่ส่งมาจะเป็น null/0 ไปก่อน ไม่ใช่ error — ต้องกรอกเพิ่มเอง
+ * รองรับชื่อฟิลด์ของ Skill "Timesheet2" เท่านั้น (Position, Total Work days, Month Year, Leave
+ * Sick ฯลฯ) — เลิกใช้ Skill "Timesheet" รุ่นแรกแล้ว ไม่ต้องรองรับชื่อฟิลด์เก่าอีกต่อไป Timesheet2
+ * ยัง train ไม่ครบทุกฟิลด์ (ดูคอมเมนต์หัวไฟล์ 21 ส.ค. 69) ฟิลด์ไหนที่ ABBYY ยังไม่ส่งมาจะเป็น null/0
+ * ไปก่อน ไม่ใช่ error — ต้องกรอกเพิ่มเอง
  */
 export function mapAbbyyResult(rawResult) {
   const rootObject = rawResult?.Transaction?.Documents?.[0]?.ExtractedData?.RootObject;
   const fields = fieldMap(rootObject);
 
-  const period = parsePeriodFromYearField(fields['Month Year'] ?? fields['Year']);
+  const period = parsePeriodFromYearField(fields['Month Year']);
   const employeeName = fields['Employee Name'] ?? null;
-  const position = fields['Position'] ?? fields['Role'] ?? null;
+  const position = fields['Position'] ?? null;
   const projectManagerSignatureName = fields['Approver'] ?? null;
-  const rawTotalWorkDays = fields['Total Work days'] ?? fields['Man Day'];
+  const rawTotalWorkDays = fields['Total Work days'];
   const totalWorkDays = rawTotalWorkDays ? Number(rawTotalWorkDays) : 0;
   const rawTotalHours = fields['Total Hours'];
   const totalHours = rawTotalHours ? Number(rawTotalHours) : null;
