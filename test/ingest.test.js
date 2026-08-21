@@ -270,9 +270,9 @@ function bubbleTexts(bubble) {
   return out;
 }
 
-test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน → nextAction เป็น fix_mismatch และแจ้ง LINE (ข้อ 2.6)', async () => {
+test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน → ไม่บล็อกอีกต่อไป (workday_sum เป็น WARN) แต่ยังทักไว้ให้เห็น', async () => {
   const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
-  data.totalWorkDays = 25;          // รายงานเกินจริง
+  data.totalWorkDays = 25;          // รายงานเกินจริง — เช่นทำงานเสาร์-อาทิตย์/OT จริง
 
   const line = new FakeLineClient();
   const result = await svc.ingestTimesheet({
@@ -283,14 +283,12 @@ test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน 
     lineClient: line,
   });
 
-  assert.equal(result.status, 'mismatch');
-  assert.equal(result.nextAction, svc.NEXT_ACTION.FIX_MISMATCH);
-  assert.ok(result.failures.length > 0, 'ต้องบอกด้วยว่าไม่ผ่านข้อไหน');
+  assert.equal(result.status, 'verified');
+  assert.notEqual(result.nextAction, svc.NEXT_ACTION.FIX_MISMATCH);
+  assert.equal(result.failures.length, 0, 'workday_sum ไม่ใช่ FAIL แล้ว จึงไม่มีในรายการ failures');
 
-  assert.equal(line.sent.length, 1, 'ต้องแจ้ง LINE ครั้งเดียวตอนตรวจไม่ผ่าน');
-  assert.match(line.sent[0], /พงศ์พันธ์ มามาก/, 'ต้องใช้ชื่อไทยที่จับคู่ได้ ไม่ใช่ชื่อดิบจากไฟล์');
-  assert.match(line.sent[0], /2026020102/);
-  for (const failure of result.failures) assert.ok(line.sent[0].includes(failure));
+  assert.equal(line.sent.length, 0, 'ต้องไม่ใช่ข้อความ "ตรวจไม่ผ่าน" แบบเดิมอีกแล้ว');
+  assert.equal(line.flex.length, 1, 'ยังต้องแจ้ง LINE ตามปกติ (สรุปคิวที่รอตรวจแบบบับเบิล) แม้ตัวเลขไม่ตรงปฏิทิน');
 });
 
 test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE สรุปทั้งคิวที่รอตรวจ (ไม่ใช่ข้อความตรวจไม่ผ่าน)', async () => {

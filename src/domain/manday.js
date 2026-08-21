@@ -124,6 +124,9 @@ function runChecks({
   const checks = [];
 
   // 1. วันทำงานที่ Timesheet รายงาน + วันลา ต้องเท่ากับวันทำงานของเดือน
+  // เดิมเช็คนี้เป็น FAIL (บล็อกปุ่ม "ยืนยันว่าตรวจแล้ว") — ปรับเป็น WARN ตามที่ขอ เพราะพนักงาน
+  // บางคนทำงานวันเสาร์-อาทิตย์/OT จริง ทำให้ยอดเกินวันทำงานปฏิทินได้โดยไม่ใช่ข้อมูลผิด ยังคงโชว์
+  // ให้เห็นไว้เผื่อดูประกอบ แต่ไม่บล็อกการยืนยันอีกต่อไป (คนตรวจรับผิดชอบดูตัวเลขเองแทน)
   const sum = reportedWorkDays + leaveDays.length;
   checks.push(
     sum === standardWorkingDays
@@ -135,7 +138,7 @@ function runChecks({
         }
       : {
           id: 'workday_sum',
-          severity: SEVERITY.FAIL,
+          severity: SEVERITY.WARN,
           title: 'วันทำงานบวกวันลาไม่เท่ากับวันทำงานของเดือน',
           detail: `Timesheet รายงาน ${reportedWorkDays} + ลา ${leaveDays.length} = ${sum} แต่ปฏิทินคำนวณได้ ${standardWorkingDays} วัน`,
         },

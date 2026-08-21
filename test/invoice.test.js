@@ -164,7 +164,7 @@ test('หมายเหตุที่ระบบสร้างใช้ป�
   assert.equal(thaiDate('2026-01-31'), '31 มกราคม 2569');
 });
 
-test('ตรวจจับวันทำงานที่ไม่ตรงกับปฏิทิน', () => {
+test('ทักวันทำงานที่ไม่ตรงกับปฏิทินแบบ WARN — ไม่บล็อกการยืนยันอีกต่อไป (พนักงานอาจทำงานเสาร์-อาทิตย์/OT จริง)', () => {
   const result = calculateManday({
     period: '2026-01',
     monthlyRate: DEV.monthlyRate,
@@ -173,9 +173,9 @@ test('ตรวจจับวันทำงานที่ไม่ตรง�
     holidays: HOLIDAYS_JAN_2026,
   });
 
-  assert.equal(result.ok, false);
-  const failed = result.checks.find((c) => c.severity === SEVERITY.FAIL);
-  assert.equal(failed.id, 'workday_sum');
+  assert.equal(result.ok, true);
+  const flagged = result.checks.find((c) => c.id === 'workday_sum');
+  assert.equal(flagged.severity, SEVERITY.WARN);
 });
 
 test('ตรวจจับวันลาที่ตรงกับวันหยุด', () => {
