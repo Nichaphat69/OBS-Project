@@ -25,7 +25,15 @@
  *      แต่ตรวจกับผลจริงพบว่าค่าในคอลัมน์ยังสลับตำแหน่งกันไม่คงที่ต่อแถว (ไม่ใช่ shift แบบตายตัวที่แก้
  *      โค้ดตามได้) ดูคอมเมนต์ hasStructuredTable() ด้านล่าง — ยังไม่ดึงเวลาเข้า-ออกจากตารางนี้เลย
  * ทั้งสองแบบ: ไม่มั่นใจว่าจับคู่ถูกแถวจริงเมื่อไหร่ ให้คืน [] ดีกว่าใส่ข้อมูลผิดแบบเงียบๆ
+ *
+ * ข้อยกเว้นเดียว (21 ส.ค. 69 ตามที่ขอ): วันลา (leaveDays) — ดึงจากตาราง "New Table" ของ Timesheet2
+ * โดยสแกนค่าทุกคอลัมน์ของแถว (ยกเว้น Description) หาคำที่บ่งบอกว่าเป็นวันลา ด้วย classifyDayKind()
+ * ตัวเดียวกับที่ทางโมเดลในเครื่องใช้อยู่แล้ว (ทนคอลัมน์สลับตำแหน่งได้เพราะไม่ยึดว่าต้องอยู่คอลัมน์ไหน)
+ * — ยอมรับความเสี่ยงนี้ตามที่ผู้ใช้ขอ แม้จะรู้ว่าตารางยังไม่น่าเชื่อ 100% เพราะกระทบแค่ "วันไหนเป็นวันลา"
+ * ไม่ได้ไปยุ่งกับเวลาเข้า-ออก/รายละเอียดงานที่เสี่ยงกว่า — ยังคงแนบโน้ตเตือนไว้ให้ตรวจทานกับ PDF จริงก่อนยืนยัน
  */
+
+import { classifyDayKind, classifyLeaveType } from './normalize.js';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 // เอกสาร ABBYY แนะนำไม่ควรเช็คสถานะถี่กว่า 1 ครั้ง/วินาที — ตั้งเผื่อไว้ที่ 1.5 วินาที
@@ -326,6 +334,47 @@ function hasStructuredTable(rootObject) {
   return Array.isArray(table?.List) && table.List.length > 0 && table.List[0]?.Value?.Fields;
 }
 
+/** "02/05/26" → "2026-05-02" — คอลัมน์ "Day" มีวันที่เต็มรูปแบบอยู่แล้ว ไม่ต้องพึ่ง period จากที่อื่น
+ * (แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปนจะไม่ match รูปแบบนี้ คืน null ให้ข้ามแถวนั้นไปเอง) */
+function parseTableRowDate(cols) {
+  const m = String(cols['Day'] ?? '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]) < 100 ? Number(m[3]) + 2000 : Number(m[3]);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * ดึงวันลาจากตาราง "New Table" — สแกนค่าทุกคอลัมน์ของแถว (ยกเว้น "Description" ที่เป็นย่อหน้า
+ * บรรยายงานอิสระ เสี่ยงจับคำว่า "ลา" ผิดที่แทรกอยู่กลางคำอื่น เหมือนที่เจอมาแล้วฝั่งโมเดลในเครื่อง)
+ * ด้วย classifyDayKind() — ทนคอลัมน์สลับตำแหน่งได้เพราะไม่ยึดว่า label ต้องอยู่คอลัมน์ไหนเป๊ะๆ
+ * ดูคอมเมนต์หัวไฟล์อธิบายความเสี่ยงที่ยอมรับไว้แล้ว
+ */
+function extractLeaveDaysFromTable(rootObject) {
+  const table = rootObject?.Fields?.find((f) => f.Name === 'New Table');
+  if (!Array.isArray(table?.List)) return [];
+
+  const leaveDays = [];
+  for (const row of table.List) {
+    const cols = {};
+    for (const f of row.Value?.Fields ?? []) cols[f.Name] = f.List?.[0]?.Value ?? null;
+
+    const date = parseTableRowDate(cols);
+    if (!date) continue; // แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปน ไม่มีวันที่ใช้ได้ ข้ามไป
+
+    const labels = Object.entries(cols)
+      .filter(([name]) => name !== 'Description')
+      .map(([, value]) => value);
+    if (classifyDayKind(...labels) !== 'leave') continue;
+
+    const rawLabel = labels.filter(Boolean).join(' ');
+    leaveDays.push({ date, type: classifyLeaveType(rawLabel), rawLabel });
+  }
+  return leaveDays;
+}
+
 /**
  * แปลงผลลัพธ์ดิบจาก ABBYY (Transaction.Documents[0].ExtractedData.RootObject) ให้ตรงกับ
  * TIMESHEET_SCHEMA ที่ src/extract/timesheet.js ใช้ต่อ (verifyExtraction, calculateManday ฯลฯ
@@ -349,17 +398,34 @@ export function mapAbbyyResult(rawResult) {
   const rawTotalHours = fields['Total Hours'];
   const totalHours = rawTotalHours ? Number(rawTotalHours) : null;
   const rawLeaveSick = fields['Leave Sick'];
-  const totalLeaveDays = rawLeaveSick ? Number(rawLeaveSick) : 0;
 
+  const isStructuredTable = hasStructuredTable(rootObject);
   // ตารางแถวจริงของ Timesheet2 ยังไม่น่าเชื่อพอจะดึงเวลาเข้า-ออกอัตโนมัติ (ดูคอมเมนต์ hasStructuredTable)
   // ส่วนตารางก้อนข้อความของ Timesheet รุ่นแรกยังลองแบบเดิมได้ตามปกติ
-  const days = hasStructuredTable(rootObject) ? [] : buildDayRowsFromFlatFields(fields, period);
+  const days = isStructuredTable ? [] : buildDayRowsFromFlatFields(fields, period);
+  // วันลา: ยอมเสี่ยงดึงจากตารางตามที่ขอ (ดูคอมเมนต์หัวไฟล์) — มีแถวไหนจับได้ว่าเป็นวันลา ใช้จำนวนนั้น
+  // เป็นตัวเลขจริง (แม่นกว่าฟิลด์สรุป "Leave Sick" เพราะรู้วันที่ด้วย) ถ้าตารางจับไม่ได้เลยสักแถว
+  // ค่อย fallback ไปใช้ตัวเลขจากฟิลด์สรุปแทน (ไม่มีวันที่ให้ ก็ยังต้องให้คนกรอกวันเองอยู่ดี)
+  const leaveDays = isStructuredTable ? extractLeaveDaysFromTable(rootObject) : [];
+  const totalLeaveDays = leaveDays.length > 0
+    ? leaveDays.length
+    : (rawLeaveSick ? Number(rawLeaveSick) : 0);
 
   const missingFieldNotes = [];
-  if (hasStructuredTable(rootObject)) {
+  if (isStructuredTable) {
     missingFieldNotes.push(
       'ABBYY อ่านตารางรายวันมาเป็นแถวแล้ว แต่คอลัมน์ยังสลับตำแหน่งกันไม่คงที่ต่อแถว — ไม่ได้ดึงเวลาเข้า-ออก/รายละเอียดงานให้อัตโนมัติ ต้องกรอกเพิ่มเอง',
     );
+    if (leaveDays.length > 0) {
+      missingFieldNotes.push(
+        'วันลาด้านล่างนี้ตรวจจับมาจากตารางเดียวกันที่คอลัมน์ยังไม่แม่นยำ 100% — ตรวจสอบวันที่กับ PDF ต้นฉบับก่อนยืนยัน',
+      );
+    }
+    if (rawLeaveSick && Number(rawLeaveSick) !== leaveDays.length) {
+      missingFieldNotes.push(
+        `ช่องสรุป "Leave Sick" บอกว่ามีวันลา ${rawLeaveSick} วัน แต่ตรวจจากตารางเจอ ${leaveDays.length} วัน — ไม่ตรงกัน ตรวจสอบเพิ่ม`,
+      );
+    }
   } else if (fields['Time In'] && days.length === 0) {
     missingFieldNotes.push(
       'ABBYY อ่านตารางรายวันได้ แต่จำนวนค่าที่ได้ไม่ตรงกับจำนวนวันในเดือน/วันทำงาน — ไม่ได้ใส่ตารางรายวันให้ ต้องกรอกเพิ่มเอง',
@@ -381,7 +447,7 @@ export function mapAbbyyResult(rawResult) {
     totalLeaveDays: Number.isFinite(totalLeaveDays) ? totalLeaveDays : 0,
     totalHours: Number.isFinite(totalHours) ? totalHours : null,
     days,
-    leaveDays: [],
+    leaveDays,
     // ไม่มีฟิลด์ชื่อกำกับลายเซ็นพนักงานแยกต่างหาก (ฟิลด์ "Employee's signature" เป็นรูปภาพ ไม่ใช่ตัวอักษร)
     // ใช้ Employee Name เป็นตัวแทน — มีชื่อพนักงานแปลว่าน่าจะมีลายเซ็นกำกับอยู่ในเอกสารเดียวกัน
     signedByEmployee: Boolean(employeeName),

@@ -184,6 +184,64 @@ test('mapAbbyyResult คืน days เป็น [] ถ้าตาราง "Ne
   assert.match(data.notes.join(' '), /คอลัมน์ยังสลับตำแหน่งกัน/);
 });
 
+/** สร้าง row ของ "New Table" ให้ทดสอบง่ายๆ — cols เป็น { ชื่อคอลัมน์: ค่า } */
+function tableRow(cols) {
+  return { Value: { Fields: Object.entries(cols).map(([name, value]) => ({
+    Name: name, List: [{ Value: value }],
+  })) } };
+}
+
+test('mapAbbyyResult ดึงวันลาจากตาราง "New Table" ได้ แม้ป้ายกำกับ "Sick Leave" ไปอยู่คอลัมน์ผิด (จำลองคอลัมน์สลับตำแหน่ง)', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        tableRow({ Date: '1', Day: '01/06/26', Project: 'Mon', 'Total per day': '0.00' }),
+        // ป้าย "Sick Leave" หลุดไปอยู่คอลัมน์ "Project" (ไม่ใช่ "Type") จำลองคอลัมน์สลับตำแหน่ง
+        tableRow({ Date: '2', Day: '02/06/26', Project: 'Sick Leave', 'Total per day': '0.00' }),
+        tableRow({ Date: '3', Day: '03/06/26', Project: 'Wed', 'Time In': '9:00', 'Time Out': '18:00' }),
+        // แถวหัวตาราง/ลายเซ็นที่หลุดมาปน — "Day" ไม่ใช่รูปแบบวันที่ ต้องไม่ถูกนับ
+        tableRow({ Date: 'No.', Day: 'Date', Description: 'บริษัท ไทยประกันชีวิต ลาน้ำ' }),
+      ] },
+    ] } } }] },
+  });
+
+  assert.equal(data.leaveDays.length, 1);
+  assert.equal(data.leaveDays[0].date, '2026-06-02');
+  assert.equal(data.leaveDays[0].type, 'sick');
+  assert.equal(data.totalLeaveDays, 1);
+  assert.match(data.notes.join(' '), /ตรวจสอบวันที่กับ PDF ต้นฉบับ/);
+});
+
+test('mapAbbyyResult ไม่จับ "ลา" ที่แทรกอยู่กลางคำอื่นในคอลัมน์ "Description" ว่าเป็นวันลา (ไม่สแกน Description)', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        // "ลาน" ("บริเวณลานจอด") อยู่ใน Description เท่านั้น คอลัมน์อื่นบอกว่าเป็นวันทำงานปกติ
+        tableRow({
+          Date: '5', Day: '05/06/26', Project: 'Fri', Type: 'Working',
+          Description: 'ทำงานที่บริเวณลานจอดรถ ติดตั้งกล้อง', 'Time In': '9:00', 'Time Out': '18:00',
+        }),
+      ] },
+    ] } } }] },
+  });
+  assert.deepEqual(data.leaveDays, []);
+});
+
+test('mapAbbyyResult ใช้จำนวนวันลาจากตาราง (มีวันที่จริง) แทนฟิลด์สรุป "Leave Sick" ถ้าไม่ตรงกัน พร้อมโน้ตเตือน', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'Leave Sick', List: [{ Value: '3' }] }, // ฟิลด์สรุปบอกว่ามี 3 วัน
+      { Name: 'New Table', List: [
+        tableRow({ Date: '2', Day: '02/06/26', Project: 'Personal Leave' }), // ตารางเจอแค่ 1 วัน
+      ] },
+    ] } } }] },
+  });
+  assert.equal(data.leaveDays.length, 1);
+  assert.equal(data.leaveDays[0].type, 'personal');
+  assert.equal(data.totalLeaveDays, 1); // เชื่อตารางที่มีวันที่จริงมากกว่าตัวเลขสรุปเปล่าๆ
+  assert.match(data.notes.join(' '), /ไม่ตรงกัน/);
+});
+
 test('mapAbbyyResult คืน days เป็น [] ถ้าจำนวนค่าใน Work Hour per Day (ตารางแบบก้อนข้อความเดิม) ไม่ตรงกับจำนวนวันในเดือน', () => {
   const data = mapAbbyyResult({
     Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
