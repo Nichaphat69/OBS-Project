@@ -3837,6 +3837,38 @@ function hideLoginScreen() {
   el('loginForm').reset();
 }
 
+/* ── login เข้า HRDD (WorkDD) เพิ่มเติม ───────────────────────
+   ยิงหลังจาก login เข้าระบบ OBS สำเร็จ เพื่อเอา accessToken มาเก็บไว้เรียกข้อมูลจาก HRDD
+   API ตรงจาก frontend ต่อได้ — เก็บใน localStorage แยกจาก session cookie ของ OBS เอง
+   ยิงไม่สำเร็จก็ไม่บล็อกการเข้าระบบ OBS (แค่ยังไม่มี token ไปเรียก HRDD ต่อ) */
+const HRDD_TOKEN_KEY = 'hrddAccessToken';
+const HRDD_TOKEN_TYPE_KEY = 'hrddTokenType';
+
+async function loginHrdd() {
+  try {
+    const response = await fetch('http://43.208.215.145:3003/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // ต้องใส่เพราะ backend ตั้ง allowCredentials(true)
+      body: JSON.stringify({
+        username: 'obs.test@workdd.com',
+        password: '1234',
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.accessToken) {
+      console.error('HRDD login ไม่สำเร็จ:', data);
+      return null;
+    }
+    localStorage.setItem(HRDD_TOKEN_KEY, data.accessToken);
+    localStorage.setItem(HRDD_TOKEN_TYPE_KEY, data.tokenType ?? 'Bearer');
+    return data.accessToken;
+  } catch (error) {
+    console.error('เชื่อมต่อ HRDD ไม่สำเร็จ:', error);
+    return null;
+  }
+}
+
 /* ปุ่มในข้อความ LINE พา query string มาเปิดหน้าที่ต้องทำงานต่อได้ทันที ไม่ต้องกดเมนูหาเอง
      ?view=queue                              → คิว "ตรวจ Manday"
      ?view=cycle&contract=…&period=YYYY-MM    → หน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้น
@@ -3988,6 +4020,7 @@ el('loginForm').addEventListener('submit', async (e) => {
         password: el('loginPass').value,
       }),
     });
+    await loginHrdd();
     await startApp();
   } catch (error) {
     el('loginErr').textContent = error.message;
@@ -4032,6 +4065,8 @@ el('logoutBtn').addEventListener('click', async (e) => {
   /* ยิงบอกเซิร์ฟเวอร์ให้ลบ session ทิ้ง — ยิงไม่สำเร็จก็ยังต้องพากลับไปหน้า login อยู่ดี
      ไม่งั้นคนกดออกจากระบบแล้วยังค้างอยู่ในหน้าเดิม นึกว่าออกไปแล้วทั้งที่ยังไม่ออก */
   try { await api('/auth/logout', { method: 'POST' }); } catch { /* ไม่ได้ก็เคลียร์ฝั่งเราไปเลย */ }
+  localStorage.removeItem(HRDD_TOKEN_KEY);
+  localStorage.removeItem(HRDD_TOKEN_TYPE_KEY);
   btn.disabled = false;
   closeWho();
   showLoginScreen();
@@ -4042,6 +4077,7 @@ el('logoutBtn').addEventListener('click', async (e) => {
   try { me = await api('/auth/me'); } catch { me = { loggedIn: false }; }
   if (me.loggedIn) {
     state.username = me.username; // ใช้กันแก้ role/ปิดใช้งานบัญชีตัวเองในหน้าจัดการระบบ
+    if (!localStorage.getItem(HRDD_TOKEN_KEY)) await loginHrdd(); // รีเฟรชหน้า/เปิดแท็บใหม่ตอน session OBS ยังอยู่ แต่ยังไม่มี HRDD token
     await startApp();
   } else showLoginScreen();
 })();
