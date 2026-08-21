@@ -334,16 +334,21 @@ function hasStructuredTable(rootObject) {
   return Array.isArray(table?.List) && table.List.length > 0 && table.List[0]?.Value?.Fields;
 }
 
-/** "02/05/26" → "2026-05-02" — คอลัมน์ "Day" มีวันที่เต็มรูปแบบอยู่แล้ว ไม่ต้องพึ่ง period จากที่อื่น
- * (แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปนจะไม่ match รูปแบบนี้ คืน null ให้ข้ามแถวนั้นไปเอง) */
+/** "02/05/26" → "2026-05-02" — ไม่มีวันที่เต็มรูปแบบ DD/MM/YY อยู่ประจำคอลัมน์ไหนเลย เจอจริงว่า
+ * ครั้งหนึ่งอยู่ใน "Day" อีกครั้งดันสลับไปอยู่ใน "Date" แทน (ส่วน "Day" กลับมีแค่ชื่อวันในสัปดาห์
+ * เช่น "Mon") จึงต้องสแกนทุกคอลัมน์หา pattern นี้เอง ไม่ยึดว่าต้องอยู่คอลัมน์ไหนเป๊ะๆ — เอาตัวแรก
+ * ที่ match (แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปนจะไม่ match รูปแบบนี้เลยสักคอลัมน์ ข้ามแถวนั้นไปเอง) */
 function parseTableRowDate(cols) {
-  const m = String(cols['Day'] ?? '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  const year = Number(m[3]) < 100 ? Number(m[3]) + 2000 : Number(m[3]);
-  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  for (const value of Object.values(cols)) {
+    const m = String(value ?? '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (!m) continue;
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]) < 100 ? Number(m[3]) + 2000 : Number(m[3]);
+    if (day < 1 || day > 31 || month < 1 || month > 12) continue;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return null;
 }
 
 /* เจอจริงว่า ABBYY แยกป้ายวันลาเป็นคำเดี่ยวๆคนละคอลัมน์กัน (เช่น Type="Vacation", Description="Leave"
