@@ -227,6 +227,19 @@ test('mapAbbyyResult ไม่จับ "ลา" ที่แทรกอยู�
   assert.deepEqual(data.leaveDays, []);
 });
 
+test('mapAbbyyResult จับวันลาได้แม้ ABBYY แยกคำเป็นคนละคอลัมน์กัน (เจอจริง: Type="Vacation", Description="Leave")', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        tableRow({ Date: '1', Day: '01/07/26', Project: 'Wed', Type: 'Vacation', Description: 'Leave' }),
+      ] },
+    ] } } }] },
+  });
+  assert.equal(data.leaveDays.length, 1);
+  assert.equal(data.leaveDays[0].date, '2026-07-01');
+  assert.equal(data.leaveDays[0].type, 'vacation');
+});
+
 test('mapAbbyyResult ใช้จำนวนวันลาจากตาราง (มีวันที่จริง) แทนฟิลด์สรุป "Leave Sick" ถ้าไม่ตรงกัน พร้อมโน้ตเตือน', () => {
   const data = mapAbbyyResult({
     Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [

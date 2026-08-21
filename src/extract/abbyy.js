@@ -346,10 +346,27 @@ function parseTableRowDate(cols) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+/* เจอจริงว่า ABBYY แยกป้ายวันลาเป็นคำเดี่ยวๆคนละคอลัมน์กัน (เช่น Type="Vacation", Description="Leave"
+   — คนละคำ คนละช่อง ไม่ใช่ "Vacation Leave" อยู่ในช่องเดียว) classifyDayKind() ต้องมีคำว่า "leave"/"ลา"
+   ครบคำถึงจะรู้ว่าเป็นวันลา คำว่า "Vacation" เดี่ยวๆจึงหลุดผ่านไปเป็น 'work' — เทียบแบบ "ค่าทั้งเซลตรงกับ
+   คำนี้เป๊ะ" (exact match ไม่ใช่ substring) แทน เพื่อจับคำเดี่ยวๆแบบนี้ได้ด้วย โดยไม่เสี่ยงจับ "ลา" ที่แทรก
+   อยู่กลางคำอื่นในย่อหน้าบรรยายงานยาวๆ (ย่อหน้าจริงไม่มีทางเท่ากับคำเดี่ยวๆพวกนี้เป๊ะอยู่แล้ว) จึงรวม
+   "Description" เข้ามาสแกนด้วยได้อย่างปลอดภัยเฉพาะการเทียบแบบนี้ */
+const EXACT_LEAVE_WORDS = new Set([
+  'leave', 'vacation', 'sick', 'personal', 'annual', 'absent',
+  'vacation leave', 'sick leave', 'personal leave', 'annual leave',
+  'ลา', 'ลาป่วย', 'ลากิจ', 'ลาพักร้อน',
+]);
+
+function hasExactLeaveWord(cols) {
+  return Object.values(cols).some((v) => EXACT_LEAVE_WORDS.has(String(v ?? '').trim().toLowerCase()));
+}
+
 /**
- * ดึงวันลาจากตาราง "New Table" — สแกนค่าทุกคอลัมน์ของแถว (ยกเว้น "Description" ที่เป็นย่อหน้า
- * บรรยายงานอิสระ เสี่ยงจับคำว่า "ลา" ผิดที่แทรกอยู่กลางคำอื่น เหมือนที่เจอมาแล้วฝั่งโมเดลในเครื่อง)
- * ด้วย classifyDayKind() — ทนคอลัมน์สลับตำแหน่งได้เพราะไม่ยึดว่า label ต้องอยู่คอลัมน์ไหนเป๊ะๆ
+ * ดึงวันลาจากตาราง "New Table" — สแกนค่าทุกคอลัมน์ของแถว (ยกเว้น "Description" ตอนเช็คแบบ substring
+ * เพราะเป็นย่อหน้าบรรยายงานอิสระ เสี่ยงจับคำว่า "ลา" ผิดที่แทรกอยู่กลางคำอื่น เหมือนที่เจอมาแล้วฝั่งโมเดล
+ * ในเครื่อง) ด้วย classifyDayKind() ก่อน แล้วเสริมด้วย hasExactLeaveWord() ที่รวม Description มาเช็คด้วย
+ * (ปลอดภัยเพราะเช็คแบบ exact match ดูคอมเมนต์ข้างบน) — ทนคอลัมน์สลับตำแหน่งและคำที่ถูกแยกคนละคอลัมน์ได้
  * ดูคอมเมนต์หัวไฟล์อธิบายความเสี่ยงที่ยอมรับไว้แล้ว
  */
 function extractLeaveDaysFromTable(rootObject) {
@@ -364,12 +381,13 @@ function extractLeaveDaysFromTable(rootObject) {
     const date = parseTableRowDate(cols);
     if (!date) continue; // แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปน ไม่มีวันที่ใช้ได้ ข้ามไป
 
-    const labels = Object.entries(cols)
+    const labelsNoDescription = Object.entries(cols)
       .filter(([name]) => name !== 'Description')
       .map(([, value]) => value);
-    if (classifyDayKind(...labels) !== 'leave') continue;
+    const isLeave = classifyDayKind(...labelsNoDescription) === 'leave' || hasExactLeaveWord(cols);
+    if (!isLeave) continue;
 
-    const rawLabel = labels.filter(Boolean).join(' ');
+    const rawLabel = [...labelsNoDescription, cols['Description']].filter(Boolean).join(' ');
     leaveDays.push({ date, type: classifyLeaveType(rawLabel), rawLabel });
   }
   return leaveDays;
