@@ -332,6 +332,12 @@ const routes = [
     return svc.updateContract({ ...body, contractId: decodeURIComponent(m[1]), actor: session.nameTh });
   }],
 
+  /** ตัวเลือกประเภทหัก ณ ที่จ่ายในหน้าตรวจ Timesheet ก่อนยืนยัน — แก้เฉพาะ wht_rate ไม่แตะฟิลด์อื่น */
+  ['PATCH', /^\/api\/contracts\/([^/]+)\/wht-rate$/, (m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.updateContractWhtRate(decodeURIComponent(m[1]), body?.whtRate, { actor: session.nameTh });
+  }],
+
   ['GET', /^\/api\/employees$/, (_m, url) =>
     svc.listEmployees({ contractId: url.searchParams.get('contractId') ?? undefined })],
 

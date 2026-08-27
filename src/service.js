@@ -196,6 +196,27 @@ export function updateContract({
   return listContracts().find((c) => c.id === contractId);
 }
 
+/**
+ * แก้เฉพาะอัตราหัก ณ ที่จ่ายของสัญญา — ใช้จากตัวเลือกประเภทหัก ณ ที่จ่ายในหน้าตรวจ Timesheet
+ * (ก่อนยืนยัน) แยกจาก updateContract() ตรงๆเพราะ updateContract() เป็น full-replace ต้องมีครบ
+ * ทุกฟิลด์ (taxId, po_no, ช่วงสัญญา ฯลฯ) ถ้าเรียกจากหน้านี้ที่มีแค่ contractId+เปอร์เซ็นต์
+ * จะเสี่ยงเผลอรีเซ็ตฟิลด์อื่นที่ไม่รู้ค่ากลับไปเป็นค่า default ของฟังก์ชัน
+ */
+export function updateContractWhtRate(contractId, whtRate, { actor }) {
+  const contract = get('SELECT id FROM contracts WHERE id = $id', { id: contractId });
+  if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
+  const rate = Number(whtRate);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 0.3) {
+    throw Object.assign(new Error('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%'), { status: 400 });
+  }
+  run('UPDATE contracts SET wht_rate = $rate WHERE id = $id', { rate, id: contractId });
+  logAudit({
+    actor, action: 'update_contract_wht_rate', entityType: 'contract', entityId: contractId,
+    detail: { whtRate: rate },
+  });
+  return { contractId, whtRate: rate };
+}
+
 /** ปิดสัญญาฉบับนี้โดยไม่เปิดฉบับอื่นแทน — ปล่อยให้ "ไม่มีสัญญา active เลย" ได้ชั่วคราว
  * (หน้าเว็บควรเตือนให้เลือกฉบับอื่น ไม่ใช่ปิดไปเงียบๆ) */
 export function deactivateContract(contractId, { actor }) {
@@ -398,6 +419,7 @@ export function getTimesheet(id) {
             a.monthly_rate, a.quotation_no,
             c.po_no, c.contract_no, c.project_name, c.divisor_mode, c.divisor_value,
             c.start_date AS contract_start, c.end_date AS contract_end, c.credit_days,
+            c.vat_rate, c.wht_rate,
             cu.id AS customer_id, cu.name_th AS customer_name, cu.tax_id,
             cu.billing_place, cu.contact_name, cu.contact_phone,
             ${CHECK_COLUMNS}
@@ -418,7 +440,9 @@ export function getTimesheet(id) {
     { id },
   );
   const dayLabels = all(
-    'SELECT date, label, time_in, time_out, job_desc, remark FROM timesheet_days WHERE timesheet_id = $id ORDER BY date',
+    `SELECT date, day_of_week, project, label, type, time_in, time_out, ot_time_in, ot_time_out,
+            job_desc, remark, normal_hours, ot_hours, total_hours
+       FROM timesheet_days WHERE timesheet_id = $id ORDER BY date`,
     { id },
   );
 
@@ -444,6 +468,8 @@ export function getTimesheet(id) {
       startDate: row.contract_start,
       endDate: row.contract_end,
       creditDays: row.credit_days,
+      vatRate: row.vat_rate,
+      whtRate: row.wht_rate,
     },
     matching: buildMatchingReport(row),
     audit: all(
@@ -1056,7 +1082,8 @@ function enrichDocument(data, verification) {
 
   const assignment = employee
     ? get(
-        `SELECT a.*, c.id AS contract_id, c.po_no, c.project_name, cu.name_th AS customer_name
+        `SELECT a.*, c.id AS contract_id, c.po_no, c.project_name, cu.name_th AS customer_name,
+                c.vat_rate, c.wht_rate
            FROM assignments a
            JOIN contracts c ON c.id = a.contract_id
            JOIN customers cu ON cu.id = c.customer_id
@@ -1085,6 +1112,8 @@ function enrichDocument(data, verification) {
           customerName: assignment.customer_name,
           monthlyRate: assignment.monthly_rate,
           quotationNo: assignment.quotation_no,
+          vatRate: assignment.vat_rate,
+          whtRate: assignment.wht_rate,
         }
       : null,
     blockers: [
@@ -1926,11 +1955,17 @@ export async function ingestTimesheet({
     for (const day of data.days ?? []) {
       if (!day.label && !day.timeIn) continue;
       run(
-        `INSERT INTO timesheet_days (timesheet_id, date, time_in, time_out, label, job_desc)
-         VALUES ($id, $date, $in, $out, $label, $job)`,
+        `INSERT INTO timesheet_days (
+           timesheet_id, date, day_of_week, project, time_in, time_out, ot_time_in, ot_time_out,
+           type, label, job_desc, normal_hours, ot_hours, total_hours)
+         VALUES ($id, $date, $dow, $project, $in, $out, $otIn, $otOut,
+                 $type, $label, $job, $normalHours, $otHours, $totalHours)`,
         {
-          id: documentNo, date: day.date, in: day.timeIn, out: day.timeOut,
-          label: day.label, job: day.jobDescription,
+          id: documentNo, date: day.date, dow: day.dayOfWeek ?? null, project: day.project ?? null,
+          in: day.timeIn, out: day.timeOut, otIn: day.otTimeIn ?? null, otOut: day.otTimeOut ?? null,
+          type: day.type ?? null, label: day.label, job: day.jobDescription,
+          normalHours: day.normalHours ?? null, otHours: day.otHours ?? null,
+          totalHours: day.totalHours ?? null,
         },
       );
     }

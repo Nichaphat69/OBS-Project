@@ -209,6 +209,48 @@ test('mapAbbyyResult ดึง days จากตาราง "New Table" ได�
   assert.equal(data.days[1].timeOut, null);
 });
 
+test('mapAbbyyResult ดึง dayOfWeek/project/type/ชั่วโมงสรุปจากตาราง "New Table" ได้ครบ (27 ส.ค. 69 ตามที่ขอ) '
+  + 'และเชื่อชั่วโมงที่ ABBYY อ่านมาก่อนถ้ามี', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        tableRow({
+          Date: '1', Day: '01/06/26', Project: 'BSCP-AI', Type: 'Working', Description: 'แก้บั๊ก A',
+          'Time In': '9:00', 'Time Out': '18:00', Normal: '8.00', OT: '0.00', 'Total per day': '8.00',
+        }),
+      ] },
+    ] } } }] },
+  });
+
+  assert.equal(data.days[0].date, '2026-06-01');
+  assert.equal(data.days[0].dayOfWeek, 'Mon'); // 1 มิ.ย. 2569 ตรงกับวันจันทร์จริง
+  assert.equal(data.days[0].project, 'BSCP-AI');
+  assert.equal(data.days[0].type, 'Working');
+  assert.equal(data.days[0].normalHours, 8);
+  assert.equal(data.days[0].otHours, 0);
+  assert.equal(data.days[0].totalHours, 8);
+});
+
+test('mapAbbyyResult ดึงเวลา OT In/Out และคำนวณชม.เองเมื่อตารางมี 4 ค่าเวลาในแถวเดียวแต่ไม่มีคอลัมน์ '
+  + 'Normal/OT/Total per day สรุปมาให้ (27 ส.ค. 69 ตามที่ขอ — เผื่อพนักงานกรอกแค่เวลาเข้า-ออก)', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        tableRow({
+          Date: '1', Day: '01/06/26', Project: 'BSCP-AI', Type: 'Working', Description: 'ปิดงานด่วน',
+          'Time In': '9:00', 'Time Out': '18:00', 'OT In': '19:00', 'OT Out': '21:00',
+        }),
+      ] },
+    ] } } }] },
+  });
+
+  assert.equal(data.days[0].otTimeIn, '19:00');
+  assert.equal(data.days[0].otTimeOut, '21:00');
+  assert.equal(data.days[0].normalHours, 9); // คำนวณเอง 18:00-9:00 เพราะไม่มีคอลัมน์ Normal สรุปมาให้
+  assert.equal(data.days[0].otHours, 2);     // คำนวณเอง 21:00-19:00
+  assert.equal(data.days[0].totalHours, 11); // รวมเอง 9+2 เพราะไม่มีคอลัมน์ Total per day สรุปมาให้
+});
+
 /** สร้าง row ของ "New Table" ให้ทดสอบง่ายๆ — cols เป็น { ชื่อคอลัมน์: ค่า } */
 function tableRow(cols) {
   return { Value: { Fields: Object.entries(cols).map(([name, value]) => ({

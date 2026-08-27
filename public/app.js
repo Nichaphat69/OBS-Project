@@ -46,6 +46,292 @@ const int = (value) => (value === null || value === undefined ? '—' : Number(v
 
 const icon = (name, cls = 'i sm') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 
+/* ── สลับภาษา ไทย/อังกฤษ (27 ส.ค. 69) ─────────────────────────
+   tx(str) แปลข้อความ UI คงที่ (หัวข้อ/ปุ่ม/label/หัวตาราง) — คีย์คือข้อความไทยต้นฉบับเป๊ะๆ ไม่ใช่ key
+   เชิงความหมาย เพื่อให้เห็นชัดว่าแปลอะไรอยู่โดยไม่ต้องเปิดคู่ดิกชันนารี ไม่ครอบคลุมข้อมูลจริง
+   (ชื่อคน/บริษัท/ไฟล์/หมายเหตุที่พิมพ์เอง) เพราะนั่นคือ "ข้อมูล" ไม่ใช่ "ข้อความของหน้าจอ" — ถ้าไม่เจอ
+   คำแปลใน T จะคืนข้อความไทยเดิม ไม่ throw จึงต่อคำแปลเพิ่มได้เรื่อยๆโดยไม่เสี่ยงพังของเดิม
+   ชื่อฟังก์ชันตั้งใจไม่ใช้ t เพราะทั้งไฟล์มีตัวแปร/พารามิเตอร์ชื่อ t (ตัวย่อ "timesheet") ใช้ซ้ำอยู่แล้ว
+   หลายจุด (เช่น sheetCard(t), matchesSearch(t, term)) ถ้าใช้ t ซ้ำจะโดน shadow เงียบๆในฟังก์ชันพวกนั้น */
+const T = {
+  // ── ทั่วไป / คำซ้ำหลายหน้า ──
+  'ใบ': 'sheets', 'วัน': 'days', 'บาท': 'THB', 'คน': 'people', 'เดือน': 'months', 'รอบ': 'cycles',
+  'ข้อมูล ณ': 'Data as of', 'กลับ': 'Back', 'ทั้งหมด': 'All', 'ปิด': 'Close', 'บันทึก': 'Save',
+  'ยกเลิก': 'Cancel', 'ลบ': 'Delete', 'แก้ไข': 'Edit', 'เพิ่ม': 'Add', 'ค้นหา': 'Search',
+  'ไม่มีข้อมูล': 'No data', 'กำลังโหลด…': 'Loading…', 'กำลังโหลดข้อมูล…': 'Loading data…',
+  'ยืนยันแล้ว': 'Confirmed', 'วางบิลแล้ว': 'Billed', 'รออนุมัติ': 'Awaiting approval',
+  'รอคนตรวจ': 'Awaiting review', 'ข้อมูลไม่ตรง': 'Mismatch', 'ได้ไม่ครบ': 'Incomplete',
+  'รอ Timesheet': 'Awaiting Timesheet', 'ตีกลับ': 'Rejected', 'ตีกลับให้แก้ไข': 'Rejected for correction',
+  'รับเข้าระบบ': 'Received', 'อ่านข้อมูลแล้ว': 'Extracted', 'ตรวจผ่าน': 'Verified',
+  'อนุมัติแล้ว': 'Approved', 'รอตรวจ': 'Pending review', 'บันทึกแล้ว': 'Saved', 'ทิ้งแล้ว': 'Discarded',
+  'เกินกำหนด': 'Overdue', 'ตรงเวลา': 'On time', 'เลยกำหนดวางบิล': 'Billing overdue',
+
+  // ── แดชบอร์ด ──
+  'ภาพรวมการวางบิล': 'Billing Overview', 'ยังไม่มีสัญญาในระบบ': 'No contract in the system yet',
+  'ขั้น 2 · รอตรวจสอบ': 'Step 2 · Awaiting review', 'ขั้น 3 · พร้อมวางบิล': 'Step 3 · Ready to bill',
+  'ยอดวางบิลแล้ว': 'Amount billed', 'สถานะรอบบิล': 'Cycle status', 'งานที่ต้องทำ': 'To-do',
+  'เปิด': 'Open', 'ความคืบหน้าสัญญา': 'Contract progress', 'มูลค่าสัญญา': 'Contract value',
+  'คงเหลือ': 'Remaining', 'พนักงานในสัญญา': 'Employees on contract', 'เครดิต': 'Credit',
+  'ส่วนลดวันลารวม': 'Total leave deduction', 'ยังไม่มีสัญญา': 'No contract yet',
+  'รอบบิลตามสัญญา': 'Cycles by contract', 'รอบบิล': 'Billing cycle', 'สถานะ': 'Status',
+  'กำหนดเวลา': 'Deadline', 'มูลค่า': 'Value', 'เลขที่': 'No.', 'รับเมื่อ': 'Received',
+  'ลา': 'Leave', 'เปิดตรวจ': 'Open for review', 'รายการคำนวณ': 'Calculation', 'จำนวน': 'Qty',
+  'เรทค่าบริการต่อเดือน': 'Monthly service rate', 'วันทำงานที่วางบิลได้': 'Billable work days',
+  'ส่วนลดวันลา': 'Leave deduction', 'ไม่มีวันลา': 'No leave', 'ยอดที่วางบิลได้': 'Billable amount',
+  'ยอดเปลี่ยน ต้องยืนยันใหม่': 'Amount changed — needs reconfirmation',
+  'ต้องตรวจ': 'Needs review', 'รอคนยืนยัน': 'Awaiting confirmation',
+  'รับล่าสุด': 'Most recent', 'ยอดสูงสุด': 'Highest amount', 'ชื่อพนักงาน': 'Employee name',
+  'ต้องแก้ก่อน': 'Needs fixing first', 'เทียบเดือนก่อน': 'vs. last month',
+  'ยังเทียบไม่ได้': 'No comparison yet',
+  'ใบว่าจ้าง': 'PO', 'กดเพื่อไปตรวจ': 'Click to review', 'กดเพื่อไปอนุมัติ': 'Click to approve',
+  'รอบล่าสุด': 'Latest cycle', 'รอ': 'Waiting on', 'ตาม Timesheet': 'per Timesheet',
+
+  // ── ตรวจ Manday (คิว) ──
+  'ขั้นที่ 2 จาก 4': 'Step 2 of 4', 'ตรวจ Manday': 'Review Manday', 'เรียงตาม': 'Sort by',
+  'ค้นหาชื่อ เลขเอกสาร ตำแหน่ง รอบบิล…': 'Search by name, doc no., position, cycle…',
+  'ล้างคำค้น': 'Clear search', 'ตัวกรอง': 'Filter',
+  'ไม่พบรายการที่ตรงกับ': 'No results matching',
+  'ไม่มีใบที่รอตรวจ — ทุกใบมีคนยืนยันแล้ว ไปต่อที่ขั้น 3 วางบิล':
+    'Nothing pending review — everything has been confirmed, move on to Step 3 billing',
+  'ไม่มีรายการในหมวดนี้': 'No items in this category', 'แสดง': 'Showing', 'จาก': 'of',
+  'รายการ': 'items', 'ไม่มีรายการ': 'No items', 'กรองจาก': 'filtered from',
+  'ก่อนหน้า': 'Previous', 'ถัดไป': 'Next',
+
+  // ── รายละเอียด Timesheet (openSheet) ──
+  'กลับไปกล่องงาน': 'Back to task box', 'โครงการ': 'Project', 'คำนวณใหม่': 'Recalculate',
+  'อัปโหลด · ระบบอ่านไฟล์': 'Upload · System reads file',
+  'ตรวจ Manday · คนยืนยัน': 'Review Manday · Human confirms',
+  'วางบิล FlowAccount': 'Bill via FlowAccount', 'ร่างอีเมลถึงลูกค้า': 'Draft email to customer',
+  'ภาพรวม': 'Overview', 'รายละเอียด': 'Details', 'ปฏิทิน': 'Calendar',
+  'สรุปรายการที่จะวางบิล': 'Billing line summary',
+  'เรทค่าบริการต่อเดือนตามใบว่าจ้าง': 'Monthly service rate per PO',
+  'วันทำงานของเดือน': 'Work days this month',
+  'หักเสาร์–อาทิตย์ และวันหยุดแล้ว': 'Weekends and holidays excluded',
+  'ทำงานจริงตาม Timesheet': 'Actual work days per Timesheet', 'อัตราต่อวัน': 'Daily rate',
+  'ข้อมูลอ้างอิง': 'Reference info', 'เลขผู้เสียภาษี': 'Tax ID', 'ใบเสนอราคา': 'Quotation',
+  'ช่วงสัญญา': 'Contract period', 'ตัวหารอัตราต่อวัน': 'Daily-rate divisor', 'คงที่': 'Fixed',
+  'วันทำงานจริงของเดือน': 'Actual work days of the month', 'ผู้ประสานงาน': 'Coordinator',
+  'ประวัติการดำเนินการ': 'Activity history', 'ลูกค้าอนุมัติ Timesheet': 'Customer approved Timesheet',
+  'ที่มาของข้อมูล': 'Data source', 'ไฟล์ที่อัปโหลด': 'Uploaded file', 'อ้างอิงอีเมล': 'Email reference',
+  'ไม่ได้ระบุ': 'Not specified', 'ชื่อที่เขียนในไฟล์': 'Name as written in file',
+  'ตำแหน่งที่เขียนในไฟล์': 'Position as written in file', 'เปิดดูไฟล์ต้นฉบับ': 'View original file',
+  'ดาวน์โหลดไฟล์ต้นฉบับ': 'Download original file', 'ดาวน์โหลด': 'Download',
+  'ไม่มีไฟล์ต้นฉบับเก็บไว้': 'No original file stored', 'วันที่': 'Date', 'ป้ายกำกับ': 'Label',
+  'เวลาเข้า–ออก': 'Time in–out', 'รายละเอียดงาน': 'Job details', 'ค่าล่วงเวลา (OT)': 'Overtime (OT)',
+  'ตรวจจับอัตโนมัติจาก Timesheet — ตรวจสอบชั่วโมงกับ PDF ต้นฉบับก่อนยืนยัน':
+    'Auto-detected from the Timesheet — verify hours against the original PDF before confirming',
+  'ชั่วโมง OT': 'OT hours', 'ค่าจ้างวันนั้น (รวม OT)': "That day's pay (incl. OT)",
+  'ค่า OT เพิ่ม': 'Extra OT pay', 'รวมค่า OT ทั้งหมด': 'Total OT pay',
+  'ผลการอ่านไฟล์ดิบ': 'Raw extraction result', 'สรุปประจำเดือน': 'Monthly summary',
+  'ทำงาน (วัน)': 'Work (days)', 'ลาป่วย (วัน)': 'Sick leave (days)',
+  'ลากิจ (วัน)': 'Personal leave (days)', 'ลาพักร้อน (วัน)': 'Vacation (days)',
+  'เสาร์–อาทิตย์ (วัน)': 'Weekends (days)', 'วันหยุด (วัน)': 'Holidays (days)',
+  'หมายเหตุที่จะขึ้นบนใบแจ้งหนี้': 'Remarks shown on the invoice',
+  'ไม่มีวันลา จึงไม่มีหมายเหตุ': 'No leave, so no remarks', 'ยังยืนยันไม่ได้': 'Cannot confirm yet',
+  'ยอดเปลี่ยนหลังยืนยันไปแล้ว': 'Amount changed after confirmation',
+  'อ่านตัวเลขชุดใหม่แล้วยืนยันอีกครั้ง': 'New figures read — please reconfirm',
+  'ตีกลับให้แก้ Timesheet': 'Reject for Timesheet correction',
+  'ไปขั้น 3 วางบิล': 'Go to Step 3 billing', 'ยืนยันว่าตรวจแล้ว': 'Confirm reviewed',
+  'ยังไม่ได้คำนวณ': 'Not calculated yet', 'อา': 'Su', 'จ': 'Mo', 'อ': 'Tu', 'พ': 'We', 'พฤ': 'Th',
+  'ศ': 'Fr', 'ส': 'Sa', 'ทำงาน': 'Work', 'วันหยุด': 'Holiday', 'ลาป่วย': 'Sick leave',
+  'ลากิจ': 'Personal leave', 'ลาพักร้อน': 'Vacation', 'ลาไม่รับค่าจ้าง': 'Unpaid leave',
+  'เสาร์–อาทิตย์ไม่มีป้าย': 'No badge on weekends',
+  'ราคาก่อน–หลังหัก VAT': 'Price before–after VAT', 'รวมเป็นเงิน (ก่อน VAT)': 'Subtotal (before VAT)',
+  'รวมทั้งสิ้น (หลัง VAT)': 'Total (after VAT)', 'ยอดรับชำระสุทธิ': 'Net payment',
+  'เหตุผลที่ตีกลับ…': 'Reason for rejection…', 'ตีกลับเรียบร้อย': 'Rejected successfully',
+  'ภาษีมูลค่าเพิ่ม': 'VAT', 'หักภาษี ณ ที่จ่าย': 'Withholding tax',
+  'คำนวณใหม่แล้ว — วางบิลได้': 'Recalculated — billable', 'วัน ส่วนลด': 'days, deduction',
+  'คำนวณใหม่แล้ว — วันที่วางบิลได้': 'Recalculated — billable days',
+  'พร้อมเข้ารอบบิล': 'ready for the billing cycle',
+
+  // ── วางบิล & ร่างอีเมล (renderCycles/openCycle) ──
+  'ขั้นที่ 3 จาก 4': 'Step 3 of 4', 'วางบิล &amp; ร่างอีเมล': 'Billing &amp; Email',
+  'ของสัญญา': 'of contract', 'ไม่มีรอบบิลในหมวดนี้': 'No billing cycles in this category',
+  'พร้อมอนุมัติ': 'Ready to approve', 'ทุกรอบ': 'All cycles', 'ยังไม่จบ': 'Not done',
+  'กลับ': 'Back', 'กลับหน้ารอบบิล': 'Back to cycle list', 'ยังวางบิลไม่ได้': 'Cannot bill yet',
+  'รายการในรอบบิล': 'Items in this cycle', 'ประกอบเป็นใบแจ้งหนี้ใบเดียว': 'combined into a single invoice',
+  'ข้อมูลที่ส่งเข้า FlowAccount': 'Data sent to FlowAccount', 'ร่างอีเมล': 'Email draft',
+  'Payload ที่จะยิงเข้า API': 'Payload to send to the API',
+  'ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง': 'Verify field names against the API docs before using in production',
+  'ร่างอีเมลวางบิล': 'Billing email draft', 'ให้ระบบเรียบเรียงใหม่': 'Let the system rewrite it',
+  'คัดลอกร่าง': 'Copy draft', 'สร้างร่างใน Gmail': 'Create Gmail draft',
+  'ข้อสังเกตจากระบบ': 'System notes', 'ถึง': 'To', 'สำเนา': 'Cc', 'เรื่อง': 'Subject',
+  'เปิดดูไฟล์นี้': 'View this file', 'ดาวน์โหลดไฟล์นี้': 'Download this file',
+  'ใบแจ้งหนี้ที่จะสร้าง': 'Invoice to be created', 'เลขเอกสารจะได้จาก FlowAccount': 'Document no. will come from FlowAccount',
+  'ส่งเมลแล้ว': 'Email sent', 'ไม่พบอีเมลผู้รับในร่าง': 'No recipient email found in the draft',
+  'บันทึกโดย': 'Recorded by', 'สร้างร่างแล้ว': 'Draft created', 'ดู Timesheet': 'View Timesheet',
+  'วางบิล': 'Billed on', 'ครบกำหนด': 'Due', 'เปิดดูเอกสาร': 'View document', 'สร้างแล้ว': 'Created',
+  'เลขประจำตัวผู้เสียภาษี': 'Tax ID', 'วันที่เอกสาร': 'Document date', 'ครบ': 'due',
+  'เว้นว่างตามใบจริง': 'Left blank to match the real document', 'ส่วนลด': 'Discount',
+  'จำนวนเงิน': 'Amount', 'รวมเป็นเงิน': 'Subtotal', 'รวมหลังหักส่วนลด': 'Total after discount',
+  'รวมทั้งสิ้น': 'Grand total', 'ยอดรับชำระ': 'Payment amount', 'หมายเหตุ': 'Remark',
+  'ภาษีหัก ณ ที่จ่ายคิดจากยอดหลังหักส่วนลดก่อน VAT': 'Withholding tax is calculated on the amount after discount, before VAT',
+  'ตามที่ใบแจ้งหนี้ตัวอย่างทำ ไม่ใช่คิดจากยอดรวมทั้งสิ้น': 'as the sample invoice does — not on the grand total',
+  'สร้างร่างใน FlowAccount แล้ว': 'FlowAccount draft created', 'ยังอนุมัติไม่ได้': 'Cannot approve yet',
+  'ข้อ': 'issue(s)', 'อนุมัติและสร้างร่างใน FlowAccount': 'Approve and create FlowAccount draft',
+  'กำลังส่งเข้า FlowAccount…': 'Sending to FlowAccount…',
+  'ระบบกำลังเรียบเรียง…': 'System is rewriting…',
+  'ระบบร่างอีเมลใหม่แล้ว — อ่านทวนก่อนคัดลอกไปส่ง': 'System redrafted the email — review before copying to send',
+  'คัดลอกร่างอีเมลแล้ว — วางในกล่องเมลได้เลย': 'Email draft copied — paste it into your mail client',
+  'คัดลอกไม่สำเร็จ — เลือกข้อความในกล่องร่างแล้วคัดลอกเอง': 'Copy failed — select the text in the draft box and copy it manually',
+  'กำลังสร้างร่างใน Gmail…': 'Creating Gmail draft…',
+  'สร้างร่างใบแจ้งหนี้': 'Invoice draft', 'ใน FlowAccount แล้ว': 'created in FlowAccount',
+  '(โหมด dry-run — ยังไม่เรียก API จริง)': '(dry-run mode — no real API call made)',
+  'ร่างอีเมลรออยู่ในระบบ ยังไม่ส่งออก': 'Email draft is ready in the system, not sent yet',
+  'สร้างร่างใน Gmail แล้ว — ถึง': 'Gmail draft created — to',
+  'เปิดแท็บใหม่ให้แล้ว กดตรวจแล้วส่งได้จากที่นั่นเลย': 'Opened a new tab — review and send it from there',
+  'สร้างร่างใน Gmail แล้ว — กดส่งจาก Gmail ได้เลย': 'Gmail draft created — you can send it from Gmail',
+  'ระบบจะขึ้นว่าส่งแล้วให้เองเมื่อเปิดหน้านี้อีกครั้ง': 'The system will show it as sent the next time you open this page',
+  'ยังไม่ได้สร้างร่างใน Gmail — สร้างจากแท็บ': 'No Gmail draft yet — create one from the',
+  'ด้านซ้าย': 'tab on the left', 'แล้วระบบจะตามให้เองว่าส่งไปแล้วหรือยัง': 'and the system will track whether it was sent',
+
+  // ── อัปโหลด Timesheet (renderUpload) ──
+  'ขั้นที่ 1 จาก 4': 'Step 1 of 4', 'อัปโหลด Timesheet': 'Upload Timesheet', 'อัปโหลดไฟล์': 'Upload File',
+  'ดึงจาก Gmail': 'Pull from Gmail', 'ยังไม่ต่อ': 'Not connected', 'กรอกเอง': 'Manual entry',
+  'ประวัติ': 'History', 'อีเมลแจ้งอนุมัติ Timesheet': 'Timesheet approval emails',
+  'กำลังเชื่อมต่อ…': 'Connecting…', 'ยังไม่ได้เชื่อมต่อ Gmail': 'Gmail not connected yet',
+  'ทำครั้งเดียวจบ ใช้บัญชี Google ของคุณเองได้': 'One-time setup — you can use your own Google account',
+  'สิทธิ์ที่ขอคือ': 'The permissions requested are', 'อ่านเมล': 'read email', 'สร้างร่าง': 'create drafts',
+  'ในโค้ดไม่มีคำสั่งส่งอีเมลอยู่เลย': 'there is no send-email command anywhere in the code',
+  'ร่างที่สร้างจะไปอยู่ในกล่อง Drafts ให้คุณกดส่งเอง': 'Drafts land in your Drafts folder for you to send yourself',
+  'เลือกไฟล์ Timesheet': 'Choose Timesheet file', 'PDF ที่ลูกค้าอนุมัติแล้ว': 'PDF the customer has approved',
+  'ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์': 'Drag a file here, or click to choose one',
+  'อ่านไฟล์นี้': 'Read this file', 'ข้อมูลจากใบ Timesheet': 'Data from the Timesheet',
+  'รอบเดือน': 'Month', 'ชื่อพนักงาน': 'Employee name', 'ตามที่เขียนในใบ': 'as written on the sheet',
+  'ตำแหน่ง': 'Position', 'ผู้อนุมัติฝั่งลูกค้า': 'Customer-side approver', 'วันที่ลูกค้าอนุมัติ': 'Customer approval date',
+  'วันลา': 'Leave', '+ เพิ่มวันลา': '+ Add leave', 'ไม่มีวันลาก็เว้นว่างไว้': 'Leave blank if there is no leave',
+  'บันทึกเข้าระบบ': 'Save to system', 'ประวัติที่ระบบเคยอ่านแล้ว': 'Previously read history',
+  'ทั้งจากอัปโหลดไฟล์และดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง':
+    'From both file uploads and Gmail — the first gate before entering the real billing system',
+  'กับ': 'and',
+
+  // ── การ์ดผลอ่านไฟล์ (readResultHtml/whtSectionHtml/pendingReadHtml) ──
+  'ข้อมูลที่อ่านได้': 'Data extracted', 'จากอีเมลและไฟล์แนบ': 'from the email and attachment',
+  'จากไฟล์': 'from the file', 'ใบที่': 'Sheet', 'ในไฟล์เดียวกัน': 'in the same file',
+  'เปิดดูไฟล์ต้นฉบับที่ระบบอ่าน': 'View the original file the system read',
+  'เรื่อง': 'Subject', 'เลขเอกสาร': 'Document no.',
+  'ยังบันทึกไม่ได้': 'Cannot save yet',
+  'ชื่อพนักงานตามที่เขียนในไฟล์': 'Employee name as written in the file',
+  'จับคู่กับพนักงานในระบบไม่ได้ — เลือกว่าชื่อนี้คือใคร แล้วกดเพิ่มเป็นชื่อพ้อง':
+    'Could not match to an employee in the system — pick who this is, then add as an alias',
+  'ครั้งต่อไประบบจะจับคู่ให้เอง': 'next time the system will match it automatically',
+  '— เลือกพนักงานที่ตรงกับชื่อนี้ —': '— Choose the employee this name matches —',
+  'เพิ่มเป็นชื่อพ้อง': 'Add as alias', 'ตำแหน่งตามที่เขียนในไฟล์': 'Position as written in the file',
+  'วันทำงานที่ระบุท้ายตาราง': 'Work days stated at the bottom of the table',
+  'วันลาที่ระบุท้ายตาราง': 'Leave days stated at the bottom of the table',
+  'อีเมลระบุวันที่อนุมัติ': 'Email states approval date', 'วันลาที่อ่านได้': 'Leave days extracted',
+  'เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)': 'Compare with HRDD (parent-company attendance system)',
+  'รีเฟรชจาก HRDD': 'Refresh from HRDD', 'กำลังตรวจสอบวันลากับ HRDD…': 'Checking leave against HRDD…',
+  'จับคู่ชื่อพนักงานกับคนในระบบก่อน (ด้านบน) ถึงจะเทียบกับ HRDD ได้':
+    'Match the employee name to someone in the system first (above) before comparing with HRDD',
+  'ลายเซ็น': 'Signature', 'พนักงาน': 'Employee', 'พบลายเซ็น': 'Signature found',
+  'ดู JSON ดิบที่ระบบอ่านออกมา': 'View the raw JSON the system extracted', 'ทิ้งผลนี้': 'Discard this result',
+  'ยืนยันและบันทึกเข้าระบบ': 'Confirm and save to system', 'ระบบกำลังอ่าน': 'System is reading',
+  'เมลและไฟล์แนบ': 'the email and attachment', 'ไฟล์': 'the file', 'ไฟล์ Timesheet': 'Timesheet file',
+  'อ่านทีละหน้าแล้วรวมผล — เอกสารทั่วไปราว': 'Reading page by page and combining the result — typically about',
+  'วินาทีต่อหน้า': 'seconds per page',
+  'ไฟล์ที่รวม Timesheet หลายคนจะใช้เวลาหลายนาที ปล่อยหน้านี้ไว้ได้เลย':
+    'files combining several people’s Timesheets take a few minutes — feel free to leave this page open',
+
+  // ── ใบแจ้งหนี้ (renderInvoices) ──
+  'เอกสาร': 'Documents', 'ใบแจ้งหนี้': 'Invoices',
+  'เอกสารที่ระบบสร้างเข้า FlowAccount — กางยอดภาษีของทุกรอบไว้เทียบกัน':
+    'Documents the system created in FlowAccount — tax figures for every cycle laid out to compare',
+  'เลขที่เอกสาร': 'Document no.', 'หลังส่วนลด': 'After discount', 'หัก ณ ที่จ่าย': 'Withholding tax',
+  'เปิดดูใบวางบิล': 'View invoice', 'ดาวน์โหลดใบวางบิล': 'Download invoice',
+  'ส่งไม่สำเร็จ': 'Failed to send', 'ร่าง': 'Draft',
+  'ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3': 'No invoices yet — create one at Step 3',
+  'รวมยอดที่วางบิลแล้ว': 'Total billed',
+
+  // ── ข้อมูลหลัก (renderMaster) ──
+  'อ้างอิง': 'Reference', 'ข้อมูลหลัก': 'Master Data',
+  'ฐานข้อมูลที่ทั้ง 3 ขั้นใช้ร่วมกัน — จับคู่ชื่อ · หาเรทค่าบริการ · นับวันทำงานของเดือน':
+    'The shared database all 3 steps use — matching names, looking up rates, counting work days',
+  'พนักงาน & ชื่อพ้อง': 'Employees & Aliases', 'ลูกค้า & สัญญา': 'Customers & Contracts',
+  'วันหยุด': 'Holidays', 'เพิ่มพนักงาน': 'Add employee',
+  'ยังไม่มีบริษัทที่กำลังดำเนินการอยู่': 'No active company selected',
+  'รหัส': 'Code', 'ชื่อ': 'Name', 'ชื่อพ้อง': 'Aliases', 'ตำแหน่งพ้อง': 'Position aliases',
+  'ตำแหน่งบนใบแจ้งหนี้': 'Position on invoice', 'เรท/เดือน': 'Rate/month', 'บริษัท': 'Company',
+  'แก้ไขข้อมูลพนักงาน': 'Edit employee', 'นำออกจากโครงการนี้': 'Remove from this project',
+  'เพิ่มลูกค้าใหม่': 'Add new customer',
+  'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ':
+    'Currently active — turning it off will not auto-switch to another company',
+  'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)':
+    'Inactive — turn on to make the system work with this company (auto-switches off any other active one)',
+  'กำลังดำเนินการ': 'Active', 'ปิดอยู่': 'Inactive', 'แก้ไขข้อมูลสัญญา': 'Edit contract',
+  'เลขที่สัญญา': 'Contract no.', 'จำนวนคน': 'Headcount', 'ยอดต่อเดือน': 'Monthly total',
+  'ผู้ประสานงาน': 'Coordinator', 'สถานที่วางบิล': 'Billing address', 'ปฏิทินวันหยุด': 'Holiday calendar',
+  'ชื่อวันหยุด': 'Holiday name', '+ เพิ่มวันหยุด': '+ Add holiday', 'ขอบเขต': 'Scope',
+  'ทุกลูกค้า': 'All customers', 'ลบวันหยุดนี้': 'Delete this holiday', 'ลูกค้า': 'Customer',
+  'บริษัท & สัญญา': 'Company & Contract',
+
+  // ── ข้อมูลหลัก: alias cell / rate cell / add-edit forms ──
+  'คลิกเพื่อแก้ไข': 'Click to edit', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ไม่มี': 'None',
+  'ลบ': 'Delete', 'นี้': 'this', 'ใหม่': 'new', 'แก้เรท': 'Edit rate',
+  'กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว': 'Enter the company and its first contract at once',
+  'ชื่อบริษัท': 'Company name', 'เลขผู้เสียภาษี': 'Tax ID', 'สาขา': 'Branch',
+  'เครดิต (วัน)': 'Credit (days)', 'เบอร์ผู้ประสานงาน': 'Coordinator phone',
+  'อีเมลผู้ประสานงาน': 'Coordinator email', 'สัญญาแรก': 'First contract',
+  'เลขที่ใบว่าจ้าง (PO)': 'PO number', 'เลขที่สัญญา': 'Contract no.', 'ชื่อโครงการ': 'Project name',
+  'ตัวหารอัตราต่อวัน': 'Daily-rate divisor', 'คงที่ (ระบุจำนวนวัน)': 'Fixed (specify days)',
+  'จำนวนวัน (ถ้าคงที่)': 'Number of days (if fixed)', 'วันเริ่มสัญญา': 'Contract start date',
+  'วันสิ้นสุดสัญญา': 'Contract end date',
+  'พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ': 'Employees/rates for this customer can be added later from the',
+  'บันทึกลูกค้าใหม่': 'Save new customer', 'เพิ่มพนักงานใหม่': 'Add new employee',
+  'ผูกอัตราจ้างกับ': 'Linking the rate to', 'ชื่อ-นามสกุล (ไทย)': 'Full name (Thai)',
+  'ชื่อ-นามสกุล (อังกฤษ)': 'Full name (English)', 'รหัสพนักงาน HRDD': 'HRDD employee code',
+  'เลขที่ใบเสนอราคา (QT)': 'Quotation no. (QT)', 'เรทต่อเดือน (บาท)': 'Monthly rate (THB)',
+  'วันเริ่มงาน': 'Start date', 'วันสิ้นสุด (ถ้าไม่ระบุ = ตามสัญญา)': 'End date (blank = follows contract)',
+  'บันทึกพนักงานใหม่': 'Save new employee', 'แก้ไขข้อมูลสัญญา': 'Edit contract',
+  'วันสิ้นสุด': 'End date', 'บันทึกการแก้ไข': 'Save changes', 'สัญญา': 'Contract',
+
+  // ── จัดการระบบ (renderSystemAdmin) ──
+  'ผู้ดูแลระบบ': 'System Admin', 'จัดการระบบ': 'System Admin',
+  'ผู้ใช้ในระบบ · การเชื่อมต่อกับบริการภายนอก · บันทึกทุกการเปลี่ยนแปลง':
+    'System users · connections to external services · a log of every change',
+  'ผู้ใช้': 'Users', 'ผู้รับแจ้งเตือน': 'Notification recipients', 'บันทึกระบบ': 'System log',
+  'การเชื่อมต่อ': 'Connections', 'ใช้จริงตอนกดอนุมัติ': 'Used in production on approval',
+  'ไม่ตรงกับค่าใน .env ด้านบน — ค่านี้ในฐานข้อมูลเป็นตัวที่ใช้จริง':
+    'Does not match the .env value above — this database value is what is actually used',
+  'ตั้งค่าแล้ว': 'Configured', 'ยังไม่ตั้ง': 'Not configured', 'ชนิดเอกสาร': 'Document type',
+  'เชื่อมต่อแล้ว': 'Connected', 'ยังไม่เชื่อม': 'Not connected',
+  'ราย': 'recipients', 'ลิงก์ในข้อความ LINE': 'Link in LINE messages',
+  'ข้อความแจ้งเตือนจะไม่มีปุ่มกดเข้าระบบ': 'Notification messages will have no button linking into the system',
+  'ระบบในเครื่อง': 'Local system', 'โมเดล': 'Model', 'โมเดล (ข้อความ)': 'Model (text)',
+  'โมเดล (อ่านไฟล์)': 'Model (file reading)', 'เงื่อนไขวางบิล': 'Billing rules',
+  'วันที่ลงเอกสาร': 'Document date', 'ของเดือนถัดไป': 'of the following month',
+  'ต้องได้ครบทุกคน': 'Requires everyone submitted', 'ใช่': 'Yes', 'ไม่': 'No',
+  'ต้องมีคนกดยืนยัน': 'Requires human confirmation', 'ไม่ (โหมด auto)': 'No (auto mode)',
+  'ใช่ (โหมด manual)': 'Yes (manual mode)', 'ส่งอีเมลอัตโนมัติ': 'Auto-send email',
+  'สร้างร่างเท่านั้น': 'Draft only', 'ไฟล์แนบในร่างอีเมล': 'Email draft attachments',
+  'ใบวางบิล + Timesheet ทุกคนในรอบ': 'Invoice + everyone’s Timesheet in the cycle',
+  'ใบวางบิลดึงจาก FlowAccount มาเก็บให้เองตอนกดอนุมัติ': 'The invoice is pulled from FlowAccount automatically on approval',
+  'ปิดรอบเมื่อส่งเมล': 'Close cycle when email is sent', 'อัตโนมัติ': 'Automatic',
+  'ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งแล้วหรือยัง': 'The system checks your Gmail inbox to see whether the draft was sent',
+  'เพิ่มผู้ใช้ใหม่': 'Add new user', 'รหัสผ่าน': 'Password', '(อย่างน้อย 8 ตัวอักษร)': '(at least 8 characters)',
+  '+ เพิ่มผู้ใช้': '+ Add user', 'สร้างเมื่อ': 'Created', 'แก้ role ของตัวเองไม่ได้': 'Cannot change your own role',
+  'ปิดใช้งานบัญชีตัวเองไม่ได้': 'Cannot deactivate your own account',
+  'ใช้งานอยู่ — กดเพื่อปิดใช้งาน': 'Active — click to deactivate',
+  'ปิดใช้งานอยู่ — กดเพื่อเปิดใช้งาน': 'Inactive — click to activate',
+  'ใช้งานอยู่': 'Active', 'ปิดใช้งาน': 'Inactive', 'ลบบัญชีของตัวเองไม่ได้': 'Cannot delete your own account',
+  'เพิ่มผู้รับแจ้งเตือน': 'Add notification recipient', 'ช่องทาง': 'Channel', 'อีเมล': 'Email',
+  'ชื่อ (แสดงในรายการ)': 'Name (shown in the list)', 'ปลายทาง': 'Destination',
+  '— เลือกคนที่เคยทักบอทมาแล้ว —': '— Choose someone who has messaged the bot —',
+  'ไม่พบชื่อ': 'Name not found', 'อื่นๆ — กรอก userId เอง': 'Other — enter userId manually',
+  '+ เพิ่ม': '+ Add', 'ลบผู้รับแจ้งเตือนนี้': 'Delete this recipient', 'ยังไม่มีผู้รับแจ้งเตือน': 'No notification recipients yet',
+  'เวลา': 'Time', 'ผู้ทำ': 'Actor', 'การกระทำ': 'Action', 'เป้าหมาย': 'Target',
+  '▶ รายละเอียด': '▶ Details', 'ยังไม่มีบันทึก': 'No log entries yet',
+  'สวัสดีตอนเช้า': 'Good morning', 'สวัสดีตอนบ่าย': 'Good afternoon', 'สวัสดีตอนเย็น': 'Good evening',
+  'เทียบ': 'vs ', 'เดือนก่อน': 'last month', 'ยอดของรายการนี้': 'This line amount',
+
+  // ── ตารางรายละเอียดรายวันเต็มรูปแบบ (openSheet, 27 ส.ค. 69) ──
+  'ตามคอลัมน์ที่ ABBYY อ่านได้ — ชั่วโมงคำนวณเองอัตโนมัติถ้าตารางต้นฉบับไม่ได้สรุปมาให้':
+    'Matches the columns ABBYY reads — hours are auto-calculated when the source table has none',
+  'วันในสัปดาห์': 'Day', 'เวลา OT': 'OT time', 'ประเภท': 'Type',
+  'ชม.ปกติ': 'Normal (hrs)', 'ชม. OT': 'OT (hrs)', 'รวม/วัน': 'Total/day', 'รวมทั้งเดือน': 'Monthly total',
+};
+const tx = (str) => (state.lang === 'en' && T[str] ? T[str] : str);
+
 /**
  * แปลงเวลาที่เก็บในฐานข้อมูลให้เป็น Date
  *
@@ -241,6 +527,7 @@ document.addEventListener('click', (e) => {
 // ─────────────────────────────────────────────────────────────
 
 const state = {
+  lang: localStorage.getItem('obs.lang') === 'en' ? 'en' : 'th',
   view: 'dash', detailId: null, tab: 1,
   queueFilter: 'action', queueSearch: '', queuePage: 1,
   queueSort: 'urgent', expanded: null,
@@ -288,15 +575,15 @@ const CYCLE_STATE_CLASS = {
 
 function greeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'สวัสดีตอนเช้า';
-  if (h < 17) return 'สวัสดีตอนบ่าย';
-  return 'สวัสดีตอนเย็น';
+  if (h < 12) return tx('สวัสดีตอนเช้า');
+  if (h < 17) return tx('สวัสดีตอนบ่าย');
+  return tx('สวัสดีตอนเย็น');
 }
 
 function trendPill(value, label) {
-  if (value === null || value === undefined) return '<span class="pill flat">ยังเทียบไม่ได้</span>';
+  if (value === null || value === undefined) return `<span class="pill flat">${tx('ยังเทียบไม่ได้')}</span>`;
   const up = value >= 0;
-  return `<span class="pill ${up ? 'up' : 'down'}" title="เทียบ${esc(label ?? 'เดือนก่อน')}">
+  return `<span class="pill ${up ? 'up' : 'down'}" title="${tx('เทียบ')}${esc(tx(label ?? 'เดือนก่อน'))}">
     ${up ? '↑' : '↓'} ${Math.abs(value).toFixed(1)}%</span>`;
 }
 
@@ -322,59 +609,59 @@ async function renderDashboard() {
     <div class="greet">
       <div>
         <span class="hi">${greeting()}</span>
-        <h1>ภาพรวมการวางบิล</h1>
+        <h1>${tx('ภาพรวมการวางบิล')}</h1>
         <p class="sub2">${contract
-          ? `${esc(contract.customerName)} · ${esc(contract.projectName)} · ใบว่าจ้าง ${esc(contract.poNo)}`
-          : 'ยังไม่มีสัญญาในระบบ'}</p>
+          ? `${esc(contract.customerName)} · ${esc(contract.projectName)} · ${tx('ใบว่าจ้าง')} ${esc(contract.poNo)}`
+          : tx('ยังไม่มีสัญญาในระบบ')}</p>
       </div>
       <div class="tools">
-        <span class="datechip">${icon('cal')} ข้อมูล ณ ${dateOnly(data.today)}</span>
+        <span class="datechip">${icon('cal')} ${tx('ข้อมูล ณ')} ${dateOnly(data.today)}</span>
       </div>
     </div>
 
     <div class="kpis">
       <div class="kpi ${data.counts.waitingCheck ? 'w' : 'g'} act" data-go="queue" role="button" tabindex="0">
-        <div class="kh"><span class="ic">${icon('list-chk')}</span><span class="kl">ขั้น 2 · รอตรวจสอบ</span></div>
-        <span class="kv">${int(data.counts.waitingCheck)}<small>ใบ</small></span>
+        <div class="kh"><span class="ic">${icon('list-chk')}</span><span class="kl">${tx('ขั้น 2 · รอตรวจสอบ')}</span></div>
+        <span class="kv">${int(data.counts.waitingCheck)}<small>${tx('ใบ')}</small></span>
         ${data.counts.waitingCheck
-          ? `<span class="kf">มูลค่า ${money(data.waitingCheckValue)} บาท · กดเพื่อไปตรวจ</span>` : ''}
+          ? `<span class="kf">${tx('มูลค่า')} ${money(data.waitingCheckValue)} ${tx('บาท')} · ${tx('กดเพื่อไปตรวจ')}</span>` : ''}
       </div>
 
       <div class="kpi ${data.counts.readyToBill ? 'w' : 'g'} act" data-go="cycles" role="button" tabindex="0">
-        <div class="kh"><span class="ic">${icon('doc')}</span><span class="kl">ขั้น 3 · พร้อมวางบิล</span></div>
-        <span class="kv">${int(data.counts.readyToBill)}<small>ใบ</small></span>
+        <div class="kh"><span class="ic">${icon('doc')}</span><span class="kl">${tx('ขั้น 3 · พร้อมวางบิล')}</span></div>
+        <span class="kv">${int(data.counts.readyToBill)}<small>${tx('ใบ')}</small></span>
         ${data.counts.readyToBill
-          ? `<span class="kf">มูลค่า ${money(data.readyValue)} บาท · กดเพื่อไปอนุมัติ</span>` : ''}
+          ? `<span class="kf">${tx('มูลค่า')} ${money(data.readyValue)} ${tx('บาท')} · ${tx('กดเพื่อไปอนุมัติ')}</span>` : ''}
       </div>
 
       <div class="kpi a">
-        <div class="kh"><span class="ic">${icon('money')}</span><span class="kl">ยอดวางบิลแล้ว</span>
+        <div class="kh"><span class="ic">${icon('money')}</span><span class="kl">${tx('ยอดวางบิลแล้ว')}</span>
           ${trendPill(data.trends.billed, data.trends.previousPeriodLabel)}</div>
         <span class="kv">${money(data.billedAmount)}</span>
         ${data.invoiceCount
-          ? `<span class="kf">${int(data.invoiceCount)} ใบ · รอบล่าสุด ${esc(data.trends.latestPeriodLabel)}</span>` : ''}
+          ? `<span class="kf">${int(data.invoiceCount)} ${tx('ใบ')} · ${tx('รอบล่าสุด')} ${esc(data.trends.latestPeriodLabel)}</span>` : ''}
       </div>
     </div>
 
     <div class="mosaic c3">
       <div class="card">
-        <div class="hd"><h3>สถานะรอบบิล</h3></div>
+        <div class="hd"><h3>${tx('สถานะรอบบิล')}</h3></div>
         <div class="bd">
           <div class="split">
             ${order.filter((k) => dist[k]).map((k) =>
               `<span style="flex:${dist[k]};background:${SPLIT_COLOR[k]}"
-                     title="${SPLIT_LABEL[k]} ${dist[k]}"></span>`).join('')}
+                     title="${tx(SPLIT_LABEL[k])} ${dist[k]}"></span>`).join('')}
           </div>
           <ul class="legend-rows">
             ${order.map((k) => `
               <li><i style="background:${SPLIT_COLOR[k]}"></i>
-                <span>${SPLIT_LABEL[k]}</span><b>${int(dist[k] ?? 0)}</b></li>`).join('')}
+                <span>${tx(SPLIT_LABEL[k])}</span><b>${int(dist[k] ?? 0)}</b></li>`).join('')}
           </ul>
         </div>
       </div>
 
       <div class="card">
-        <div class="hd"><h3>งานที่ต้องทำ</h3></div>
+        <div class="hd"><h3>${tx('งานที่ต้องทำ')}</h3></div>
         <div class="bd">
           <ul class="tasks">${data.tasks.slice(0, 6).map((n, i) => `
             <li>
@@ -382,45 +669,45 @@ async function renderDashboard() {
                 ${icon(n.level === 'info' ? 'info' : 'alt')}</span>
               <span><span class="tt">${esc(n.title)}</span>
                 ${n.detail ? `<span class="td">${esc(n.detail)}</span>` : ''}</span>
-              <button class="go" data-task="${i}">เปิด</button>
+              <button class="go" data-task="${i}">${tx('เปิด')}</button>
             </li>`).join('')}</ul>
         </div>
       </div>
 
       <div class="card">
-        <div class="hd"><h3>ความคืบหน้าสัญญา</h3><span class="rt">${esc(contract?.poNo ?? '')}</span></div>
+        <div class="hd"><h3>${tx('ความคืบหน้าสัญญา')}</h3><span class="rt">${esc(contract?.poNo ?? '')}</span></div>
         <div class="bd">
           ${contract ? `
           <div class="pair" style="gap:20px">
-            <div><span class="pl">มูลค่าสัญญา</span><span class="pv">${money(contract.contractValue)}</span></div>
-            <div><span class="pl">คงเหลือ</span><span class="pv c">${money(contract.remainingValue)}</span></div>
+            <div><span class="pl">${tx('มูลค่าสัญญา')}</span><span class="pv">${money(contract.contractValue)}</span></div>
+            <div><span class="pl">${tx('คงเหลือ')}</span><span class="pv c">${money(contract.remainingValue)}</span></div>
           </div>
           <div class="bar"><span style="width:${contract.progress}%"></span></div>
           <div class="progline">
             <span>${dateOnly(contract.startDate)}</span>
-            <span><b>${contract.progress}%</b> · ${contract.monthsBilled}/${contract.monthsTotal} รอบ</span>
+            <span><b>${contract.progress}%</b> · ${contract.monthsBilled}/${contract.monthsTotal} ${tx('รอบ')}</span>
             <span>${dateOnly(contract.endDate)}</span>
           </div>
           <ul class="legend-rows" style="margin-top:16px">
-            <li><i style="background:var(--brand)"></i><span>พนักงานในสัญญา</span><b>${int(contract.headcount)} คน</b></li>
-            <li><i style="background:var(--tint2)"></i><span>เครดิต</span><b>${int(contract.creditDays)} วัน</b></li>
-            <li><i style="background:var(--tint2)"></i><span>ส่วนลดวันลารวม</span><b>${money(data.leaveDeduction)}</b></li>
-          </ul>` : '<div class="empty">ยังไม่มีสัญญา</div>'}
+            <li><i style="background:var(--brand)"></i><span>${tx('พนักงานในสัญญา')}</span><b>${int(contract.headcount)} ${tx('คน')}</b></li>
+            <li><i style="background:var(--tint2)"></i><span>${tx('เครดิต')}</span><b>${int(contract.creditDays)} ${tx('วัน')}</b></li>
+            <li><i style="background:var(--tint2)"></i><span>${tx('ส่วนลดวันลารวม')}</span><b>${money(data.leaveDeduction)}</b></li>
+          </ul>` : `<div class="empty">${tx('ยังไม่มีสัญญา')}</div>`}
         </div>
       </div>
 
     </div>
 
     <div class="card">
-      <div class="hd"><h3>รอบบิลตามสัญญา</h3></div>
+      <div class="hd"><h3>${tx('รอบบิลตามสัญญา')}</h3></div>
       <div class="bd flush"><div class="tw"><table style="min-width:820px">
         <thead><tr>
-          <th>รอบบิล</th><th style="width:150px">Timesheet</th>
-          <th style="width:180px">สถานะ</th><th style="width:230px">กำหนดเวลา</th>
-          <th class="r" style="width:140px">มูลค่า</th>
+          <th>${tx('รอบบิล')}</th><th style="width:150px">Timesheet</th>
+          <th style="width:180px">${tx('สถานะ')}</th><th style="width:230px">${tx('กำหนดเวลา')}</th>
+          <th class="r" style="width:140px">${tx('มูลค่า')}</th>
         </tr></thead>
         <tbody>${(contract?.periods ?? []).map((c) => cycleRow(c)).join('')
-          || '<tr><td colspan="5" class="empty">ยังไม่มีสัญญาในระบบ</td></tr>'}</tbody>
+          || `<tr><td colspan="5" class="empty">${tx('ยังไม่มีสัญญาในระบบ')}</td></tr>`}</tbody>
       </table></div></div>
     </div>
   </div>`;
@@ -461,15 +748,15 @@ function cycleRow(c, { showCustomer = false } = {}) {
         <span class="sub">${showCustomer ? `${esc(c.customerName)} · ` : ''}${esc(c.poNo)}</span></td>
     <td class="n">${c.received} / ${c.expected}
         ${c.missing.length
-          ? `<span class="sub" title="${esc(c.missing.join(', '))}">รอ ${esc(c.missing.map(firstName).join(', '))}</span>`
+          ? `<span class="sub" title="${esc(c.missing.join(', '))}">${tx('รอ')} ${esc(c.missing.map(firstName).join(', '))}</span>`
           : c.uncheckedCount
-            ? `<span class="sub">รอคนยืนยัน ${int(c.uncheckedCount)} ใบ</span>`
+            ? `<span class="sub">${tx('รอคนยืนยัน')} ${int(c.uncheckedCount)} ${tx('ใบ')}</span>`
             : ''}</td>
-    <td><span class="st ${CYCLE_STATE_CLASS[c.state]}">${esc(c.stateLabel)}</span>
+    <td><span class="st ${CYCLE_STATE_CLASS[c.state]}">${tx(c.stateLabel)}</span>
         ${c.invoiceNo ? `<span class="sub">${esc(c.invoiceNo)}</span>` : ''}</td>
     <td>${c.state === 'billed'
-        ? (c.overduePayment ? `<span class="tg cr">เกินกำหนด</span>` : `<span class="tg ok">ตรงเวลา</span>`)
-        : (c.overdueToBill ? `<span class="tg wn">เลยกำหนดวางบิล</span>` : '')}</td>
+        ? (c.overduePayment ? `<span class="tg cr">${tx('เกินกำหนด')}</span>` : `<span class="tg ok">${tx('ตรงเวลา')}</span>`)
+        : (c.overdueToBill ? `<span class="tg wn">${tx('เลยกำหนดวางบิล')}</span>` : '')}</td>
     <td class="r n">${c.value ? money(c.value) : ''}</td>
   </tr>`;
 }
@@ -519,44 +806,44 @@ function sheetCard(t) {
         <span class="mt2">${esc(t.employee.invoicePosition ?? '—')}</span>
       </span>
       <span class="rt2">
-        <span class="st ${STATUS_CLASS[t.status] ?? 'mu'}">${esc(t.statusLabel)}</span>
+        <span class="st ${STATUS_CLASS[t.status] ?? 'mu'}">${tx(t.statusLabel)}</span>
       </span>
     </div>
 
     <div class="rec-tags">
       <span class="tag">${esc(t.periodLabel)}</span>
-      <span class="tag">เลขที่ ${esc(t.id)}</span>
-      ${t.reportedLeave ? `<span class="tag lv">ลา ${int(t.reportedLeave)} วัน</span>` : ''}
-      ${t.check?.checked ? `<span class="tag ok">${icon('chk')} ยืนยันแล้ว</span>` : ''}
-      ${t.check?.stale ? '<span class="tag lv">ยอดเปลี่ยน ต้องยืนยันใหม่</span>' : ''}
+      <span class="tag">${tx('เลขที่')} ${esc(t.id)}</span>
+      ${t.reportedLeave ? `<span class="tag lv">${tx('ลา')} ${int(t.reportedLeave)} ${tx('วัน')}</span>` : ''}
+      ${t.check?.checked ? `<span class="tag ok">${icon('chk')} ${tx('ยืนยันแล้ว')}</span>` : ''}
+      ${t.check?.stale ? `<span class="tag lv">${tx('ยอดเปลี่ยน ต้องยืนยันใหม่')}</span>` : ''}
       ${t.invoiceNo ? `<span class="tag ok">${esc(t.invoiceNo)}</span>` : ''}
     </div>
-    <div class="rec-when">รับเมื่อ ${dt(t.receivedAt)}</div>
+    <div class="rec-when">${tx('รับเมื่อ')} ${dt(t.receivedAt)}</div>
 
     <div class="minitab">
-      <div class="mh2"><span>รายการคำนวณ</span><span class="q">จำนวน</span><span class="p">บาท</span></div>
+      <div class="mh2"><span>${tx('รายการคำนวณ')}</span><span class="q">${tx('จำนวน')}</span><span class="p">${tx('บาท')}</span></div>
       <div class="mr">
-        <span class="lb2">เรทค่าบริการต่อเดือน</span>
-        <span class="q">1 เดือน</span>
+        <span class="lb2">${tx('เรทค่าบริการต่อเดือน')}</span>
+        <span class="q">1 ${tx('เดือน')}</span>
         <span class="p">${money(t.employee.monthlyRate)}</span>
       </div>
       <div class="mr">
-        <span class="lb2">วันทำงานที่วางบิลได้<small>ตาม Timesheet ${int(t.reportedWorkDays)} วัน</small></span>
-        <span class="q">${int(t.payableDays)} วัน</span>
+        <span class="lb2">${tx('วันทำงานที่วางบิลได้')}<small>${tx('ตาม Timesheet')} ${int(t.reportedWorkDays)} ${tx('วัน')}</small></span>
+        <span class="q">${int(t.payableDays)} ${tx('วัน')}</span>
         <span class="p">—</span>
       </div>
       ${t.reportedLeave
         ? `<div class="mr neg">
-             <span class="lb2">ส่วนลดวันลา<small>ลา ${int(t.reportedLeave)} วัน</small></span>
-             <span class="q">${int(t.reportedLeave)} วัน</span>
+             <span class="lb2">${tx('ส่วนลดวันลา')}<small>${tx('ลา')} ${int(t.reportedLeave)} ${tx('วัน')}</small></span>
+             <span class="q">${int(t.reportedLeave)} ${tx('วัน')}</span>
              <span class="p">−${money(t.discount)}</span>
            </div>`
-        : `<div class="mr"><span class="lb2">ส่วนลดวันลา<small>ไม่มีวันลา</small></span>
-             <span class="q">0 วัน</span><span class="p">—</span></div>`}
+        : `<div class="mr"><span class="lb2">${tx('ส่วนลดวันลา')}<small>${tx('ไม่มีวันลา')}</small></span>
+             <span class="q">0 ${tx('วัน')}</span><span class="p">—</span></div>`}
     </div>
 
     <div class="rec-total">
-      <span class="tl">ยอดที่วางบิลได้</span>
+      <span class="tl">${tx('ยอดที่วางบิลได้')}</span>
       <span class="tv">${money(t.lineAmount)}</span>
     </div>
 
@@ -567,8 +854,8 @@ function sheetCard(t) {
         : ''}
 
     <div class="rec-acts ${t.status === 'billed' ? 'one' : ''}">
-      <button class="btn pri" data-open="${esc(t.id)}">${icon('file')} เปิดตรวจ</button>
-      ${t.status === 'billed' ? '' : `<button class="btn dgr" data-reject="${esc(t.id)}">ตีกลับ</button>`}
+      <button class="btn pri" data-open="${esc(t.id)}">${icon('file')} ${tx('เปิดตรวจ')}</button>
+      ${t.status === 'billed' ? '' : `<button class="btn dgr" data-reject="${esc(t.id)}">${tx('ตีกลับ')}</button>`}
     </div>
   </div>`;
 }
@@ -607,33 +894,33 @@ async function renderQueue() {
 
   main.innerHTML = `
   <div class="page">
-    <div class="phd"><div><span class="ey">ขั้นที่ 2 จาก 4</span><h1>ตรวจ Manday</h1></div></div>
+    <div class="phd"><div><span class="ey">${tx('ขั้นที่ 2 จาก 4')}</span><h1>${tx('ตรวจ Manday')}</h1></div></div>
 
     <div class="card">
       <div class="filterbar">
         <div class="pills">
           ${Object.entries(QUEUE_FILTERS).map(([key, f]) => `
             <button class="pbtn ${state.queueFilter === key ? 'on' : ''}" data-filter="${key}">
-              ${f.label}<span class="c">${byFilter === null ? 0 : sheets.filter(f.test).length}</span></button>`).join('')}
+              ${tx(f.label)}<span class="c">${byFilter === null ? 0 : sheets.filter(f.test).length}</span></button>`).join('')}
         </div>
         <div class="gap"></div>
         <span class="selectwrap">
-          <span class="lb3">เรียงตาม</span>
+          <span class="lb3">${tx('เรียงตาม')}</span>
           <span class="selectchip">
             <select id="qSort">
               ${Object.entries(SORTS).map(([key, s]) =>
-                `<option value="${key}" ${state.queueSort === key ? 'selected' : ''}>${s.label}</option>`).join('')}
+                `<option value="${key}" ${state.queueSort === key ? 'selected' : ''}>${tx(s.label)}</option>`).join('')}
             </select>
             ${icon('cd')}
           </span>
         </span>
         <label class="searchbox">
           ${icon('srch')}
-          <input type="search" id="qSearch" placeholder="ค้นหาชื่อ เลขเอกสาร ตำแหน่ง รอบบิล…"
+          <input type="search" id="qSearch" placeholder="${tx('ค้นหาชื่อ เลขเอกสาร ตำแหน่ง รอบบิล…')}"
                  value="${esc(state.queueSearch)}" autocomplete="off">
         </label>
         <button class="iconbtn ${state.queueSearch ? 'on' : ''}" id="clearSearch"
-                title="${state.queueSearch ? 'ล้างคำค้น' : 'ตัวกรอง'}">
+                title="${state.queueSearch ? tx('ล้างคำค้น') : tx('ตัวกรอง')}">
           ${icon(state.queueSearch ? 'cl' : 'flt')}
         </button>
       </div>
@@ -641,23 +928,23 @@ async function renderQueue() {
       ${shown.length
         ? `<div class="cardgrid">${shown.map(sheetCard).join('')}</div>`
         : `<div class="empty">${icon('inbox', 'i')}<div>${state.queueSearch
-            ? `ไม่พบรายการที่ตรงกับ "${esc(state.queueSearch)}"`
+            ? `${tx('ไม่พบรายการที่ตรงกับ')} "${esc(state.queueSearch)}"`
             : state.queueFilter === 'action'
-              ? 'ไม่มีใบที่รอตรวจ — ทุกใบมีคนยืนยันแล้ว ไปต่อที่ขั้น 3 วางบิล'
-              : 'ไม่มีรายการในหมวดนี้'}</div></div>`}
+              ? tx('ไม่มีใบที่รอตรวจ — ทุกใบมีคนยืนยันแล้ว ไปต่อที่ขั้น 3 วางบิล')
+              : tx('ไม่มีรายการในหมวดนี้')}</div></div>`}
 
       <div class="pager">
         <span class="info">${found.length
-          ? `แสดง ${start + 1}–${Math.min(start + PAGE_SIZE, found.length)} จาก ${found.length} รายการ`
-          : 'ไม่มีรายการ'}${state.queueSearch ? ` · กรองจาก ${byFilter.length} รายการ` : ''}</span>
+          ? `${tx('แสดง')} ${start + 1}–${Math.min(start + PAGE_SIZE, found.length)} ${tx('จาก')} ${found.length} ${tx('รายการ')}`
+          : tx('ไม่มีรายการ')}${state.queueSearch ? ` · ${tx('กรองจาก')} ${byFilter.length} ${tx('รายการ')}` : ''}</span>
         <div class="gap"></div>
         <div class="pgn">
           <button data-page="${state.queuePage - 1}" ${state.queuePage === 1 ? 'disabled' : ''}
-                  aria-label="ก่อนหน้า">${icon('cl')}</button>
+                  aria-label="${tx('ก่อนหน้า')}">${icon('cl')}</button>
           ${Array.from({ length: pages }, (_, i) => `
             <button data-page="${i + 1}" class="${state.queuePage === i + 1 ? 'on' : ''}">${i + 1}</button>`).join('')}
           <button data-page="${state.queuePage + 1}" ${state.queuePage === pages ? 'disabled' : ''}
-                  aria-label="ถัดไป">${icon('cr')}</button>
+                  aria-label="${tx('ถัดไป')}">${icon('cr')}</button>
         </div>
       </div>
     </div>
@@ -724,7 +1011,7 @@ async function renderQueue() {
       e.stopPropagation();
       try {
         const r = await api(`/timesheets/${encodeURIComponent(btn.dataset.recompute)}/recompute`, { method: 'POST' });
-        toast(`คำนวณใหม่แล้ว — วางบิลได้ ${r.payableDays} วัน ส่วนลด ${money(r.discount)} บาท`);
+        toast(`${tx('คำนวณใหม่แล้ว — วางบิลได้')} ${r.payableDays} ${tx('วัน ส่วนลด')} ${money(r.discount)} ${tx('บาท')}`);
         renderQueue();
       } catch (error) { toast(error.message, true); }
     });
@@ -734,14 +1021,14 @@ async function renderQueue() {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const reason = await promptModal({
-        title: 'ตีกลับให้แก้ Timesheet', placeholder: 'เหตุผลที่ตีกลับ…', confirmLabel: 'ตีกลับ',
+        title: tx('ตีกลับให้แก้ Timesheet'), placeholder: tx('เหตุผลที่ตีกลับ…'), confirmLabel: tx('ตีกลับ'),
       });
       if (!reason) return;
       try {
         await api(`/timesheets/${encodeURIComponent(btn.dataset.reject)}/reject`, {
           method: 'POST', body: JSON.stringify({ reason }),
         });
-        toast('ตีกลับเรียบร้อย');
+        toast(tx('ตีกลับเรียบร้อย'));
         renderQueue();
       } catch (error) { toast(error.message, true); }
     });
@@ -764,8 +1051,56 @@ const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 const LEAVE_ICON = { sick: 'heart', personal: 'car', vacation: 'rocket', unpaid: 'cal' };
 const LEAVE_TH = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง' };
 
+/** สีป้าย "ประเภท" ในตารางรายละเอียดรายวัน (27 ส.ค. 69) — เดาโทนจากคำในข้อความ ไม่ยึดว่าต้องเป็น
+ * ค่าคงที่ตายตัว เพราะ ABBYY แต่ละ Skill ใช้คำไม่เหมือนกัน (Working/Public Holiday/Vacation Leave ฯลฯ) */
+function dayTypeTone(type) {
+  const t = String(type ?? '').toLowerCase();
+  if (/holiday|หยุด/.test(t)) return 'cr';
+  if (/weekend|เสาร์|อาทิตย์/.test(t)) return 'mu';
+  if (/leave|ลา|sick|vacation|personal|annual|absent/.test(t)) return 'wn';
+  if (/work|ทำงาน/.test(t)) return 'ok';
+  return 'mu';
+}
+
+/** ฟอร์แมตชั่วโมงในตารางรายละเอียดรายวัน — ทศนิยม 2 ตำแหน่ง, "—" ถ้าไม่มีข้อมูล (ไม่ใช่ "0.00"
+ * เพราะ "ไม่มีข้อมูล" กับ "ศูนย์ชั่วโมงจริงๆ" ความหมายต่างกัน คนอ่านต้องแยกออก) */
+function hoursCell(value) {
+  return value === null || value === undefined ? '—' : Number(value).toFixed(2);
+}
+
+/** รวมชั่วโมงทั้งเดือนต่อคอลัมน์ (ไว้ทำแถวรวมท้ายตาราง) — ข้ามแถวที่เป็น null (ไม่มีข้อมูล ไม่ใช่ศูนย์) */
+function sumHours(days, key) {
+  const values = days.map((d) => d[key]).filter((v) => v !== null && v !== undefined);
+  return values.length ? values.reduce((sum, v) => sum + Number(v), 0) : null;
+}
+
+/** ราคาก่อน–หลังหัก VAT ของรายการนี้ (27 ส.ค. 69) — ตัวเลขคำนวณสดจากยอดรายการ+อัตราของสัญญานี้
+ * เพื่อดูตัวเลขเบื้องต้นได้ทันทีในหน้าตรวจ Manday ยอดจริงที่ยิงเข้า FlowAccount รวมทุกรายการของ
+ * รอบบิลเดียวกันคำนวณอีกทีตอนวางบิล (ดู buildInvoice() ที่ src/domain/invoice.js) อาจต่างกันเล็กน้อย
+ * จากการปัดเศษเมื่อรวมหลายรายการเข้าด้วยกัน */
+function vatBreakdownHtml(manday, contract) {
+  const base = Number(manday?.lineAmount);
+  if (!Number.isFinite(base)) return '';
+  const vatRate = contract?.vatRate ?? 0.07;
+  const whtRate = contract?.whtRate ?? 0.03;
+  const vat = Math.round(base * vatRate * 100) / 100;
+  const grand = Math.round((base + vat) * 100) / 100;
+  const wht = Math.round(base * whtRate * 100) / 100;
+  const net = Math.round((grand - wht) * 100) / 100;
+  return `<div class="bd" style="padding-top:0">
+    <div class="fsec-h" style="margin:8px 0 4px"><b>${tx('ราคาก่อน–หลังหัก VAT')}</b></div>
+    <div class="tot">
+      <div class="t"><span>${tx('รวมเป็นเงิน (ก่อน VAT)')}</span><span class="v">${money(base)}</span></div>
+      <div class="t"><span>${tx('ภาษีมูลค่าเพิ่ม')} ${Math.round(vatRate * 100)}%</span><span class="v">${money(vat)}</span></div>
+      <div class="t gr"><span>${tx('รวมทั้งสิ้น (หลัง VAT)')}</span><span class="v">${money(grand)}</span></div>
+      <div class="t mi"><span>${tx('หักภาษี ณ ที่จ่าย')} ${Math.round(whtRate * 100)}%</span><span class="v">−${money(wht)}</span></div>
+      <div class="t py"><span>${tx('ยอดรับชำระสุทธิ')}</span><span class="v">${money(net)}</span></div>
+    </div>
+  </div>`;
+}
+
 function calendarHtml(manday) {
-  if (!manday?.calendar) return '<div class="empty">ยังไม่ได้คำนวณ</div>';
+  if (!manday?.calendar) return `<div class="empty">${tx('ยังไม่ได้คำนวณ')}</div>`;
   const { days } = manday.calendar;
   // ปฏิทินเริ่มวันอาทิตย์: getUTCDay() 0=อาทิตย์ ตรงกับคอลัมน์แรกพอดี ไม่ต้องเลื่อน
   const firstCol = days[0].dayOfWeek;
@@ -776,32 +1111,32 @@ function calendarHtml(manday) {
     ...days.map((d) => {
       if (d.kind === 'holiday') {
         return `<div class="cl holiday"><span class="dn">${d.day}</span>
-          <span class="dbanner">${icon('bell', 'i xs')}${esc(d.label ?? 'วันหยุด')}</span></div>`;
+          <span class="dbanner">${icon('bell', 'i xs')}${esc(d.label ?? tx('วันหยุด'))}</span></div>`;
       }
       // เสาร์-อาทิตย์ไม่มีป้ายเลย เหมือน HRDD เป๊ะๆ — คอลัมน์ก็บอกอยู่แล้วว่าเป็นวันไหน
       if (d.kind === 'weekend') return `<div class="cl weekend"><span class="dn">${d.day}</span></div>`;
       if (d.kind === 'leave') {
         const leaveType = leaveByDate.get(d.date) ?? 'unpaid';
         return `<div class="cl lv-${leaveType}"><span class="dn">${d.day}</span>
-          <span class="dbadge lv-${leaveType}" title="${esc(LEAVE_TH[leaveType] ?? 'ลา')}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i lg')}</span></div>`;
+          <span class="dbadge lv-${leaveType}" title="${esc(tx(LEAVE_TH[leaveType] ?? 'ลา'))}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i lg')}</span></div>`;
       }
       return `<div class="cl workday"><span class="dn">${d.day}</span>
-        <span class="dbadge workday" title="ทำงาน">${icon('home', 'i lg')}</span></div>`;
+        <span class="dbadge workday" title="${tx('ทำงาน')}">${icon('home', 'i lg')}</span></div>`;
     }),
   ];
 
   return `
     <div class="cal">
-      ${DOW.map((d) => `<div class="dw">${d}</div>`).join('')}
+      ${DOW.map((d) => `<div class="dw">${tx(d)}</div>`).join('')}
       ${cells.join('')}
     </div>
     <div class="cal-legend">
-      <span class="legend-item workday">${icon('home', 'i lg')}ทำงาน</span>
-      <span class="legend-item holiday">วันหยุด</span>
-      <span class="legend-item sick">${icon('heart', 'i lg')}ลาป่วย</span>
-      <span class="legend-item personal">${icon('car', 'i lg')}ลากิจ</span>
-      <span class="legend-item vacation">${icon('rocket', 'i lg')}ลาพักร้อน</span>
-      <span class="cal-legend-mu">เสาร์–อาทิตย์ไม่มีป้าย</span>
+      <span class="legend-item workday">${icon('home', 'i lg')}${tx('ทำงาน')}</span>
+      <span class="legend-item holiday">${tx('วันหยุด')}</span>
+      <span class="legend-item sick">${icon('heart', 'i lg')}${tx('ลาป่วย')}</span>
+      <span class="legend-item personal">${icon('car', 'i lg')}${tx('ลากิจ')}</span>
+      <span class="legend-item vacation">${icon('rocket', 'i lg')}${tx('ลาพักร้อน')}</span>
+      <span class="cal-legend-mu">${tx('เสาร์–อาทิตย์ไม่มีป้าย')}</span>
     </div>`;
 }
 
@@ -826,17 +1161,17 @@ async function openSheet(id) {
 
   main.innerHTML = `
   <div class="page">
-    <button class="back" id="backBtn">${icon('cl')} กลับไปกล่องงาน</button>
+    <button class="back" id="backBtn">${icon('cl')} ${tx('กลับไปกล่องงาน')}</button>
 
     <div class="phd">
       <div>
-        <span class="ey">Timesheet ${esc(sheet.id)} · รอบบิล ${esc(sheet.periodLabel)}</span>
+        <span class="ey">Timesheet ${esc(sheet.id)} · ${tx('รอบบิล')} ${esc(sheet.periodLabel)}</span>
         <h1>${esc(sheet.employee.nameTh)} — ${esc(sheet.employee.invoicePosition ?? '')}</h1>
-        <p>${esc(sheet.contract.customerName)} · โครงการ ${esc(sheet.contract.projectName)}
-           · ใบว่าจ้าง ${esc(sheet.contract.poNo)} · สัญญา ${esc(sheet.contract.contractNo ?? '—')}</p>
+        <p>${esc(sheet.contract.customerName)} · ${tx('โครงการ')} ${esc(sheet.contract.projectName)}
+           · ${tx('ใบว่าจ้าง')} ${esc(sheet.contract.poNo)} · ${tx('สัญญา')} ${esc(sheet.contract.contractNo ?? '—')}</p>
       </div>
       <div class="acts">
-        <button class="btn" id="recomputeBtn">${icon('rf')} คำนวณใหม่</button>
+        <button class="btn" id="recomputeBtn">${icon('rf')} ${tx('คำนวณใหม่')}</button>
       </div>
     </div>
 
@@ -844,31 +1179,31 @@ async function openSheet(id) {
       <div class="pstep dn">
         <span class="cir">${icon('chk')}</span>
         <span class="cap">Step 01</span>
-        <span class="pl">อัปโหลด · ระบบอ่านไฟล์</span>
+        <span class="pl">${tx('อัปโหลด · ระบบอ่านไฟล์')}</span>
       </div>
       <div class="pline dn"></div>
       <div class="pstep ${step >= 3 ? 'dn' : 'cu'}">
         <span class="cir">${step >= 3 ? icon('chk') : icon('list-chk')}</span>
         <span class="cap">Step 02</span>
-        <span class="pl">ตรวจ Manday · คนยืนยัน</span>
+        <span class="pl">${tx('ตรวจ Manday · คนยืนยัน')}</span>
       </div>
       <div class="pline ${step >= 3 ? 'dn' : ''}"></div>
       <div class="pstep ${step === 3 ? 'cu' : step > 3 ? 'dn' : ''}">
         <span class="cir">${step > 3 ? icon('chk') : icon('money')}</span>
         <span class="cap">Step 03</span>
-        <span class="pl">วางบิล FlowAccount</span>
+        <span class="pl">${tx('วางบิล FlowAccount')}</span>
       </div>
       <div class="pline ${step > 3 ? 'dn' : ''}"></div>
       <div class="pstep ${step === 4 ? 'cu' : ''}">
         <span class="cir">${icon('mail')}</span>
         <span class="cap">Step 04</span>
-        <span class="pl">ร่างอีเมลถึงลูกค้า</span>
+        <span class="pl">${tx('ร่างอีเมลถึงลูกค้า')}</span>
       </div>
     </div>
 
     <div class="tabs" role="tablist">
-      ${['ภาพรวม', 'รายละเอียด', 'ปฏิทิน'].map((t, i) =>
-        `<button class="tab ${state.tab === i + 1 ? 'on' : ''}" data-tab="${i + 1}">${t}</button>`).join('')}
+      ${['ภาพรวม', 'รายละเอียด', 'ปฏิทิน'].map((label, i) =>
+        `<button class="tab ${state.tab === i + 1 ? 'on' : ''}" data-tab="${i + 1}">${tx(label)}</button>`).join('')}
     </div>
 
     <!-- ภาพรวม -->
@@ -876,49 +1211,50 @@ async function openSheet(id) {
       <div class="g3">
         <div>
           <div class="card">
-            <div class="hd"><h3>สรุปรายการที่จะวางบิล</h3></div>
+            <div class="hd"><h3>${tx('สรุปรายการที่จะวางบิล')}</h3></div>
             <div class="bd flush"><table class="ldg"><tbody>
-              <tr><td>เรทค่าบริการต่อเดือนตามใบว่าจ้าง</td><td class="r">${money(manday?.monthlyRate)}</td></tr>
-              <tr><td>วันทำงานของเดือน<span class="sub">หักเสาร์–อาทิตย์ และวันหยุดแล้ว</span></td><td class="r">${int(manday?.standardWorkingDays)} วัน</td></tr>
-              <tr><td>ทำงานจริงตาม Timesheet</td><td class="r">${int(sheet.reportedWorkDays)} วัน</td></tr>
-              <tr><td>วันลา</td><td class="r">${int(manday?.leaveCount)} วัน</td></tr>
-              <tr><td>อัตราต่อวัน<span class="sub">${money(manday?.monthlyRate)} ÷ ${int(manday?.divisor?.applied)}</span></td><td class="r">${money(manday?.dailyRate)}</td></tr>
-              <tr class="res"><td>ส่วนลดวันลา</td><td class="r">−${money(manday?.discount)}</td></tr>
+              <tr><td>${tx('เรทค่าบริการต่อเดือนตามใบว่าจ้าง')}</td><td class="r">${money(manday?.monthlyRate)}</td></tr>
+              <tr><td>${tx('วันทำงานของเดือน')}<span class="sub">${tx('หักเสาร์–อาทิตย์ และวันหยุดแล้ว')}</span></td><td class="r">${int(manday?.standardWorkingDays)} ${tx('วัน')}</td></tr>
+              <tr><td>${tx('ทำงานจริงตาม Timesheet')}</td><td class="r">${int(sheet.reportedWorkDays)} ${tx('วัน')}</td></tr>
+              <tr><td>${tx('วันลา')}</td><td class="r">${int(manday?.leaveCount)} ${tx('วัน')}</td></tr>
+              <tr><td>${tx('อัตราต่อวัน')}<span class="sub">${money(manday?.monthlyRate)} ÷ ${int(manday?.divisor?.applied)}</span></td><td class="r">${money(manday?.dailyRate)}</td></tr>
+              <tr class="res"><td>${tx('ส่วนลดวันลา')}</td><td class="r">−${money(manday?.discount)}</td></tr>
               ${manday?.otTotal > 0
-                ? `<tr class="res"><td>ค่าล่วงเวลา (OT)<span class="sub">${int((manday.otDays ?? []).length)} วัน</span></td><td class="r" style="color:var(--ok)">+${money(manday.otTotal)}</td></tr>`
+                ? `<tr class="res"><td>${tx('ค่าล่วงเวลา (OT)')}<span class="sub">${int((manday.otDays ?? []).length)} ${tx('วัน')}</span></td><td class="r" style="color:var(--ok)">+${money(manday.otTotal)}</td></tr>`
                 : ''}
             </tbody></table></div>
             <div class="bd">
               <div class="tot">
-                <div class="t py"><span>ยอดของรายการนี้</span><span class="v">${money(manday?.lineAmount)}</span></div>
+                <div class="t py"><span>${tx('ยอดของรายการนี้')}</span><span class="v">${money(manday?.lineAmount)}</span></div>
               </div>
             </div>
+            ${vatBreakdownHtml(manday, sheet.contract)}
           </div>
         </div>
 
         <div>
           <div class="card">
-            <div class="hd"><h3>ข้อมูลอ้างอิง</h3></div>
+            <div class="hd"><h3>${tx('ข้อมูลอ้างอิง')}</h3></div>
             <div class="bd"><dl class="kv">
-              <dt>ลูกค้า</dt><dd>${esc(sheet.contract.customerName)}</dd>
-              <dt>เลขผู้เสียภาษี</dt><dd class="n">${esc(sheet.contract.taxId ?? '—')}</dd>
-              <dt>ใบว่าจ้าง</dt><dd class="n">${esc(sheet.contract.poNo)}</dd>
-              <dt>สัญญา</dt><dd class="n">${esc(sheet.contract.contractNo ?? '—')}</dd>
-              <dt>ใบเสนอราคา</dt><dd class="n">${esc(sheet.employee.quotationNo ?? '—')}</dd>
-              <dt>ช่วงสัญญา</dt><dd>${dateOnly(sheet.contract.startDate)} – ${dateOnly(sheet.contract.endDate)}</dd>
-              <dt>เครดิต</dt><dd>${int(sheet.contract.creditDays)} วัน</dd>
-              <dt>ตัวหารอัตราต่อวัน</dt><dd>${sheet.contract.divisorMode === 'fixed'
-                  ? `คงที่ ${int(sheet.contract.divisorValue)}` : 'วันทำงานจริงของเดือน'}</dd>
-              <dt>ผู้ประสานงาน</dt><dd>${esc(sheet.contract.contactName ?? '—')}</dd>
+              <dt>${tx('ลูกค้า')}</dt><dd>${esc(sheet.contract.customerName)}</dd>
+              <dt>${tx('เลขผู้เสียภาษี')}</dt><dd class="n">${esc(sheet.contract.taxId ?? '—')}</dd>
+              <dt>${tx('ใบว่าจ้าง')}</dt><dd class="n">${esc(sheet.contract.poNo)}</dd>
+              <dt>${tx('สัญญา')}</dt><dd class="n">${esc(sheet.contract.contractNo ?? '—')}</dd>
+              <dt>${tx('ใบเสนอราคา')}</dt><dd class="n">${esc(sheet.employee.quotationNo ?? '—')}</dd>
+              <dt>${tx('ช่วงสัญญา')}</dt><dd>${dateOnly(sheet.contract.startDate)} – ${dateOnly(sheet.contract.endDate)}</dd>
+              <dt>${tx('เครดิต')}</dt><dd>${int(sheet.contract.creditDays)} ${tx('วัน')}</dd>
+              <dt>${tx('ตัวหารอัตราต่อวัน')}</dt><dd>${sheet.contract.divisorMode === 'fixed'
+                  ? `${tx('คงที่')} ${int(sheet.contract.divisorValue)}` : tx('วันทำงานจริงของเดือน')}</dd>
+              <dt>${tx('ผู้ประสานงาน')}</dt><dd>${esc(sheet.contract.contactName ?? '—')}</dd>
             </dl></div>
           </div>
 
           <div class="card">
-            <div class="hd"><h3>ประวัติการดำเนินการ</h3></div>
+            <div class="hd"><h3>${tx('ประวัติการดำเนินการ')}</h3></div>
             <div class="bd"><ul class="acts-l">
-              <li><span class="tx">รับเข้าระบบ<small>${esc(sheet.sourceFile ?? sheet.sourceEmailId ?? '—')}</small></span>
+              <li><span class="tx">${tx('รับเข้าระบบ')}<small>${esc(sheet.sourceFile ?? sheet.sourceEmailId ?? '—')}</small></span>
                 <span class="tm">${dt(sheet.receivedAt)}</span></li>
-              <li><span class="tx">ลูกค้าอนุมัติ Timesheet<small>${esc(sheet.approvedBy ?? '—')}</small></span>
+              <li><span class="tx">${tx('ลูกค้าอนุมัติ Timesheet')}<small>${esc(sheet.approvedBy ?? '—')}</small></span>
                 <span class="tm">${dateOnly(sheet.approvedAt)}</span></li>
               ${sheet.audit.map((a) => `
                 <li><span class="tx">${esc(auditActionLabel(a.action))}<small>${esc(auditActorLabel(a.actor))}</small></span>
@@ -932,13 +1268,13 @@ async function openSheet(id) {
     <!-- อีเมล & Timesheet -->
     <div class="tp ${state.tab === 2 ? 'on' : ''}" data-pane="2">
       <div class="card">
-        <div class="hd"><h3>ที่มาของข้อมูล</h3></div>
+        <div class="hd"><h3>${tx('ที่มาของข้อมูล')}</h3></div>
         <div class="bd">
           <dl class="kv" style="margin-bottom:16px">
-            <dt>ไฟล์ที่อัปโหลด</dt><dd>${esc(sheet.sourceFile ?? '—')}</dd>
-            <dt>อ้างอิงอีเมล</dt><dd>${esc(sheet.sourceEmailSubject ?? sheet.sourceEmailId ?? 'ไม่ได้ระบุ')}</dd>
-            <dt>ชื่อที่เขียนในไฟล์</dt><dd>${esc(sheet.rawEmployeeName ?? '—')}</dd>
-            <dt>ตำแหน่งที่เขียนในไฟล์</dt><dd>${esc(sheet.rawPosition ?? '—')}</dd>
+            <dt>${tx('ไฟล์ที่อัปโหลด')}</dt><dd>${esc(sheet.sourceFile ?? '—')}</dd>
+            <dt>${tx('อ้างอิงอีเมล')}</dt><dd>${esc(sheet.sourceEmailSubject ?? sheet.sourceEmailId ?? tx('ไม่ได้ระบุ'))}</dd>
+            <dt>${tx('ชื่อที่เขียนในไฟล์')}</dt><dd>${esc(sheet.rawEmployeeName ?? '—')}</dd>
+            <dt>${tx('ตำแหน่งที่เขียนในไฟล์')}</dt><dd>${esc(sheet.rawPosition ?? '—')}</dd>
             <dt>Total Work days</dt><dd class="n">${int(sheet.reportedWorkDays)}</dd>
             <dt>Leave / Sick (days)</dt><dd class="n">${int(sheet.reportedLeave)}</dd>
           </dl>
@@ -947,43 +1283,64 @@ async function openSheet(id) {
               // ไฟล์ต้นฉบับถูกเก็บไว้ตอนยืนยันเข้าระบบ (timesheets.source_file_bytes)
               const src = `/api/timesheets/${encodeURIComponent(sheet.id)}/file`;
               return `<a class="file" href="${esc(src)}" target="_blank" rel="noopener"
-                         title="เปิดดูไฟล์ต้นฉบับ"><span class="pd">PDF</span> ${esc(sheet.sourceFile)}</a>
+                         title="${tx('เปิดดูไฟล์ต้นฉบับ')}"><span class="pd">PDF</span> ${esc(sheet.sourceFile)}</a>
                       <a class="btn sm icon" href="${esc(src)}?dl" download="${esc(sheet.sourceFile)}"
-                         title="ดาวน์โหลดไฟล์ต้นฉบับ" aria-label="ดาวน์โหลด">${icon('cd')}</a>`;
-            })() : '<span class="file"><span class="pd">PDF</span> ไม่มีไฟล์ต้นฉบับเก็บไว้</span>'}
+                         title="${tx('ดาวน์โหลดไฟล์ต้นฉบับ')}" aria-label="${tx('ดาวน์โหลด')}">${icon('cd')}</a>`;
+            })() : `<span class="file"><span class="pd">PDF</span> ${tx('ไม่มีไฟล์ต้นฉบับเก็บไว้')}</span>`}
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="hd"><h3>รายละเอียด</h3></div>
-        <div class="bd flush"><div class="tw"><table style="min-width:760px">
-          <thead><tr><th>วันที่</th><th>ป้ายกำกับ</th><th>เวลาเข้า–ออก</th><th>รายละเอียดงาน</th></tr></thead>
+        <div class="hd"><h3>${tx('รายละเอียด')}</h3>
+          <span class="rt">${tx('ตามคอลัมน์ที่ ABBYY อ่านได้ — ชั่วโมงคำนวณเองอัตโนมัติถ้าตารางต้นฉบับไม่ได้สรุปมาให้')}</span></div>
+        <div class="bd flush"><div class="tw"><table class="ldg" style="min-width:1080px">
+          <thead><tr>
+            <th>${tx('วันที่')}</th><th>${tx('วันในสัปดาห์')}</th><th>${tx('โครงการ')}</th>
+            <th>${tx('เวลาเข้า–ออก')}</th><th>${tx('เวลา OT')}</th>
+            <th>${tx('ประเภท')}</th><th>${tx('รายละเอียดงาน')}</th>
+            <th class="r">${tx('ชม.ปกติ')}</th><th class="r">${tx('ชม. OT')}</th><th class="r">${tx('รวม/วัน')}</th>
+          </tr></thead>
           <tbody>${sheet.dayLabels.length
-            ? sheet.dayLabels.map((d) => `<tr><td class="n">${esc(d.date)}</td><td>${esc(d.label ?? '—')}</td>
-                <td class="n">${d.time_in ? `${esc(d.time_in)} – ${esc(d.time_out ?? '')}` : '—'}</td>
-                <td style="white-space:pre-line">${esc(d.job_desc ?? d.remark ?? '—')}</td></tr>`).join('')
-            : '<tr><td colspan="4" class="empty">ไม่มีข้อมูล</td></tr>'}</tbody>
+            ? sheet.dayLabels.map((d) => `<tr>
+                <td class="n">${esc(d.date)}</td>
+                <td class="n">${esc(d.day_of_week ?? '—')}</td>
+                <td>${esc(d.project ?? '—')}</td>
+                <td class="n">${d.time_in && d.time_out ? `${esc(d.time_in)} – ${esc(d.time_out)}` : '—'}</td>
+                <td class="n">${d.ot_time_in && d.ot_time_out ? `${esc(d.ot_time_in)} – ${esc(d.ot_time_out)}` : '—'}</td>
+                <td><span class="tg ${dayTypeTone(d.type)}">${esc(d.type ?? d.label ?? '—')}</span></td>
+                <td style="white-space:pre-line">${esc(d.job_desc ?? d.remark ?? '—')}</td>
+                <td class="r n">${hoursCell(d.normal_hours)}</td>
+                <td class="r n">${hoursCell(d.ot_hours)}</td>
+                <td class="r n" style="font-weight:600">${hoursCell(d.total_hours)}</td>
+              </tr>`).join('')
+            : `<tr><td colspan="10" class="empty">${tx('ไม่มีข้อมูล')}</td></tr>`}</tbody>
+          ${sheet.dayLabels.length ? `<tfoot><tr>
+            <td colspan="7" style="font-weight:600">${tx('รวมทั้งเดือน')}</td>
+            <td class="r n" style="font-weight:600">${hoursCell(sumHours(sheet.dayLabels, 'normal_hours'))}</td>
+            <td class="r n" style="font-weight:600">${hoursCell(sumHours(sheet.dayLabels, 'ot_hours'))}</td>
+            <td class="r n" style="font-weight:600">${hoursCell(sumHours(sheet.dayLabels, 'total_hours'))}</td>
+          </tr></tfoot>` : ''}
         </table></div></div>
       </div>
 
       ${(manday?.otDays ?? []).length ? `<div class="card">
-        <div class="hd"><h3>ค่าล่วงเวลา (OT)</h3>
-          <span class="rt">ตรวจจับอัตโนมัติจาก Timesheet — ตรวจสอบชั่วโมงกับ PDF ต้นฉบับก่อนยืนยัน</span></div>
+        <div class="hd"><h3>${tx('ค่าล่วงเวลา (OT)')}</h3>
+          <span class="rt">${tx('ตรวจจับอัตโนมัติจาก Timesheet — ตรวจสอบชั่วโมงกับ PDF ต้นฉบับก่อนยืนยัน')}</span></div>
         <div class="bd flush"><div class="tw"><table style="min-width:0">
-          <thead><tr><th>วันที่</th><th class="r">ชั่วโมง OT</th><th class="r">ค่าจ้างวันนั้น (รวม OT)</th><th class="r">ค่า OT เพิ่ม</th></tr></thead>
+          <thead><tr><th>${tx('วันที่')}</th><th class="r">${tx('ชั่วโมง OT')}</th><th class="r">${tx('ค่าจ้างวันนั้น (รวม OT)')}</th><th class="r">${tx('ค่า OT เพิ่ม')}</th></tr></thead>
           <tbody>${manday.otDays.map((o) => `<tr><td class="n">${esc(dateOnly(o.date))}</td>
               <td class="r n">${o.hours}</td>
               <td class="r n">${money(o.dayAmount)}</td>
               <td class="r n" style="color:var(--ok)">+${money(o.otAmount)}</td></tr>`).join('')}</tbody>
         </table></div></div>
         <div class="bd">
-          <div class="tot"><div class="t py"><span>รวมค่า OT ทั้งหมด</span><span class="v">+${money(manday.otTotal)}</span></div></div>
+          <div class="tot"><div class="t py"><span>${tx('รวมค่า OT ทั้งหมด')}</span><span class="v">+${money(manday.otTotal)}</span></div></div>
         </div>
       </div>` : ''}
 
       ${sheet.extraction ? `<div class="card">
-        <div class="hd"><h3>ผลการอ่านไฟล์ดิบ</h3></div>
+        <div class="hd"><h3>${tx('ผลการอ่านไฟล์ดิบ')}</h3></div>
         <div class="bd"><pre class="code">${esc(JSON.stringify(sheet.extraction, null, 2))}</pre></div>
       </div>` : ''}
     </div>
@@ -991,26 +1348,26 @@ async function openSheet(id) {
     <!-- คำนวณ Manday -->
     <div class="tp ${state.tab === 3 ? 'on' : ''}" data-pane="3">
       <div class="card">
-        <div class="hd"><h3>ปฏิทิน ${esc(sheet.periodLabel)}</h3></div>
+        <div class="hd"><h3>${tx('ปฏิทิน')} ${esc(sheet.periodLabel)}</h3></div>
         <div class="bd">${calendarHtml(manday)}</div>
       </div>
 
       <div class="card">
-        <div class="hd"><h3>สรุปประจำเดือน</h3></div>
+        <div class="hd"><h3>${tx('สรุปประจำเดือน')}</h3></div>
         <div class="bd">
           <div class="stat-tiles">
-            <div class="stat-tile ok"><span class="sti">${icon('home', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">ทำงาน (วัน)</span></span></div>
-            <div class="stat-tile cr"><span class="sti">${icon('heart', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.sick)}</span><span class="stl">ลาป่วย (วัน)</span></span></div>
-            <div class="stat-tile pr"><span class="sti">${icon('car', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.personal)}</span><span class="stl">ลากิจ (วัน)</span></span></div>
-            <div class="stat-tile wn"><span class="sti">${icon('rocket', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.vacation)}</span><span class="stl">ลาพักร้อน (วัน)</span></span></div>
-            <div class="stat-tile"><span class="sti">${icon('cal', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">เสาร์–อาทิตย์ (วัน)</span></span></div>
-            <div class="stat-tile pk"><span class="sti">${icon('bell', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">วันหยุด (วัน)</span></span></div>
+            <div class="stat-tile ok"><span class="sti">${icon('home', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">${tx('ทำงาน (วัน)')}</span></span></div>
+            <div class="stat-tile cr"><span class="sti">${icon('heart', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.sick)}</span><span class="stl">${tx('ลาป่วย (วัน)')}</span></span></div>
+            <div class="stat-tile pr"><span class="sti">${icon('car', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.personal)}</span><span class="stl">${tx('ลากิจ (วัน)')}</span></span></div>
+            <div class="stat-tile wn"><span class="sti">${icon('rocket', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.vacation)}</span><span class="stl">${tx('ลาพักร้อน (วัน)')}</span></span></div>
+            <div class="stat-tile"><span class="sti">${icon('cal', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">${tx('เสาร์–อาทิตย์ (วัน)')}</span></span></div>
+            <div class="stat-tile pk"><span class="sti">${icon('bell', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">${tx('วันหยุด (วัน)')}</span></span></div>
           </div>
           <div class="fsec" style="margin-top:0">
-            <div class="fsec-h"><b>หมายเหตุที่จะขึ้นบนใบแจ้งหนี้</b></div>
+            <div class="fsec-h"><b>${tx('หมายเหตุที่จะขึ้นบนใบแจ้งหนี้')}</b></div>
             ${manday?.remarkLines?.length
               ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
-              : '<div class="empty">ไม่มีวันลา จึงไม่มีหมายเหตุ</div>'}
+              : `<div class="empty">${tx('ไม่มีวันลา จึงไม่มีหมายเหตุ')}</div>`}
           </div>
         </div>
       </div>
@@ -1018,20 +1375,20 @@ async function openSheet(id) {
 
     <div class="fbar">
       <span class="sx">${failures.length
-        ? `<b>ยังยืนยันไม่ได้</b> — ${esc(failures.map((f) => f.title).join(' · '))}`
+        ? `<b>${tx('ยังยืนยันไม่ได้')}</b> — ${esc(failures.map((f) => f.title).join(' · '))}`
         : sheet.status === 'billed'
-          ? `<b>วางบิลแล้ว</b> — ${esc(sheet.invoiceNo ?? '')}`
+          ? `<b>${tx('วางบิลแล้ว')}</b> — ${esc(sheet.invoiceNo ?? '')}`
           : sheet.check?.checked
-            ? `<b>ยืนยันแล้ว</b> — ${esc(sheet.check.by ?? '')} · ${dt(sheet.check.at)}`
+            ? `<b>${tx('ยืนยันแล้ว')}</b> — ${esc(sheet.check.by ?? '')} · ${dt(sheet.check.at)}`
             : sheet.check?.stale
-              ? '<b>ยอดเปลี่ยนหลังยืนยันไปแล้ว</b> — อ่านตัวเลขชุดใหม่แล้วยืนยันอีกครั้ง'
+              ? `<b>${tx('ยอดเปลี่ยนหลังยืนยันไปแล้ว')}</b> — ${tx('อ่านตัวเลขชุดใหม่แล้วยืนยันอีกครั้ง')}`
               : ''}</span>
       <div class="gap"></div>
-      <button class="btn dgr" id="rejectBtn">ตีกลับให้แก้ Timesheet</button>
+      <button class="btn dgr" id="rejectBtn">${tx('ตีกลับให้แก้ Timesheet')}</button>
       ${sheet.status === 'billed' || sheet.check?.checked
-        ? `<button class="btn pri" id="toCycleBtn">${icon('send')} ไปขั้น 3 วางบิล</button>`
+        ? `<button class="btn pri" id="toCycleBtn">${icon('send')} ${tx('ไปขั้น 3 วางบิล')}</button>`
         : `<button class="btn pri" id="checkBtn" ${failures.length ? 'disabled' : ''}>
-             ${icon('chk')} ยืนยันว่าตรวจแล้ว</button>`}
+             ${icon('chk')} ${tx('ยืนยันว่าตรวจแล้ว')}</button>`}
     </div>
   </div>`;
 
@@ -1048,21 +1405,21 @@ async function openSheet(id) {
   el('recomputeBtn').addEventListener('click', async () => {
     try {
       const result = await api(`/timesheets/${encodeURIComponent(id)}/recompute`, { method: 'POST' });
-      toast(`คำนวณใหม่แล้ว — วันที่วางบิลได้ ${result.payableDays} วัน ส่วนลด ${money(result.discount)} บาท`);
+      toast(`${tx('คำนวณใหม่แล้ว — วันที่วางบิลได้')} ${result.payableDays} ${tx('วัน ส่วนลด')} ${money(result.discount)} ${tx('บาท')}`);
       openSheet(id);
     } catch (error) { toast(error.message, true); }
   });
 
   el('rejectBtn').addEventListener('click', async () => {
     const reason = await promptModal({
-      title: 'ตีกลับให้แก้ Timesheet', placeholder: 'เหตุผลที่ตีกลับ…', confirmLabel: 'ตีกลับ',
+      title: tx('ตีกลับให้แก้ Timesheet'), placeholder: tx('เหตุผลที่ตีกลับ…'), confirmLabel: tx('ตีกลับ'),
     });
     if (!reason) return;
     try {
       await api(`/timesheets/${encodeURIComponent(id)}/reject`, {
         method: 'POST', body: JSON.stringify({ reason }),
       });
-      toast('ตีกลับเรียบร้อย');
+      toast(tx('ตีกลับเรียบร้อย'));
       setNav('queue');
     } catch (error) { toast(error.message, true); }
   });
@@ -1077,7 +1434,7 @@ async function openSheet(id) {
     btn.disabled = true;
     try {
       await api(`/timesheets/${encodeURIComponent(id)}/check`, { method: 'POST' });
-      toast(`ยืนยันแล้ว — ${sheet.employee.nameTh} รอบ ${sheet.periodLabel} พร้อมเข้ารอบบิล`);
+      toast(`${tx('ยืนยันแล้ว')} — ${sheet.employee.nameTh} ${tx('รอบ')} ${sheet.periodLabel} ${tx('พร้อมเข้ารอบบิล')}`);
       openSheet(id);
       syncBadges();
     } catch (error) {
@@ -1340,7 +1697,7 @@ async function renderCycles() {
 
   main.innerHTML = `
   <div class="page">
-    <div class="phd"><div><span class="ey">ขั้นที่ 3 จาก 4</span><h1>วางบิล &amp; ร่างอีเมล</h1></div></div>
+    <div class="phd"><div><span class="ey">${tx('ขั้นที่ 3 จาก 4')}</span><h1>${tx('วางบิล &amp; ร่างอีเมล')}</h1></div></div>
 
     ${data.contracts.map((ct) => `
       <div class="card">
@@ -1350,15 +1707,15 @@ async function renderCycles() {
         </div>
         <div class="bd" style="padding-bottom:0">
           <div class="pair">
-            <div><span class="pl">มูลค่าสัญญา</span><span class="pv">${money(ct.contractValue)}<small>บาท</small></span></div>
-            <div><span class="pl">วางบิลแล้ว</span><span class="pv a">${money(ct.billedValue)}<small>บาท</small></span></div>
-            <div><span class="pl">คงเหลือ</span><span class="pv c">${money(ct.remainingValue)}<small>บาท</small></span></div>
-            <div><span class="pl">รอบบิล</span><span class="pv">${ct.monthsBilled} / ${ct.monthsTotal}<small>เดือน</small></span></div>
+            <div><span class="pl">${tx('มูลค่าสัญญา')}</span><span class="pv">${money(ct.contractValue)}<small>${tx('บาท')}</small></span></div>
+            <div><span class="pl">${tx('วางบิลแล้ว')}</span><span class="pv a">${money(ct.billedValue)}<small>${tx('บาท')}</small></span></div>
+            <div><span class="pl">${tx('คงเหลือ')}</span><span class="pv c">${money(ct.remainingValue)}<small>${tx('บาท')}</small></span></div>
+            <div><span class="pl">${tx('รอบบิล')}</span><span class="pv">${ct.monthsBilled} / ${ct.monthsTotal}<small>${tx('เดือน')}</small></span></div>
           </div>
           <div class="bar"><span style="width:${ct.progress}%"></span></div>
           <div class="progline" style="padding-bottom:18px">
             <span>${dateOnly(ct.startDate)}</span>
-            <span><b>${ct.progress}%</b> ของสัญญา</span>
+            <span><b>${ct.progress}%</b> ${tx('ของสัญญา')}</span>
             <span>${dateOnly(ct.endDate)}</span>
           </div>
         </div>
@@ -1369,19 +1726,19 @@ async function renderCycles() {
         <div class="seg">
           ${Object.entries(CYCLE_FILTERS).map(([key, f]) => `
             <button data-cfilter="${key}" class="${state.cycleFilter === key ? 'on' : ''}">
-              ${f.label} <span class="c">${all.filter(f.test).length}</span></button>`).join('')}
+              ${tx(f.label)} <span class="c">${all.filter(f.test).length}</span></button>`).join('')}
         </div>
         <div class="gap"></div>
-        <span class="meta">แสดง ${filtered.length} จาก ${all.length} รอบ</span>
+        <span class="meta">${tx('แสดง')} ${filtered.length} ${tx('จาก')} ${all.length} ${tx('รอบ')}</span>
       </div>
       <div class="tw"><table style="min-width:940px">
         <thead><tr>
-          <th>รอบบิล</th><th style="width:200px">Timesheet</th>
-          <th style="width:180px">สถานะ</th><th style="width:230px">กำหนดเวลา</th>
-          <th class="r" style="width:140px">มูลค่า</th>
+          <th>${tx('รอบบิล')}</th><th style="width:200px">Timesheet</th>
+          <th style="width:180px">${tx('สถานะ')}</th><th style="width:230px">${tx('กำหนดเวลา')}</th>
+          <th class="r" style="width:140px">${tx('มูลค่า')}</th>
         </tr></thead>
         <tbody>${filtered.map((c) => cycleRow(c, { showCustomer: data.contracts.length > 1 })).join('')
-          || '<tr><td colspan="5" class="empty">ไม่มีรอบบิลในหมวดนี้</td></tr>'}</tbody>
+          || `<tr><td colspan="5" class="empty">${tx('ไม่มีรอบบิลในหมวดนี้')}</td></tr>`}</tbody>
       </table></div>
     </div>
   </div>`;
@@ -1403,13 +1760,17 @@ async function renderCycles() {
 
 /* ข้อความบอกสถานะขั้นสุดท้ายของรอบบิล — ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งหรือยัง
    ไม่มีปุ่มให้คนมากดบอกแล้ว เพราะเดิมลืมกดกันประจำ รอบที่ส่งไปแล้วจริงก็ยังค้างเป็น "สร้างร่างแล้ว" */
-const WAITING_SEND = `${icon('clock')} สร้างร่างใน Gmail แล้ว — กดส่งจาก Gmail ได้เลย ` +
-  'ระบบจะขึ้นว่าส่งแล้วให้เองเมื่อเปิดหน้านี้อีกครั้ง';
-const NO_DRAFT_YET = `${icon('info')} ยังไม่ได้สร้างร่างใน Gmail — สร้างจากแท็บ “ร่างอีเมล” ด้านซ้าย ` +
-  'แล้วระบบจะตามให้เองว่าส่งไปแล้วหรือยัง';
+/* ฟังก์ชันไม่ใช่ค่าคงที่ตรงๆ เพราะต้องอ่าน state.lang สดทุกครั้งที่ openCycle() วาดใหม่
+   (สลับภาษาแล้วเปิดหน้านี้ซ้ำ) ถ้าเป็นค่าคงที่จะถูกคำนวณครั้งเดียวตอนโหลดไฟล์ ไม่มีวันอัปเดตตามภาษา */
+const WAITING_SEND = () => `${icon('clock')} ${tx('สร้างร่างใน Gmail แล้ว — กดส่งจาก Gmail ได้เลย')} ` +
+  tx('ระบบจะขึ้นว่าส่งแล้วให้เองเมื่อเปิดหน้านี้อีกครั้ง');
+const NO_DRAFT_YET = () => `${icon('info')} ${tx('ยังไม่ได้สร้างร่างใน Gmail — สร้างจากแท็บ')} “${tx('ร่างอีเมล')}” ${tx('ด้านซ้าย')} ` +
+  tx('แล้วระบบจะตามให้เองว่าส่งไปแล้วหรือยัง');
 
 async function openCycle(contractId, period) {
   state.view = 'cycle';
+  state.cycleContractId = contractId;
+  state.cyclePeriod = period;
   markTab('cycle');
 
   main.innerHTML = '<div class="loading">กำลังโหลด…</div>';
@@ -1417,7 +1778,7 @@ async function openCycle(contractId, period) {
 
   if (!data.invoice) {
     main.innerHTML = `<div class="page">
-      <button class="back" id="backBtn">${icon('cl')} กลับ</button>
+      <button class="back" id="backBtn">${icon('cl')} ${tx('กลับ')}</button>
       <div class="card"><div class="empty">${icon('cal', 'i')}
         <div>${esc(data.blockers.join(' · '))}</div></div></div></div>`;
     el('backBtn').addEventListener('click', () => setNav('cycles'));
@@ -1439,57 +1800,57 @@ async function openCycle(contractId, period) {
           <span class="mt2">${esc(entry.employee.nameTh)} · ${esc(entry.employee.quotationNo ?? '')}</span>
         </span>
         <span class="rt2"><span class="st ${m.discount ? 'wn' : 'ok'}">
-          ${m.payableDays} / ${m.standardWorkingDays} วัน</span></span>
+          ${m.payableDays} / ${m.standardWorkingDays} ${tx('วัน')}</span></span>
       </div>
       <div class="minitab">
-        <div class="mh2"><span>รายการคำนวณ</span><span class="q">จำนวน</span><span class="p">บาท</span></div>
+        <div class="mh2"><span>${tx('รายการคำนวณ')}</span><span class="q">${tx('จำนวน')}</span><span class="p">${tx('บาท')}</span></div>
         <div class="mr">
-          <span class="lb2">เรทค่าบริการต่อเดือน</span>
-          <span class="q">1 เดือน</span><span class="p">${money(m.monthlyRate)}</span>
+          <span class="lb2">${tx('เรทค่าบริการต่อเดือน')}</span>
+          <span class="q">1 ${tx('เดือน')}</span><span class="p">${money(m.monthlyRate)}</span>
         </div>
         ${m.leaveCount ? `<div class="mr neg">
-          <span class="lb2">ส่วนลดวันลา<small>${money(m.dailyRate)} × ${m.leaveCount} วัน</small></span>
-          <span class="q">${m.leaveCount} วัน</span><span class="p">−${money(m.discount)}</span>
+          <span class="lb2">${tx('ส่วนลดวันลา')}<small>${money(m.dailyRate)} × ${m.leaveCount} ${tx('วัน')}</small></span>
+          <span class="q">${m.leaveCount} ${tx('วัน')}</span><span class="p">−${money(m.discount)}</span>
         </div>` : `<div class="mr">
-          <span class="lb2">ส่วนลดวันลา<small>ไม่มีวันลา</small></span>
-          <span class="q">0 วัน</span><span class="p">—</span>
+          <span class="lb2">${tx('ส่วนลดวันลา')}<small>${tx('ไม่มีวันลา')}</small></span>
+          <span class="q">0 ${tx('วัน')}</span><span class="p">—</span>
         </div>`}
       </div>
       <div class="rec-total">
-        <span class="tl">ยอดของรายการนี้</span>
+        <span class="tl">${tx('ยอดของรายการนี้')}</span>
         <span class="tv">${money(m.lineAmount)}</span>
       </div>
       <div class="rec-acts one">
-        <button class="btn" data-open="${esc(entry.timesheetId)}">${icon('file')} ดู Timesheet</button>
+        <button class="btn" data-open="${esc(entry.timesheetId)}">${icon('file')} ${tx('ดู Timesheet')}</button>
       </div>
     </div>`;
   };
 
   main.innerHTML = `
   <div class="page">
-    <button class="back" id="backBtn">${icon('cl')} กลับหน้ารอบบิล</button>
+    <button class="back" id="backBtn">${icon('cl')} ${tx('กลับหน้ารอบบิล')}</button>
 
     <div class="greet">
       <div>
-        <span class="hi">รอบบิล ${esc(data.periodLabel)}</span>
+        <span class="hi">${tx('รอบบิล')} ${esc(data.periodLabel)}</span>
         <h1>${esc(data.contract.customer_name)}</h1>
-        <p class="sub2">โครงการ ${esc(data.contract.project_name)} · Timesheet ${data.cycle.received}/${data.cycle.expected} คน</p>
+        <p class="sub2">${tx('โครงการ')} ${esc(data.contract.project_name)} · Timesheet ${data.cycle.received}/${data.cycle.expected} ${tx('คน')}</p>
       </div>
       <div class="tools">
-        <span class="datechip">${icon('cal')} วางบิล ${dateOnly(inv.documentDate)}</span>
-        <span class="datechip">${icon('clock')} ครบกำหนด ${dateOnly(inv.dueDate)}</span>
+        <span class="datechip">${icon('cal')} ${tx('วางบิล')} ${dateOnly(inv.documentDate)}</span>
+        <span class="datechip">${icon('clock')} ${tx('ครบกำหนด')} ${dateOnly(inv.dueDate)}</span>
       </div>
     </div>
 
     ${data.blockers.length ? `<div class="note cr">${icon('alt')}<span>
-      <strong>ยังวางบิลไม่ได้</strong><br>${data.blockers.map(esc).join('<br>')}</span></div>` : ''}
+      <strong>${tx('ยังวางบิลไม่ได้')}</strong><br>${data.blockers.map(esc).join('<br>')}</span></div>` : ''}
 
     <div class="split2">
       <!-- ซ้าย: รายการในรอบบิล -->
       <div>
         <div class="card">
-          <div class="hd"><h3>รายการในรอบบิล</h3>
-            <span class="rt">${data.entries.length} คน · ประกอบเป็นใบแจ้งหนี้ใบเดียว</span></div>
+          <div class="hd"><h3>${tx('รายการในรอบบิล')}</h3>
+            <span class="rt">${data.entries.length} ${tx('คน')} · ${tx('ประกอบเป็นใบแจ้งหนี้ใบเดียว')}</span></div>
           <div class="cardgrid" style="grid-template-columns:1fr">
             ${data.entries.map(entryCard).join('')}
           </div>
@@ -1497,33 +1858,33 @@ async function openCycle(contractId, period) {
 
         <div class="tabs" role="tablist">
           ${['ข้อมูลที่ส่งเข้า FlowAccount', 'ร่างอีเมล'].map((label, i) =>
-            `<button class="tab ${i === 0 ? 'on' : ''}" data-ctab="${i + 1}">${label}</button>`).join('')}
+            `<button class="tab ${i === 0 ? 'on' : ''}" data-ctab="${i + 1}">${tx(label)}</button>`).join('')}
         </div>
 
         <div class="tp on" data-cpane="1">
           <div class="card">
-            <div class="hd"><h3>Payload ที่จะยิงเข้า API</h3>
-              <span class="rt">ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง</span></div>
+            <div class="hd"><h3>${tx('Payload ที่จะยิงเข้า API')}</h3>
+              <span class="rt">${tx('ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง')}</span></div>
             <div class="bd"><pre class="code">${esc(JSON.stringify(data.payload, null, 2))}</pre></div>
           </div>
         </div>
 
         <div class="tp" data-cpane="2">
           <div class="card">
-            <div class="hd"><h3>ร่างอีเมลวางบิล</h3></div>
+            <div class="hd"><h3>${tx('ร่างอีเมลวางบิล')}</h3></div>
             <div class="bd">
               <div class="mailacts">
-                <button class="btn sm" id="aiDraftBtn">${icon('rf')} ให้ระบบเรียบเรียงใหม่</button>
-                <button class="btn sm" id="copyMailBtn">${icon('doc')} คัดลอกร่าง</button>
-                <button class="btn sm" id="gmailDraftBtn">${icon('mail')} สร้างร่างใน Gmail</button>
+                <button class="btn sm" id="aiDraftBtn">${icon('rf')} ${tx('ให้ระบบเรียบเรียงใหม่')}</button>
+                <button class="btn sm" id="copyMailBtn">${icon('doc')} ${tx('คัดลอกร่าง')}</button>
+                <button class="btn sm" id="gmailDraftBtn">${icon('mail')} ${tx('สร้างร่างใน Gmail')}</button>
               </div>
               ${data.emailDraft.highlights?.length ? `<div class="note info">${icon('info')}<span>
-                <strong>ข้อสังเกตจากระบบ</strong><br>${data.emailDraft.highlights.map(esc).join('<br>')}
+                <strong>${tx('ข้อสังเกตจากระบบ')}</strong><br>${data.emailDraft.highlights.map(esc).join('<br>')}
               </span></div>` : ''}
               <div class="cmp">
-                <div class="f"><span class="l">ถึง</span><span id="mailTo">${esc(data.emailDraft.to)}</span></div>
-                <div class="f"><span class="l">สำเนา</span><span>${esc(data.emailDraft.cc)}</span></div>
-                <div class="f sj"><span class="l">เรื่อง</span><span id="mailSubject">${esc(data.emailDraft.subject)}</span></div>
+                <div class="f"><span class="l">${tx('ถึง')}</span><span id="mailTo">${esc(data.emailDraft.to)}</span></div>
+                <div class="f"><span class="l">${tx('สำเนา')}</span><span>${esc(data.emailDraft.cc)}</span></div>
+                <div class="f sj"><span class="l">${tx('เรื่อง')}</span><span id="mailSubject">${esc(data.emailDraft.subject)}</span></div>
                 <div class="lt" id="mailBody">${esc(data.emailDraft.body)}</div>
                 <div class="en">
                   <div class="files">${data.emailDraft.attachments.map((raw) => {
@@ -1537,9 +1898,9 @@ async function openCycle(contractId, period) {
                         : null;
                     return href
                       ? `<a class="file" href="${esc(href)}" target="_blank" rel="noopener"
-                           title="เปิดดูไฟล์นี้"><span class="pd">PDF</span> ${esc(a.label)}</a>
+                           title="${tx('เปิดดูไฟล์นี้')}"><span class="pd">PDF</span> ${esc(a.label)}</a>
                          <a class="btn sm icon" href="${esc(href)}?dl" download="${esc(a.label)}"
-                           title="ดาวน์โหลดไฟล์นี้" aria-label="ดาวน์โหลด">${icon('cd')}</a>`
+                           title="${tx('ดาวน์โหลดไฟล์นี้')}" aria-label="${tx('ดาวน์โหลด')}">${icon('cd')}</a>`
                       : `<span class="file"><span class="pd">PDF</span> ${esc(a.label)}</span>`;
                   }).join('')}</div>
                 </div>
@@ -1552,20 +1913,20 @@ async function openCycle(contractId, period) {
       <!-- ขวา: ใบแจ้งหนี้ค้างไว้ตลอด -->
       <div class="sticky">
         <div class="card">
-          <div class="hd"><h3>ใบแจ้งหนี้ที่จะสร้าง</h3>
+          <div class="hd"><h3>${tx('ใบแจ้งหนี้ที่จะสร้าง')}</h3>
             <span class="rt">${billed
-              ? `สร้างแล้ว — ${esc(data.existing.document_no)}${data.existing.share_link
-                  ? ` · <a href="${esc(data.existing.share_link)}" target="_blank" rel="noopener">เปิดดูเอกสาร</a>`
+              ? `${tx('สร้างแล้ว')} — ${esc(data.existing.document_no)}${data.existing.share_link
+                  ? ` · <a href="${esc(data.existing.share_link)}" target="_blank" rel="noopener">${tx('เปิดดูเอกสาร')}</a>`
                   : ''}`
-              : 'เลขเอกสารจะได้จาก FlowAccount'}</span></div>
+              : tx('เลขเอกสารจะได้จาก FlowAccount')}</span></div>
           ${billed ? (data.existing.email_sent_at
             ? `<div class="bd">
                  <div class="sentok">
                    <span class="ic">${icon('chk')}</span>
                    <div>
-                     <div class="ttl">ส่งเมลแล้ว</div>
-                     <div class="meta">ถึง <b>${esc(data.emailDraft?.to || 'ไม่พบอีเมลผู้รับในร่าง')}</b><br>
-                       บันทึกโดย ${esc(data.existing.email_sent_by || '—')} · ${dt(data.existing.email_sent_at)}</div>
+                     <div class="ttl">${tx('ส่งเมลแล้ว')}</div>
+                     <div class="meta">${tx('ถึง')} <b>${esc(data.emailDraft?.to || tx('ไม่พบอีเมลผู้รับในร่าง'))}</b><br>
+                       ${tx('บันทึกโดย')} ${esc(data.existing.email_sent_by || '—')} · ${dt(data.existing.email_sent_at)}</div>
                    </div>
                  </div>
                </div>`
@@ -1573,25 +1934,25 @@ async function openCycle(contractId, period) {
                แล้วสลับเป็นแถบเขียวด้านบนให้เอง (ดู syncEmailSent) ตรงนี้บอกแค่ว่ากำลังรออะไรอยู่ */
             : `<div class="bd sendrow">
                  <span class="hint" id="sendHint">${data.existing.gmail_thread_id
-                   ? WAITING_SEND : NO_DRAFT_YET}</span>
+                   ? WAITING_SEND() : NO_DRAFT_YET()}</span>
                </div>`) : ''}
         <div class="bd">
           <div class="doc">
             <div class="dh">
               <div>
-                <span class="tg ${billed ? 'ok' : 'wn'}" style="margin-bottom:6px">${billed ? 'สร้างร่างแล้ว' : 'ร่าง · Draft'}</span>
+                <span class="tg ${billed ? 'ok' : 'wn'}" style="margin-bottom:6px">${billed ? tx('สร้างร่างแล้ว') : 'ร่าง · Draft'}</span>
                 <div class="cs">${esc(inv.customer.name)}</div>
-                <div class="ti">เลขประจำตัวผู้เสียภาษี ${esc(inv.customer.taxId)} · ${esc(inv.customer.branch ?? '')}</div>
+                <div class="ti">${tx('เลขประจำตัวผู้เสียภาษี')} ${esc(inv.customer.taxId)} · ${esc(inv.customer.branch ?? '')}</div>
               </div>
               <dl class="kv">
-                <dt>วันที่เอกสาร</dt><dd>${dateOnly(inv.documentDate)}</dd>
-                <dt>เครดิต</dt><dd>${int(inv.creditDays)} วัน · ครบ ${dateOnly(inv.dueDate)}</dd>
-                <dt>Reference</dt><dd><span class="tg mu">เว้นว่างตามใบจริง</span></dd>
+                <dt>${tx('วันที่เอกสาร')}</dt><dd>${dateOnly(inv.documentDate)}</dd>
+                <dt>${tx('เครดิต')}</dt><dd>${int(inv.creditDays)} ${tx('วัน')} · ${tx('ครบ')} ${dateOnly(inv.dueDate)}</dd>
+                <dt>Reference</dt><dd><span class="tg mu">${tx('เว้นว่างตามใบจริง')}</span></dd>
               </dl>
             </div>
             <div class="tw"><table style="min-width:0">
-              <thead><tr><th style="width:34px">#</th><th>รายการ</th>
-                <th class="r" style="width:96px">ส่วนลด</th><th class="r" style="width:112px">จำนวนเงิน</th></tr></thead>
+              <thead><tr><th style="width:34px">#</th><th>${tx('รายการ')}</th>
+                <th class="r" style="width:96px">${tx('ส่วนลด')}</th><th class="r" style="width:112px">${tx('จำนวนเงิน')}</th></tr></thead>
               <tbody>${inv.items.map((i) => `
                 <tr><td class="n">${i.seq}</td>
                   <td><span class="nm">${esc(i.name)}</span>
@@ -1602,19 +1963,19 @@ async function openCycle(contractId, period) {
             </table></div>
             <div class="dfoot">
               <div class="tot">
-                <div class="t"><span>รวมเป็นเงิน</span><span class="v">${money(t.total)}</span></div>
-                <div class="t mi"><span>ส่วนลด</span><span class="v">−${money(t.discountTotal)}</span></div>
-                <div class="t rl"><span>รวมหลังหักส่วนลด</span><span class="v">${money(t.totalAfterDiscount)}</span></div>
-                <div class="t"><span>ภาษีมูลค่าเพิ่ม ${Math.round(t.vatRate * 100)}%</span><span class="v">${money(t.vat)}</span></div>
-                <div class="t gr"><span>รวมทั้งสิ้น</span><span class="v">${money(t.grandTotal)}</span></div>
-                <div class="t mi"><span>หักภาษี ณ ที่จ่าย ${Math.round(t.whtRate * 100)}%</span><span class="v">−${money(t.withholdingTax)}</span></div>
-                <div class="t py"><span>ยอดรับชำระ</span><span class="v">${money(t.paymentAmount)}</span></div>
+                <div class="t"><span>${tx('รวมเป็นเงิน')}</span><span class="v">${money(t.total)}</span></div>
+                <div class="t mi"><span>${tx('ส่วนลด')}</span><span class="v">−${money(t.discountTotal)}</span></div>
+                <div class="t rl"><span>${tx('รวมหลังหักส่วนลด')}</span><span class="v">${money(t.totalAfterDiscount)}</span></div>
+                <div class="t"><span>${tx('ภาษีมูลค่าเพิ่ม')} ${Math.round(t.vatRate * 100)}%</span><span class="v">${money(t.vat)}</span></div>
+                <div class="t gr"><span>${tx('รวมทั้งสิ้น')}</span><span class="v">${money(t.grandTotal)}</span></div>
+                <div class="t mi"><span>${tx('หักภาษี ณ ที่จ่าย')} ${Math.round(t.whtRate * 100)}%</span><span class="v">−${money(t.withholdingTax)}</span></div>
+                <div class="t py"><span>${tx('ยอดรับชำระ')}</span><span class="v">${money(t.paymentAmount)}</span></div>
               </div>
-              ${inv.remark ? `<div class="rmk"><span class="ey">หมายเหตุ</span>${esc(inv.remark)}</div>` : ''}
+              ${inv.remark ? `<div class="rmk"><span class="ey">${tx('หมายเหตุ')}</span>${esc(inv.remark)}</div>` : ''}
               <div class="note">${icon('info')}<span>
-                ภาษีหัก ณ ที่จ่ายคิดจากยอดหลังหักส่วนลดก่อน VAT
+                ${tx('ภาษีหัก ณ ที่จ่ายคิดจากยอดหลังหักส่วนลดก่อน VAT')}
                 (${money(t.totalAfterDiscount)} × ${Math.round(t.whtRate * 100)}% = ${money(t.withholdingTax)})
-                ตามที่ใบแจ้งหนี้ตัวอย่างทำ ไม่ใช่คิดจากยอดรวมทั้งสิ้น
+                ${tx('ตามที่ใบแจ้งหนี้ตัวอย่างทำ ไม่ใช่คิดจากยอดรวมทั้งสิ้น')}
               </span></div>
             </div>
           </div>
@@ -1625,13 +1986,13 @@ async function openCycle(contractId, period) {
 
     <div class="fbar">
       <span class="sx" id="cycleStatus">${billed
-        ? `<b>สร้างร่างใน FlowAccount แล้ว</b> — ${esc(data.existing.document_no)}`
+        ? `<b>${tx('สร้างร่างใน FlowAccount แล้ว')}</b> — ${esc(data.existing.document_no)}`
         : data.blockers.length
-          ? `<b>ยังอนุมัติไม่ได้</b> — ${data.blockers.length} ข้อ`
+          ? `<b>${tx('ยังอนุมัติไม่ได้')}</b> — ${data.blockers.length} ${tx('ข้อ')}`
           : ''}</span>
       <div class="gap"></div>
       <button class="btn pri" id="approveBtn" ${billed || data.blockers.length ? 'disabled' : ''}>
-        ${icon('send')} อนุมัติและสร้างร่างใน FlowAccount</button>
+        ${icon('send')} ${tx('อนุมัติและสร้างร่างใน FlowAccount')}</button>
     </div>
   </div>`;
 
@@ -1651,21 +2012,21 @@ async function openCycle(contractId, period) {
   const approveBtn = el('approveBtn');
   approveBtn?.addEventListener('click', async () => {
     approveBtn.disabled = true;
-    approveBtn.textContent = 'กำลังส่งเข้า FlowAccount…';
+    approveBtn.textContent = tx('กำลังส่งเข้า FlowAccount…');
     try {
       const result = await api(`/cycles/${encodeURIComponent(contractId)}/${period}/approve`, {
         method: 'POST',
       });
       toast(
-        `สร้างร่างใบแจ้งหนี้ ${result.documentNo} ใน FlowAccount แล้ว` +
-        (result.mode === 'dry-run' ? ' (โหมด dry-run — ยังไม่เรียก API จริง)' : '') +
-        ' · ร่างอีเมลรออยู่ในระบบ ยังไม่ส่งออก',
+        `${tx('สร้างร่างใบแจ้งหนี้')} ${result.documentNo} ${tx('ใน FlowAccount แล้ว')}` +
+        (result.mode === 'dry-run' ? ` ${tx('(โหมด dry-run — ยังไม่เรียก API จริง)')}` : '') +
+        ` · ${tx('ร่างอีเมลรออยู่ในระบบ ยังไม่ส่งออก')}`,
       );
       openCycle(contractId, period);
       syncBadges();
     } catch (error) {
       approveBtn.disabled = false;
-      approveBtn.innerHTML = `${icon('send')} อนุมัติและสร้างร่างใน FlowAccount`;
+      approveBtn.innerHTML = `${icon('send')} ${tx('อนุมัติและสร้างร่างใน FlowAccount')}`;
       toast(error.message, true);
     }
   });
@@ -1677,25 +2038,25 @@ async function openCycle(contractId, period) {
   el('aiDraftBtn')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
-    btn.textContent = 'ระบบกำลังเรียบเรียง…';
+    btn.textContent = tx('ระบบกำลังเรียบเรียง…');
     try {
       await api(`/cycles/${encodeURIComponent(contractId)}/${period}/email-draft`, { method: 'POST' });
-      toast('ระบบร่างอีเมลใหม่แล้ว — อ่านทวนก่อนคัดลอกไปส่ง');
+      toast(tx('ระบบร่างอีเมลใหม่แล้ว — อ่านทวนก่อนคัดลอกไปส่ง'));
       openCycle(contractId, period);
     } catch (error) {
       btn.disabled = false;
-      btn.innerHTML = `${icon('rf')} ให้ระบบเรียบเรียงใหม่`;
+      btn.innerHTML = `${icon('rf')} ${tx('ให้ระบบเรียบเรียงใหม่')}`;
       toast(error.message, true);
     }
   });
 
   el('copyMailBtn')?.addEventListener('click', async () => {
-    const text = `เรื่อง: ${data.emailDraft.subject}\n\n${data.emailDraft.body}`;
+    const text = `${tx('เรื่อง')}: ${data.emailDraft.subject}\n\n${data.emailDraft.body}`;
     try {
       await navigator.clipboard.writeText(text);
-      toast('คัดลอกร่างอีเมลแล้ว — วางในกล่องเมลได้เลย');
+      toast(tx('คัดลอกร่างอีเมลแล้ว — วางในกล่องเมลได้เลย'));
     } catch {
-      toast('คัดลอกไม่สำเร็จ — เลือกข้อความในกล่องร่างแล้วคัดลอกเอง', true);
+      toast(tx('คัดลอกไม่สำเร็จ — เลือกข้อความในกล่องร่างแล้วคัดลอกเอง'), true);
     }
   });
 
@@ -1706,12 +2067,12 @@ async function openCycle(contractId, period) {
        จะมองว่าไม่ใช่ user gesture แล้ว บล็อก popup ทันที (ทดสอบแล้วเจอจริง) */
     const draftWindow = window.open('', '_blank');
     btn.disabled = true;
-    btn.textContent = 'กำลังสร้างร่างใน Gmail…';
+    btn.textContent = tx('กำลังสร้างร่างใน Gmail…');
     try {
       const r = await api(`/cycles/${encodeURIComponent(contractId)}/${period}/gmail-draft`, { method: 'POST' });
-      toast(`สร้างร่างใน Gmail แล้ว — ถึง ${r.to} · เปิดแท็บใหม่ให้แล้ว กดตรวจแล้วส่งได้จากที่นั่นเลย (${r.note})`);
+      toast(`${tx('สร้างร่างใน Gmail แล้ว — ถึง')} ${r.to} · ${tx('เปิดแท็บใหม่ให้แล้ว กดตรวจแล้วส่งได้จากที่นั่นเลย')} (${r.note})`);
       /* อัปเดตแถบสถานะตรงๆแทนการโหลดหน้าใหม่ทั้งหน้า — ไม่งั้นแท็บที่คนเปิดค้างไว้จะเด้งกลับไปแท็บแรก */
-      if (el('sendHint')) el('sendHint').innerHTML = WAITING_SEND;
+      if (el('sendHint')) el('sendHint').innerHTML = WAITING_SEND();
       if (r.url && draftWindow) draftWindow.location = r.url;
       else draftWindow?.close();
     } catch (error) {
@@ -1719,7 +2080,7 @@ async function openCycle(contractId, period) {
       draftWindow?.close();
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `${icon('mail')} สร้างร่างใน Gmail`;
+      btn.innerHTML = `${icon('mail')} ${tx('สร้างร่างใน Gmail')}`;
     }
   });
 
@@ -1734,6 +2095,15 @@ async function openCycle(contractId, period) {
    จุดต่างที่สำคัญคือ "ยังไม่บันทึกจนกว่าคนจะเห็น" — อีกสามขั้นที่เหลือเหมือนกันทุกอย่าง */
 
 const LEAVE_OPTIONS = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', other: 'อื่นๆ' };
+
+/** ประเภทหัก ณ ที่จ่ายที่พบบ่อย — ใช้เลือกเร็วในหน้าตรวจ Timesheet ก่อนยืนยัน (27 ส.ค. 69)
+ * ปรับอัตราเองได้จากสเต็ปเปอร์ถ้าเงื่อนไขต่างจากมาตรฐาน — ดู readResultHtml()/bindUploadTab() */
+const WHT_TYPES = [
+  { pct: 1, name: 'ค่าบริการขนส่งสินค้า' },
+  { pct: 2, name: 'ค่าโฆษณา' },
+  { pct: 3, name: 'ค่าจ้างทำของ / ค่าบริการ' },
+  { pct: 5, name: 'ค่าเช่าทรัพย์สิน' },
+];
 
 /** อ่านไฟล์เป็น base64 โดยไม่มีส่วนหัว data: */
 function fileToBase64(file) {
@@ -1754,30 +2124,30 @@ async function renderUpload() {
   main.innerHTML = `
   <div class="page">
     <div class="phd">
-      <div><span class="ey">ขั้นที่ 1 จาก 4</span><h1>อัปโหลด Timesheet</h1></div>
+      <div><span class="ey">${tx('ขั้นที่ 1 จาก 4')}</span><h1>${tx('อัปโหลด Timesheet')}</h1></div>
     </div>
 
     <div class="tabs" role="tablist">
-      <button class="tab ${state.uploadTab === 1 ? 'on' : ''}" data-utab="1">อัปโหลดไฟล์</button>
-      <button class="tab ${state.uploadTab === 3 ? 'on' : ''}" data-utab="3">ดึงจาก Gmail
-        ${settings.env.hasGmail ? '' : '<span class="tg mu">ยังไม่ต่อ</span>'}</button>
-      <button class="tab ${state.uploadTab === 2 ? 'on' : ''}" data-utab="2">กรอกเอง</button>
-      <button class="tab ${state.uploadTab === 4 ? 'on' : ''}" data-utab="4">ประวัติ</button>
+      <button class="tab ${state.uploadTab === 1 ? 'on' : ''}" data-utab="1">${tx('อัปโหลดไฟล์')}</button>
+      <button class="tab ${state.uploadTab === 3 ? 'on' : ''}" data-utab="3">${tx('ดึงจาก Gmail')}
+        ${settings.env.hasGmail ? '' : `<span class="tg mu">${tx('ยังไม่ต่อ')}</span>`}</button>
+      <button class="tab ${state.uploadTab === 2 ? 'on' : ''}" data-utab="2">${tx('กรอกเอง')}</button>
+      <button class="tab ${state.uploadTab === 4 ? 'on' : ''}" data-utab="4">${tx('ประวัติ')}</button>
     </div>
 
     <!-- ── ดึงจาก Gmail ── -->
     <div class="tp ${state.uploadTab === 3 ? 'on' : ''}" data-upane="3">
       ${settings.env.hasGmail ? `
         <div class="card">
-          <div class="hd"><h3>อีเมลแจ้งอนุมัติ Timesheet</h3>
-            <span class="rt" id="gmailAcct">กำลังเชื่อมต่อ…</span></div>
+          <div class="hd"><h3>${tx('อีเมลแจ้งอนุมัติ Timesheet')}</h3>
+            <span class="rt" id="gmailAcct">${tx('กำลังเชื่อมต่อ…')}</span></div>
           <div class="bd">
             <div id="gmailList"></div>
           </div>
         </div>` : `
         <div class="card"><div class="bd">
           <div class="note wn">${icon('alt')}<span>
-            <strong>ยังไม่ได้เชื่อมต่อ Gmail</strong> — ทำครั้งเดียวจบ ใช้บัญชี Google ของคุณเองได้
+            <strong>${tx('ยังไม่ได้เชื่อมต่อ Gmail')}</strong> — ${tx('ทำครั้งเดียวจบ ใช้บัญชี Google ของคุณเองได้')}
           </span></div>
           <ol class="steps">
             <li>เปิด <b>console.cloud.google.com</b> → สร้างโปรเจกต์ใหม่</li>
@@ -1790,8 +2160,8 @@ async function renderUpload() {
             <li>เอา <code>GMAIL_REFRESH_TOKEN</code> ที่ได้ใส่ <code>.env</code> → รันเซิร์ฟเวอร์ใหม่</li>
           </ol>
           <div class="note info">${icon('info')}<span>
-            สิทธิ์ที่ขอคือ <b>อ่านเมล</b> กับ <b>สร้างร่าง</b> — ในโค้ดไม่มีคำสั่งส่งอีเมลอยู่เลย
-            ร่างที่สร้างจะไปอยู่ในกล่อง Drafts ให้คุณกดส่งเอง
+            ${tx('สิทธิ์ที่ขอคือ')} <b>${tx('อ่านเมล')}</b> ${tx('กับ')} <b>${tx('สร้างร่าง')}</b> — ${tx('ในโค้ดไม่มีคำสั่งส่งอีเมลอยู่เลย')}
+            ${tx('ร่างที่สร้างจะไปอยู่ในกล่อง Drafts ให้คุณกดส่งเอง')}
           </span></div>
         </div></div>`}
     </div>
@@ -1799,16 +2169,16 @@ async function renderUpload() {
     <!-- ── อัปโหลดไฟล์ ── -->
     <div class="tp ${state.uploadTab === 1 ? 'on' : ''}" data-upane="1">
       <div class="card">
-        <div class="hd"><h3>เลือกไฟล์ Timesheet</h3><span class="rt">PDF ที่ลูกค้าอนุมัติแล้ว</span></div>
+        <div class="hd"><h3>${tx('เลือกไฟล์ Timesheet')}</h3><span class="rt">${tx('PDF ที่ลูกค้าอนุมัติแล้ว')}</span></div>
         <div class="bd">
           <label class="drop" id="dropZone">
             <input type="file" id="fileInput" accept="application/pdf" hidden>
             ${icon('file', 'i')}
-            <b id="dropName">ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์</b>
+            <b id="dropName">${tx('ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์')}</b>
           </label>
         </div>
         <div class="ft">
-          <button class="btn pri" id="readBtn" disabled>${icon('srch')} อ่านไฟล์นี้</button>
+          <button class="btn pri" id="readBtn" disabled>${icon('srch')} ${tx('อ่านไฟล์นี้')}</button>
         </div>
       </div>
 
@@ -1817,37 +2187,37 @@ async function renderUpload() {
     <!-- ── กรอกเอง ── -->
     <div class="tp ${state.uploadTab === 2 ? 'on' : ''}" data-upane="2">
       <div class="card">
-        <div class="hd"><h3>ข้อมูลจากใบ Timesheet</h3></div>
+        <div class="hd"><h3>${tx('ข้อมูลจากใบ Timesheet')}</h3></div>
         <div class="bd">
             <div class="frm">
-              <label>รอบเดือน<input id="ePeriod" type="month"></label>
-              <label>ชื่อพนักงาน <b>ตามที่เขียนในใบ</b>
+              <label>${tx('รอบเดือน')}<input id="ePeriod" type="month"></label>
+              <label>${tx('ชื่อพนักงาน')} <b>${tx('ตามที่เขียนในใบ')}</b>
                 <input id="eName" type="text" placeholder="เช่น Pongpun Mamak" autocomplete="off">
               </label>
-              <label>ตำแหน่ง <b>ตามที่เขียนในใบ</b>
+              <label>${tx('ตำแหน่ง')} <b>${tx('ตามที่เขียนในใบ')}</b>
                 <input id="ePos" type="text" placeholder="เช่น Java Programmer" autocomplete="off">
               </label>
-              <label>ผู้อนุมัติฝั่งลูกค้า
+              <label>${tx('ผู้อนุมัติฝั่งลูกค้า')}
                 <input id="eBy" type="text" value="Project Manager (TLI)" autocomplete="off">
               </label>
-              <label>วันที่ลูกค้าอนุมัติ<input id="eAt" type="date"></label>
+              <label>${tx('วันที่ลูกค้าอนุมัติ')}<input id="eAt" type="date"></label>
             </div>
             <div class="fsec">
-              <div class="fsec-h"><b>วันลา</b><button class="btn sm" id="eAddLeave">+ เพิ่มวันลา</button></div>
+              <div class="fsec-h"><b>${tx('วันลา')}</b><button class="btn sm" id="eAddLeave">${tx('+ เพิ่มวันลา')}</button></div>
               <div id="eLeaves"></div>
-              <small class="fhint">ไม่มีวันลาก็เว้นว่างไว้</small>
+              <small class="fhint">${tx('ไม่มีวันลาก็เว้นว่างไว้')}</small>
             </div>
           </div>
-        <div class="ft"><button class="btn pri" id="eSave">บันทึกเข้าระบบ</button></div>
+        <div class="ft"><button class="btn pri" id="eSave">${tx('บันทึกเข้าระบบ')}</button></div>
       </div>
     </div>
 
     <!-- ── ประวัติที่ AI เคยอ่านแล้ว ── -->
     <div class="tp ${state.uploadTab === 4 ? 'on' : ''}" data-upane="4">
       <div class="card">
-        <div class="hd"><h3>ประวัติที่ระบบเคยอ่านแล้ว</h3>
-          <span class="rt">ทั้งจากอัปโหลดไฟล์และดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง</span></div>
-        <div class="bd flush"><div id="aiHistoryList"><div class="loading">กำลังโหลด…</div></div></div>
+        <div class="hd"><h3>${tx('ประวัติที่ระบบเคยอ่านแล้ว')}</h3>
+          <span class="rt">${tx('ทั้งจากอัปโหลดไฟล์และดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง')}</span></div>
+        <div class="bd flush"><div id="aiHistoryList"><div class="loading">${tx('กำลังโหลด…')}</div></div></div>
       </div>
     </div>
 
@@ -2127,14 +2497,14 @@ function pendingReadHtml(read) {
   const ss = String(secs % 60).padStart(2, '0');
   return `
   <div class="card pending" data-read-key="${esc(read._key)}">
-    <div class="hd"><h3>${icon('srch')} ระบบกำลังอ่าน${read.email ? 'เมลและไฟล์แนบ' : 'ไฟล์'}</h3>
+    <div class="hd"><h3>${icon('srch')} ${tx('ระบบกำลังอ่าน')}${tx(read.email ? 'เมลและไฟล์แนบ' : 'ไฟล์')}</h3>
       <span class="rt n">${mm}:${ss}</span></div>
     <div class="bd">
       <div class="readwait">
         <div class="bar"><i></i></div>
-        <b>${esc(read.fileName ?? 'ไฟล์ Timesheet')}</b>
-        <span>อ่านทีละหน้าแล้วรวมผล — เอกสารทั่วไปราว ${READ_SECONDS_PER_PAGE} วินาทีต่อหน้า
-          ไฟล์ที่รวม Timesheet หลายคนจะใช้เวลาหลายนาที ปล่อยหน้านี้ไว้ได้เลย</span>
+        <b>${esc(read.fileName ?? tx('ไฟล์ Timesheet'))}</b>
+        <span>${tx('อ่านทีละหน้าแล้วรวมผล — เอกสารทั่วไปราว')} ${READ_SECONDS_PER_PAGE} ${tx('วินาทีต่อหน้า')}
+          ${tx('ไฟล์ที่รวม Timesheet หลายคนจะใช้เวลาหลายนาที ปล่อยหน้านี้ไว้ได้เลย')}</span>
       </div>
     </div>
   </div>`;
@@ -2294,6 +2664,41 @@ function readsFromResult(result, tab) {
   }));
 }
 
+/** ส่วน "หัก ณ ที่จ่าย" ในหน้าตรวจ Timesheet ก่อนยืนยัน — อยู่ระหว่าง "เทียบกับ HRDD" กับ "ลายเซ็น"
+ * ตั้งต้นจากอัตราที่ตั้งไว้ในสัญญาอยู่แล้ว (contract.whtRate) เลือกประเภท/ปรับ % แล้วกดยืนยันตอนท้าย
+ * จะอัปเดตอัตราของสัญญานี้ให้ด้วย (ดู confirmBtn ใน bindUploadTab()) — ไม่มีสัญญาให้ยังเลือกไม่ได้ */
+function whtSectionHtml(read, key) {
+  if (!read.contract) {
+    return `<div class="fsec">
+      <div class="fsec-h"><b>${icon('money', 'i sm')} หัก ณ ที่จ่าย</b></div>
+      <div class="note">${icon('info')}<span>จับคู่ชื่อพนักงานกับคนในระบบก่อน ถึงจะเลือกประเภทหัก ณ ที่จ่ายได้</span></div>
+    </div>`;
+  }
+  const defaultPct = Math.round((read.contract.whtRate ?? 0.03) * 100);
+  const base = Number(read.contract.monthlyRate) || 0;
+  return `<div class="fsec">
+    <div class="fsec-h"><b>${icon('money', 'i sm')} หัก ณ ที่จ่าย</b>
+      <span style="font-size:12px;color:var(--mut)">ตามที่ฝ่ายบัญชีกำหนด</span></div>
+    <div class="wht-types" data-wht-types>
+      ${WHT_TYPES.map((w) => `<div class="wht-type ${w.pct === defaultPct ? 'on' : ''}" data-pct="${w.pct}">
+        <div class="nm">${esc(w.name)}</div><div class="code">${w.pct}%</div></div>`).join('')}
+    </div>
+    <div class="stepper-row">
+      <div class="lbl">อัตราหัก ณ ที่จ่าย<small>ปรับได้เองถ้าเงื่อนไขต่างจากค่ามาตรฐานของประเภทที่เลือก</small></div>
+      <div class="stepper">
+        <button type="button" class="whtMinus">−</button>
+        <span class="val" data-wht-val>${defaultPct}%</span>
+        <button type="button" class="whtPlus">+</button>
+      </div>
+    </div>
+    <div class="wht-result">
+      <span>หัก ณ ที่จ่าย <span data-wht-pct-label>${defaultPct}</span>% จากยอดประมาณ ${money(base)}</span>
+      <span data-wht-amount>−${money(Math.round(base * defaultPct) / 100)}</span>
+    </div>
+    <input type="hidden" id="rWht-${key}" value="${defaultPct}">
+  </div>`;
+}
+
 function readResultHtml(read, employees = []) {
   const key = read._key;
   const d = read.data;
@@ -2314,57 +2719,57 @@ function readResultHtml(read, employees = []) {
 
   return `
   <div class="card" data-read-key="${esc(key)}">
-    <div class="hd"><h3>ข้อมูลที่อ่านได้${read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์'}${
+    <div class="hd"><h3>${tx('ข้อมูลที่อ่านได้')}${tx(read.email ? 'จากอีเมลและไฟล์แนบ' : 'จากไฟล์')}${
       d.employeeName ? ` — ${esc(d.employeeName)}` : ''}</h3>
-      ${read.partOfFile ? `<span class="tg mu">ใบที่ ${read.partOfFile.index} จาก ${read.partOfFile.total} ในไฟล์เดียวกัน</span>` : ''}</div>
+      ${read.partOfFile ? `<span class="tg mu">${tx('ใบที่')} ${read.partOfFile.index} ${tx('จาก')} ${read.partOfFile.total} ${tx('ในไฟล์เดียวกัน')}</span>` : ''}</div>
     <div class="bd">
       ${srcFile ? `<div class="attrow" style="margin-bottom:14px">
         <a class="file" href="${esc(srcFile)}" target="_blank" rel="noopener"
-           title="เปิดดูไฟล์ต้นฉบับที่ระบบอ่าน"><span class="pd">PDF</span> ${esc(read.fileName)}</a>
+           title="${tx('เปิดดูไฟล์ต้นฉบับที่ระบบอ่าน')}"><span class="pd">PDF</span> ${esc(read.fileName)}</a>
         <a class="btn sm icon" href="${esc(srcFile)}&dl" download="${esc(read.fileName)}"
-           title="ดาวน์โหลดไฟล์ต้นฉบับ" aria-label="ดาวน์โหลด">${icon('cd')}</a>
+           title="${tx('ดาวน์โหลดไฟล์ต้นฉบับ')}" aria-label="${tx('ดาวน์โหลด')}">${icon('cd')}</a>
       </div>` : ''}
       ${read.email ? `<div class="cmp" style="margin-bottom:16px">
-        <div class="f"><span class="l">จาก</span><span>${esc(read.email.from)}</span></div>
-        <div class="f sj"><span class="l">เรื่อง</span><span>${esc(read.email.subject)}</span></div>
-        <div class="f"><span class="l">เลขเอกสาร</span>${docInput}</div>
-      </div>` : `<div class="frm" style="margin-bottom:16px"><label>เลขเอกสาร${docInput}</label></div>`}
+        <div class="f"><span class="l">${state.lang === 'en' ? 'From' : 'จาก'}</span><span>${esc(read.email.from)}</span></div>
+        <div class="f sj"><span class="l">${tx('เรื่อง')}</span><span>${esc(read.email.subject)}</span></div>
+        <div class="f"><span class="l">${tx('เลขเอกสาร')}</span>${docInput}</div>
+      </div>` : `<div class="frm" style="margin-bottom:16px"><label>${tx('เลขเอกสาร')}${docInput}</label></div>`}
       ${blocked ? `<div class="note cr">${icon('alt')}<span>
-        <strong>ยังบันทึกไม่ได้ ${hardBlockers.length} ข้อ</strong><br>
+        <strong>${tx('ยังบันทึกไม่ได้')} ${hardBlockers.length} ${tx('ข้อ')}</strong><br>
         ${hardBlockers.map(esc).join('<br>')}</span></div>` : ''}
 
       <div class="g2">
         <div class="frm">
-          <label>ชื่อพนักงานตามที่เขียนในไฟล์
+          <label>${tx('ชื่อพนักงานตามที่เขียนในไฟล์')}
             <input id="rName-${key}" type="text" value="${esc(d.employeeName ?? '')}">
             ${!read.matching.employee ? `
-              <small>จับคู่กับพนักงานในระบบไม่ได้ — เลือกว่าชื่อนี้คือใคร แล้วกดเพิ่มเป็นชื่อพ้อง
-                ครั้งต่อไประบบจะจับคู่ให้เอง</small>
+              <small>${tx('จับคู่กับพนักงานในระบบไม่ได้ — เลือกว่าชื่อนี้คือใคร แล้วกดเพิ่มเป็นชื่อพ้อง')}
+                ${tx('ครั้งต่อไประบบจะจับคู่ให้เอง')}</small>
               <div class="fixa-picker">
                 <span class="selectchip grow"><select id="rAliasEmp-${key}">
-                  <option value="">— เลือกพนักงานที่ตรงกับชื่อนี้ —</option>
+                  <option value="">${tx('— เลือกพนักงานที่ตรงกับชื่อนี้ —')}</option>
                   ${rankEmployees(employees, d.employeeName).map(({ e, close }) => `
                     <option value="${esc(e.id)}">${close ? '★ ' : ''}${esc(employeeLabel(e))}</option>`).join('')}
                 </select>${icon('cd')}</span>
-                <button class="btn sm pri rAliasAdd" type="button" disabled>${icon('chk')} เพิ่มเป็นชื่อพ้อง</button>
+                <button class="btn sm pri rAliasAdd" type="button" disabled>${icon('chk')} ${tx('เพิ่มเป็นชื่อพ้อง')}</button>
               </div>` : ''}
           </label>
-          <label>ตำแหน่งตามที่เขียนในไฟล์
+          <label>${tx('ตำแหน่งตามที่เขียนในไฟล์')}
             <input id="rPos-${key}" type="text" value="${esc(d.position ?? '')}">
           </label>
-          <label>รอบเดือน<input id="rPeriod-${key}" type="month" value="${esc(d.period ?? '')}"></label>
+          <label>${tx('รอบเดือน')}<input id="rPeriod-${key}" type="month" value="${esc(d.period ?? '')}"></label>
         </div>
         <div class="frm">
-          <label>วันทำงานที่ระบุท้ายตาราง
+          <label>${tx('วันทำงานที่ระบุท้ายตาราง')}
             <input id="rWork-${key}" type="number" min="0" max="31" value="${int(d.totalWorkDays)}">
           </label>
-          <label>วันลาที่ระบุท้ายตาราง
+          <label>${tx('วันลาที่ระบุท้ายตาราง')}
             <input id="rLeave-${key}" type="number" min="0" max="31" value="${int(d.totalLeaveDays)}">
           </label>
-          <label>ผู้อนุมัติฝั่งลูกค้า
+          <label>${tx('ผู้อนุมัติฝั่งลูกค้า')}
             <input id="rBy-${key}" type="text"
               value="${esc(read.approvedBy ?? d.projectManagerSignatureName ?? 'Project Manager (TLI)')}">
-            ${read.approvedAt ? `<small>อีเมลระบุวันที่อนุมัติ ${dateOnly(read.approvedAt)}</small>` : ''}
+            ${read.approvedAt ? `<small>${tx('อีเมลระบุวันที่อนุมัติ')} ${dateOnly(read.approvedAt)}</small>` : ''}
           </label>
         </div>
       </div>
@@ -2373,51 +2778,53 @@ function readResultHtml(read, employees = []) {
         <!-- ซ่อนไว้ตามที่ขอ (25 ส.ค. 69) — ไม่ให้แก้วันลาตรงนี้ตรงๆอีกต่อไป ให้แก้ผ่านปุ่ม "แก้ไข"
              ในตาราง "เทียบกับ HRDD" ด้านล่างแทนที่เดียว แต่ต้องคง .rLeaveRows/.lrow ไว้ในหน้าเว็บ
              เพราะเป็นที่เก็บข้อมูลวันลาจริงที่ตอนกดยืนยันจะอ่านไปบันทึก (ดู confirmBtn ท้ายไฟล์นี้) -->
-        <div class="fsec-h"><b>วันลาที่อ่านได้</b>
-          <button class="btn sm rAddLeave" type="button">+ เพิ่มวันลา</button></div>
+        <div class="fsec-h"><b>${tx('วันลาที่อ่านได้')}</b>
+          <button class="btn sm rAddLeave" type="button">${tx('+ เพิ่มวันลา')}</button></div>
         <div class="rLeaveRows">${(d.leaveDays ?? []).map((l) => `
           <div class="lrow">
             <input type="date" class="ldate" value="${esc(l.date)}">
             <select class="ltype">
               ${Object.entries(LEAVE_OPTIONS).map(([v, label]) =>
-                `<option value="${v}" ${l.type === v ? 'selected' : ''}>${label}</option>`).join('')}
+                `<option value="${v}" ${l.type === v ? 'selected' : ''}>${tx(label)}</option>`).join('')}
             </select>
-            <button class="btn sm dgr lrm" type="button">ลบ</button>
+            <button class="btn sm dgr lrm" type="button">${tx('ลบ')}</button>
           </div>`).join('')}</div>
       </div>
 
       <div class="fsec hrdd">
-        <div class="fsec-h"><b>${icon('list-chk', 'i sm')} เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)</b>
+        <div class="fsec-h"><b>${icon('list-chk', 'i sm')} ${tx('เทียบกับ HRDD (ระบบเช็คชื่อบริษัทหลัก)')}</b>
           <div class="hrdd-actions">
             <span class="hrddMeta"></span>
-            <button class="btn sm hrddRefreshBtn" type="button">${icon('rf', 'i sm')} รีเฟรชจาก HRDD</button>
+            <button class="btn sm hrddRefreshBtn" type="button">${icon('rf', 'i sm')} ${tx('รีเฟรชจาก HRDD')}</button>
           </div></div>
         <div class="hrddBody">${read.matching.employee
-          ? '<div class="loading">กำลังตรวจสอบวันลากับ HRDD…</div>'
-          : `<div class="note">${icon('info')}<span>จับคู่ชื่อพนักงานกับคนในระบบก่อน (ด้านบน) ถึงจะเทียบกับ HRDD ได้</span></div>`}</div>
+          ? `<div class="loading">${tx('กำลังตรวจสอบวันลากับ HRDD…')}</div>`
+          : `<div class="note">${icon('info')}<span>${tx('จับคู่ชื่อพนักงานกับคนในระบบก่อน (ด้านบน) ถึงจะเทียบกับ HRDD ได้')}</span></div>`}</div>
       </div>
 
+      ${whtSectionHtml(read, key)}
+
       <div class="fsec">
-        <div class="fsec-h"><b>ลายเซ็น</b></div>
+        <div class="fsec-h"><b>${tx('ลายเซ็น')}</b></div>
         <ul class="cks">
-          <li><span class="l">พนักงาน</span>
+          <li><span class="l">${tx('พนักงาน')}</span>
             <span class="v ${d.signedByEmployee ? '' : 'mu'}">${d.signedByEmployee
-              ? esc(d.employeeSignatureName || read.matching.employee?.nameTh || d.employeeName || 'พบลายเซ็น')
+              ? esc(d.employeeSignatureName || read.matching.employee?.nameTh || d.employeeName || tx('พบลายเซ็น'))
               : '—'}</span></li>
-          <li><span class="l">ผู้อนุมัติฝั่งลูกค้า</span>
+          <li><span class="l">${tx('ผู้อนุมัติฝั่งลูกค้า')}</span>
             <span class="v ${d.signedByProjectManager ? '' : 'mu'}">${d.signedByProjectManager
-              ? esc(d.projectManagerSignatureName || read.approvedBy || 'พบลายเซ็น')
+              ? esc(d.projectManagerSignatureName || read.approvedBy || tx('พบลายเซ็น'))
               : '—'}</span></li>
         </ul>
       </div>
 
-      <details class="raw"><summary>ดู JSON ดิบที่ระบบอ่านออกมา</summary>
+      <details class="raw"><summary>${tx('ดู JSON ดิบที่ระบบอ่านออกมา')}</summary>
         <pre class="code">${esc(JSON.stringify(d, null, 2))}</pre></details>
     </div>
     <div class="ft review-ft">
-      <button class="btn ghost discardBtn" type="button">${icon('trash', 'i sm')} ทิ้งผลนี้</button>
+      <button class="btn ghost discardBtn" type="button">${icon('trash', 'i sm')} ${tx('ทิ้งผลนี้')}</button>
       <button class="btn pri lg confirmBtn" type="button" data-blocked="${blocked}" ${blocked ? 'disabled' : ''}>
-        ${icon('chk')} ยืนยันและบันทึกเข้าระบบ</button>
+        ${icon('chk')} ${tx('ยืนยันและบันทึกเข้าระบบ')}</button>
     </div>
   </div>`;
 }
@@ -2534,6 +2941,33 @@ function bindUploadTab() {
     card.querySelector('.hrddRefreshBtn')?.addEventListener('click', () => runHrddPreviewCompare(card, entry));
     if (entry().matching.employee) runHrddPreviewCompare(card, entry);
 
+    // ═══ หัก ณ ที่จ่าย — เลือกประเภท/ปรับ % แล้วอัปเดตค่านี้ลงในช่องซ่อนไว้ยิงตอนยืนยัน (ดู confirmBtn) ═══
+    (() => {
+      const whtTypes = card.querySelector('[data-wht-types]');
+      if (!whtTypes) return;
+      const base = Number(entry().contract?.monthlyRate) || 0;
+      const valEl = card.querySelector('[data-wht-val]');
+      const pctLabelEl = card.querySelector('[data-wht-pct-label]');
+      const amtEl = card.querySelector('[data-wht-amount]');
+      const hiddenEl = field('rWht');
+      const renderWht = (pct) => {
+        valEl.textContent = `${pct}%`;
+        pctLabelEl.textContent = pct;
+        amtEl.textContent = `−${money(Math.round(base * pct) / 100)}`;
+        hiddenEl.value = pct;
+      };
+      whtTypes.addEventListener('click', (e) => {
+        const t = e.target.closest('.wht-type');
+        if (!t) return;
+        whtTypes.querySelectorAll('.wht-type').forEach((x) => x.classList.toggle('on', x === t));
+        renderWht(Number(t.dataset.pct));
+      });
+      card.querySelector('.whtPlus')?.addEventListener('click', () =>
+        renderWht(Math.min(30, parseInt(valEl.textContent, 10) + 1)));
+      card.querySelector('.whtMinus')?.addEventListener('click', () =>
+        renderWht(Math.max(0, parseInt(valEl.textContent, 10) - 1)));
+    })();
+
     card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
       const btn = card.querySelector('.confirmBtn');
       const documentNo = field('uDoc').value.trim();
@@ -2564,6 +2998,24 @@ function bindUploadTab() {
         totalLeaveDays,
         leaveDays,
       };
+
+      // ถ้าเปลี่ยนประเภท/อัตราหัก ณ ที่จ่ายไว้ต่างจากที่สัญญาตั้งไว้เดิม อัปเดตให้สัญญานี้ก่อน
+      // ยิงแยกจากบันทึก Timesheet เอง — ถ้าอัปเดตไม่สำเร็จ (เช่นไม่ใช่แอดมิน) ไม่ควรบล็อกการยืนยัน Timesheet
+      const whtField = field('rWht');
+      if (whtField && current.contract) {
+        const newPct = Number(whtField.value);
+        const currentPct = Math.round((current.contract.whtRate ?? 0.03) * 100);
+        if (Number.isFinite(newPct) && newPct !== currentPct) {
+          try {
+            await api(`/contracts/${encodeURIComponent(current.contract.id)}/wht-rate`, {
+              method: 'PATCH',
+              body: JSON.stringify({ whtRate: newPct / 100 }),
+            });
+          } catch (error) {
+            toast(`บันทึก Timesheet ต่อได้ แต่ปรับอัตราหัก ณ ที่จ่ายให้สัญญาไม่สำเร็จ: ${error.message}`, true);
+          }
+        }
+      }
 
       try {
         const r = await api('/timesheets/confirm', {
@@ -2655,7 +3107,7 @@ function addLeaveRow(target = 'eLeaves') {
 function renderAliasCell(e, kind, aliases) {
   const edit = state.aliasEdit;
   const addingHere = edit?.mode === 'add' && edit.empId === e.id && edit.kind === kind;
-  const label = kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง';
+  const label = tx(kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง');
 
   const tags = aliases.map((a) => {
     const editingThis = edit?.mode === 'edit' && edit.empId === e.id && edit.kind === kind && edit.original === a.alias;
@@ -2663,25 +3115,25 @@ function renderAliasCell(e, kind, aliases) {
       return `<span class="tg alias editing">
         <input type="text" class="aliasInput" value="${esc(a.alias)}" data-emp="${esc(e.id)}"
           data-kind="${kind}" data-mode="edit" data-original="${esc(a.alias)}">
-        <button class="ax save" data-emp="${esc(e.id)}" data-kind="${kind}" title="บันทึก">✓</button>
-        <button class="ax cancel" title="ยกเลิก">×</button>
+        <button class="ax save" data-emp="${esc(e.id)}" data-kind="${kind}" title="${tx('บันทึก')}">✓</button>
+        <button class="ax cancel" title="${tx('ยกเลิก')}">×</button>
       </span>`;
     }
-    return `<span class="tg alias-${kind} alias aliastag" title="${esc(a.source ?? '')} — คลิกเพื่อแก้ไข"
+    return `<span class="tg alias-${kind} alias aliastag" title="${esc(a.source ?? '')} — ${tx('คลิกเพื่อแก้ไข')}"
         data-emp="${esc(e.id)}" data-kind="${kind}" data-alias="${esc(a.alias)}">${esc(a.alias)}<button
         class="ax rm" data-emp="${esc(e.id)}" data-kind="${kind}"
-        data-alias="${esc(a.alias)}" title="ลบ${label}นี้">×</button></span>`;
+        data-alias="${esc(a.alias)}" title="${tx('ลบ')}${label}${tx('นี้')}">×</button></span>`;
   }).join(' ');
 
   const addRow = addingHere
     ? `<span class="tg alias editing">
-        <input type="text" class="aliasInput" placeholder="${label}ใหม่" data-emp="${esc(e.id)}" data-kind="${kind}" data-mode="add">
-        <button class="ax save" data-emp="${esc(e.id)}" data-kind="${kind}" title="บันทึก">✓</button>
-        <button class="ax cancel" title="ยกเลิก">×</button>
+        <input type="text" class="aliasInput" placeholder="${label}${tx('ใหม่')}" data-emp="${esc(e.id)}" data-kind="${kind}" data-mode="add">
+        <button class="ax save" data-emp="${esc(e.id)}" data-kind="${kind}" title="${tx('บันทึก')}">✓</button>
+        <button class="ax cancel" title="${tx('ยกเลิก')}">×</button>
       </span>`
     : `<button class="lk addal" data-emp="${esc(e.id)}" data-kind="${kind}">+ ${label}</button>`;
 
-  return `${tags || (addingHere ? '' : '<span class="sub">ไม่มี</span> ')}${tags ? ' ' : ''}<div class="arow">${addRow}</div>`;
+  return `${tags || (addingHere ? '' : `<span class="sub">${tx('ไม่มี')}</span> `)}${tags ? ' ' : ''}<div class="arow">${addRow}</div>`;
 }
 
 /**
@@ -2695,14 +3147,14 @@ function renderRateCell(e) {
     return `<div class="rateEditRow">
       <input type="number" step="0.01" min="0" class="rateInput" value="${e.monthly_rate}"
         data-asg="${esc(e.assignment_id)}" data-name="${esc(e.name_th)}">
-      <button class="ax save" title="บันทึก">✓</button>
-      <button class="ax cancel" title="ยกเลิก">×</button>
+      <button class="ax save" title="${tx('บันทึก')}">✓</button>
+      <button class="ax cancel" title="${tx('ยกเลิก')}">×</button>
     </div>`;
   }
 
   return `${money(e.monthly_rate)}
     <button class="lk edrate" data-asg="${esc(e.assignment_id)}"
-      data-name="${esc(e.name_th)}">แก้เรท</button>`;
+      data-name="${esc(e.name_th)}">${tx('แก้เรท')}</button>`;
 }
 
 /**
@@ -2713,43 +3165,43 @@ function renderRateCell(e) {
 function renderCustomerAddForm() {
   return `
   <div class="card">
-    <div class="hd"><h3>เพิ่มลูกค้าใหม่</h3>
-      <span class="rt">กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว</span></div>
+    <div class="hd"><h3>${tx('เพิ่มลูกค้าใหม่')}</h3>
+      <span class="rt">${tx('กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว')}</span></div>
     <div class="bd">
       <div class="frm">
-        <label>ชื่อบริษัท<input id="ncNameTh" type="text" placeholder="เช่น บริษัท ทดสอบ จำกัด" autocomplete="off"></label>
-        <label>เลขผู้เสียภาษี<input id="ncTaxId" type="text" autocomplete="off"></label>
-        <label>สาขา<input id="ncBranch" type="text" value="สำนักงานใหญ่" autocomplete="off"></label>
-        <label>เครดิต (วัน)<input id="ncCreditDays" type="number" min="0" value="30"></label>
-        <label>ผู้ประสานงาน<input id="ncContactName" type="text" autocomplete="off"></label>
-        <label>เบอร์ผู้ประสานงาน<input id="ncContactPhone" type="text" autocomplete="off"></label>
-        <label>อีเมลผู้ประสานงาน<input id="ncContactEmail" type="email" autocomplete="off"></label>
-        <label>สถานที่วางบิล<input id="ncBillingPlace" type="text" autocomplete="off"></label>
+        <label>${tx('ชื่อบริษัท')}<input id="ncNameTh" type="text" placeholder="เช่น บริษัท ทดสอบ จำกัด" autocomplete="off"></label>
+        <label>${tx('เลขผู้เสียภาษี')}<input id="ncTaxId" type="text" autocomplete="off"></label>
+        <label>${tx('สาขา')}<input id="ncBranch" type="text" value="สำนักงานใหญ่" autocomplete="off"></label>
+        <label>${tx('เครดิต (วัน)')}<input id="ncCreditDays" type="number" min="0" value="30"></label>
+        <label>${tx('ผู้ประสานงาน')}<input id="ncContactName" type="text" autocomplete="off"></label>
+        <label>${tx('เบอร์ผู้ประสานงาน')}<input id="ncContactPhone" type="text" autocomplete="off"></label>
+        <label>${tx('อีเมลผู้ประสานงาน')}<input id="ncContactEmail" type="email" autocomplete="off"></label>
+        <label>${tx('สถานที่วางบิล')}<input id="ncBillingPlace" type="text" autocomplete="off"></label>
       </div>
       <div class="fsec">
-        <div class="fsec-h"><b>สัญญาแรก</b></div>
+        <div class="fsec-h"><b>${tx('สัญญาแรก')}</b></div>
         <div class="frm">
-          <label>เลขที่ใบว่าจ้าง (PO)<input id="ncPoNo" type="text" placeholder="เช่น 26/B0200" autocomplete="off"></label>
-          <label>เลขที่สัญญา<input id="ncContractNo" type="text" autocomplete="off"></label>
-          <label>ชื่อโครงการ<input id="ncProjectName" type="text" autocomplete="off"></label>
-          <label>ตัวหารอัตราต่อวัน
+          <label>${tx('เลขที่ใบว่าจ้าง (PO)')}<input id="ncPoNo" type="text" placeholder="เช่น 26/B0200" autocomplete="off"></label>
+          <label>${tx('เลขที่สัญญา')}<input id="ncContractNo" type="text" autocomplete="off"></label>
+          <label>${tx('ชื่อโครงการ')}<input id="ncProjectName" type="text" autocomplete="off"></label>
+          <label>${tx('ตัวหารอัตราต่อวัน')}
             <span class="selectchip grow"><select id="ncDivisorMode">
-              <option value="fixed" selected>คงที่ (ระบุจำนวนวัน)</option>
-              <option value="actual_working_days">วันทำงานจริงของเดือน</option>
+              <option value="fixed" selected>${tx('คงที่ (ระบุจำนวนวัน)')}</option>
+              <option value="actual_working_days">${tx('วันทำงานจริงของเดือน')}</option>
             </select></span>
           </label>
-          <label>จำนวนวัน (ถ้าคงที่)<input id="ncDivisorValue" type="number" min="1" value="20"></label>
-          <label>วันเริ่มสัญญา<input id="ncStartDate" type="date"></label>
-          <label>วันสิ้นสุดสัญญา<input id="ncEndDate" type="date"></label>
+          <label>${tx('จำนวนวัน (ถ้าคงที่)')}<input id="ncDivisorValue" type="number" min="1" value="20"></label>
+          <label>${tx('วันเริ่มสัญญา')}<input id="ncStartDate" type="date"></label>
+          <label>${tx('วันสิ้นสุดสัญญา')}<input id="ncEndDate" type="date"></label>
           <label>VAT (%)<input id="ncVat" type="number" min="0" max="100" step="0.1" value="7"></label>
-          <label>หัก ณ ที่จ่าย (%)<input id="ncWht" type="number" min="0" max="100" step="0.1" value="3"></label>
+          <label>${tx('หัก ณ ที่จ่าย')} (%)<input id="ncWht" type="number" min="0" max="100" step="0.1" value="3"></label>
         </div>
-        <small class="fhint">พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน &amp; ชื่อพ้อง"</small>
+        <small class="fhint">${tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ')} "${tx('พนักงาน & ชื่อพ้อง')}"</small>
       </div>
     </div>
     <div class="ft">
-      <button class="btn" id="custAddCancel">ยกเลิก</button>
-      <button class="btn pri" id="custAddSave">บันทึกลูกค้าใหม่</button>
+      <button class="btn" id="custAddCancel">${tx('ยกเลิก')}</button>
+      <button class="btn pri" id="custAddSave">${tx('บันทึกลูกค้าใหม่')}</button>
     </div>
   </div>`;
 }
@@ -2761,23 +3213,23 @@ function renderCustomerAddForm() {
 function renderEmployeeAddForm(activeContract) {
   return `
   <div class="card">
-    <div class="hd"><h3>เพิ่มพนักงานใหม่</h3>
-      <span class="rt">ผูกอัตราจ้างกับ "${esc(activeContract.customer_name)} — ${esc(activeContract.project_name)}"</span></div>
+    <div class="hd"><h3>${tx('เพิ่มพนักงานใหม่')}</h3>
+      <span class="rt">${tx('ผูกอัตราจ้างกับ')} "${esc(activeContract.customer_name)} — ${esc(activeContract.project_name)}"</span></div>
     <div class="bd">
       <div class="frm">
-        <label>ชื่อ-นามสกุล (ไทย)<input id="neNameTh" type="text" autocomplete="off"></label>
-        <label>ชื่อ-นามสกุล (อังกฤษ)<input id="neNameEn" type="text" autocomplete="off"></label>
-        <label>ตำแหน่งบนใบแจ้งหนี้<input id="neInvoicePosition" type="text" autocomplete="off"></label>
-        <label>รหัสพนักงาน HRDD<input id="neHrddCode" type="text" autocomplete="off"></label>
-        <label>เลขที่ใบเสนอราคา (QT)<input id="neQuotationNo" type="text" autocomplete="off"></label>
-        <label>เรทต่อเดือน (บาท)<input id="neMonthlyRate" type="number" min="0" step="0.01"></label>
-        <label>วันเริ่มงาน<input id="neStartDate" type="date"></label>
-        <label>วันสิ้นสุด (ถ้าไม่ระบุ = ตามสัญญา)<input id="neEndDate" type="date"></label>
+        <label>${tx('ชื่อ-นามสกุล (ไทย)')}<input id="neNameTh" type="text" autocomplete="off"></label>
+        <label>${tx('ชื่อ-นามสกุล (อังกฤษ)')}<input id="neNameEn" type="text" autocomplete="off"></label>
+        <label>${tx('ตำแหน่งบนใบแจ้งหนี้')}<input id="neInvoicePosition" type="text" autocomplete="off"></label>
+        <label>${tx('รหัสพนักงาน HRDD')}<input id="neHrddCode" type="text" autocomplete="off"></label>
+        <label>${tx('เลขที่ใบเสนอราคา (QT)')}<input id="neQuotationNo" type="text" autocomplete="off"></label>
+        <label>${tx('เรทต่อเดือน (บาท)')}<input id="neMonthlyRate" type="number" min="0" step="0.01"></label>
+        <label>${tx('วันเริ่มงาน')}<input id="neStartDate" type="date"></label>
+        <label>${tx('วันสิ้นสุด (ถ้าไม่ระบุ = ตามสัญญา)')}<input id="neEndDate" type="date"></label>
       </div>
     </div>
     <div class="ft">
-      <button class="btn" id="empAddCancel">ยกเลิก</button>
-      <button class="btn pri" id="empAddSave">บันทึกพนักงานใหม่</button>
+      <button class="btn" id="empAddCancel">${tx('ยกเลิก')}</button>
+      <button class="btn pri" id="empAddSave">${tx('บันทึกพนักงานใหม่')}</button>
     </div>
   </div>`;
 }
@@ -2789,23 +3241,23 @@ function renderEmployeeAddForm(activeContract) {
 function renderEmployeeEditForm(e) {
   return `
   <div class="card">
-    <div class="hd"><h3>แก้ไขข้อมูลพนักงาน</h3>
+    <div class="hd"><h3>${tx('แก้ไขข้อมูลพนักงาน')}</h3>
       <span class="rt">${esc(e.customer_name ?? '—')}${e.quotation_no ? ` · ${esc(e.quotation_no)}` : ''}</span></div>
     <div class="bd">
       <div class="frm">
-        <label>ชื่อ-นามสกุล (ไทย)<input id="eeNameTh" type="text" value="${esc(e.name_th)}" autocomplete="off"></label>
-        <label>ชื่อ-นามสกุล (อังกฤษ)<input id="eeNameEn" type="text" value="${esc(e.name_en ?? '')}" autocomplete="off"></label>
-        <label>ตำแหน่งบนใบแจ้งหนี้<input id="eeInvoicePosition" type="text" value="${esc(e.invoice_position)}" autocomplete="off"></label>
-        <label>รหัสพนักงาน HRDD<input id="eeHrddCode" type="text" value="${esc(e.hrdd_employee_code ?? '')}" autocomplete="off"></label>
-        <label>เลขที่ใบเสนอราคา (QT)<input id="eeQuotationNo" type="text" value="${esc(e.quotation_no ?? '')}" autocomplete="off"></label>
-        <label>เรทต่อเดือน (บาท)<input id="eeMonthlyRate" type="number" min="0" step="0.01" value="${e.monthly_rate ?? ''}"></label>
-        <label>วันเริ่มงาน<input id="eeStartDate" type="date" value="${esc(e.start_date ?? '')}"></label>
-        <label>วันสิ้นสุด<input id="eeEndDate" type="date" value="${esc(e.end_date ?? '')}"></label>
+        <label>${tx('ชื่อ-นามสกุล (ไทย)')}<input id="eeNameTh" type="text" value="${esc(e.name_th)}" autocomplete="off"></label>
+        <label>${tx('ชื่อ-นามสกุล (อังกฤษ)')}<input id="eeNameEn" type="text" value="${esc(e.name_en ?? '')}" autocomplete="off"></label>
+        <label>${tx('ตำแหน่งบนใบแจ้งหนี้')}<input id="eeInvoicePosition" type="text" value="${esc(e.invoice_position)}" autocomplete="off"></label>
+        <label>${tx('รหัสพนักงาน HRDD')}<input id="eeHrddCode" type="text" value="${esc(e.hrdd_employee_code ?? '')}" autocomplete="off"></label>
+        <label>${tx('เลขที่ใบเสนอราคา (QT)')}<input id="eeQuotationNo" type="text" value="${esc(e.quotation_no ?? '')}" autocomplete="off"></label>
+        <label>${tx('เรทต่อเดือน (บาท)')}<input id="eeMonthlyRate" type="number" min="0" step="0.01" value="${e.monthly_rate ?? ''}"></label>
+        <label>${tx('วันเริ่มงาน')}<input id="eeStartDate" type="date" value="${esc(e.start_date ?? '')}"></label>
+        <label>${tx('วันสิ้นสุด')}<input id="eeEndDate" type="date" value="${esc(e.end_date ?? '')}"></label>
       </div>
     </div>
     <div class="ft">
-      <button class="btn" id="empEditCancel">ยกเลิก</button>
-      <button class="btn pri" id="empEditSave" data-emp="${esc(e.id)}" data-asg="${esc(e.assignment_id ?? '')}">บันทึกการแก้ไข</button>
+      <button class="btn" id="empEditCancel">${tx('ยกเลิก')}</button>
+      <button class="btn pri" id="empEditSave" data-emp="${esc(e.id)}" data-asg="${esc(e.assignment_id ?? '')}">${tx('บันทึกการแก้ไข')}</button>
     </div>
   </div>`;
 }
@@ -2817,40 +3269,40 @@ function renderEmployeeEditForm(e) {
 function renderContractEditForm(c) {
   return `
   <div class="card">
-    <div class="hd"><h3>แก้ไขข้อมูลสัญญา</h3>
+    <div class="hd"><h3>${tx('แก้ไขข้อมูลสัญญา')}</h3>
       <span class="rt">${esc(c.po_no)} — ${esc(c.project_name)}</span></div>
     <div class="bd">
       <div class="frm">
-        <label>ชื่อบริษัท<input id="ccNameTh" type="text" value="${esc(c.customer_name)}" autocomplete="off"></label>
-        <label>เลขผู้เสียภาษี<input id="ccTaxId" type="text" value="${esc(c.tax_id)}" autocomplete="off"></label>
-        <label>ผู้ประสานงาน<input id="ccContactName" type="text" value="${esc(c.contact_name ?? '')}" autocomplete="off"></label>
-        <label>เบอร์ผู้ประสานงาน<input id="ccContactPhone" type="text" value="${esc(c.contact_phone ?? '')}" autocomplete="off"></label>
-        <label>สถานที่วางบิล<input id="ccBillingPlace" type="text" value="${esc(c.billing_place ?? '')}" autocomplete="off"></label>
+        <label>${tx('ชื่อบริษัท')}<input id="ccNameTh" type="text" value="${esc(c.customer_name)}" autocomplete="off"></label>
+        <label>${tx('เลขผู้เสียภาษี')}<input id="ccTaxId" type="text" value="${esc(c.tax_id)}" autocomplete="off"></label>
+        <label>${tx('ผู้ประสานงาน')}<input id="ccContactName" type="text" value="${esc(c.contact_name ?? '')}" autocomplete="off"></label>
+        <label>${tx('เบอร์ผู้ประสานงาน')}<input id="ccContactPhone" type="text" value="${esc(c.contact_phone ?? '')}" autocomplete="off"></label>
+        <label>${tx('สถานที่วางบิล')}<input id="ccBillingPlace" type="text" value="${esc(c.billing_place ?? '')}" autocomplete="off"></label>
       </div>
       <div class="fsec">
-        <div class="fsec-h"><b>สัญญา</b></div>
+        <div class="fsec-h"><b>${tx('สัญญา')}</b></div>
         <div class="frm">
-          <label>เลขที่ใบว่าจ้าง (PO)<input id="ccPoNo" type="text" value="${esc(c.po_no)}" autocomplete="off"></label>
-          <label>เลขที่สัญญา<input id="ccContractNo" type="text" value="${esc(c.contract_no ?? '')}" autocomplete="off"></label>
-          <label>ชื่อโครงการ<input id="ccProjectName" type="text" value="${esc(c.project_name)}" autocomplete="off"></label>
-          <label>ตัวหารอัตราต่อวัน
+          <label>${tx('เลขที่ใบว่าจ้าง (PO)')}<input id="ccPoNo" type="text" value="${esc(c.po_no)}" autocomplete="off"></label>
+          <label>${tx('เลขที่สัญญา')}<input id="ccContractNo" type="text" value="${esc(c.contract_no ?? '')}" autocomplete="off"></label>
+          <label>${tx('ชื่อโครงการ')}<input id="ccProjectName" type="text" value="${esc(c.project_name)}" autocomplete="off"></label>
+          <label>${tx('ตัวหารอัตราต่อวัน')}
             <span class="selectchip grow"><select id="ccDivisorMode">
-              <option value="fixed" ${c.divisor_mode === 'fixed' ? 'selected' : ''}>คงที่ (ระบุจำนวนวัน)</option>
-              <option value="actual_working_days" ${c.divisor_mode === 'actual_working_days' ? 'selected' : ''}>วันทำงานจริงของเดือน</option>
+              <option value="fixed" ${c.divisor_mode === 'fixed' ? 'selected' : ''}>${tx('คงที่ (ระบุจำนวนวัน)')}</option>
+              <option value="actual_working_days" ${c.divisor_mode === 'actual_working_days' ? 'selected' : ''}>${tx('วันทำงานจริงของเดือน')}</option>
             </select></span>
           </label>
-          <label>จำนวนวัน (ถ้าคงที่)<input id="ccDivisorValue" type="number" min="1" value="${int(c.divisor_value)}"></label>
-          <label>วันเริ่มสัญญา<input id="ccStartDate" type="date" value="${esc(c.start_date)}"></label>
-          <label>วันสิ้นสุดสัญญา<input id="ccEndDate" type="date" value="${esc(c.end_date)}"></label>
+          <label>${tx('จำนวนวัน (ถ้าคงที่)')}<input id="ccDivisorValue" type="number" min="1" value="${int(c.divisor_value)}"></label>
+          <label>${tx('วันเริ่มสัญญา')}<input id="ccStartDate" type="date" value="${esc(c.start_date)}"></label>
+          <label>${tx('วันสิ้นสุดสัญญา')}<input id="ccEndDate" type="date" value="${esc(c.end_date)}"></label>
           <label>VAT (%)<input id="ccVat" type="number" min="0" max="100" step="0.1" value="${Math.round(c.vat_rate * 100)}"></label>
-          <label>หัก ณ ที่จ่าย (%)<input id="ccWht" type="number" min="0" max="100" step="0.1" value="${Math.round(c.wht_rate * 100)}"></label>
-          <label>เครดิต (วัน)<input id="ccCreditDays" type="number" min="0" value="${int(c.credit_days)}"></label>
+          <label>${tx('หัก ณ ที่จ่าย')} (%)<input id="ccWht" type="number" min="0" max="100" step="0.1" value="${Math.round(c.wht_rate * 100)}"></label>
+          <label>${tx('เครดิต (วัน)')}<input id="ccCreditDays" type="number" min="0" value="${int(c.credit_days)}"></label>
         </div>
       </div>
     </div>
     <div class="ft">
-      <button class="btn" id="ctgEditCancel">ยกเลิก</button>
-      <button class="btn pri" id="ctgEditSave" data-contract="${esc(c.id)}">บันทึกการแก้ไข</button>
+      <button class="btn" id="ctgEditCancel">${tx('ยกเลิก')}</button>
+      <button class="btn pri" id="ctgEditSave" data-contract="${esc(c.id)}">${tx('บันทึกการแก้ไข')}</button>
     </div>
   </div>`;
 }
@@ -2864,18 +3316,18 @@ async function renderMaster() {
 
   main.innerHTML = `
   <div class="page">
-    <div class="phd"><div><span class="ey">อ้างอิง</span><h1>ข้อมูลหลัก</h1>
-      <p>ฐานข้อมูลที่ทั้ง 3 ขั้นใช้ร่วมกัน — จับคู่ชื่อ · หาเรทค่าบริการ · นับวันทำงานของเดือน</p></div></div>
+    <div class="phd"><div><span class="ey">${tx('อ้างอิง')}</span><h1>${tx('ข้อมูลหลัก')}</h1>
+      <p>${tx('ฐานข้อมูลที่ทั้ง 3 ขั้นใช้ร่วมกัน — จับคู่ชื่อ · หาเรทค่าบริการ · นับวันทำงานของเดือน')}</p></div></div>
 
     <div class="tabs" role="tablist">
-      ${['พนักงาน & ชื่อพ้อง', 'ลูกค้า & สัญญา', 'วันหยุด'].map((t, i) =>
-        `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-mtab2="${i + 1}">${t}</button>`).join('')}
+      ${['พนักงาน & ชื่อพ้อง', 'ลูกค้า & สัญญา', 'วันหยุด'].map((label, i) =>
+        `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-mtab2="${i + 1}">${tx(label)}</button>`).join('')}
     </div>
 
     <div class="tp ${tab === 1 ? 'on' : ''}" data-mpane="1">
       <div class="metabar">
-        <span class="ey">${activeContract ? `${employees.length} คน — ${activeContract.customer_name}` : `${employees.length} คน`}</span>
-        <button class="btn pri sm" id="empAddBtn" ${activeContract ? '' : 'disabled title="ยังไม่มีบริษัทที่กำลังดำเนินการอยู่"'}>${icon('grid', 'i sm')} เพิ่มพนักงาน</button>
+        <span class="ey">${activeContract ? `${employees.length} ${tx('คน')} — ${activeContract.customer_name}` : `${employees.length} ${tx('คน')}`}</span>
+        <button class="btn pri sm" id="empAddBtn" ${activeContract ? '' : `disabled title="${tx('ยังไม่มีบริษัทที่กำลังดำเนินการอยู่')}"`}>${icon('grid', 'i sm')} ${tx('เพิ่มพนักงาน')}</button>
       </div>
 
       ${state.employeeAdd && activeContract ? renderEmployeeAddForm(activeContract) : ''}
@@ -2886,8 +3338,8 @@ async function renderMaster() {
       })()}
 
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ชื่อพ้อง</th><th>ตำแหน่งพ้อง</th>
-          <th>ตำแหน่งบนใบแจ้งหนี้</th><th class="r">เรท/เดือน</th><th>บริษัท</th><th style="width:80px"></th></tr></thead>
+        <thead><tr><th>${tx('รหัส')}</th><th>${tx('ชื่อ')}</th><th>${tx('ชื่อพ้อง')}</th><th>${tx('ตำแหน่งพ้อง')}</th>
+          <th>${tx('ตำแหน่งบนใบแจ้งหนี้')}</th><th class="r">${tx('เรท/เดือน')}</th><th>${tx('บริษัท')}</th><th style="width:80px"></th></tr></thead>
         <tbody>${employees.map((e) => `
           <tr><td class="n">${esc(e.id)}</td>
             <td><span class="nm">${esc(e.name_th)}</span><span class="sub">${esc(e.name_en ?? '')}</span></td>
@@ -2898,17 +3350,17 @@ async function renderMaster() {
             <td>${esc(e.customer_name ?? '—')}<span class="sub">${esc(e.quotation_no ?? '')}</span></td>
             <td><div class="rowacts">
               <button class="btn sm icon" data-edit-emp="${esc(e.assignment_id ?? e.id)}"
-                title="แก้ไขข้อมูลพนักงาน" aria-label="แก้ไข">${icon('edit')}</button>
+                title="${tx('แก้ไขข้อมูลพนักงาน')}" aria-label="${tx('แก้ไข')}">${icon('edit')}</button>
               ${e.assignment_id ? `<button class="btn sm icon dgr" data-rm-asg="${esc(e.assignment_id)}"
-                data-emp-name="${esc(e.name_th)}" title="นำออกจากโครงการนี้" aria-label="ลบ">${icon('trash')}</button>` : ''}
+                data-emp-name="${esc(e.name_th)}" title="${tx('นำออกจากโครงการนี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button>` : ''}
             </div></td></tr>`).join('')}</tbody>
       </table></div></div>
     </div>
 
     <div class="tp ${tab === 2 ? 'on' : ''}" data-mpane="2">
       <div class="metabar">
-        <span class="ey">${contracts.length} บริษัท</span>
-        <button class="btn pri sm" id="custAddBtn">${icon('grid', 'i sm')} เพิ่มลูกค้าใหม่</button>
+        <span class="ey">${contracts.length} ${tx('บริษัท')}</span>
+        <button class="btn pri sm" id="custAddBtn">${icon('grid', 'i sm')} ${tx('เพิ่มลูกค้าใหม่')}</button>
       </div>
 
       ${state.customerAdd ? renderCustomerAddForm() : ''}
@@ -2919,34 +3371,34 @@ async function renderMaster() {
             <div class="rowacts">
               <label class="toggle ${c.status === 'active' ? 'on' : ''}"
                      title="${c.status === 'active'
-                       ? 'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ'
-                       : 'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)'}">
+                       ? tx('กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ')
+                       : tx('ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)')}">
                 <input type="checkbox" class="ctgAct" data-contract="${esc(c.id)}"
                        ${c.status === 'active' ? 'checked' : ''}>
                 <span class="tk"></span>
-                <span class="tl">${c.status === 'active' ? 'กำลังดำเนินการ' : 'ปิดอยู่'}</span>
+                <span class="tl">${tx(c.status === 'active' ? 'กำลังดำเนินการ' : 'ปิดอยู่')}</span>
               </label>
               <button class="btn sm icon" data-edit-contract="${esc(c.id)}"
-                title="แก้ไขข้อมูลสัญญา" aria-label="แก้ไข">${icon('edit')}</button>
+                title="${tx('แก้ไขข้อมูลสัญญา')}" aria-label="${tx('แก้ไข')}">${icon('edit')}</button>
             </div>
           </div>
           <div class="bd"><div class="g2">
             <dl class="kv">
-              <dt>ลูกค้า</dt><dd>${esc(c.customer_name)}</dd>
-              <dt>เลขผู้เสียภาษี</dt><dd class="n">${esc(c.tax_id)}</dd>
-              <dt>เลขที่สัญญา</dt><dd class="n">${esc(c.contract_no ?? '—')}</dd>
-              <dt>ช่วงสัญญา</dt><dd>${dateOnly(c.start_date)} – ${dateOnly(c.end_date)}</dd>
-              <dt>จำนวนคน</dt><dd class="n">${int(c.headcount)} คน</dd>
+              <dt>${tx('ลูกค้า')}</dt><dd>${esc(c.customer_name)}</dd>
+              <dt>${tx('เลขผู้เสียภาษี')}</dt><dd class="n">${esc(c.tax_id)}</dd>
+              <dt>${tx('เลขที่สัญญา')}</dt><dd class="n">${esc(c.contract_no ?? '—')}</dd>
+              <dt>${tx('ช่วงสัญญา')}</dt><dd>${dateOnly(c.start_date)} – ${dateOnly(c.end_date)}</dd>
+              <dt>${tx('จำนวนคน')}</dt><dd class="n">${int(c.headcount)} ${tx('คน')}</dd>
             </dl>
             <dl class="kv">
-              <dt>ยอดต่อเดือน</dt><dd class="n">${money(c.monthly_total)} บาท</dd>
-              <dt>ตัวหารอัตราต่อวัน</dt><dd>${c.divisor_mode === 'fixed'
-                  ? `คงที่ ${int(c.divisor_value)}` : 'วันทำงานจริงของเดือน'}</dd>
+              <dt>${tx('ยอดต่อเดือน')}</dt><dd class="n">${money(c.monthly_total)} ${tx('บาท')}</dd>
+              <dt>${tx('ตัวหารอัตราต่อวัน')}</dt><dd>${c.divisor_mode === 'fixed'
+                  ? `${tx('คงที่')} ${int(c.divisor_value)}` : tx('วันทำงานจริงของเดือน')}</dd>
               <dt>VAT</dt><dd class="n">${Math.round(c.vat_rate * 100)}%</dd>
-              <dt>หัก ณ ที่จ่าย</dt><dd class="n">${Math.round(c.wht_rate * 100)}%</dd>
-              <dt>เครดิต</dt><dd class="n">${int(c.credit_days)} วัน</dd>
-              <dt>ผู้ประสานงาน</dt><dd>${esc(c.contact_name ?? '—')} ${esc(c.contact_phone ?? '')}</dd>
-              ${c.billing_place ? `<dt>สถานที่วางบิล</dt><dd>${esc(c.billing_place)}</dd>` : ''}
+              <dt>${tx('หัก ณ ที่จ่าย')}</dt><dd class="n">${Math.round(c.wht_rate * 100)}%</dd>
+              <dt>${tx('เครดิต')}</dt><dd class="n">${int(c.credit_days)} ${tx('วัน')}</dd>
+              <dt>${tx('ผู้ประสานงาน')}</dt><dd>${esc(c.contact_name ?? '—')} ${esc(c.contact_phone ?? '')}</dd>
+              ${c.billing_place ? `<dt>${tx('สถานที่วางบิล')}</dt><dd>${esc(c.billing_place)}</dd>` : ''}
             </dl>
           </div>
           </div>
@@ -2955,23 +3407,23 @@ async function renderMaster() {
 
     <div class="tp ${tab === 3 ? 'on' : ''}" data-mpane="3">
       <div class="card">
-        <div class="hd"><h3>ปฏิทินวันหยุด</h3></div>
+        <div class="hd"><h3>${tx('ปฏิทินวันหยุด')}</h3></div>
         <div class="bd">
           <div class="hadd">
             <input type="date" id="hDate">
-            <input type="text" id="hName" placeholder="ชื่อวันหยุด" autocomplete="off">
-            <button class="btn sm pri" id="hAdd">+ เพิ่มวันหยุด</button>
+            <input type="text" id="hName" placeholder="${tx('ชื่อวันหยุด')}" autocomplete="off">
+            <button class="btn sm pri" id="hAdd">${tx('+ เพิ่มวันหยุด')}</button>
           </div>
         </div>
         <div class="bd flush"><div class="tw"><table style="min-width:520px">
-          <thead><tr><th style="width:140px">วันที่</th><th>ชื่อวันหยุด</th><th>ขอบเขต</th>
+          <thead><tr><th style="width:140px">${tx('วันที่')}</th><th>${tx('ชื่อวันหยุด')}</th><th>${tx('ขอบเขต')}</th>
             <th style="width:60px"></th></tr></thead>
           <tbody>${settings.holidays.map((h) => `
             <tr><td class="n">${dateOnly(h.date)}</td><td>${esc(h.name)}</td>
-              <td>${h.customer_id ? esc(h.customer_id) : '<span class="tg mu">ทุกลูกค้า</span>'}</td>
+              <td>${h.customer_id ? esc(h.customer_id) : `<span class="tg mu">${tx('ทุกลูกค้า')}</span>`}</td>
               <td><button class="btn sm icon dgr hrm" data-date="${esc(h.date)}"
                 data-name="${esc(h.name)}" data-cus="${esc(h.customer_id ?? '')}"
-                title="ลบวันหยุดนี้" aria-label="ลบ">${icon('trash')}</button></td></tr>`).join('')}</tbody>
+                title="${tx('ลบวันหยุดนี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button></td></tr>`).join('')}</tbody>
         </table></div></div>
       </div>
     </div>
@@ -3379,57 +3831,57 @@ async function renderSystemAdmin() {
 
   main.innerHTML = `
   <div class="page">
-    <div class="phd"><div><span class="ey">ผู้ดูแลระบบ</span><h1>จัดการระบบ</h1>
-      <p>ผู้ใช้ในระบบ · การเชื่อมต่อกับบริการภายนอก · บันทึกทุกการเปลี่ยนแปลง</p></div></div>
+    <div class="phd"><div><span class="ey">${tx('ผู้ดูแลระบบ')}</span><h1>${tx('จัดการระบบ')}</h1>
+      <p>${tx('ผู้ใช้ในระบบ · การเชื่อมต่อกับบริการภายนอก · บันทึกทุกการเปลี่ยนแปลง')}</p></div></div>
 
     <div class="tabs" role="tablist">
-      ${['ภาพรวม', 'ผู้ใช้', 'ผู้รับแจ้งเตือน', 'บันทึกระบบ'].map((t, i) =>
-        `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-systab="${i + 1}">${t}</button>`).join('')}
+      ${['ภาพรวม', 'ผู้ใช้', 'ผู้รับแจ้งเตือน', 'บันทึกระบบ'].map((label, i) =>
+        `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-systab="${i + 1}">${tx(label)}</button>`).join('')}
     </div>
 
     <div class="tp ${tab === 1 ? 'on' : ''}" data-spane="1">
       <div class="g2">
         <div class="card">
-          <div class="hd"><h3>การเชื่อมต่อ</h3></div>
+          <div class="hd"><h3>${tx('การเชื่อมต่อ')}</h3></div>
           <div class="bd"><dl class="kv">
             <dt>FlowAccount (.env)</dt><dd><span class="tg ${settings.env.flowAccountMode === 'dry-run' ? 'wn' : 'ok'}">${esc(settings.env.flowAccountMode)}</span></dd>
-            <dt>FlowAccount (ใช้จริงตอนกดอนุมัติ)</dt>
+            <dt>FlowAccount (${tx('ใช้จริงตอนกดอนุมัติ')})</dt>
               <dd><span class="tg ${(settings.flowaccount?.mode ?? settings.env.flowAccountMode) === 'dry-run' ? 'wn' : 'ok'}">
                 ${esc(settings.flowaccount?.mode ?? settings.env.flowAccountMode)}</span>
                 ${settings.flowaccount?.mode && settings.flowaccount.mode !== settings.env.flowAccountMode
-                  ? '<small style="display:block;color:var(--cr)">ไม่ตรงกับค่าใน .env ด้านบน — ค่านี้ในฐานข้อมูลเป็นตัวที่ใช้จริง</small>' : ''}</dd>
+                  ? `<small style="display:block;color:var(--cr)">${tx('ไม่ตรงกับค่าใน .env ด้านบน — ค่านี้ในฐานข้อมูลเป็นตัวที่ใช้จริง')}</small>` : ''}</dd>
             <dt>Credential FlowAccount</dt><dd>${settings.env.hasFlowAccountCredentials
-                ? '<span class="tg ok">ตั้งค่าแล้ว</span>' : '<span class="tg wn">ยังไม่ตั้ง</span>'}</dd>
-            <dt>ชนิดเอกสาร</dt><dd>${esc(settings.flowaccount?.documentType ?? '—')}</dd>
+                ? `<span class="tg ok">${tx('ตั้งค่าแล้ว')}</span>` : `<span class="tg wn">${tx('ยังไม่ตั้ง')}</span>`}</dd>
+            <dt>${tx('ชนิดเอกสาร')}</dt><dd>${esc(settings.flowaccount?.documentType ?? '—')}</dd>
             <dt>Gmail</dt><dd>${settings.env.hasGmail
-                ? '<span class="tg ok">เชื่อมต่อแล้ว</span>' : '<span class="tg wn">ยังไม่เชื่อม</span>'}</dd>
+                ? `<span class="tg ok">${tx('เชื่อมต่อแล้ว')}</span>` : `<span class="tg wn">${tx('ยังไม่เชื่อม')}</span>`}</dd>
             <dt>LINE</dt><dd>${settings.env.hasLine
-                ? `<span class="tg ok">เชื่อมต่อแล้ว</span> <small>ผู้รับแจ้งเตือน ${int(settings.env.lineRecipientCount)} ราย</small>`
-                : '<span class="tg wn">ยังไม่เชื่อม</span>'}</dd>
-            <dt>ลิงก์ในข้อความ LINE</dt><dd>${settings.env.appBaseUrl
+                ? `<span class="tg ok">${tx('เชื่อมต่อแล้ว')}</span> <small>${tx('ผู้รับแจ้งเตือน')} ${int(settings.env.lineRecipientCount)} ${tx('ราย')}</small>`
+                : `<span class="tg wn">${tx('ยังไม่เชื่อม')}</span>`}</dd>
+            <dt>${tx('ลิงก์ในข้อความ LINE')}</dt><dd>${settings.env.appBaseUrl
                 ? `<span class="n">${esc(settings.env.appBaseUrl)}</span>`
-                : `<span class="tg wn">ยังไม่ตั้ง</span>
-                   <small style="display:block">ข้อความแจ้งเตือนจะไม่มีปุ่มกดเข้าระบบ</small>`}</dd>
-            <dt>ระบบในเครื่อง</dt><dd class="n">${esc(settings.env.localLlmBaseUrl)}</dd>
+                : `<span class="tg wn">${tx('ยังไม่ตั้ง')}</span>
+                   <small style="display:block">${tx('ข้อความแจ้งเตือนจะไม่มีปุ่มกดเข้าระบบ')}</small>`}</dd>
+            <dt>${tx('ระบบในเครื่อง')}</dt><dd class="n">${esc(settings.env.localLlmBaseUrl)}</dd>
             ${settings.env.localTextModel === settings.env.localVisionModel
               // ตัวเดียวกันทั้งอ่านไฟล์และร่างข้อความ — แยกสองแถวก็เห็นค่าซ้ำกันเปล่าๆ
-              ? `<dt>โมเดล</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>`
-              : `<dt>โมเดล (ข้อความ)</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>
-                 <dt>โมเดล (อ่านไฟล์)</dt><dd class="n">${esc(settings.env.localVisionModel)}</dd>`}
+              ? `<dt>${tx('โมเดล')}</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>`
+              : `<dt>${tx('โมเดล (ข้อความ)')}</dt><dd class="n">${esc(settings.env.localTextModel)}</dd>
+                 <dt>${tx('โมเดล (อ่านไฟล์)')}</dt><dd class="n">${esc(settings.env.localVisionModel)}</dd>`}
           </dl></div>
         </div>
         <div class="card">
-          <div class="hd"><h3>เงื่อนไขวางบิล</h3></div>
+          <div class="hd"><h3>${tx('เงื่อนไขวางบิล')}</h3></div>
           <div class="bd"><dl class="kv">
-            <dt>วันที่ลงเอกสาร</dt><dd>วันที่ ${int(settings.billingRules?.billOnDayOfNextMonth)} ของเดือนถัดไป</dd>
-            <dt>ต้องได้ครบทุกคน</dt><dd>${settings.billingRules?.requireAllTimesheets ? 'ใช่' : 'ไม่'}</dd>
-            <dt>ต้องมีคนกดยืนยัน</dt><dd><span class="tg ${settings.billingRules?.requireHumanCheck === false ? 'mu' : 'ok'}">
-              ${settings.billingRules?.requireHumanCheck === false ? 'ไม่ (โหมด auto)' : 'ใช่ (โหมด manual)'}</span></dd>
-            <dt>ส่งอีเมลอัตโนมัติ</dt><dd><span class="tg ok">สร้างร่างเท่านั้น</span></dd>
-            <dt>ไฟล์แนบในร่างอีเมล</dt><dd>ใบวางบิล + Timesheet ทุกคนในรอบ
-              <small style="display:block">ใบวางบิลดึงจาก FlowAccount มาเก็บให้เองตอนกดอนุมัติ</small></dd>
-            <dt>ปิดรอบเมื่อส่งเมล</dt><dd><span class="tg ok">อัตโนมัติ</span>
-              <small style="display:block">ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งแล้วหรือยัง</small></dd>
+            <dt>${tx('วันที่ลงเอกสาร')}</dt><dd>${tx('วันที่')} ${int(settings.billingRules?.billOnDayOfNextMonth)} ${tx('ของเดือนถัดไป')}</dd>
+            <dt>${tx('ต้องได้ครบทุกคน')}</dt><dd>${tx(settings.billingRules?.requireAllTimesheets ? 'ใช่' : 'ไม่')}</dd>
+            <dt>${tx('ต้องมีคนกดยืนยัน')}</dt><dd><span class="tg ${settings.billingRules?.requireHumanCheck === false ? 'mu' : 'ok'}">
+              ${tx(settings.billingRules?.requireHumanCheck === false ? 'ไม่ (โหมด auto)' : 'ใช่ (โหมด manual)')}</span></dd>
+            <dt>${tx('ส่งอีเมลอัตโนมัติ')}</dt><dd><span class="tg ok">${tx('สร้างร่างเท่านั้น')}</span></dd>
+            <dt>${tx('ไฟล์แนบในร่างอีเมล')}</dt><dd>${tx('ใบวางบิล + Timesheet ทุกคนในรอบ')}
+              <small style="display:block">${tx('ใบวางบิลดึงจาก FlowAccount มาเก็บให้เองตอนกดอนุมัติ')}</small></dd>
+            <dt>${tx('ปิดรอบเมื่อส่งเมล')}</dt><dd><span class="tg ok">${tx('อัตโนมัติ')}</span>
+              <small style="display:block">${tx('ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งแล้วหรือยัง')}</small></dd>
           </dl></div>
         </div>
       </div>
@@ -3437,67 +3889,67 @@ async function renderSystemAdmin() {
 
     <div class="tp ${tab === 2 ? 'on' : ''}" data-spane="2">
       <div class="card">
-        <div class="hd"><h3>เพิ่มผู้ใช้ใหม่</h3></div>
+        <div class="hd"><h3>${tx('เพิ่มผู้ใช้ใหม่')}</h3></div>
         <div class="bd">
           <div class="frm">
-            <label>Username / อีเมล<input id="uUsername" type="text" autocomplete="off"></label>
-            <label>ชื่อ<input id="uName" type="text" autocomplete="off"></label>
-            <label>รหัสผ่าน <small>(อย่างน้อย 8 ตัวอักษร)</small><input id="uPassword" type="password" autocomplete="new-password"></label>
+            <label>Username / ${tx('อีเมล')}<input id="uUsername" type="text" autocomplete="off"></label>
+            <label>${tx('ชื่อ')}<input id="uName" type="text" autocomplete="off"></label>
+            <label>${tx('รหัสผ่าน')} <small>${tx('(อย่างน้อย 8 ตัวอักษร)')}</small><input id="uPassword" type="password" autocomplete="new-password"></label>
             <label>Role<span class="selectchip"><select id="uRole">
               <option value="user">user</option>
               <option value="admin">admin</option>
             </select>${icon('cd')}</span></label>
           </div>
         </div>
-        <div class="ft"><button class="btn pri" id="uAdd">+ เพิ่มผู้ใช้</button></div>
+        <div class="ft"><button class="btn pri" id="uAdd">${tx('+ เพิ่มผู้ใช้')}</button></div>
       </div>
 
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>Username</th><th>ชื่อ</th><th>Role</th><th>สถานะ</th><th>สร้างเมื่อ</th><th></th></tr></thead>
+        <thead><tr><th>Username</th><th>${tx('ชื่อ')}</th><th>Role</th><th>${tx('สถานะ')}</th><th>${tx('สร้างเมื่อ')}</th><th></th></tr></thead>
         <tbody>${(users ?? []).map((u) => {
           const isSelf = u.username === state.username;
           return `
           <tr><td class="n">${esc(u.username)}</td>
             <td>${esc(u.name_th)}</td>
             <td><span class="selectchip"><select class="uRoleSel" data-user="${esc(u.username)}"
-                  ${isSelf ? 'disabled title="แก้ role ของตัวเองไม่ได้"' : ''}>
+                  ${isSelf ? `disabled title="${tx('แก้ role ของตัวเองไม่ได้')}"` : ''}>
                 <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
               </select>${icon('cd')}</span></td>
             <td><label class="toggle ${u.active ? 'on' : ''}"
-                  title="${isSelf ? 'ปิดใช้งานบัญชีตัวเองไม่ได้'
-                    : u.active ? 'ใช้งานอยู่ — กดเพื่อปิดใช้งาน' : 'ปิดใช้งานอยู่ — กดเพื่อเปิดใช้งาน'}">
+                  title="${isSelf ? tx('ปิดใช้งานบัญชีตัวเองไม่ได้')
+                    : tx(u.active ? 'ใช้งานอยู่ — กดเพื่อปิดใช้งาน' : 'ปิดใช้งานอยู่ — กดเพื่อเปิดใช้งาน')}">
                 <input type="checkbox" class="uActiveToggle" data-user="${esc(u.username)}"
                   ${u.active ? 'checked' : ''} ${isSelf ? 'disabled' : ''}>
                 <span class="tk"></span>
-                <span class="tl">${u.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</span>
+                <span class="tl">${tx(u.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน')}</span>
               </label></td>
             <td>${dt(u.created_at)}</td>
             <td><button class="btn sm icon dgr" data-del-user="${esc(u.username)}" data-name="${esc(u.name_th)}"
-                ${isSelf ? 'disabled title="ลบบัญชีของตัวเองไม่ได้"' : ''} aria-label="ลบ">${icon('trash')}</button></td></tr>`;
+                ${isSelf ? `disabled title="${tx('ลบบัญชีของตัวเองไม่ได้')}"` : ''} aria-label="${tx('ลบ')}">${icon('trash')}</button></td></tr>`;
         }).join('')}</tbody>
       </table></div></div>
     </div>
 
     <div class="tp ${tab === 3 ? 'on' : ''}" data-spane="3">
       <div class="card">
-        <div class="hd"><h3>เพิ่มผู้รับแจ้งเตือน</h3></div>
+        <div class="hd"><h3>${tx('เพิ่มผู้รับแจ้งเตือน')}</h3></div>
         <div class="bd">
           <div class="frm">
-            <label>ช่องทาง<span class="selectchip"><select id="nChannel">
+            <label>${tx('ช่องทาง')}<span class="selectchip"><select id="nChannel">
               <option value="line">LINE</option>
-              <option value="email">อีเมล</option>
+              <option value="email">${tx('อีเมล')}</option>
             </select>${icon('cd')}</span></label>
-            <label>ชื่อ (แสดงในรายการ)<input id="nLabel" type="text" placeholder="เช่น นิชา" autocomplete="off"></label>
-            <label>ปลายทาง
+            <label>${tx('ชื่อ (แสดงในรายการ)')}<input id="nLabel" type="text" placeholder="เช่น นิชา" autocomplete="off"></label>
+            <label>${tx('ปลายทาง')}
               <span class="selectchip" id="nTargetLineWrap" style="${(lineUsers ?? []).length ? '' : 'display:none'}">
                 <select id="nTargetLine">
-                  <option value="">— เลือกคนที่เคยทักบอทมาแล้ว —</option>
+                  <option value="">${tx('— เลือกคนที่เคยทักบอทมาแล้ว —')}</option>
                   ${(lineUsers ?? []).map((u) => `
                     <option value="${esc(u.userId)}" data-name="${esc(u.displayName ?? '')}">
-                      ${esc(u.displayName ?? 'ไม่พบชื่อ')} (${esc(u.userId.slice(0, 10))}…)
+                      ${esc(u.displayName ?? tx('ไม่พบชื่อ'))} (${esc(u.userId.slice(0, 10))}…)
                     </option>`).join('')}
-                  <option value="__manual">อื่นๆ — กรอก userId เอง</option>
+                  <option value="__manual">${tx('อื่นๆ — กรอก userId เอง')}</option>
                 </select>${icon('cd')}
               </span>
               <input id="nTarget" type="text" placeholder="LINE user ID หรืออีเมล" autocomplete="off"
@@ -3505,11 +3957,11 @@ async function renderSystemAdmin() {
             </label>
           </div>
         </div>
-        <div class="ft"><button class="btn pri" id="nAdd">+ เพิ่ม</button></div>
+        <div class="ft"><button class="btn pri" id="nAdd">${tx('+ เพิ่ม')}</button></div>
       </div>
 
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>ช่องทาง</th><th>ชื่อ</th><th>ปลายทาง</th><th></th></tr></thead>
+        <thead><tr><th>${tx('ช่องทาง')}</th><th>${tx('ชื่อ')}</th><th>${tx('ปลายทาง')}</th><th></th></tr></thead>
         <tbody>${(recipients ?? []).map((r) => {
           /* ชื่อที่โชว์ตรงนี้ต้องเป็นชื่อจริงในโปรไฟล์ LINE ของคนนั้น ไม่ใช่ป้ายที่พิมพ์ไว้ตอนเพิ่ม
              (พิมพ์ผิด/เปลี่ยนชื่อในไลน์แล้วป้ายเดิมจะไม่ตรงคนอีกต่อไป) — ถ้าหาโปรไฟล์ไม่เจอ
@@ -3518,28 +3970,28 @@ async function renderSystemAdmin() {
             ? (lineUsers ?? []).find((u) => u.userId === r.target)?.displayName : null;
           const label = liveName ?? r.label;
           return `
-          <tr><td><span class="tg ${r.channel === 'line' ? 'ok' : 'mu'}">${r.channel === 'line' ? 'LINE' : 'อีเมล'}</span></td>
+          <tr><td><span class="tg ${r.channel === 'line' ? 'ok' : 'mu'}">${r.channel === 'line' ? 'LINE' : tx('อีเมล')}</span></td>
             <td>${esc(label)}</td>
             <td class="n">${esc(r.target)}</td>
             <td><button class="btn sm icon dgr nrm" data-id="${r.id}" data-label="${esc(label)}"
-                  title="ลบผู้รับแจ้งเตือนนี้" aria-label="ลบ">${icon('trash')}</button></td></tr>`;
+                  title="${tx('ลบผู้รับแจ้งเตือนนี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button></td></tr>`;
         }).join('')}</tbody>
       </table></div>
-      ${(recipients ?? []).length === 0 ? '<div class="empty">ยังไม่มีผู้รับแจ้งเตือน</div>' : ''}</div>
+      ${(recipients ?? []).length === 0 ? `<div class="empty">${tx('ยังไม่มีผู้รับแจ้งเตือน')}</div>` : ''}</div>
     </div>
 
     <div class="tp ${tab === 4 ? 'on' : ''}" data-spane="4">
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>เวลา</th><th>ผู้ทำ</th><th>การกระทำ</th><th>เป้าหมาย</th><th></th></tr></thead>
+        <thead><tr><th>${tx('เวลา')}</th><th>${tx('ผู้ทำ')}</th><th>${tx('การกระทำ')}</th><th>${tx('เป้าหมาย')}</th><th></th></tr></thead>
         <tbody>${(log ?? []).map((l) => `
           <tr><td class="n">${dt(l.at)}</td>
             <td>${esc(l.actor)}</td>
             <td>${esc(l.action)}</td>
             <td>${l.entity_type ? `${esc(l.entity_type)} · ${esc(l.entity_id ?? '')}` : '—'}</td>
-            <td>${l.detail ? `<details class="raw"><summary>▶ รายละเอียด</summary>
+            <td>${l.detail ? `<details class="raw"><summary>${tx('▶ รายละเอียด')}</summary>
                 <pre class="code">${esc(JSON.stringify(l.detail, null, 2))}</pre></details>` : ''}</td></tr>`).join('')}</tbody>
       </table></div>
-      ${(log ?? []).length === 0 ? '<div class="empty">ยังไม่มีบันทึก</div>' : ''}</div>
+      ${(log ?? []).length === 0 ? `<div class="empty">${tx('ยังไม่มีบันทึก')}</div>` : ''}</div>
     </div>
 
   </div>`;
@@ -3709,22 +4161,22 @@ async function renderInvoices() {
 
   main.innerHTML = `
   <div class="page">
-    <div class="phd"><div><span class="ey">เอกสาร</span><h1>ใบแจ้งหนี้</h1>
-      <p>เอกสารที่ระบบสร้างเข้า FlowAccount — กางยอดภาษีของทุกรอบไว้เทียบกัน</p></div></div>
+    <div class="phd"><div><span class="ey">${tx('เอกสาร')}</span><h1>${tx('ใบแจ้งหนี้')}</h1>
+      <p>${tx('เอกสารที่ระบบสร้างเข้า FlowAccount — กางยอดภาษีของทุกรอบไว้เทียบกัน')}</p></div></div>
 
     <div class="card"><div class="tw"><table style="min-width:960px">
-      <thead><tr><th>เลขที่เอกสาร</th><th>รอบบิล</th><th>ลูกค้า</th>
-        <th class="r">หลังส่วนลด</th><th class="r">VAT</th><th class="r">หัก ณ ที่จ่าย</th>
-        <th class="r">ยอดรับชำระ</th><th style="width:150px">สถานะ</th></tr></thead>
+      <thead><tr><th>${tx('เลขที่เอกสาร')}</th><th>${tx('รอบบิล')}</th><th>${tx('ลูกค้า')}</th>
+        <th class="r">${tx('หลังส่วนลด')}</th><th class="r">VAT</th><th class="r">${tx('หัก ณ ที่จ่าย')}</th>
+        <th class="r">${tx('ยอดรับชำระ')}</th><th style="width:150px">${tx('สถานะ')}</th></tr></thead>
       <tbody>${invoices.length ? invoices.map((i) => {
         const fileHref = i.document_no ? `/api/invoices/${encodeURIComponent(i.id)}/file` : null;
         return `
         <tr class="rw" data-cycle="${esc(i.contract_id)}|${esc(i.period)}">
           <td>${fileHref
-            ? `<a class="file" href="${esc(fileHref)}" target="_blank" rel="noopener" title="เปิดดูใบวางบิล">
+            ? `<a class="file" href="${esc(fileHref)}" target="_blank" rel="noopener" title="${tx('เปิดดูใบวางบิล')}">
                  <span class="docid">${esc(i.document_no)}</span></a>
                <a class="btn sm icon" href="${esc(fileHref)}?dl" download="${esc(i.document_no)}.pdf"
-                 title="ดาวน์โหลดใบวางบิล" aria-label="ดาวน์โหลด">${icon('cd')}</a>`
+                 title="${tx('ดาวน์โหลดใบวางบิล')}" aria-label="${tx('ดาวน์โหลด')}">${icon('cd')}</a>`
             : `<span class="docid">—</span>`}
               <span class="sub">${dateOnly(i.document_date)}</span></td>
           <td>${esc(i.periodLabel)}</td>
@@ -3734,13 +4186,13 @@ async function renderInvoices() {
           <td class="r n" style="color:var(--cr)">−${money(i.withholding_tax)}</td>
           <td class="r n" style="font-weight:700;color:var(--brand-d)">${money(i.payment_amount)}</td>
           <td><span class="st ${i.status === 'sent_to_flowaccount' ? 'ok' : i.status === 'failed' ? 'cr' : 'wn'}">
-            ${i.status === 'sent_to_flowaccount' ? 'สร้างร่างแล้ว' : i.status === 'failed' ? 'ส่งไม่สำเร็จ' : 'ร่าง'}</span>
+            ${tx(i.status === 'sent_to_flowaccount' ? 'สร้างร่างแล้ว' : i.status === 'failed' ? 'ส่งไม่สำเร็จ' : 'ร่าง')}</span>
             ${i.response?.mode === 'dry-run' ? '<span class="sub">dry-run</span>' : ''}
-            ${i.email_sent_at ? `<span class="sub">ส่งเมลแล้ว ${dt(i.email_sent_at)}</span>` : ''}</td></tr>`;
+            ${i.email_sent_at ? `<span class="sub">${tx('ส่งเมลแล้ว')} ${dt(i.email_sent_at)}</span>` : ''}</td></tr>`;
       }).join('')
-        : '<tr><td colspan="8" class="empty">ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3</td></tr>'}</tbody>
+        : `<tr><td colspan="8" class="empty">${tx('ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3')}</td></tr>`}</tbody>
       ${invoices.length ? `<tfoot><tr>
-        <td colspan="3" style="font-weight:600">รวมยอดที่วางบิลแล้ว</td>
+        <td colspan="3" style="font-weight:600">${tx('รวมยอดที่วางบิลแล้ว')}</td>
         <td class="r n">${money(sum('total_after_discount'))}</td>
         <td class="r n">${money(sum('vat'))}</td>
         <td class="r n" style="color:var(--cr)">−${money(sum('withholding_tax'))}</td>
@@ -3906,6 +4358,34 @@ el('sideToggle').addEventListener('click', () => {
   const collapsed = !document.body.classList.contains('side-collapsed');
   localStorage.setItem(SIDE_KEY, collapsed ? '1' : '0');
   applySideState(collapsed);
+});
+
+/* ── สลับภาษา ไทย/อังกฤษ (27 ส.ค. 69) ─────────────────────────
+   แทนที่ตำแหน่งวันที่เดิมบนแถบบน (#langSwitch) แปล 2 ชั้น: (1) โครงแอปที่เป็น HTML คงที่ (แถบบน/
+   เมนูข้าง/หน้า login) ผ่าน data-th/data-en ตรงตัว (2) เนื้อหาที่ render() สร้างใหม่ทุกครั้ง (ตาราง/
+   ฟอร์ม/การ์ด) ผ่าน tx('ข้อความไทย') ที่ผูกกับ T dictionary — ต้องสั่ง render() ซ้ำหลังสลับภาษา
+   ไม่งั้นชั้นที่ 2 จะไม่รีเฟรช เพราะ HTML เดิมถูกสร้างไว้ตั้งแต่ตอนภาษาก่อนหน้าแล้ว */
+const LANG_KEY = 'obs.lang';
+
+function applyLang(lang) {
+  state.lang = lang;
+  document.querySelectorAll('#langSwitch .opt').forEach((o) => o.classList.toggle('on', o.dataset.set === lang));
+  document.querySelectorAll('[data-th][data-en]').forEach((elx) => {
+    elx.textContent = lang === 'en' ? elx.dataset.en : elx.dataset.th;
+  });
+}
+
+el('langSwitch').addEventListener('click', (e) => {
+  const opt = e.target.closest('.opt');
+  if (!opt || opt.dataset.set === state.lang) return;
+  const lang = opt.dataset.set;
+  localStorage.setItem(LANG_KEY, lang);
+  applyLang(lang);
+  /* state.view อาจเป็น 'detail'/'cycle' ซึ่งเป็นหน้าย่อยที่เปิดตรงๆ ไม่ได้อยู่ใน RENDER dispatch
+     (ดู render()) ต้องเรียกฟังก์ชันเปิดหน้านั้นซ้ำเอง render() เฉยๆจะหา RENDER['detail'] ไม่เจอแล้ว throw */
+  if (state.view === 'detail' && state.detailId) openSheet(state.detailId);
+  else if (state.view === 'cycle' && state.cycleContractId) openCycle(state.cycleContractId, state.cyclePeriod);
+  else if (RENDER[state.view]) render();
 });
 
 
@@ -4209,11 +4689,8 @@ document.addEventListener('keydown', (e) => {
 async function startApp() {
   hideLoginScreen();
   applySideState(localStorage.getItem(SIDE_KEY) === '1');
+  applyLang(state.lang);
   const deepCycle = applyDeepLinkView();
-
-  el('mastDate').textContent = new Date().toLocaleDateString('th-TH', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
 
   await loadContractSwitch();
 

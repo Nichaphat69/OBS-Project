@@ -289,6 +289,17 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   white-space: nowrap;
 }
 
+/* สลับภาษา ไทย/อังกฤษ (27 ส.ค. 69) — แทนที่ตำแหน่งวันที่เดิมบนแถบบน */
+.langswitch {
+  display: flex; align-items: center; background: var(--sunk); border: 1px solid var(--rule);
+  border-radius: 999px; padding: 3px; gap: 2px; cursor: pointer; flex: none;
+}
+.langswitch .opt {
+  padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--mut);
+  transition: .15s;
+}
+.langswitch .opt.on { background: var(--brand); color: #fff; }
+
 /* ชื่อผู้ใช้ต้องไม่ตัดบรรทัด ไม่งั้นแถบบนสูงขึ้นและตัวหนังสือโดนตัดที่ขอบขวา */
 .who { position: relative; display: flex; align-items: center; padding-left: 16px; flex: none;
   border-left: 1px solid var(--hair); }
@@ -1598,7 +1609,7 @@ tbody tr.urgent:hover { background: var(--hov); }
 /* ── มือถือ ─────────────────────────────────────────────── */
 @media (max-width: 880px) {
   .mast-in { padding: 0 16px; gap: 12px; }
-  .mark .mt span, .mast-date, .who .wt { display: none; }
+  .mark .mt span, .mast-date, .langswitch, .who .wt { display: none; }
   .tabbar-in { padding: 0 16px; }
   .page { padding: 22px 16px 80px; }
   .fbar { margin: 22px -16px -80px; padding: 14px 16px; }
@@ -1661,6 +1672,29 @@ td.n, .docid { white-space: nowrap; }
 .fsec.hrdd .fsec-h b svg{ color:var(--brand); flex:none; }
 .hrdd-actions{ display:flex; align-items:center; gap:10px; }
 .hrddMeta{ font-size:12px; color:var(--mut); }
+
+/* เลือกประเภทหัก ณ ที่จ่าย (27 ส.ค. 69) — อยู่ในหน้าตรวจ Timesheet ระหว่าง "เทียบกับ HRDD" กับ "ลายเซ็น" */
+.wht-types{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:14px 0 16px; }
+.wht-type{ border:1.5px solid var(--rule); border-radius:var(--r-ctl); padding:12px 14px; cursor:pointer;
+  background:var(--paper); transition:.12s; }
+.wht-type:hover{ border-color:var(--brand-l); }
+.wht-type.on{ border-color:var(--brand); background:var(--tint); box-shadow:0 0 0 3px var(--tint2); }
+.wht-type .nm{ font-weight:700; font-size:13px; color:var(--ink); }
+.wht-type.on .nm{ color:var(--brand-d); }
+.wht-type .code{ font-size:11.5px; color:var(--mut); margin-top:2px; }
+.stepper-row{ display:flex; align-items:center; justify-content:space-between; background:var(--sunk);
+  border:1px solid var(--rule); border-radius:var(--r-ctl); padding:14px 18px; margin-bottom:14px; }
+.stepper-row .lbl{ font-weight:600; color:var(--ink2); font-size:13.5px; }
+.stepper-row .lbl small{ display:block; font-weight:400; color:var(--mut); font-size:11.5px; margin-top:2px; }
+.stepper{ display:flex; align-items:center; gap:12px; }
+.stepper button{ width:32px; height:32px; border-radius:50%; border:1.5px solid var(--rule); background:var(--paper);
+  color:var(--brand); font-size:17px; font-weight:700; cursor:pointer; }
+.stepper button:hover{ background:var(--tint); }
+.stepper .val{ font-size:22px; font-weight:800; min-width:52px; text-align:center; color:var(--ink); }
+.wht-result{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px;
+  background:var(--crb); border-radius:var(--r-ctl); border:1px solid var(--crl); }
+.wht-result span:first-child{ color:var(--cr); font-weight:600; font-size:13.5px; }
+.wht-result span:last-child{ color:var(--cr); font-weight:800; font-size:18px; }
 
 /* แผง "แก้ไข" ในตารางเทียบ HRDD — เลือกจะเอาตาม Timesheet/HRDD/ทางเลือกอื่น + เหตุผลบังคับกรอก */
 .hrdd-row.resolved{ opacity:.75; }

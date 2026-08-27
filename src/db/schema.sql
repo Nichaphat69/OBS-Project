@@ -145,14 +145,26 @@ CREATE TABLE IF NOT EXISTS ai_reads (
 
 CREATE INDEX IF NOT EXISTS idx_ai_reads_period ON ai_reads(period, status);
 
+-- ตารางรายละเอียดรายวัน — คอลัมน์ตรงกับ "New Table" ของ ABBYY (Date/Day/Project/Time In/Time Out/
+-- OT In/OT Out/Type/Description/Normal/OT/Total per day) ใช้แสดงในหน้าตรวจ Manday แท็บ "รายละเอียด"
+-- (27 ส.ค. 69 ตามที่ขอ) — day_of_week/normal_hours/ot_hours/total_hours คำนวณเองถ้า ABBYY อ่านมาไม่ได้
+-- ดู buildDayRowsFromStructuredTable() ที่ src/extract/abbyy.js
 CREATE TABLE IF NOT EXISTS timesheet_days (
   timesheet_id TEXT NOT NULL REFERENCES timesheets(id) ON DELETE CASCADE,
   date         TEXT NOT NULL,
+  day_of_week  TEXT,
+  project      TEXT,
   time_in      TEXT,
   time_out     TEXT,
+  ot_time_in   TEXT,
+  ot_time_out  TEXT,
+  type         TEXT,
   label        TEXT,                      -- Holiday / Weekend / Sick leave / ว่าง
   job_desc     TEXT,
   remark       TEXT,
+  normal_hours REAL,
+  ot_hours     REAL,
+  total_hours  REAL,
   PRIMARY KEY (timesheet_id, date)
 );
 

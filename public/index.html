@@ -55,12 +55,13 @@
   <div class="login-art" aria-hidden="true"></div>
   <div class="login-panel">
     <form class="login-card" id="loginForm">
-      <h1>เข้าสู่ระบบ OBS</h1>
-      <p class="lc-sub">ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
+      <h1 data-th="เข้าสู่ระบบ OBS" data-en="Sign in to OBS">เข้าสู่ระบบ OBS</h1>
+      <p class="lc-sub" data-th="ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้"
+         data-en="Outsource billing system — use the username/password your admin created for you">ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
       <label>Username<input id="loginUser" type="text" autocomplete="username" required></label>
-      <label>รหัสผ่าน<input id="loginPass" type="password" autocomplete="current-password" required></label>
+      <label><span data-th="รหัสผ่าน" data-en="Password">รหัสผ่าน</span><input id="loginPass" type="password" autocomplete="current-password" required></label>
       <div class="lc-err" id="loginErr" hidden></div>
-      <button class="btn pri" type="submit" id="loginBtn">เข้าสู่ระบบ</button>
+      <button class="btn pri" type="submit" id="loginBtn" data-th="เข้าสู่ระบบ" data-en="Sign in">เข้าสู่ระบบ</button>
     </form>
   </div>
 </div>
@@ -87,7 +88,11 @@
          aria-label="เลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่" hidden></div>
   </div>
   <span class="env dry" id="envChip"><span class="sw"></span> …</span>
-  <span class="mast-date" id="mastDate"></span>
+  <!-- สลับภาษา ไทย/อังกฤษ — แทนที่ตำแหน่งวันที่เดิม (27 ส.ค. 69) ดู applyLang()/langSwitch ใน app.js -->
+  <div class="langswitch" id="langSwitch" title="สลับภาษา">
+    <span class="opt on" data-set="th">ไทย</span>
+    <span class="opt" data-set="en">EN</span>
+  </div>
   <div class="bellwrap">
     <button class="bell" id="bellBtn" title="การแจ้งเตือน" aria-label="การแจ้งเตือน"
             aria-expanded="false" aria-controls="bellPop">
@@ -119,29 +124,29 @@
          ลำดับขั้นจึงอ่านจากเลขมุมไอคอนกับ tooltip แทน -->
     <nav class="snav" id="tabbar" aria-label="เมนูหลัก">
       <button class="mtab on" data-view="dash" title="แดชบอร์ด">
-        <svg class="i"><use href="#i-grid"/></svg> <span>แดชบอร์ด</span></button>
+        <svg class="i"><use href="#i-grid"/></svg> <span data-th="แดชบอร์ด" data-en="Dashboard">แดชบอร์ด</span></button>
 
-      <span class="sgrp">ขั้นตอนการทำงาน</span>
+      <span class="sgrp" data-th="ขั้นตอนการทำงาน" data-en="Workflow">ขั้นตอนการทำงาน</span>
       <button class="mtab" data-view="upload" data-step="1" title="ขั้น 1 · อัปโหลด Timesheet">
-        <svg class="i"><use href="#i-envelope-plus"/></svg> <span>อัปโหลด Timesheet</span></button>
+        <svg class="i"><use href="#i-envelope-plus"/></svg> <span data-th="อัปโหลด Timesheet" data-en="Upload Timesheet">อัปโหลด Timesheet</span></button>
       <button class="mtab" data-view="queue" data-step="2" title="ขั้น 2 · ตรวจ Manday">
-        <svg class="i"><use href="#i-list-chk"/></svg> <span>ตรวจ Manday</span>
+        <svg class="i"><use href="#i-list-chk"/></svg> <span data-th="ตรวจ Manday" data-en="Review Manday">ตรวจ Manday</span>
         <span class="bdg" id="queueBadge">–</span></button>
       <button class="mtab" data-view="cycles" data-step="3" title="ขั้น 3 · วางบิล และร่างอีเมล">
-        <svg class="i"><use href="#i-invoice"/></svg> <span>วางบิล &amp; ร่างอีเมล</span>
+        <svg class="i"><use href="#i-invoice"/></svg> <span data-th="วางบิล &amp; ร่างอีเมล" data-en="Billing &amp; Email">วางบิล &amp; ร่างอีเมล</span>
         <span class="bdg" id="cycleBadge">–</span></button>
 
-      <span class="sgrp">อ้างอิง</span>
+      <span class="sgrp" data-th="อ้างอิง" data-en="Reference">อ้างอิง</span>
       <button class="mtab" data-view="invoices" title="ใบแจ้งหนี้">
-        <svg class="i"><use href="#i-doc"/></svg> <span>ใบแจ้งหนี้</span></button>
+        <svg class="i"><use href="#i-doc"/></svg> <span data-th="ใบแจ้งหนี้" data-en="Invoices">ใบแจ้งหนี้</span></button>
       <button class="mtab" data-view="master" title="ข้อมูลหลัก" id="masterNavBtn" hidden>
-        <svg class="i"><use href="#i-users"/></svg> <span>ข้อมูลหลัก</span></button>
+        <svg class="i"><use href="#i-users"/></svg> <span data-th="ข้อมูลหลัก" data-en="Master Data">ข้อมูลหลัก</span></button>
       <button class="mtab" data-view="sysadmin" title="จัดการระบบ" id="sysAdminTab" hidden>
-        <svg class="i"><use href="#i-cog"/></svg> <span>จัดการระบบ</span></button>
+        <svg class="i"><use href="#i-cog"/></svg> <span data-th="จัดการระบบ" data-en="System Admin">จัดการระบบ</span></button>
     </nav>
 
     <button class="sidetoggle" id="sideToggle" title="ย่อเมนู" aria-label="ย่อเมนู" aria-pressed="false">
-      <svg class="i"><use href="#i-panel"/></svg> <span>ย่อเมนู</span>
+      <svg class="i"><use href="#i-panel"/></svg> <span data-th="ย่อเมนู" data-en="Collapse">ย่อเมนู</span>
     </button>
   </aside>
 

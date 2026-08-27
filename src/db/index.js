@@ -47,6 +47,16 @@ const ADDED_COLUMNS = [
   // หัวข้ออีเมลต้นทาง — source_email_id เดิมเก็บแค่ message id (อ่านไม่รู้เรื่อง) หน้า "ที่มาของข้อมูล"
   // จะได้โชว์ชื่ออีเมลจริงแทนรหัสดิบได้ ใบเก่าก่อนมีคอลัมน์นี้จะเป็น NULL (ไม่มีให้ย้อนไปหา ไม่ใช่บั๊ก)
   ['timesheets', 'source_email_subject', 'TEXT'],
+  // ตารางรายละเอียดรายวันเต็มรูปแบบตามคอลัมน์ของ ABBYY "New Table" (27 ส.ค. 69 ตามที่ขอ) —
+  // ใบเก่าก่อนมีคอลัมน์พวกนี้จะเป็น NULL หมด (ไม่มีข้อมูลย้อนหลังให้เติม ไม่ใช่บั๊ก)
+  ['timesheet_days', 'day_of_week', 'TEXT'],
+  ['timesheet_days', 'project', 'TEXT'],
+  ['timesheet_days', 'ot_time_in', 'TEXT'],
+  ['timesheet_days', 'ot_time_out', 'TEXT'],
+  ['timesheet_days', 'type', 'TEXT'],
+  ['timesheet_days', 'normal_hours', 'REAL'],
+  ['timesheet_days', 'ot_hours', 'REAL'],
+  ['timesheet_days', 'total_hours', 'REAL'],
 ];
 
 function addMissingColumns(database) {

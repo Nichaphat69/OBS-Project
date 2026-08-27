@@ -382,17 +382,50 @@ function parseTimeToMinutes(value) {
 /**
  * ดึงเวลาเข้า-ออกจากแถว โดยสแกนหาค่าที่ตรงรูปแบบเวลา (เช่น "9:00") ในทุกคอลัมน์ ไม่ยึดว่าต้อง
  * เป็นคอลัมน์ชื่อ "Time In"/"Time Out" เพราะค่าเคยสลับคอลัมน์กันมาแล้วจริง (ดูคอมเมนต์หัวไฟล์)
- * รับเฉพาะกรณีเจอค่าเวลาพอดี 2 ค่าในแถว (Time In + Time Out ปกติ) — น้อยกว่านั้นแปลว่าไม่ทำงานวันนั้น
- * (Weekend/Holiday ไม่มีเวลาเลย) มากกว่านั้นแปลว่ามีคอลัมน์ OT In/OT Out ติดมาด้วย ไม่แน่ใจว่าคู่ไหน
- * เป็นเวลาทำงานปกติ ปล่อยเป็น null ดีกว่าเดาผิด — เวลาที่น้อยกว่าคือเข้างาน มากกว่าคือออกงาน
+ * เจอค่าเวลาพอดี 2 ค่าในแถว = เวลาทำงานปกติเท่านั้น (Weekend/Holiday ไม่มีเวลาเลยจึงเจอ 0 ค่า)
+ * เจอ 4 ค่า (27 ส.ค. 69 ตามที่ขอ) = มีเวลา OT ติดมาด้วย — คู่แรก (เช้ากว่า) คือเข้า-ออกงานปกติ
+ * คู่หลัง (ดึกกว่า) คือเข้า-ออก OT เพราะ OT ต้องเกิดหลังเลิกงานปกติเสมอ ไม่มี OT ก่อนเข้างาน
+ * จำนวนอื่น (1, 3, มากกว่า 4) = รูปแบบที่ไม่มั่นใจ ปล่อย null ทั้งหมดดีกว่าเดาผิด
  */
 function extractRowTimes(cols) {
   const times = Object.values(cols)
     .map((v) => ({ raw: v, minutes: parseTimeToMinutes(v) }))
-    .filter((t) => t.minutes !== null);
-  if (times.length !== 2) return { timeIn: null, timeOut: null };
-  times.sort((a, b) => a.minutes - b.minutes);
-  return { timeIn: times[0].raw, timeOut: times[1].raw };
+    .filter((t) => t.minutes !== null)
+    .sort((a, b) => a.minutes - b.minutes);
+
+  if (times.length === 2) {
+    return { timeIn: times[0].raw, timeOut: times[1].raw, otTimeIn: null, otTimeOut: null };
+  }
+  if (times.length === 4) {
+    return { timeIn: times[0].raw, timeOut: times[1].raw, otTimeIn: times[2].raw, otTimeOut: times[3].raw };
+  }
+  return { timeIn: null, timeOut: null, otTimeIn: null, otTimeOut: null };
+}
+
+/** ชั่วโมงระหว่างเวลาเข้า-ออก (เช่น "9:00" → "18:00" = 9) — null ถ้าเวลาใดเวลาหนึ่งไม่ใช่รูปแบบเวลา
+ * รองรับกรณี OT ยาวข้ามเที่ยงคืน (เวลาออกน้อยกว่าเวลาเข้า ถือว่าข้ามวัน ไม่ใช่ค่าติดลบ) */
+function hoursBetween(startRaw, endRaw) {
+  const start = parseTimeToMinutes(startRaw);
+  const end = parseTimeToMinutes(endRaw);
+  if (start === null || end === null) return null;
+  const diffMin = end >= start ? end - start : (end + 24 * 60) - start;
+  return Math.round((diffMin / 60) * 100) / 100;
+}
+
+/** แปลงค่าดิบจาก ABBYY เป็นตัวเลข — คืน null ถ้าไม่มีค่า/ว่างเปล่า/ไม่ใช่ตัวเลข แทนที่จะปัดเป็น 0
+ * เงียบๆ (Number(null) === 0 ซึ่งจะหลอกว่า ABBYY อ่านมาว่า "ศูนย์" ทั้งที่จริงคือ "ไม่มีข้อมูล") */
+function parsedOrNull(raw) {
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+const DOW_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** "2026-05-01" → "Fri" — คำนวณเองจากวันที่แทนเชื่อคอลัมน์ "Day" ที่ ABBYY อ่านมา เพราะวันที่คำนวณ
+ * วันในสัปดาห์ได้แน่นอนอยู่แล้ว ไม่ต้องเสี่ยงอ่านผิด/พิมพ์ผิดจากต้นฉบับซ้ำ (27 ส.ค. 69) */
+function dayOfWeekFromDate(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : DOW_EN[d.getUTCDay()];
 }
 
 /**
@@ -404,8 +437,12 @@ function extractRowTimes(cols) {
  *   - label: รวมทุกคอลัมน์ยกเว้น Description/วันที่/เวลาที่จับได้แล้ว เอาไปให้ classifyDayKind()
  *     ตัดสินต่อ (ตัวเดียวกับที่ใช้ทั้งฝั่งโมเดลในเครื่องและ extractLeaveDaysFromTable) ไม่ยึดว่า
  *     ต้องอยู่คอลัมน์ "Type" เป๊ะๆ
- *   - jobDescription: เชื่อคอลัมน์ "Description" ตรงๆ (ไม่มีรูปแบบให้ pattern-match แบบวันที่/เวลา
- *     ได้อยู่แล้ว เป็นข้อความอิสระ) ความเสี่ยงลดลงมากเพราะตอนนี้ทุกแถวกรอกครบไม่มีช่องว่างให้สลับ
+ *   - project/type/jobDescription: เชื่อคอลัมน์ "Project"/"Type"/"Description" ตรงๆ (ข้อความอิสระ
+ *     ไม่มีรูปแบบให้ pattern-match แบบวันที่/เวลาได้อยู่แล้ว) — "Type" ยัง fallback ไปใช้ label ที่คำนวณ
+ *     เองถ้าคอลัมน์ "Type" ว่าง เผื่อ Skill บาง version ไม่มีคอลัมน์นี้แยกให้
+ *   - ชั่วโมง Normal/OT/Total per day (27 ส.ค. 69 ตามที่ขอ): เชื่อค่าที่ ABBYY อ่านมาก่อนถ้ามี
+ *     ถ้าคอลัมน์ว่าง/อ่านไม่ได้ ค่อยคำนวณเองจากเวลาเข้า-ออกงานปกติ/เวลาเข้า-ออก OT แทน
+ *     (เผื่อกรณีพนักงานกรอกแค่เวลาเข้า-ออกมา ไม่ได้สรุปจำนวนชั่วโมงมาให้ในตาราง)
  */
 function buildDayRowsFromStructuredTable(rootObject) {
   const table = rootObject?.Fields?.find((f) => f.Name === 'New Table');
@@ -419,7 +456,7 @@ function buildDayRowsFromStructuredTable(rootObject) {
     const date = parseTableRowDate(cols);
     if (!date) continue; // แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปน ข้ามไป
 
-    const { timeIn, timeOut } = extractRowTimes(cols);
+    const { timeIn, timeOut, otTimeIn, otTimeOut } = extractRowTimes(cols);
     const jobDescription = cols['Description'] ?? null;
     // ตัดคอลัมน์ Description ออก (แยกเก็บเป็น jobDescription แล้ว) และตัดค่าที่เป็นรูปแบบวันที่/เวลา
     // ออกด้วย (ไม่ใช่แค่เทียบเท่ากับ date/timeIn/timeOut ที่ parse ได้ เพราะ "Day"/"Date" มักมีทั้งค่า
@@ -432,7 +469,26 @@ function buildDayRowsFromStructuredTable(rootObject) {
       .filter(Boolean);
     const label = labelParts.length ? labelParts.join(' ') : null;
 
-    days.push({ date, timeIn, timeOut, label, type: null, remark: null, jobDescription });
+    const project = cols['Project'] ?? null;
+    const type = cols['Type'] || label;
+
+    const computedNormal = hoursBetween(timeIn, timeOut);
+    const computedOt = hoursBetween(otTimeIn, otTimeOut);
+    const normalHours = parsedOrNull(cols['Normal']) ?? computedNormal;
+    const otHours = parsedOrNull(cols['OT']) ?? computedOt;
+    const totalHours = parsedOrNull(cols['Total per day'])
+      ?? ((normalHours !== null || otHours !== null)
+        ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100
+        : null);
+
+    days.push({
+      date,
+      dayOfWeek: dayOfWeekFromDate(date),
+      project,
+      timeIn, timeOut, otTimeIn, otTimeOut,
+      label, type, remark: null, jobDescription,
+      normalHours, otHours, totalHours,
+    });
   }
   return days;
 }
