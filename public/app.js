@@ -103,6 +103,8 @@ const T = {
   'ตรวจ Manday · คนยืนยัน': 'Review Manday · Human confirms',
   'วางบิล FlowAccount': 'Bill via FlowAccount', 'ร่างอีเมลถึงลูกค้า': 'Draft email to customer',
   'ภาพรวม': 'Overview', 'รายละเอียด': 'Details', 'ปฏิทิน': 'Calendar',
+  'รายละเอียดวันที่เลือก': 'Selected Day', 'คลิกวันที่ในปฏิทินเพื่อดูรายละเอียดวันนั้น': 'Click a date to see its details',
+  'เข้างาน': 'Check-in', 'ออกงาน': 'Check-out',
   'สรุปรายการที่จะวางบิล': 'Billing line summary',
   'เรทค่าบริการต่อเดือนตามใบว่าจ้าง': 'Monthly service rate per PO',
   'วันทำงานของเดือน': 'Work days this month',
@@ -261,7 +263,10 @@ const T = {
   'กำลังดำเนินการ': 'Active', 'ปิดอยู่': 'Inactive', 'แก้ไขข้อมูลสัญญา': 'Edit contract',
   'เลขที่สัญญา': 'Contract no.', 'จำนวนคน': 'Headcount', 'ยอดต่อเดือน': 'Monthly total',
   'ผู้ประสานงาน': 'Coordinator', 'สถานที่วางบิล': 'Billing address', 'ปฏิทินวันหยุด': 'Holiday calendar',
-  'ชื่อวันหยุด': 'Holiday name', '+ เพิ่มวันหยุด': '+ Add holiday', 'ขอบเขต': 'Scope',
+  'ชื่อวันหยุด': 'Holiday name', 'ขอบเขต': 'Scope',
+  'เติมวันหยุดราชการทางการให้อัตโนมัติตามปีที่เลือก ไม่ต้องพิมพ์เพิ่มเอง':
+    'Official public holidays fill in automatically for the selected year — no need to type them in',
+  'ยังไม่มีข้อมูลวันหยุดทางการของปีนี้ในระบบ': 'No official holiday data for this year yet',
   'ทุกลูกค้า': 'All customers', 'ลบวันหยุดนี้': 'Delete this holiday', 'ลูกค้า': 'Customer',
   'บริษัท & สัญญา': 'Company & Contract',
 
@@ -532,7 +537,9 @@ const state = {
   queueFilter: 'action', queueSearch: '', queuePage: 1,
   queueSort: 'urgent', expanded: null,
   cycleFilter: 'all',
-  masterTab: 1, uploadTab: 1, sysTab: 1,
+  cycleTab: 1,
+  calDay: null,
+  masterTab: 1, uploadTab: 1, sysTab: 1, holidayYear: null,
   /** role ของคนที่ login อยู่ — เติมจาก /pulse ทุกครั้งที่ syncBadges() คุยกับเซิร์ฟเวอร์ */
   role: null,
   /* สัญญาที่ "กำลังดำเนินการอยู่" ที่เลือกจากตัวเลือกบริษัทบนแถบบน — null = ยังไม่มีสัญญา active เลย
@@ -1048,18 +1055,46 @@ const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
    ระบบนี้ไม่มีข้อมูลตำแหน่งงาน (WFH/Onsite) เหมือน HRDD เพราะเป็นระบบคำนวณ Manday ไม่ใช่ระบบเช็คชื่อ
    เข้า-ออกงาน จึงให้ไอคอน "บ้าน" ตัวเดียวแทนวันทำงานทุกวัน ไม่แยก WFH/Onsite เพราะไม่มีข้อมูลจริงรองรับ
    ว่าวันไหนทำงานที่บ้านหรือเข้าออฟฟิศ — ไม่ใส่ข้อมูลปลอมๆที่ไม่มีจริงเข้าไป */
-const LEAVE_ICON = { sick: 'heart', personal: 'car', vacation: 'rocket', unpaid: 'cal' };
-const LEAVE_TH = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง' };
+const LEAVE_ICON = { sick: 'sickface', personal: 'idcard', vacation: 'plane', unpaid: 'cal' };
 
-/** สีป้าย "ประเภท" ในตารางรายละเอียดรายวัน (27 ส.ค. 69) — เดาโทนจากคำในข้อความ ไม่ยึดว่าต้องเป็น
- * ค่าคงที่ตายตัว เพราะ ABBYY แต่ละ Skill ใช้คำไม่เหมือนกัน (Working/Public Holiday/Vacation Leave ฯลฯ) */
-function dayTypeTone(type) {
+/** ป้ายกำกับ "ประเภท" สองภาษา ใช้ทั้งในปฏิทิน (title ของไอคอน) และตารางรายละเอียดรายวัน (27 ส.ค. 69
+ * ตามที่ขอเป๊ะๆ "Sick Leave"/"Vacation Leave") — ใช้ dayTypeText() อ่านค่าแทน tx() เพราะปุ่มสลับภาษา
+ * ไม่ผูกกับ T{} ตัวเดียวกับที่จุดอื่นในหน้าใช้ (คีย์ 'วันหยุด' ของ T{} มีความหมายอื่นอยู่แล้วที่นั่น) */
+const DAY_TYPE_LABEL = {
+  work: { th: 'ทำงาน', en: 'Working' },
+  weekend: { th: 'วันหยุด', en: 'Weekend' },
+  holiday: { th: 'วันหยุดนักขัตฤกษ์', en: 'Public Holiday' },
+  sick: { th: 'ลาป่วย', en: 'Sick Leave' },
+  personal: { th: 'ลากิจ', en: 'Personal Leave' },
+  vacation: { th: 'ลาพักร้อน', en: 'Vacation Leave' },
+  unpaid: { th: 'ลาไม่รับค่าจ้าง', en: 'Unpaid Leave' },
+};
+const dayTypeText = (key) => DAY_TYPE_LABEL[key]?.[state.lang === 'en' ? 'en' : 'th'] ?? key;
+
+/** ตัด "ข้อความซ้ำตัวเอง" ทิ้ง เช่น "Vacation Leave Vacation Leave" → "Vacation Leave" (27 ส.ค. 69) —
+ * เอกสารที่รับเข้าระบบก่อนแก้จุดนี้ที่ src/extract/abbyy.js ยังมีข้อความซ้ำค้างอยู่ในฐานข้อมูลเดิม
+ * (ไม่รื้ออ่านไฟล์ใหม่ทุกใบ) จึงกรองซ้ำอีกชั้นตอนแสดงผลด้วย ให้ใช้ได้ทันทีกับของเก่าที่ยืนยันไปแล้ว */
+function dedupeRepeatedText(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return text;
+  const words = s.split(/\s+/);
+  if (words.length < 2 || words.length % 2 !== 0) return s;
+  const half = words.length / 2;
+  const first = words.slice(0, half).join(' ');
+  const second = words.slice(half).join(' ');
+  return first.toLowerCase() === second.toLowerCase() ? first : s;
+}
+
+/** โทนสี+ป้ายของ "ประเภท" ในตารางรายละเอียดรายวัน (27 ส.ค. 69) — เดาโทนจากคำในข้อความ ไม่ยึดว่าต้องเป็น
+ * ค่าคงที่ตายตัว เพราะ ABBYY แต่ละ Skill ใช้คำไม่เหมือนกัน (Working/Public Holiday/Vacation Leave ฯลฯ)
+ * แต่ป้ายที่โชว์ผลใช้ DAY_TYPE_LABEL คงที่เสมอ ไม่ใช่ข้อความดิบจาก ABBYY จะได้แปลภาษาได้ */
+function dayTypeInfo(type) {
   const t = String(type ?? '').toLowerCase();
-  if (/holiday|หยุด/.test(t)) return 'cr';
-  if (/weekend|เสาร์|อาทิตย์/.test(t)) return 'mu';
-  if (/leave|ลา|sick|vacation|personal|annual|absent/.test(t)) return 'wn';
-  if (/work|ทำงาน/.test(t)) return 'ok';
-  return 'mu';
+  if (/holiday|หยุด/.test(t)) return { tone: 'dt-holiday', label: dayTypeText('holiday') };
+  if (/weekend|เสาร์|อาทิตย์/.test(t)) return { tone: 'dt-weekend', label: dayTypeText('weekend') };
+  if (/leave|ลา|sick|vacation|personal|annual|absent/.test(t)) return { tone: 'wn', label: type ?? '—' };
+  if (/work|ทำงาน/.test(t)) return { tone: 'dt-work', label: dayTypeText('work') };
+  return { tone: 'mu', label: type ?? '—' };
 }
 
 /** ฟอร์แมตชั่วโมงในตารางรายละเอียดรายวัน — ทศนิยม 2 ตำแหน่ง, "—" ถ้าไม่มีข้อมูล (ไม่ใช่ "0.00"
@@ -1106,24 +1141,32 @@ function calendarHtml(manday) {
   const firstCol = days[0].dayOfWeek;
   const leaveByDate = new Map(manday.leaveDays.map((l) => [l.date, l.type]));
 
+  // คลิกวันที่ในปฏิทินได้ (27 ส.ค. 69 ตามที่ขอ "ทำปฏิทินให้สวยๆ") — ใช้ดูรายละเอียดวันนั้นในการ์ด
+  // "รายละเอียดวันที่เลือก" ข้างๆ ดูตัว sel/data-date ด้านล่าง กับ dayDetailHtml() ที่ประกอบการ์ดนั้น
   const cells = [
     ...Array.from({ length: firstCol }, () => '<div class="cl vd"></div>'),
     ...days.map((d) => {
+      const sel = d.date === state.calDay ? ' sel' : '';
       if (d.kind === 'holiday') {
-        return `<div class="cl holiday"><span class="dn">${d.day}</span>
-          <span class="dbanner">${icon('bell', 'i xs')}${esc(d.label ?? tx('วันหยุด'))}</span></div>`;
+        return `<div class="cl holiday${sel}" data-date="${d.date}"><span class="dn">${d.day}</span>
+          <span class="dbanner">${icon('gift', 'i xs')}${esc(d.label ?? dayTypeText('holiday'))}</span></div>`;
       }
       // เสาร์-อาทิตย์ไม่มีป้ายเลย เหมือน HRDD เป๊ะๆ — คอลัมน์ก็บอกอยู่แล้วว่าเป็นวันไหน
-      if (d.kind === 'weekend') return `<div class="cl weekend"><span class="dn">${d.day}</span></div>`;
+      if (d.kind === 'weekend') return `<div class="cl weekend${sel}" data-date="${d.date}"><span class="dn">${d.day}</span></div>`;
       if (d.kind === 'leave') {
         const leaveType = leaveByDate.get(d.date) ?? 'unpaid';
-        return `<div class="cl lv-${leaveType}"><span class="dn">${d.day}</span>
-          <span class="dbadge lv-${leaveType}" title="${esc(tx(LEAVE_TH[leaveType] ?? 'ลา'))}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i lg')}</span></div>`;
+        return `<div class="cl lv-${leaveType}${sel}" data-date="${d.date}"><span class="dn">${d.day}</span>
+          <span class="dbadge lv-${leaveType}" title="${esc(dayTypeText(leaveType))}">${icon(LEAVE_ICON[leaveType] ?? 'cal', 'i sm')}</span></div>`;
       }
-      return `<div class="cl workday"><span class="dn">${d.day}</span>
-        <span class="dbadge workday" title="${tx('ทำงาน')}">${icon('home', 'i lg')}</span></div>`;
+      return `<div class="cl workday${sel}" data-date="${d.date}"><span class="dn">${d.day}</span>
+        <span class="dbadge workday" title="${dayTypeText('work')}">${icon('monitor', 'i sm')}</span></div>`;
     }),
   ];
+  // เติมช่องว่างท้ายแถวสุดท้ายด้วย .cl.vd เหมือนกับช่องว่างต้นเดือน (28 ส.ค. 69 ตามที่ขอ "ไม่มีวันที่
+  // พื้นที่เหลือก็สีขาว ไม่เอาสีเทา") — ไม่งั้นช่องว่างท้ายแถวจะไม่มี element มาคลุม โผล่พื้นเทาของ
+  // คอนเทนเนอร์ .cal ให้เห็น (สีเทานั้นคือเส้นตารางที่ตั้งใจไว้ ไม่ใช่พื้นที่ว่าง)
+  const trailing = (7 - ((firstCol + days.length) % 7)) % 7;
+  cells.push(...Array.from({ length: trailing }, () => '<div class="cl vd"></div>'));
 
   return `
     <div class="cal">
@@ -1131,19 +1174,62 @@ function calendarHtml(manday) {
       ${cells.join('')}
     </div>
     <div class="cal-legend">
-      <span class="legend-item workday">${icon('home', 'i lg')}${tx('ทำงาน')}</span>
+      <span class="legend-item workday">${icon('monitor', 'i lg')}${tx('ทำงาน')}</span>
       <span class="legend-item holiday">${tx('วันหยุด')}</span>
-      <span class="legend-item sick">${icon('heart', 'i lg')}${tx('ลาป่วย')}</span>
-      <span class="legend-item personal">${icon('car', 'i lg')}${tx('ลากิจ')}</span>
-      <span class="legend-item vacation">${icon('rocket', 'i lg')}${tx('ลาพักร้อน')}</span>
+      <span class="legend-item sick">${icon('sickface', 'i lg')}${tx('ลาป่วย')}</span>
+      <span class="legend-item personal">${icon('idcard', 'i lg')}${tx('ลากิจ')}</span>
+      <span class="legend-item vacation">${icon('plane', 'i lg')}${tx('ลาพักร้อน')}</span>
       <span class="cal-legend-mu">${tx('เสาร์–อาทิตย์ไม่มีป้าย')}</span>
     </div>`;
 }
 
+/** การ์ด "รายละเอียดวันที่เลือก" ข้างปฏิทิน (27 ส.ค. 69 ตามที่ขอ "ทำปฏิทินให้สวยๆ") — โชว์ตอนคลิกวันที่
+ * ในปฏิทิน ดึงจากแถวเดียวกับตารางรายละเอียดรายวัน (sheet.dayLabels) ให้ตรงกันเป๊ะ ไม่เดาใหม่จาก
+ * manday.calendar.days ซ้ำเพราะตัวนั้นมีแค่ kind/นับจำนวน ไม่มีเวลาเข้า-ออก/โปรเจกต์/รายละเอียดงาน */
+function dayDetailHtml(date, sheet, manday) {
+  if (!date) return `<div class="empty">${tx('คลิกวันที่ในปฏิทินเพื่อดูรายละเอียดวันนั้น')}</div>`;
+  const d = sheet.dayLabels.find((r) => r.date === date);
+  const calDay = manday?.calendar?.days?.find((c) => c.date === date);
+  const leaveType = new Map((manday?.leaveDays ?? []).map((l) => [l.date, l.type])).get(date);
+  const fallbackType = calDay?.kind === 'weekend' ? 'Weekend'
+    : calDay?.kind === 'holiday' ? 'Holiday' : calDay?.kind === 'workday' ? 'Working' : '';
+  const info = leaveType ? { tone: `lv-${leaveType}`, label: dayTypeText(leaveType) } : dayTypeInfo(d?.type ?? fallbackType);
+  // วันหยุดนักขัตฤกษ์โชว์ชื่อวันหยุดจริงจากปฏิทินวันหยุดของลูกค้า (calDay.label — แหล่งเดียวกับ
+  // แบนเนอร์ในตัวปฏิทินเอง) แทนข้อความทั่วไปจาก Timesheet เช่น "Public Holiday" เฉยๆ (28 ส.ค. 69
+  // ตามที่ขอ "อยากให้ขึ้นด้วยว่าเป็นวันอะไร")
+  const note = calDay?.kind === 'holiday' && calDay?.label
+    ? calDay.label
+    : d?.job_desc || d?.remark ? dedupeRepeatedText(d.job_desc ?? d.remark) : null;
+  // ชื่อวันเต็ม (จันทร์/อังคาร/.../Monday/Tuesday) ใต้วันที่ — คำนวณสดจากวันที่ตรงๆ ไม่พึ่ง day_of_week
+  // แบบย่อที่ ABBYY อ่านมา (เช่น "Mon") เพื่อให้ได้ชื่อเต็มสวยๆ ตามภาษาที่กำลังแสดงอยู่ (28 ส.ค. 69)
+  const dow = new Date(`${date}T00:00:00`).toLocaleDateString(state.lang === 'en' ? 'en-US' : 'th-TH', { weekday: 'long' });
+  return `
+    <div class="daydetail">
+      <div class="ddhd">
+        <span class="ddhd-l"><span class="ddate">${esc(dateOnly(date))}</span><span class="ddow">${esc(dow)}</span></span>
+        <span class="tg ${info.tone}">${esc(info.label)}</span>
+      </div>
+      ${d?.time_in && d?.time_out ? `
+      <div class="dd-times">
+        <div class="dd-time-box"><span class="ic">${icon('signin', 'i sm')}</span><span class="lbl">${tx('เข้างาน')}</span><span class="val">${esc(d.time_in)}</span></div>
+        <div class="dd-time-box"><span class="ic">${icon('signout', 'i sm')}</span><span class="lbl">${tx('ออกงาน')}</span><span class="val">${esc(d.time_out)}</span></div>
+      </div>` : ''}
+      <dl class="kv">
+        ${d?.ot_time_in && d?.ot_time_out ? `<dt>${tx('เวลา OT')}</dt><dd class="n">${esc(d.ot_time_in)} – ${esc(d.ot_time_out)}</dd>` : ''}
+        ${d?.project ? `<dt>${tx('โครงการ')}</dt><dd>${esc(d.project)}</dd>` : ''}
+        ${d?.total_hours !== null && d?.total_hours !== undefined ? `<dt>${tx('รวม/วัน')}</dt><dd class="n">${hoursCell(d.total_hours)}</dd>` : ''}
+      </dl>
+      ${note ? `<div class="rmk">${esc(note)}</div>` : ''}
+    </div>`;
+}
+
 async function openSheet(id) {
+  // เปิดใบใหม่ (id ต่างจากที่ค้างอยู่) ค่อยรีเซ็ตกลับแท็บ "ภาพรวม" — ถ้าเป็นใบเดิม (เรียกซ้ำจาก
+  // สลับภาษา/กด "คำนวณใหม่"/ยืนยันตรวจแล้ว) คงแท็บที่กำลังดูอยู่ไว้ ไม่งั้นสลับภาษาแล้วเด้งกลับ
+  // แท็บแรกทุกครั้ง ทั้งที่กำลังดูแท็บ "รายละเอียด"/"ปฏิทิน" อยู่ (27 ส.ค. 69 ตามที่ขอ)
+  if (state.detailId !== id) { state.tab = 1; state.calDay = null; }
   state.view = 'detail';
   state.detailId = id;
-  state.tab = 1;
   markTab('detail');
 
   main.innerHTML = '<div class="loading">กำลังโหลด…</div>';
@@ -1154,6 +1240,9 @@ async function openSheet(id) {
   // สรุปประจำเดือนขอให้แยกวันลาแต่ละประเภทแทนยอดรวม "ลา" อันเดียว ("ขอให้มีครบทุกสถานะ")
   const leaveCounts = { sick: 0, personal: 0, vacation: 0, unpaid: 0 };
   for (const l of manday?.leaveDays ?? []) leaveCounts[l.type] = (leaveCounts[l.type] ?? 0) + 1;
+  // ตารางรายละเอียดรายวันใช้ประเภทวันลาที่ classifyLeaveType() ตัดสินไว้แล้วจากตัวนี้ (แม่นกว่าเดาจาก
+  // ข้อความ type/label ในตารางเอง) ให้สีป้ายตรงกับไอคอนในแท็บปฏิทินเป๊ะ — ดู leaveTypeByDate ด้านล่าง
+  const leaveTypeByDate = new Map((manday?.leaveDays ?? []).map((l) => [l.date, l.type]));
   const failures = (manday?.checks ?? []).filter((c) => c.severity === 'fail');
   const step = sheet.status === 'billed' ? 4
     : failures.length || !sheet.check?.checked ? 2
@@ -1302,18 +1391,25 @@ async function openSheet(id) {
             <th class="r">${tx('ชม.ปกติ')}</th><th class="r">${tx('ชม. OT')}</th><th class="r">${tx('รวม/วัน')}</th>
           </tr></thead>
           <tbody>${sheet.dayLabels.length
-            ? sheet.dayLabels.map((d) => `<tr>
+            ? sheet.dayLabels.map((d) => {
+                // วันลา — ใช้ประเภทที่ classifyLeaveType() ตัดสินไว้แล้ว (leaveDays ผ่านการจัดประเภท
+                // sick/personal/vacation/unpaid มาแล้วจริง) แทนการเดาจากข้อความ type/label ในตารางนี้เอง
+                // ให้สีตรงกับไอคอนในแท็บปฏิทินเป๊ะ ไม่ต้องเดาซ้ำสองที่ (27 ส.ค. 69 ตามที่ขอ)
+                const leaveType = leaveTypeByDate.get(d.date);
+                const info = leaveType ? { tone: `lv-${leaveType}`, label: dayTypeText(leaveType) } : dayTypeInfo(d.type);
+                return `<tr>
                 <td class="n">${esc(d.date)}</td>
                 <td class="n">${esc(d.day_of_week ?? '—')}</td>
                 <td>${esc(d.project ?? '—')}</td>
                 <td class="n">${d.time_in && d.time_out ? `${esc(d.time_in)} – ${esc(d.time_out)}` : '—'}</td>
                 <td class="n">${d.ot_time_in && d.ot_time_out ? `${esc(d.ot_time_in)} – ${esc(d.ot_time_out)}` : '—'}</td>
-                <td><span class="tg ${dayTypeTone(d.type)}">${esc(d.type ?? d.label ?? '—')}</span></td>
-                <td style="white-space:pre-line">${esc(d.job_desc ?? d.remark ?? '—')}</td>
+                <td><span class="tg ${info.tone}">${esc(info.label)}</span></td>
+                <td style="white-space:pre-line">${esc(dedupeRepeatedText(d.job_desc ?? d.remark ?? '—'))}</td>
                 <td class="r n">${hoursCell(d.normal_hours)}</td>
                 <td class="r n">${hoursCell(d.ot_hours)}</td>
                 <td class="r n" style="font-weight:600">${hoursCell(d.total_hours)}</td>
-              </tr>`).join('')
+              </tr>`;
+              }).join('')
             : `<tr><td colspan="10" class="empty">${tx('ไม่มีข้อมูล')}</td></tr>`}</tbody>
           ${sheet.dayLabels.length ? `<tfoot><tr>
             <td colspan="7" style="font-weight:600">${tx('รวมทั้งเดือน')}</td>
@@ -1347,27 +1443,41 @@ async function openSheet(id) {
 
     <!-- คำนวณ Manday -->
     <div class="tp ${state.tab === 3 ? 'on' : ''}" data-pane="3">
-      <div class="card">
-        <div class="hd"><h3>${tx('ปฏิทิน')} ${esc(sheet.periodLabel)}</h3></div>
-        <div class="bd">${calendarHtml(manday)}</div>
-      </div>
-
-      <div class="card">
-        <div class="hd"><h3>${tx('สรุปประจำเดือน')}</h3></div>
-        <div class="bd">
-          <div class="stat-tiles">
-            <div class="stat-tile ok"><span class="sti">${icon('home', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">${tx('ทำงาน (วัน)')}</span></span></div>
-            <div class="stat-tile cr"><span class="sti">${icon('heart', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.sick)}</span><span class="stl">${tx('ลาป่วย (วัน)')}</span></span></div>
-            <div class="stat-tile pr"><span class="sti">${icon('car', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.personal)}</span><span class="stl">${tx('ลากิจ (วัน)')}</span></span></div>
-            <div class="stat-tile wn"><span class="sti">${icon('rocket', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.vacation)}</span><span class="stl">${tx('ลาพักร้อน (วัน)')}</span></span></div>
-            <div class="stat-tile"><span class="sti">${icon('cal', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">${tx('เสาร์–อาทิตย์ (วัน)')}</span></span></div>
-            <div class="stat-tile pk"><span class="sti">${icon('bell', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">${tx('วันหยุด (วัน)')}</span></span></div>
+      <div class="g3 cal-grid">
+        <div>
+          <div class="card">
+            <div class="hd"><h3>${tx('ปฏิทิน')} ${esc(sheet.periodLabel)}</h3></div>
+            <div class="bd" id="calWrap">${calendarHtml(manday)}</div>
           </div>
-          <div class="fsec" style="margin-top:0">
-            <div class="fsec-h"><b>${tx('หมายเหตุที่จะขึ้นบนใบแจ้งหนี้')}</b></div>
-            ${manday?.remarkLines?.length
-              ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
-              : `<div class="empty">${tx('ไม่มีวันลา จึงไม่มีหมายเหตุ')}</div>`}
+
+          <div class="card">
+            <div class="hd"><h3>${tx('หมายเหตุที่จะขึ้นบนใบแจ้งหนี้')}</h3></div>
+            <div class="bd">
+              ${manday?.remarkLines?.length
+                ? `<div class="rmk">${esc(manday.remarkLines.join('\n'))}</div>`
+                : `<div class="empty">${tx('ไม่มีวันลา จึงไม่มีหมายเหตุ')}</div>`}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="hd"><h3>${tx('สรุปประจำเดือน')}</h3></div>
+            <div class="bd">
+              <div class="stat-tiles cal-summary">
+                <div class="stat-tile ok"><span class="sti">${icon('monitor', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.workday)}</span><span class="stl">${tx('ทำงาน (วัน)')}</span></span></div>
+                <div class="stat-tile cr"><span class="sti">${icon('sickface', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.sick)}</span><span class="stl">${tx('ลาป่วย (วัน)')}</span></span></div>
+                <div class="stat-tile pr"><span class="sti">${icon('idcard', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.personal)}</span><span class="stl">${tx('ลากิจ (วัน)')}</span></span></div>
+                <div class="stat-tile wn"><span class="sti">${icon('plane', 'i lg')}</span><span class="stx"><span class="stv">${int(leaveCounts.vacation)}</span><span class="stl">${tx('ลาพักร้อน (วัน)')}</span></span></div>
+                <div class="stat-tile mu"><span class="sti">${icon('cal', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.weekend)}</span><span class="stl">${tx('เสาร์–อาทิตย์ (วัน)')}</span></span></div>
+                <div class="stat-tile pk"><span class="sti">${icon('gift', 'i lg')}</span><span class="stx"><span class="stv">${int(dayCounts.holiday)}</span><span class="stl">${tx('วันหยุด (วัน)')}</span></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="hd"><h3>${tx('รายละเอียดวันที่เลือก')}</h3></div>
+            <div class="bd" id="dayDetailWrap">${dayDetailHtml(state.calDay, sheet, manday)}</div>
           </div>
         </div>
       </div>
@@ -1400,6 +1510,17 @@ async function openSheet(id) {
       main.querySelectorAll('[data-pane]').forEach((p) =>
         p.classList.toggle('on', Number(p.dataset.pane) === state.tab));
     });
+  });
+
+  // คลิกวันที่ในปฏิทินเพื่อดูรายละเอียดวันนั้นในการ์ดข้างๆ — อัปเดตแค่สอง id นี้ในที่ ไม่ re-render
+  // ทั้งหน้า (ตามแบบเดียวกับสลับแท็บด้านบน) กัน state อื่นๆที่ผู้ใช้กำลังทำอยู่ในหน้าเดียวกันหาย
+  el('calWrap')?.addEventListener('click', (e) => {
+    const cell = e.target.closest('.cl[data-date]');
+    if (!cell) return;
+    state.calDay = state.calDay === cell.dataset.date ? null : cell.dataset.date;
+    el('calWrap').querySelectorAll('.cl[data-date]').forEach((c) =>
+      c.classList.toggle('sel', c.dataset.date === state.calDay));
+    el('dayDetailWrap').innerHTML = dayDetailHtml(state.calDay, sheet, manday);
   });
 
   el('recomputeBtn').addEventListener('click', async () => {
@@ -1768,6 +1889,9 @@ const NO_DRAFT_YET = () => `${icon('info')} ${tx('ยังไม่ได้ส
   tx('แล้วระบบจะตามให้เองว่าส่งไปแล้วหรือยัง');
 
 async function openCycle(contractId, period) {
+  // เปิดรอบบิลใหม่ (contract/period ต่างจากที่ค้างอยู่) ค่อยรีเซ็ตกลับแท็บแรก — รอบเดิม (เรียกซ้ำจาก
+  // สลับภาษา/อนุมัติแล้ว) คงแท็บที่ดูอยู่ไว้ เหมือน openSheet() ด้านบน
+  if (state.cycleContractId !== contractId || state.cyclePeriod !== period) state.cycleTab = 1;
   state.view = 'cycle';
   state.cycleContractId = contractId;
   state.cyclePeriod = period;
@@ -1858,10 +1982,10 @@ async function openCycle(contractId, period) {
 
         <div class="tabs" role="tablist">
           ${['ข้อมูลที่ส่งเข้า FlowAccount', 'ร่างอีเมล'].map((label, i) =>
-            `<button class="tab ${i === 0 ? 'on' : ''}" data-ctab="${i + 1}">${tx(label)}</button>`).join('')}
+            `<button class="tab ${state.cycleTab === i + 1 ? 'on' : ''}" data-ctab="${i + 1}">${tx(label)}</button>`).join('')}
         </div>
 
-        <div class="tp on" data-cpane="1">
+        <div class="tp ${state.cycleTab === 1 ? 'on' : ''}" data-cpane="1">
           <div class="card">
             <div class="hd"><h3>${tx('Payload ที่จะยิงเข้า API')}</h3>
               <span class="rt">${tx('ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง')}</span></div>
@@ -1869,7 +1993,7 @@ async function openCycle(contractId, period) {
           </div>
         </div>
 
-        <div class="tp" data-cpane="2">
+        <div class="tp ${state.cycleTab === 2 ? 'on' : ''}" data-cpane="2">
           <div class="card">
             <div class="hd"><h3>${tx('ร่างอีเมลวางบิล')}</h3></div>
             <div class="bd">
@@ -2000,6 +2124,7 @@ async function openCycle(contractId, period) {
   main.querySelectorAll('[data-ctab]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const n = Number(btn.dataset.ctab);
+      state.cycleTab = n;
       main.querySelectorAll('[data-ctab]').forEach((b) => b.classList.toggle('on', b === btn));
       main.querySelectorAll('[data-cpane]').forEach((p) =>
         p.classList.toggle('on', Number(p.dataset.cpane) === n));
@@ -3308,8 +3433,10 @@ function renderContractEditForm(c) {
 }
 
 async function renderMaster() {
-  const [employees, contracts, settings] = await Promise.all([
-    api(`/employees${contractQuery()}`), api('/contracts'), api('/settings'),
+  const holidayYear = state.holidayYear ?? new Date().getFullYear();
+  const [employees, contracts, holidayData] = await Promise.all([
+    api(`/employees${contractQuery()}`), api('/contracts'),
+    api(`/holidays?year=${holidayYear}`),
   ]);
   const tab = state.masterTab;
   const activeContract = contracts.find((c) => c.id === state.contractId) ?? null;
@@ -3407,23 +3534,22 @@ async function renderMaster() {
 
     <div class="tp ${tab === 3 ? 'on' : ''}" data-mpane="3">
       <div class="card">
-        <div class="hd"><h3>${tx('ปฏิทินวันหยุด')}</h3></div>
+        <div class="hd"><h3>${tx('ปฏิทินวันหยุด')}</h3>
+          <span class="rt">${tx('เติมวันหยุดราชการทางการให้อัตโนมัติตามปีที่เลือก ไม่ต้องพิมพ์เพิ่มเอง')}</span></div>
         <div class="bd">
-          <div class="hadd">
-            <input type="date" id="hDate">
-            <input type="text" id="hName" placeholder="${tx('ชื่อวันหยุด')}" autocomplete="off">
-            <button class="btn sm pri" id="hAdd">${tx('+ เพิ่มวันหยุด')}</button>
-          </div>
+          <span class="selectchip"><select id="hYear">${holidayData.years.map((y) =>
+            `<option value="${y}" ${y === holidayYear ? 'selected' : ''}>${y + 543}</option>`).join('')}</select></span>
         </div>
         <div class="bd flush"><div class="tw"><table style="min-width:520px">
           <thead><tr><th style="width:140px">${tx('วันที่')}</th><th>${tx('ชื่อวันหยุด')}</th><th>${tx('ขอบเขต')}</th>
             <th style="width:60px"></th></tr></thead>
-          <tbody>${settings.holidays.map((h) => `
+          <tbody>${holidayData.holidays.length ? holidayData.holidays.map((h) => `
             <tr><td class="n">${dateOnly(h.date)}</td><td>${esc(h.name)}</td>
               <td>${h.customer_id ? esc(h.customer_id) : `<span class="tg mu">${tx('ทุกลูกค้า')}</span>`}</td>
               <td><button class="btn sm icon dgr hrm" data-date="${esc(h.date)}"
                 data-name="${esc(h.name)}" data-cus="${esc(h.customer_id ?? '')}"
-                title="${tx('ลบวันหยุดนี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button></td></tr>`).join('')}</tbody>
+                title="${tx('ลบวันหยุดนี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button></td></tr>`).join('')
+            : `<tr><td colspan="4" class="empty">${tx('ยังไม่มีข้อมูลวันหยุดทางการของปีนี้ในระบบ')}</td></tr>`}</tbody>
         </table></div></div>
       </div>
     </div>
@@ -3557,15 +3683,9 @@ async function renderMaster() {
     });
   });
 
-  el('hAdd')?.addEventListener('click', async () => {
-    const date = el('hDate').value;
-    const name = el('hName').value.trim();
-    if (!date || !name) { toast('ต้องกรอกทั้งวันที่และชื่อวันหยุด', true); return; }
-    try {
-      await api('/holidays', { method: 'POST', body: JSON.stringify({ date, name }) });
-      toast(`เพิ่มวันหยุด ${dateOnly(date)} — ${name}`);
-      renderMaster();
-    } catch (error) { toast(error.message, true); }
+  el('hYear')?.addEventListener('change', (e) => {
+    state.holidayYear = Number(e.target.value);
+    renderMaster();
   });
 
   main.querySelectorAll('.hrm').forEach((btn) => {

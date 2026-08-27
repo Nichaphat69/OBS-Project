@@ -72,13 +72,20 @@
   --pk: #DB2777; --pkb: #FDF2FA; --pkl: #FCCEEE;
   --red: #D92D20;   /* ป้ายตัวเลขแจ้งเตือน */
 
-  /* สีไอคอนปฏิทินโดยเฉพาะ — ให้ตรงตามที่ระบุมาเป๊ะๆ (คนละชุดจากสีสถานะทั่วไปด้านบน เพราะพาสเทล
-     จางกว่ามาก ใช้เป็นตัวหนังสือ/พื้นหลังทั่วไปไม่ได้ อ่านไม่ออก) ใช้เฉพาะกับตัวไอคอนในปฏิทินเท่านั้น
-     ตัวเลขวันที่/ป้ายกำกับยังใช้สีสถานะปกติด้านบนเพื่อให้อ่านง่ายอยู่ */
-  --cal-work: #B5F88C;      /* ทำงาน (บ้าน) */
-  --cal-sick: #FF5473;      /* ลาป่วย (หัวใจแตก) */
-  --cal-personal: #DEA1FF;  /* ลากิจ (รถ) */
-  --cal-vacation: #FFAB3B;  /* ลาพักร้อน (จรวด) */
+  /* สีระบบประเภทวัน — ให้ตรงตามชุดสีที่ระบุมาเป๊ะๆ ล่าสุด (27 ส.ค. 69: "สไตล์ โอเคละ") ใช้ทั้งไอคอน
+     ปฏิทิน, ป้าย "ประเภท" ในตารางรายละเอียด และตัวเลขในการ์ดสรุปประจำเดือน — จุดเดียวจบ สีเปลี่ยน
+     ที่นี่ที่เดียวคือครบทุกที่ที่ใช้ */
+  --cal-work: #7CC94D;      /* ทำงาน (จอคอมพิวเตอร์) */
+  --cal-weekend: #94A3B8;   /* วันหยุดสุดสัปดาห์ */
+  --cal-sick: #FF73C9;      /* ลาป่วย (หน้าป่วย) */
+  --cal-personal: #D17EE8;  /* ลากิจ (บัตรประจำตัว) */
+  --cal-vacation: #53C0FF;  /* ลาพักร้อน (เครื่องบิน) */
+  --cal-holiday: #FF688C;   /* วันหยุดนักขัตฤกษ์ (ป๊อปคอนเฟตตี) */
+
+  /* สี Onsite/WFH (28 ส.ค. 69) — เตรียมไว้ล่วงหน้าตามที่ขอ ยังไม่มีจุดไหนในระบบอ้างถึงตัวแปรนี้
+     เพราะระบบยังไม่มีข้อมูลจริงว่าวันไหนเข้าออฟฟิศ/วันไหน WFH — รอมีข้อมูลจริงค่อยเอาไปใช้ */
+  --loc-onsite: #4473FF;
+  --loc-wfh: #FF751F;
 
   /* เงาแบบนุ่มหลายชั้น ให้การ์ดดูลอยแบบสะอาด ไม่ใช่ตีกรอบหนัก
      เพิ่ม sh3 (ยกตัวตอนโฮเวอร์) กับ sh-brand (แสงฟุ้งสีแบรนด์ให้ปุ่มหลัก/จุดสำคัญเด่นขึ้น) */
@@ -158,7 +165,9 @@ svg.i {
 }
 svg.i.sm { width: 13px; height: 13px; }
 svg.i.xs { width: 9px; height: 9px; stroke-width: 2; }
-svg.i.lg { width: 25px; height: 25px; stroke-width: 2.6; }
+/* เส้นบาง+ขนาดเล็กลงตามที่ขอ (28 ส.ค. 69 "เส้นมันหนา ใหญ่เกินไป") — คลาสนี้ตอนนี้ใช้เฉพาะไอคอน
+   ปฏิทิน/สรุปประจำเดือน/รายละเอียดวันที่เลือกเท่านั้น ปรับที่นี่จึงกระทบแค่จุดที่ขอ */
+svg.i.lg { width: 22px; height: 22px; stroke-width: 1.7; }
 svg.i.solid { stroke: none; fill: currentColor; }
 
 /* ═══ โครงหน้า — เมนูข้างถาวร + เนื้อหาเลื่อนได้ ═══ */
@@ -973,6 +982,24 @@ td .nm { font-weight: 600; }
 .stat-tile.ok .sti svg.i { color: var(--cal-work); }
 .stat-tile.cr .sti svg.i { color: var(--cal-sick); }
 .stat-tile.pr .sti svg.i { color: var(--cal-personal); }
+/* กล่องสรุปประจำเดือนในแท็บปฏิทิน — ต้อง scope ด้วย .cal-summary เพราะ .stat-tile.ok/.wn/.pr/.cr/.pk
+   ถูกใช้ที่หน้าอื่นด้วย (เช่นสรุปผลเทียบ HRDD: ตรงกัน/ประเภทไม่ตรง/ไม่พบ) ซึ่งคนละความหมายกับประเภทวัน
+   ในนี้ ห้ามให้สีที่นี่ไปทับที่นั่น (27 ส.ค. 69) — ตัวเลขในนี้ใช้สีเดียวกับไอคอนปฏิทิน/ป้ายประเภทวันเป๊ะ */
+/* ไอคอนเสมอกับตัวเลข ไม่ใช่กึ่งกลางบล็อกตัวเลข+label ทั้งก้อน (28 ส.ค. 69 ตามที่ขอ) — เดิม
+   align-items:center ของ .stat-tile ดันไอคอนลงมาแบ่งครึ่งกับ label เล็กด้านล่าง ดูไม่เสมอกับตัวเลข */
+.stat-tiles.cal-summary .stat-tile { align-items: flex-start; padding: 12px 14px; gap: 10px; }
+/* ตัวเลข+ไอคอนเล็กลงให้สมส่วนกับคอลัมน์ที่แคบลง (28 ส.ค. 69 ตามที่ขอ "ลงขนาดตัวเลขให้ดูสมมาตร") —
+   22px เดิมมันใหญ่เกินตัวการ์ดแคบๆ นี้ ทำให้ล้นดูไม่สมส่วนกับไอคอน/label ข้างๆ */
+.stat-tiles.cal-summary .stat-tile .stv { font-size: 18px; }
+.stat-tiles.cal-summary .stat-tile .sti svg.i { width: 19px; height: 19px; stroke-width: 1.9; }
+.stat-tiles.cal-summary { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.stat-tiles.cal-summary .stat-tile.ok .stv { color: var(--cal-work); }
+.stat-tiles.cal-summary .stat-tile.cr .stv { color: var(--cal-sick); }
+.stat-tiles.cal-summary .stat-tile.pr .stv { color: var(--cal-personal); }
+.stat-tiles.cal-summary .stat-tile.wn .stv { color: var(--cal-vacation); }
+.stat-tiles.cal-summary .stat-tile.wn .sti svg.i { color: var(--cal-vacation); }
+.stat-tiles.cal-summary .stat-tile.pk .stv, .stat-tiles.cal-summary .stat-tile.pk .sti svg.i { color: var(--cal-holiday); }
+.stat-tiles.cal-summary .stat-tile.mu .stv, .stat-tiles.cal-summary .stat-tile.mu .sti svg.i { color: var(--cal-weekend); }
 .stat-tile.wn .sti svg.i { color: var(--cal-vacation); }
 
 /* ── แถบสีข้างแถวตารางเทียบ HRDD บอกสถานะโดยไม่ต้องอ่านป้ายก็รู้ ── */
@@ -992,6 +1019,17 @@ td .nm { font-weight: 600; }
 .tg.wn { color: var(--wn); background: var(--wnb); border-color: var(--wnl); }
 .tg.cr { color: var(--cr); background: var(--crb); border-color: var(--crl); }
 .tg.mu { color: var(--mut); background: var(--hov); border-color: var(--rule); }
+/* ป้ายประเภทวันลา 3 สีแยกกัน (27 ส.ค. 69 ตามที่ขอ) — สีเดียวกับที่ใช้ในปฏิทิน (--cal-sick/personal/
+   vacation) เพื่อให้เห็นแล้วรู้ทันทีว่าโทนเดียวกับไอคอนในแท็บปฏิทิน ไม่ใช่ป้ายสถานะทั่วไป */
+.tg.lv-sick { color: var(--cal-sick); background: color-mix(in srgb, var(--cal-sick) 12%, white); border-color: color-mix(in srgb, var(--cal-sick) 35%, white); }
+.tg.lv-personal { color: var(--cal-personal); background: color-mix(in srgb, var(--cal-personal) 14%, white); border-color: color-mix(in srgb, var(--cal-personal) 40%, white); }
+.tg.lv-vacation { color: var(--cal-vacation); background: color-mix(in srgb, var(--cal-vacation) 14%, white); border-color: color-mix(in srgb, var(--cal-vacation) 40%, white); }
+.tg.lv-unpaid { color: var(--pk); background: var(--pkb); border-color: color-mix(in srgb, var(--pk) 40%, white); }
+/* ป้าย "ทำงาน/วันหยุด/วันหยุดนักขัตฤกษ์" ในตารางรายละเอียด — สีเดียวชุดเดียวกับ .tg.lv-* ด้านบน
+   (27 ส.ค. 69) ใช้ตัวแปร --cal-work/weekend/holiday จุดเดียวกับที่ปฏิทินใช้ ไม่แยกชุดสีที่สอง */
+.tg.dt-work { color: var(--cal-work); background: color-mix(in srgb, var(--cal-work) 16%, white); border-color: color-mix(in srgb, var(--cal-work) 40%, white); }
+.tg.dt-weekend { color: var(--cal-weekend); background: color-mix(in srgb, var(--cal-weekend) 16%, white); border-color: color-mix(in srgb, var(--cal-weekend) 40%, white); }
+.tg.dt-holiday { color: var(--cal-holiday); background: color-mix(in srgb, var(--cal-holiday) 14%, white); border-color: color-mix(in srgb, var(--cal-holiday) 40%, white); }
 
 /* ── หน้ารายละเอียด ─────────────────────────────────────── */
 .back {
@@ -1049,6 +1087,9 @@ td .nm { font-weight: 600; }
 
 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 .g3 { display: grid; grid-template-columns: 1.65fr 1fr; gap: 22px; align-items: start; }
+/* แท็บปฏิทินขอคอลัมน์ขวา (สรุปประจำเดือน/รายละเอียดวันที่เลือก) แคบกว่า .g3 ปกติ (28 ส.ค. 69) — แยก
+   คลาสเฉพาะ ไม่แก้ .g3 ตรงๆเพราะแท็บภาพรวมก็ใช้ .g3 อยู่ด้วย คนละสัดส่วนที่ต้องการ */
+.g3.cal-grid { grid-template-columns: 2.3fr 1fr; }
 @media (max-width: 1080px) { .g2, .g3 { grid-template-columns: 1fr; } }
 
 dl.kv {
@@ -1077,85 +1118,101 @@ dl.kv dd { margin: 0; font-weight: 600; }
 /* เดิม gap ระหว่างเซลล์ทำให้ดูเป็นการ์ดลอยแยกกัน (โบราณ) — เปลี่ยนมาใช้เทคนิค "gap 1px + สีพื้นหลัง
    คอนเทนเนอร์เป็นสีเส้น" แทน ได้เส้นตารางบางๆคั่นระหว่างเซลล์แบบตารางปกติ เรียบง่าย ทันสมัย ตรงตาม
    ที่ขอ ("ไม่เอาเว้นช่องว่างแบบนี้ ... ขอเป็นเส้นตารางปกติ") ไม่ต้องพึ่ง border ซ้อนกันแบบเดิม */
+/* กลับไปเป็นเส้นตารางสีเทาอ่อนบางๆ (28 ส.ค. 69 ตามที่ขอ) แทนการ์ดมนแยกช่องแบบเดิม — ใช้เทคนิค
+   เดียวกับตารางปกติ: พื้นคอนเทนเนอร์เป็นสีเส้น (--hair) ส่วนแต่ละเซลล์เว้น gap 1px ให้เห็นเป็นเส้น */
 .cal {
   display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 1px;
-  background: var(--hair); border: 1px solid var(--hair);
-  border-radius: 10px; overflow: hidden;
+  background: var(--hair); border: 1px solid var(--hair); border-radius: 12px; overflow: hidden;
 }
 .dw {
   font-size: 11.5px; font-weight: 600; letter-spacing: 0; background: var(--paper);
   color: var(--fnt); text-align: center; padding: 10px 0;
 }
-/* เลขวันที่กับไอคอนป้ายอยู่แถวเดียวกัน (เลขซ้าย ป้ายชิดขวา) ตามแบบ HRDD เป๊ะๆ — ใช้ flex-wrap
-   แล้วดัน .dbadge ไปชิดขวาด้วย margin-left:auto ส่วนวันหยุดมีแบนเนอร์เต็มความกว้างเพิ่มอีกแถว
-   (.dbanner ตั้ง flex-basis:100% บังคับขึ้นบรรทัดใหม่) เหมือนที่ HRDD ทำกับวันหยุดนักขัตฤกษ์ */
+/* เลขวันที่กับไอคอนป้ายอยู่แถวเดียวกัน (เลขซ้าย ป้ายชิดขวา) — ใช้ flex-wrap แล้วดัน .dbadge ไปชิดขวา
+   ด้วย margin-left:auto ส่วนวันหยุดมีแบนเนอร์เต็มความกว้างเพิ่มอีกแถว (.dbanner ตั้ง flex-basis:100%
+   บังคับขึ้นบรรทัดใหม่) คลิกได้เพื่อดูรายละเอียดวันนั้น — ring สีฟ้าตอน hover/เลือกอยู่ (27-28 ส.ค. 69) */
 .cl {
   min-height: 68px; background: var(--paper); padding: 8px 8px 9px;
   display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 5px;
+  cursor: pointer; transition: box-shadow .15s var(--ease);
 }
+.cl:not(.vd):hover { box-shadow: inset 0 0 0 1.5px var(--bline); }
+.cl.sel { box-shadow: inset 0 0 0 2px var(--brand); background: var(--tint); }
 .cl .dn { flex: none; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .cl .dbadge { margin-left: auto; }
-.cl.vd { background: var(--sunk); }
-.cl.weekend { background: var(--sunk); }
-.cl.weekend .dn { color: var(--fnt); font-weight: 600; }
-.cl.holiday { background: var(--crb); }
-.cl.holiday .dn { color: var(--cr); }
-/* วันลาแยกสีตามประเภทเหมือน HRDD เป๊ะๆ — ป่วยแดง(หัวใจ) กิจชมพู(รถ) พักร้อนส้ม(จรวด) ตามที่ขอเป๊ะๆ
-   (ไม่รับค่าจ้างม่วง เพิ่มเองเพราะ HRDD ไม่มีประเภทนี้ให้เทียบ) พื้นหลังใช้โทนอ่อนทั้งหมด ไม่ใช้สีทึบ
-   เพราะขอ "สีไม่เข้ม ขอสีน่ารักๆ" */
-.cl.lv-sick { background: var(--crb); }
-.cl.lv-sick .dn { color: var(--cr); font-weight: 600; }
-/* ลากิจเปลี่ยนจากโทนชมพูเป็นโทนม่วงตามที่ขอล่าสุด ("ลากิจไอคอนรถยนต์ สีม่วง") */
-.cl.lv-personal { background: var(--prb); }
-.cl.lv-personal .dn { color: var(--pr); font-weight: 600; }
-.cl.lv-vacation { background: var(--wnb); }
-.cl.lv-vacation .dn { color: var(--wn); font-weight: 600; }
-.cl.lv-unpaid { background: var(--pkb); }
+.cl.vd { background: var(--paper); cursor: default; }
+/* พื้นหลังขาวล้วนทุกเซลล์ (28 ส.ค. 69 ตามที่ขอ "เปลี่ยนใจ เอาพื้นขาวหมดเลย") — เลิกไล่สีพื้นหลังตาม
+   ประเภทวันแล้ว ให้เลขวันที่/ไอคอนมุมขวาบน/แบนเนอร์วันหยุดเป็นตัวบอกสถานะแทนทั้งหมด */
+.cl.weekend .dn { color: var(--cal-weekend); font-weight: 600; }
+.cl.holiday .dn { color: var(--cal-holiday); }
+/* วันลาแยกสีตามประเภท — เลขวันที่ผูกกับตัวแปร --cal-* ชุดเดียวกับไอคอน/ป้ายประเภทวันในตารางรายละเอียด
+   ให้เห็นแล้วรู้ทันทีว่าโทนเดียวกัน (27-28 ส.ค. 69 ตามที่ขอ) */
+.cl.lv-sick .dn { color: var(--cal-sick); font-weight: 600; }
+.cl.lv-personal .dn { color: var(--cal-personal); font-weight: 600; }
+.cl.lv-vacation .dn { color: var(--cal-vacation); font-weight: 600; }
 .cl.lv-unpaid .dn { color: var(--pk); font-weight: 600; }
 
-/* ไอคอนต่อวัน — เอาแค่ตัวไอคอนเปล่าๆ ใหญ่ หนา ไม่มีพื้นหลัง/ป้ายทึบครอบ สีตรงตามที่ระบุมาเป๊ะๆ
-   (ทำงาน=#B5F88C, ลาป่วย=#FF5473, ลากิจ=#DEA1FF, ลาพักร้อน=#FFAB3B) ใช้ตัวแปรสีเฉพาะปฏิทิน
-   (--cal-*) แยกจากสีสถานะทั่วไป เพราะพาสเทลจางกว่ามาก เอาไปใช้เป็นตัวหนังสือ/ปุ่มที่อื่นจะอ่านไม่ออก
-   ไม่มีข้อความกำกับต่อวันอีกต่อไป (ดูคำอธิบายที่แถบใต้ปฏิทินแทน) */
+/* ไอคอนต่อวัน — เอาแค่ตัวไอคอนเปล่าๆ ไม่มีพื้นหลัง/ป้ายทึบครอบ สีตรงตามชุดสีที่ระบุมาเป๊ะๆ ใช้ตัวแปรสี
+   เฉพาะปฏิทิน (--cal-*) แยกจากสีสถานะทั่วไป เพิ่มความหนา/ขนาดจาก .i.sm ปกติ (28 ส.ค. 69 ตามที่ขอ
+   "เพิ่มความหนา") เฉพาะจุดนี้ผ่าน .dbadge โดยตรง ไม่แตะ .i.sm ที่ใช้ร่วมกับที่อื่นทั้งระบบ */
 .dbadge {
   margin-left: auto; flex: none; display: inline-flex; align-items: center; justify-content: center;
 }
+.dbadge svg.i { width: 15px; height: 15px; stroke-width: 2.1; }
 .dbadge.workday { color: var(--cal-work); }
 .dbadge.lv-sick { color: var(--cal-sick); }
 .dbadge.lv-personal { color: var(--cal-personal); }
 .dbadge.lv-vacation { color: var(--cal-vacation); }
 .dbadge.lv-unpaid { color: var(--pk); }
 
-/* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ สีแดงเหมือน HRDD (ของ HRDD เองก็ทึบแบบนี้
-   ไม่ได้อยู่ในกลุ่มไอคอน "อ่อนน่ารักๆ" ที่ขอเปลี่ยน) */
+/* แบนเนอร์วันหยุด — เต็มความกว้างเซลล์ ใต้เลขวันที่ ใช้ --cal-holiday แทนสีแดงสถานะทั่วไป
+   (27 ส.ค. 69) ให้เข้าชุดกับสีวันหยุดนักขัตฤกษ์ที่ใช้ในตารางรายละเอียด/สรุปประจำเดือน */
 .dbanner {
   display: flex; align-items: center; gap: 5px; flex-basis: 100%;
   font-size: 9.5px; font-weight: 600; padding: 3px 7px; border-radius: 6px;
-  background: var(--cr); color: #fff; line-height: 1.3;
+  background: var(--cal-holiday); color: #fff; line-height: 1.3;
 }
 
-/* แถบคำอธิบายไอคอนใต้ปฏิทิน — ก็อปสไตล์ HRDD เป๊ะๆ: ไอคอนอยู่ในกล่องมุมมนสีอ่อนแยกจากตัวหนังสือ
-   (ไม่ใช่ป้ายรวมทึบแบบ .dbadge) ยกเว้นวันหยุดที่เป็นป้ายทึบสีแดงล้วนเหมือน HRDD เป๊ะ (ของ HRDD เองก็
-   ไม่มีไอคอนในป้ายวันหยุดเช่นกัน) ตัวหนังสือใช้สีสถานะปกติให้อ่านง่าย ส่วนไอคอนใช้สีพาสเทลเฉพาะปฏิทิน
-   ตามที่ขอ (แยกกันเพราะพาสเทลจางเกินจะใช้เป็นตัวหนังสือ) */
+/* แถบคำอธิบายไอคอนใต้ปฏิทิน — ไอคอนอยู่เปล่าๆไม่มีกล่องครอบ (ไม่ใช่ป้ายรวมทึบแบบ .dbadge) ยกเว้น
+   วันหยุดที่เป็นป้ายทึบสีล้วน ตัวหนังสือ+ไอคอนใช้สี --cal-* ชุดเดียวกันทั้งคู่ (27 ส.ค. 69 ตามที่ขอ
+   สีเดียวกันทั้งระบบ ไม่แยกชุดสีอ่านง่าย/ชุดสีไอคอนเหมือนเดิมอีกต่อไป) */
+/* แถบคำอธิบายเล็กลง (28 ส.ค. 69 ตามที่ขอ) — ตัวหนังสือ/ไอคอน/ระยะห่างลดลงจากเดิม ให้เข้าชุดกับ
+   ปฏิทินที่เล็กลงด้วย ไม่ใหญ่เกินตัวจนแย่งความสนใจจากตารางเอง */
 .cal-legend {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
-  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 13px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hair);
 }
-/* ไอคอนแถบคำอธิบายก็เอาแค่ตัวเปล่าๆเหมือนกัน (ไม่มีกล่องสีครอบ) ใหญ่ หนา สีสด ตามที่ขอ */
-.legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; }
-.legend-item.workday { color: var(--ok); }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
+.legend-item svg.i { width: 15px; height: 15px; stroke-width: 2; }
+.legend-item.workday { color: var(--cal-work); }
 .legend-item.workday svg.i { color: var(--cal-work); }
-.legend-item.sick { color: var(--cr); }
+.legend-item.sick { color: var(--cal-sick); }
 .legend-item.sick svg.i { color: var(--cal-sick); }
-.legend-item.personal { color: var(--pr); }
+.legend-item.personal { color: var(--cal-personal); }
 .legend-item.personal svg.i { color: var(--cal-personal); }
-.legend-item.vacation { color: var(--wn); }
+.legend-item.vacation { color: var(--cal-vacation); }
 .legend-item.vacation svg.i { color: var(--cal-vacation); }
 .legend-item.holiday {
-  padding: 5px 14px; border-radius: var(--r-pill); background: var(--cr); color: #fff;
+  padding: 4px 12px; border-radius: var(--r-pill); background: var(--cal-holiday); color: #fff;
 }
 .cal-legend-mu { font-size: 11.5px; color: var(--mut); }
+
+/* การ์ด "รายละเอียดวันที่เลือก" ข้างปฏิทิน (27 ส.ค. 69 ตามที่ขอ "ทำปฏิทินให้สวยๆ") — โชว์ตอนคลิก
+   วันที่ในปฏิทิน ใช้ .kv/.rmk ที่มีอยู่แล้วสำหรับรายการ/หมายเหตุ เพิ่มแค่หัวการ์ด (วันที่ + ป้ายประเภท) */
+.ddhd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.ddhd-l { display: flex; flex-direction: column; gap: 2px; }
+.ddate { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.ddow { font-size: 12px; color: var(--mut); }
+/* กล่องเวลาเข้า-ออกงานคู่ (28 ส.ค. 69 ตามที่ขอให้ตรงกับดีไซน์อ้างอิง) — สองกล่องเรียงข้างกัน พื้นหลัง
+   ฟ้าอ่อนแบรนด์ (--tint) แทนเทาเรียบเดิม ให้ดูมีสีสัน/ทันสมัยขึ้นตามที่ขอ */
+.dd-times { display: flex; gap: 10px; margin-bottom: 14px; }
+.dd-time-box {
+  flex: 1; display: flex; flex-direction: column; gap: 6px;
+  background: var(--tint); border: 1px solid var(--tint2); border-radius: var(--r-ctl); padding: 10px 14px;
+}
+.dd-time-box .ic { color: var(--brand); }
+.dd-time-box .lbl { font-size: 11.5px; color: var(--brand-d); font-weight: 600; }
+.dd-time-box .val { font-size: 17px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* ── สมุดคำนวณ ──────────────────────────────────────────── */
 .ldg td { padding: 13px 22px; font-size: 13.5px; }

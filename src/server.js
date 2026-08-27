@@ -280,6 +280,15 @@ const routes = [
     });
   }],
 
+  /** วันหยุดของปีที่เลือก — เติมวันหยุดทางการอัตโนมัติถ้าปีนั้นยังไม่มีข้อมูลเลย (28 ส.ค. 69) แล้วค่อย
+   * อ่านกลับมาส่ง ให้หน้า "ปฏิทินวันหยุด" ไม่ต้องมีฟอร์มให้พิมพ์เพิ่มเองอีกต่อไป */
+  ['GET', /^\/api\/holidays$/, (_m, url, _body, session) => {
+    requireAdmin(session);
+    const year = Number(url.searchParams.get('year')) || new Date().getFullYear();
+    svc.ensureOfficialHolidays(year, session.nameTh);
+    return { year, years: svc.officialHolidayYears(), holidays: svc.listHolidays(year) };
+  }],
+
   ['POST', /^\/api\/holidays$/, (_m, _url, body, session) => {
     requireAdmin(session);
     return svc.addHoliday({

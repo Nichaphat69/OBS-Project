@@ -251,6 +251,22 @@ test('mapAbbyyResult ดึงเวลา OT In/Out และคำนวณช
   assert.equal(data.days[0].totalHours, 11); // รวมเอง 9+2 เพราะไม่มีคอลัมน์ Total per day สรุปมาให้
 });
 
+test('mapAbbyyResult ตัดข้อความ Description/Type ที่ ABBYY อ่านซ้ำสองรอบทับกันทิ้ง '
+  + '(เจอจริง: "Vacation Leave Vacation Leave" — 27 ส.ค. 69)', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        tableRow({
+          Date: '1', Day: '01/06/26', Type: 'Leave', Description: 'Vacation Leave Vacation Leave',
+        }),
+      ] },
+    ] } } }] },
+  });
+
+  assert.equal(data.days[0].jobDescription, 'Vacation Leave');
+  assert.equal(data.days[0].type, 'Leave');
+});
+
 /** สร้าง row ของ "New Table" ให้ทดสอบง่ายๆ — cols เป็น { ชื่อคอลัมน์: ค่า } */
 function tableRow(cols) {
   return { Value: { Fields: Object.entries(cols).map(([name, value]) => ({

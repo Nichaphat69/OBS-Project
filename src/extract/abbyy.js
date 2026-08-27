@@ -420,6 +420,21 @@ function parsedOrNull(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** ตัดข้อความที่ ABBYY อ่านซ้ำสองรอบทับกันทิ้ง — เจอจริงกับแถววันลาบางแถว เช่น field "Description"
+ * มาเป็น "Vacation Leave Vacation Leave" (27 ส.ค. 69) เดาว่า ABBYY ดึงข้อความเดียวกันมาจากมากกว่า
+ * 1 ตำแหน่งในเอกสารแล้วต่อกัน — ถ้าข้อความแบ่งครึ่งได้พอดีและครึ่งแรก-หลังเหมือนกันเป๊ะ (ไม่สนตัวพิมพ์
+ * ใหญ่เล็ก) เหลือแค่ครึ่งเดียว ข้อความอื่นที่ไม่ตรงแพทเทิร์นนี้ (เช่นบังเอิญมีคำซ้ำในประโยคจริงๆ) ไม่แตะ */
+function dedupeRepeatedText(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return text;
+  const words = s.split(/\s+/);
+  if (words.length < 2 || words.length % 2 !== 0) return s;
+  const half = words.length / 2;
+  const first = words.slice(0, half).join(' ');
+  const second = words.slice(half).join(' ');
+  return first.toLowerCase() === second.toLowerCase() ? first : s;
+}
+
 const DOW_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 /** "2026-05-01" → "Fri" — คำนวณเองจากวันที่แทนเชื่อคอลัมน์ "Day" ที่ ABBYY อ่านมา เพราะวันที่คำนวณ
  * วันในสัปดาห์ได้แน่นอนอยู่แล้ว ไม่ต้องเสี่ยงอ่านผิด/พิมพ์ผิดจากต้นฉบับซ้ำ (27 ส.ค. 69) */
@@ -457,7 +472,7 @@ function buildDayRowsFromStructuredTable(rootObject) {
     if (!date) continue; // แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปน ข้ามไป
 
     const { timeIn, timeOut, otTimeIn, otTimeOut } = extractRowTimes(cols);
-    const jobDescription = cols['Description'] ?? null;
+    const jobDescription = cols['Description'] ? dedupeRepeatedText(cols['Description']) : null;
     // ตัดคอลัมน์ Description ออก (แยกเก็บเป็น jobDescription แล้ว) และตัดค่าที่เป็นรูปแบบวันที่/เวลา
     // ออกด้วย (ไม่ใช่แค่เทียบเท่ากับ date/timeIn/timeOut ที่ parse ได้ เพราะ "Day"/"Date" มักมีทั้งค่า
     // DD/MM/YY จริงและเลขลำดับแถวเปล่าๆปนกัน — เหลือแค่คำอธิบายประเภทวัน เช่น "Working"/"Weekend")
@@ -467,10 +482,10 @@ function buildDayRowsFromStructuredTable(rootObject) {
       .filter(([name, value]) => name !== 'Description' && !isDateOrTimeLike(value))
       .map(([, value]) => value)
       .filter(Boolean);
-    const label = labelParts.length ? labelParts.join(' ') : null;
+    const label = labelParts.length ? dedupeRepeatedText(labelParts.join(' ')) : null;
 
     const project = cols['Project'] ?? null;
-    const type = cols['Type'] || label;
+    const type = cols['Type'] ? dedupeRepeatedText(cols['Type']) : label;
 
     const computedNormal = hoursBetween(timeIn, timeOut);
     const computedOt = hoursBetween(otTimeIn, otTimeOut);
