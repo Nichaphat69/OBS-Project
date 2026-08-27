@@ -163,6 +163,15 @@ CREATE TABLE IF NOT EXISTS leave_days (
   PRIMARY KEY (timesheet_id, date)
 );
 
+-- OT รายวัน (25 ส.ค. 69) — ดึงจากตาราง Timesheet อัตโนมัติ (ดู extractOtHoursFromTable ที่
+-- src/extract/abbyy.js) ใช้คิดค่าจ้างเพิ่มในหน้าตรวจ Manday (ดู calculateManday)
+CREATE TABLE IF NOT EXISTS overtime_days (
+  timesheet_id TEXT NOT NULL REFERENCES timesheets(id) ON DELETE CASCADE,
+  date         TEXT NOT NULL,
+  hours        REAL NOT NULL,
+  PRIMARY KEY (timesheet_id, date)
+);
+
 -- ── ใบแจ้งหนี้ ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS invoices (
   id                  TEXT PRIMARY KEY,

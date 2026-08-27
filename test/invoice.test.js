@@ -77,6 +77,41 @@ test('Manday ของ Developer ตรงกับใบแจ้งหนี�
   assert.ok(result.ok, 'ไม่ควรมีข้อผิดพลาดระดับ fail');
 });
 
+test('OT — เงินเดือน 100,000 หาร 20 วัน ทำ OT 2 ชม. วันที่ 13/06/2569 ตามตัวอย่างที่ขอ (25 ส.ค. 69)', () => {
+  const result = calculateManday({
+    period: '2026-06',
+    monthlyRate: 100000,
+    reportedWorkDays: 20,
+    leaveDays: [],
+    otDays: [{ date: '2026-06-13', hours: 2 }],
+    divisor: { mode: DIVISOR_MODE.FIXED, value: 20 },
+  });
+
+  assert.equal(result.dailyRate, 5000, '100,000 ÷ 20 = 5,000');
+  assert.equal(result.otDays.length, 1);
+  assert.equal(result.otDays[0].date, '2026-06-13');
+  assert.equal(result.otDays[0].hours, 2);
+  assert.equal(result.otDays[0].otAmount, 1250, '(2 ÷ 8) × 5,000 = 1,250');
+  assert.equal(result.otDays[0].dayAmount, 6250, 'ค่าจ้างวันนั้นรวม OT = 5,000 + 1,250');
+  assert.equal(result.otTotal, 1250);
+  assert.equal(result.lineAmount, 101250, '100,000 - ส่วนลด 0 + OT 1,250');
+});
+
+test('OT หลายวันรวมกันถูกต้อง และไม่กระทบส่วนลดวันลาที่มีอยู่', () => {
+  const result = calculateManday({
+    period: '2026-06',
+    monthlyRate: 100000,
+    reportedWorkDays: 18,
+    leaveDays: [{ date: '2026-06-01', type: 'sick' }],
+    otDays: [{ date: '2026-06-13', hours: 2 }, { date: '2026-06-20', hours: 4 }],
+    divisor: { mode: DIVISOR_MODE.FIXED, value: 20 },
+  });
+
+  assert.equal(result.discount, 5000, 'ส่วนลดวันลา 1 วัน ไม่เปลี่ยนเพราะมี OT');
+  assert.equal(result.otTotal, 1250 + 2500, '(2/8)×5000 + (4/8)×5000');
+  assert.equal(result.lineAmount, 100000 - 5000 + 3750);
+});
+
 test('Manday ของ Senior PM — ไม่มีวันลา ไม่มีส่วนลด', () => {
   const result = calculateManday({
     period: '2026-01',
@@ -131,6 +166,50 @@ test('ยอดรวมทั้งใบตรงกับ INV2026020006 ท�
   assert.equal(invoice.items[0].name, 'Senior Project Manager');
   assert.equal(invoice.items[1].name, 'Developer');
   assert.equal(invoice.items[1].discount, 2647.2);
+});
+
+test('OT ขึ้นเป็นบรรทัดแยกในใบแจ้งหนี้ ไม่ปนกับรายการปกติของพนักงานคนนั้น (25 ส.ค. 69)', () => {
+  const entries = [PM, DEV].map((employee) => ({
+    employee,
+    manday: calculateManday({
+      period: '2026-01',
+      monthlyRate: employee.monthlyRate,
+      reportedWorkDays: employee === DEV ? 19 : 20,
+      leaveDays: employee === DEV ? [{ date: '2026-01-29', type: 'sick' }] : [],
+      otDays: employee === DEV ? [{ date: '2026-01-15', hours: 2 }] : [],
+      holidays: HOLIDAYS_JAN_2026,
+    }),
+  }));
+
+  const invoice = buildInvoice({
+    period: '2026-01',
+    documentDate: '2026-02-02',
+    creditDays: 30,
+    customer: { name: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)', taxId: '0107555000104', branch: 'สำนักงานใหญ่' },
+    entries,
+  });
+
+  // PM ไม่มี OT: 1 บรรทัดตามเดิม. Developer มี OT: 2 บรรทัด (ปกติ + OT แยก) รวม 3 บรรทัดทั้งใบ
+  assert.equal(invoice.items.length, 3);
+  assert.equal(invoice.items[0].name, 'Senior Project Manager');
+  assert.equal(invoice.items[1].name, 'Developer');
+  assert.equal(invoice.items[1].discount, 2647.2, 'บรรทัดปกติของ Developer ยังหักส่วนลดวันลาเหมือนเดิม ไม่ปนกับ OT');
+  assert.ok(!invoice.items[1].isOvertimeLine);
+
+  const otItem = invoice.items[2];
+  assert.ok(otItem.isOvertimeLine);
+  assert.equal(otItem.employeeId, DEV.id);
+  assert.equal(otItem.pricePerUnit, round2((2 / 8) * (DEV.monthlyRate / 20)), '(2/8) × เรทต่อวันของ Developer');
+  assert.equal(otItem.discount, 0);
+  assert.equal(otItem.amount, otItem.pricePerUnit);
+
+  const t = invoice.totals;
+  assert.equal(t.otGrandTotal, otItem.pricePerUnit);
+  assert.equal(
+    t.totalAfterDiscount,
+    round2(t.total - t.discountTotal),
+    'totalAfterDiscount ต้องรวม OT ด้วย เพราะ OT อยู่ใน total ผ่านการเป็นบรรทัดของตัวเอง',
+  );
 });
 
 test('ภาษีหัก ณ ที่จ่ายคิดจากยอดหลังหักส่วนลด ไม่ใช่จากยอดรวมทั้งสิ้น', () => {

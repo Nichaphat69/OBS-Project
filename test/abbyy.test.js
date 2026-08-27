@@ -170,7 +170,7 @@ test('mapAbbyyResult คืน position/period เป็น null ถ้า ABBYY
   assert.match(data.notes.join(' '), /Month Year/);
 });
 
-test('mapAbbyyResult คืน days เป็น [] ถ้าตาราง "New Table" คืนมาเป็นแถวจริงแล้ว (ยังไม่เชื่อคอลัมน์ในนั้น)', () => {
+test('mapAbbyyResult คืน days เป็น [] ถ้าหาวันที่ในตาราง "New Table" ไม่เจอเลยสักแถว (แถวนี้ไม่มีรูปแบบ DD/MM/YY อยู่คอลัมน์ไหนเลย)', () => {
   const data = mapAbbyyResult({
     Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
       { Name: 'Month Year', List: [{ Value: 'May 2026' }] },
@@ -181,7 +181,32 @@ test('mapAbbyyResult คืน days เป็น [] ถ้าตาราง "Ne
     ] } } }] },
   });
   assert.deepEqual(data.days, []);
-  assert.match(data.notes.join(' '), /คอลัมน์ยังสลับตำแหน่งกัน/);
+  assert.match(data.notes.join(' '), /ยังไม่ได้ตารางรายวันมาเลย/);
+});
+
+test('mapAbbyyResult ดึง days จากตาราง "New Table" ได้ (25 ส.ค. 69 หลังเทรน Skill ให้กรอก Type/Description '
+  + 'ครบทุกแถวไม่เว้นว่าง คอลัมน์เสถียรขึ้น) — ดึงเวลาเข้า-ออก/รายละเอียดงานให้แล้ว', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        tableRow({
+          Date: '1', Day: '01/06/26', Project: '', Type: 'Working', Description: 'แก้บั๊ก A',
+          'Time In': '9:00', 'Time Out': '18:00',
+        }),
+        // วันหยุดสุดสัปดาห์ — ไม่มีเวลาเข้า-ออกเลย (ตรงตามที่ควรเป็น ไม่ใช่แค่ค่าว่าง 2 คอลัมน์บังเอิญ)
+        tableRow({ Date: '2', Day: '02/06/26', Project: '', Type: 'Weekend', Description: 'Weekend' }),
+      ] },
+    ] } } }] },
+  });
+
+  assert.equal(data.days.length, 2);
+  assert.equal(data.days[0].date, '2026-06-01');
+  assert.equal(data.days[0].timeIn, '9:00');
+  assert.equal(data.days[0].timeOut, '18:00');
+  assert.equal(data.days[0].jobDescription, 'แก้บั๊ก A');
+  assert.equal(data.days[1].date, '2026-06-02');
+  assert.equal(data.days[1].timeIn, null);
+  assert.equal(data.days[1].timeOut, null);
 });
 
 /** สร้าง row ของ "New Table" ให้ทดสอบง่ายๆ — cols เป็น { ชื่อคอลัมน์: ค่า } */

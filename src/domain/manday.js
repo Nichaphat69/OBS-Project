@@ -18,12 +18,19 @@ export const DIVISOR_MODE = {
 
 export const SEVERITY = { PASS: 'pass', WARN: 'warn', FAIL: 'fail' };
 
+/** สมมติฐานชั่วโมงทำงานปกติต่อวัน — ใช้เป็นตัวหารคำนวณค่าจ้าง OT เพิ่ม (25 ส.ค. 69 ตามที่ขอ)
+ * ตัวอย่างที่ให้มา: เงินเดือน 100,000 หาร 20 วัน = วันละ 5,000 ทำ OT 2 ชม. (รวมวันนั้น 8+2=10 ชม.)
+ * → (10/8) × 5,000 = 6,250 — ยังไม่มีที่ตั้งค่าต่อสัญญา ถ้าสัญญาไหนวันทำงานไม่ใช่ 8 ชม.จริง ต้องมาทำ
+ * ให้ตั้งค่าได้ต่อสัญญาทีหลัง ตอนนี้ยึดค่านี้ทุกสัญญาเหมือนกันก่อนตามตัวอย่างที่ขอมา */
+const STANDARD_WORK_HOURS_PER_DAY = 8;
+
 /**
  * @param {object} input
  * @param {string} input.period                 'YYYY-MM'
  * @param {number} input.monthlyRate            เรทต่อเดือนตาม PO
  * @param {number} input.reportedWorkDays       Total Work days ที่อ่านได้จาก Timesheet
  * @param {Array<{date:string,type:string}>} input.leaveDays  วันลาที่อ่านได้จาก Timesheet
+ * @param {Array<{date:string,hours:number}>} [input.otDays]  OT รายวันที่อ่านได้จาก Timesheet
  * @param {Map<string,string>} input.holidays
  * @param {object} input.divisor                { mode, value }
  * @param {Array<{date:string,label:string}>} [input.reportedDayLabels] ป้ายกำกับรายวันจาก Timesheet
@@ -33,6 +40,7 @@ export function calculateManday({
   monthlyRate,
   reportedWorkDays,
   leaveDays = [],
+  otDays = [],
   holidays = new Map(),
   divisor = { mode: DIVISOR_MODE.FIXED, value: 20 },
   reportedDayLabels = [],
@@ -51,7 +59,15 @@ export function calculateManday({
 
   const dailyRate = round2(monthlyRate / divisorValue);
   const discount = round2(leaveCount * dailyRate);
-  const lineAmount = round2(monthlyRate - discount);
+
+  // ค่าจ้าง OT เพิ่ม — ต่อวันที่มี OT: (ชั่วโมง OT ÷ 8) × เรทต่อวัน บวกเพิ่มจากยอดปกติ (ไม่ใช่ส่วนลด)
+  const otBreakdown = otDays.map((o) => {
+    const otAmount = round2((o.hours / STANDARD_WORK_HOURS_PER_DAY) * dailyRate);
+    return { date: o.date, hours: o.hours, otAmount, dayAmount: round2(dailyRate + otAmount) };
+  });
+  const otTotal = round2(otBreakdown.reduce((sum, o) => sum + o.otAmount, 0));
+
+  const lineAmount = round2(monthlyRate - discount + otTotal);
 
   const checks = runChecks({
     calendar,
@@ -76,6 +92,8 @@ export function calculateManday({
     monthlyRate,
     dailyRate,
     discount,
+    otDays: otBreakdown,
+    otTotal,
     lineAmount,
     remarkLines: buildRemarkLines({ dailyRate, leaveDays }),
     checks,

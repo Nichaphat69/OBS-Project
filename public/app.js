@@ -263,6 +263,8 @@ const state = {
   employeeAdd: false,
   /** แถวพนักงานที่กำลังกดไอคอนดินสอแก้ไขอยู่ — เปิดทีละคน: assignment_id (หรือ employee id ถ้าไม่มี) หรือ null */
   employeeEdit: null,
+  /** การ์ดบริษัท/สัญญาที่กำลังกดไอคอนดินสอแก้ไขอยู่ — เปิดทีละใบ: contract id หรือ null */
+  contractEdit: null,
   /* ผลที่ AI อ่านจากไฟล์ที่เพิ่งอัปโหลด/ดึงจาก Gmail — ยังไม่ได้บันทึกลงฐานข้อมูล
      อยู่ในหน่วยความจำหน้าจอจนกว่าคนจะกดยืนยัน รีเฟรชแล้วหาย ซึ่งถูกต้อง
      เพราะสิ่งที่ AI อ่านมายังไม่ใช่ข้อมูลของระบบจนกว่าจะมีคนรับรอง
@@ -882,6 +884,9 @@ async function openSheet(id) {
               <tr><td>วันลา</td><td class="r">${int(manday?.leaveCount)} วัน</td></tr>
               <tr><td>อัตราต่อวัน<span class="sub">${money(manday?.monthlyRate)} ÷ ${int(manday?.divisor?.applied)}</span></td><td class="r">${money(manday?.dailyRate)}</td></tr>
               <tr class="res"><td>ส่วนลดวันลา</td><td class="r">−${money(manday?.discount)}</td></tr>
+              ${manday?.otTotal > 0
+                ? `<tr class="res"><td>ค่าล่วงเวลา (OT)<span class="sub">${int((manday.otDays ?? []).length)} วัน</span></td><td class="r" style="color:var(--ok)">+${money(manday.otTotal)}</td></tr>`
+                : ''}
             </tbody></table></div>
             <div class="bd">
               <div class="tot">
@@ -961,6 +966,21 @@ async function openSheet(id) {
             : '<tr><td colspan="4" class="empty">ไม่มีข้อมูล</td></tr>'}</tbody>
         </table></div></div>
       </div>
+
+      ${(manday?.otDays ?? []).length ? `<div class="card">
+        <div class="hd"><h3>ค่าล่วงเวลา (OT)</h3>
+          <span class="rt">ตรวจจับอัตโนมัติจาก Timesheet — ตรวจสอบชั่วโมงกับ PDF ต้นฉบับก่อนยืนยัน</span></div>
+        <div class="bd flush"><div class="tw"><table style="min-width:0">
+          <thead><tr><th>วันที่</th><th class="r">ชั่วโมง OT</th><th class="r">ค่าจ้างวันนั้น (รวม OT)</th><th class="r">ค่า OT เพิ่ม</th></tr></thead>
+          <tbody>${manday.otDays.map((o) => `<tr><td class="n">${esc(dateOnly(o.date))}</td>
+              <td class="r n">${o.hours}</td>
+              <td class="r n">${money(o.dayAmount)}</td>
+              <td class="r n" style="color:var(--ok)">+${money(o.otAmount)}</td></tr>`).join('')}</tbody>
+        </table></div></div>
+        <div class="bd">
+          <div class="tot"><div class="t py"><span>รวมค่า OT ทั้งหมด</span><span class="v">+${money(manday.otTotal)}</span></div></div>
+        </div>
+      </div>` : ''}
 
       ${sheet.extraction ? `<div class="card">
         <div class="hd"><h3>ผลการอ่านไฟล์ดิบ</h3></div>
@@ -1154,39 +1174,137 @@ function renderHrddCompareInto(result, { card, meta, body }) {
       <thead><tr><th>วันที่</th><th>Timesheet</th><th>HRDD</th><th>สถานะ</th><th></th></tr></thead>
       <tbody>
         ${rows.map((r) => `
-          <tr class="hrdd-row ${HRDD_STATUS_TONE[r.status]}">
+          <tr class="hrdd-row ${HRDD_STATUS_TONE[r.status]}" data-date="${esc(r.date)}"
+              data-ts-type="${esc(r.tsType ?? '')}" data-hrdd-type="${esc(r.hrddType ?? '')}"
+              data-status="${esc(r.status)}">
             <td class="n">${dateOnly(r.date)}
               ${r.status !== 'ok' ? `<span class="why">${hrddMismatchNote(r)}</span>` : ''}</td>
-            <td>${r.tsType ? esc(r.tsType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
-            <td>${r.hrddType ? esc(r.hrddType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
-            <td><span class="st ${HRDD_STATUS_TONE[r.status]}">${HRDD_STATUS_LABEL[r.status]}</span></td>
-            <td>${r.status !== 'ok' ? `<button class="btn sm hrddFix" type="button" data-date="${esc(r.date)}">แก้ไข</button>` : ''}</td>
-          </tr>`).join('')}
+            <td class="tsCell">${r.tsType ? esc(r.tsType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
+            <td class="hrddCell">${r.hrddType ? esc(r.hrddType) : '<span class="sub">— ไม่มีข้อมูล</span>'}</td>
+            <td class="statusCell"><span class="st ${HRDD_STATUS_TONE[r.status]}">${HRDD_STATUS_LABEL[r.status]}</span></td>
+            <td class="actionCell">${r.status !== 'ok' ? `<button class="btn sm hrddFix" type="button">แก้ไข</button>` : ''}</td>
+          </tr>
+          ${r.status !== 'ok' ? `<tr class="hrddResolveRow" style="display:none">
+            <td colspan="5"><div class="hrddResolvePanel"></div></td>
+          </tr>` : ''}`).join('')}
       </tbody>
     </table></div>`;
 
   body.innerHTML = banner + stats + table;
 
-  /* "แก้ไข" พาไปที่แถววันลาของวันนั้นในตาราง "วันลาที่อ่านได้" ด้านบน (แก้ตรงนั้นได้เลย เพราะ
-     ยังไม่ยืนยันเข้าระบบ) ถ้าวันนั้นยังไม่มีแถวเลย (สถานะ "ไม่พบใน Timesheet") เพิ่มแถวใหม่ให้เลย
-     พร้อมวันที่กรอกไว้แล้ว คนกรอกแค่เลือกประเภทวันลาต่อ */
+  /* "แก้ไข" เปิดแผงเลือกว่าจะเอาตาม Timesheet/HRDD หรือทางเลือกอื่น (ตามสถานะของวันนั้น)
+     พร้อมเหตุผลบังคับกรอก — แก้ไขจริงที่ตาราง "วันลาที่อ่านได้" (.rLeaveRows) ที่ซ่อนไว้ ไม่ใช่ที่นี่
+     เพราะตอนกดยืนยันสุดท้าย confirmBtn จะอ่านข้อมูลวันลาจาก .rLeaveRows เท่านั้น (ดูด้านล่าง)
+     ผูก event ของปุ่ม/radio ในแผง "ยกเลิก"/"บันทึกการแก้ไข" ตอนสร้าง HTML ของแผงจริงๆ (ในนี้)
+     ไม่ใช่ผูกทีเดียวตอนวาดตารางแรกสุดแบบเดิม — ตอนนั้นแผงยังไม่มี HTML เลย (ว่างเปล่ารอ "แก้ไข" มาสร้าง)
+     querySelectorAll หาปุ่มที่ยังไม่มีอยู่จริงย่อมไม่เจออะไรเลย ปุ่ม "บันทึกการแก้ไข" เลยกดไม่ทำงาน */
   body.querySelectorAll('.hrddFix').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const rows2 = card.querySelector('.rLeaveRows');
-      const existing = [...rows2.querySelectorAll('.lrow')]
-        .find((r) => r.querySelector('.ldate').value === btn.dataset.date);
-      let target = existing;
-      if (!target) {
-        addLeaveRow(rows2);
-        target = rows2.lastElementChild;
-        target.querySelector('.ldate').value = btn.dataset.date;
+      const row = btn.closest('.hrdd-row');
+      const panelRow = row.nextElementSibling;
+      const panel = panelRow.querySelector('.hrddResolvePanel');
+      if (!panel.innerHTML) {
+        panel.innerHTML = buildHrddResolvePanel(row.dataset);
+        panel.querySelectorAll('.hrr-choice input[type="radio"]').forEach((radio) => {
+          radio.addEventListener('change', () => {
+            const select = panel.querySelector('.hrr-custom-select');
+            if (select) select.style.display = radio.value === 'custom' ? 'inline-block' : 'none';
+          });
+        });
+        panel.querySelector('.hrr-cancel').addEventListener('click', () => { panelRow.style.display = 'none'; });
+        panel.querySelector('.hrr-save').addEventListener('click', () => applyHrddResolve(card, panel.querySelector('.hrr-save')));
       }
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      target.classList.add('flash');
-      setTimeout(() => target.classList.remove('flash'), 1600);
-      target.querySelector('.ltype').focus();
+      panelRow.style.display = panelRow.style.display === 'none' ? '' : 'none';
     });
   });
+}
+
+/** ตัวเลือกใน panel "แก้ไข" — เหมือนกันทุกสถานะตามที่ขอ (25 ส.ค. 69): ใช้ตาม HRDD / ใช้ตาม
+ * Timesheet / ระบุเอง — ความหมายของแต่ละตัวเลือกต่างกันไปตามสถานะตอนเอาไปใช้จริง (ดู applyHrddResolve)
+ * เช่น "ใช้ตาม HRDD" ตอนสถานะ "ไม่พบใน HRDD" หมายถึงลบวันลานี้ออกเพราะ HRDD ไม่มีข้อมูลอะไรให้ใช้
+ *
+ * ตั้งชื่อกลุ่ม radio ตามวันที่ (unique ต่อแถว) — ถ้าใช้ name เดียวกันทุกแถว พอเปิด "แก้ไข"
+ * พร้อมกันหลายวัน radio ของแต่ละแถวจะไปหักล้างกันเอง (HTML จับกลุ่ม radio ด้วยชื่อทั้งหน้า ไม่ใช่ตามแผงที่มันอยู่) */
+function buildHrddResolvePanel({ date }) {
+  const name = `hrr-${date}`;
+  return `
+    <div class="hrr-choices">
+      <label class="hrr-choice"><input type="radio" name="${name}" value="use-hrdd" checked> ใช้ตาม HRDD <span class="hrr-hint">(แนะนำ)</span></label>
+      <label class="hrr-choice"><input type="radio" name="${name}" value="use-ts"> ใช้ตาม Timesheet</label>
+      <label class="hrr-choice"><input type="radio" name="${name}" value="custom"> ระบุเอง
+        <select class="hrr-custom-select" style="display:none">
+          ${Object.entries(LEAVE_OPTIONS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}
+        </select></label>
+    </div>
+    <label class="hrr-reason-label">เหตุผล / หมายเหตุ <span class="hrr-req">*จำเป็น</span></label>
+    <textarea class="hrr-reason" rows="2" placeholder="เช่น ตรวจสอบกับพนักงานแล้วว่า..."></textarea>
+    <div class="hrr-actions">
+      <button class="btn ghost sm hrr-cancel" type="button">ยกเลิก</button>
+      <button class="btn pri sm hrr-save" type="button">บันทึกการแก้ไข</button>
+    </div>`;
+}
+
+function applyHrddResolve(card, saveBtn) {
+  const panelRow = saveBtn.closest('.hrddResolveRow');
+  const row = panelRow.previousElementSibling;
+  const reasonInput = panelRow.querySelector('.hrr-reason');
+  const reason = reasonInput.value.trim();
+  if (!reason) {
+    reasonInput.classList.add('invalid');
+    reasonInput.focus();
+    toast('กรุณากรอกเหตุผล/หมายเหตุก่อนบันทึก', true);
+    return;
+  }
+  reasonInput.classList.remove('invalid');
+
+  const checked = panelRow.querySelector('input[type="radio"]:checked');
+  const choice = checked.value;
+  const choiceLabel = checked.closest('.hrr-choice').textContent.replace('(แนะนำ)', '').trim();
+  const customSelect = panelRow.querySelector('.hrr-custom-select');
+  const { date, tsType, hrddType, status } = row.dataset;
+  const rows = card.querySelector('.rLeaveRows');
+
+  const findRow = (d) => [...rows.querySelectorAll('.lrow')].find((r) => r.querySelector('.ldate').value === d);
+  const toOption = (type) => (type && LEAVE_OPTIONS[type] ? type : 'other');
+
+  if (status === 'warn') {
+    // ทั้งสองฝั่งมีข้อมูลอยู่แล้ว แค่ประเภทไม่ตรงกัน — เลือกแค่ว่าจะเชื่อฝั่งไหน
+    const finalType = choice === 'use-hrdd' ? toOption(hrddType)
+      : choice === 'use-ts' ? toOption(tsType) : customSelect.value;
+    const existing = findRow(date);
+    if (existing) existing.querySelector('.ltype').value = finalType;
+    row.querySelector('.tsCell').innerHTML = esc(finalType);
+  } else if (status === 'info') {
+    // Timesheet ไม่มีแถวนี้ — "ใช้ตาม HRDD"/"ระบุเอง" คือเพิ่มแถวใหม่, "ใช้ตาม Timesheet" คือปล่อยว่างไว้ตามเดิม
+    if (choice === 'use-ts') {
+      row.querySelector('.tsCell').innerHTML = '<span class="sub">— ไม่มีข้อมูล</span>';
+    } else {
+      const finalType = choice === 'use-hrdd' ? toOption(hrddType) : customSelect.value;
+      addLeaveRow(rows);
+      const added = rows.lastElementChild;
+      added.querySelector('.ldate').value = date;
+      added.querySelector('.ltype').value = finalType;
+      row.querySelector('.tsCell').innerHTML = esc(finalType);
+    }
+  } else if (status === 'bad') {
+    // HRDD ไม่มีแถวนี้ — "ใช้ตาม HRDD" คือลบวันลาออกจาก Timesheet, "ใช้ตาม Timesheet"/"ระบุเอง" คือเก็บไว้ (ระบุเองไว้แก้ประเภท)
+    if (choice === 'use-hrdd') {
+      findRow(date)?.remove();
+      row.querySelector('.tsCell').innerHTML = '<span class="sub">— ไม่มีข้อมูล</span>';
+    } else if (choice === 'custom') {
+      const existing = findRow(date);
+      if (existing) existing.querySelector('.ltype').value = customSelect.value;
+      row.querySelector('.tsCell').innerHTML = esc(customSelect.value);
+    }
+  }
+
+  row.classList.add('resolved');
+  row.querySelector('.statusCell').innerHTML = '<span class="st mu">แก้ไขแล้ว</span>';
+  row.querySelector('.actionCell').innerHTML = '';
+  const whyEl = row.querySelector('.why');
+  const summaryHtml = `<span class="why"><b>${esc(choiceLabel)}</b> — ${esc(reason)}</span>`;
+  if (whyEl) whyEl.outerHTML = summaryHtml; else row.querySelector('td.n').insertAdjacentHTML('beforeend', summaryHtml);
+  panelRow.remove();
 }
 
 /** ข้อความอธิบายว่าทำไมแถวนี้ไม่ตรงกัน — 3 แบบตามสถานะ (ดู HRDD_STATUS_LABEL) */
@@ -2251,7 +2369,10 @@ function readResultHtml(read, employees = []) {
         </div>
       </div>
 
-      <div class="fsec">
+      <div class="fsec" style="display:none">
+        <!-- ซ่อนไว้ตามที่ขอ (25 ส.ค. 69) — ไม่ให้แก้วันลาตรงนี้ตรงๆอีกต่อไป ให้แก้ผ่านปุ่ม "แก้ไข"
+             ในตาราง "เทียบกับ HRDD" ด้านล่างแทนที่เดียว แต่ต้องคง .rLeaveRows/.lrow ไว้ในหน้าเว็บ
+             เพราะเป็นที่เก็บข้อมูลวันลาจริงที่ตอนกดยืนยันจะอ่านไปบันทึก (ดู confirmBtn ท้ายไฟล์นี้) -->
         <div class="fsec-h"><b>วันลาที่อ่านได้</b>
           <button class="btn sm rAddLeave" type="button">+ เพิ่มวันลา</button></div>
         <div class="rLeaveRows">${(d.leaveDays ?? []).map((l) => `
@@ -2689,6 +2810,51 @@ function renderEmployeeEditForm(e) {
   </div>`;
 }
 
+/**
+ * ฟอร์ม "แก้ไขข้อมูลสัญญา" — เปิดจากไอคอนดินสอบนการ์ดบริษัท แก้ได้ทั้งข้อมูลลูกค้าและสัญญา
+ * ในคราวเดียว (เหมือนตอน "เพิ่มลูกค้าใหม่" ที่สร้างทั้งคู่พร้อมกัน)
+ */
+function renderContractEditForm(c) {
+  return `
+  <div class="card">
+    <div class="hd"><h3>แก้ไขข้อมูลสัญญา</h3>
+      <span class="rt">${esc(c.po_no)} — ${esc(c.project_name)}</span></div>
+    <div class="bd">
+      <div class="frm">
+        <label>ชื่อบริษัท<input id="ccNameTh" type="text" value="${esc(c.customer_name)}" autocomplete="off"></label>
+        <label>เลขผู้เสียภาษี<input id="ccTaxId" type="text" value="${esc(c.tax_id)}" autocomplete="off"></label>
+        <label>ผู้ประสานงาน<input id="ccContactName" type="text" value="${esc(c.contact_name ?? '')}" autocomplete="off"></label>
+        <label>เบอร์ผู้ประสานงาน<input id="ccContactPhone" type="text" value="${esc(c.contact_phone ?? '')}" autocomplete="off"></label>
+        <label>สถานที่วางบิล<input id="ccBillingPlace" type="text" value="${esc(c.billing_place ?? '')}" autocomplete="off"></label>
+      </div>
+      <div class="fsec">
+        <div class="fsec-h"><b>สัญญา</b></div>
+        <div class="frm">
+          <label>เลขที่ใบว่าจ้าง (PO)<input id="ccPoNo" type="text" value="${esc(c.po_no)}" autocomplete="off"></label>
+          <label>เลขที่สัญญา<input id="ccContractNo" type="text" value="${esc(c.contract_no ?? '')}" autocomplete="off"></label>
+          <label>ชื่อโครงการ<input id="ccProjectName" type="text" value="${esc(c.project_name)}" autocomplete="off"></label>
+          <label>ตัวหารอัตราต่อวัน
+            <span class="selectchip grow"><select id="ccDivisorMode">
+              <option value="fixed" ${c.divisor_mode === 'fixed' ? 'selected' : ''}>คงที่ (ระบุจำนวนวัน)</option>
+              <option value="actual_working_days" ${c.divisor_mode === 'actual_working_days' ? 'selected' : ''}>วันทำงานจริงของเดือน</option>
+            </select></span>
+          </label>
+          <label>จำนวนวัน (ถ้าคงที่)<input id="ccDivisorValue" type="number" min="1" value="${int(c.divisor_value)}"></label>
+          <label>วันเริ่มสัญญา<input id="ccStartDate" type="date" value="${esc(c.start_date)}"></label>
+          <label>วันสิ้นสุดสัญญา<input id="ccEndDate" type="date" value="${esc(c.end_date)}"></label>
+          <label>VAT (%)<input id="ccVat" type="number" min="0" max="100" step="0.1" value="${Math.round(c.vat_rate * 100)}"></label>
+          <label>หัก ณ ที่จ่าย (%)<input id="ccWht" type="number" min="0" max="100" step="0.1" value="${Math.round(c.wht_rate * 100)}"></label>
+          <label>เครดิต (วัน)<input id="ccCreditDays" type="number" min="0" value="${int(c.credit_days)}"></label>
+        </div>
+      </div>
+    </div>
+    <div class="ft">
+      <button class="btn" id="ctgEditCancel">ยกเลิก</button>
+      <button class="btn pri" id="ctgEditSave" data-contract="${esc(c.id)}">บันทึกการแก้ไข</button>
+    </div>
+  </div>`;
+}
+
 async function renderMaster() {
   const [employees, contracts, settings] = await Promise.all([
     api(`/employees${contractQuery()}`), api('/contracts'), api('/settings'),
@@ -2747,18 +2913,22 @@ async function renderMaster() {
 
       ${state.customerAdd ? renderCustomerAddForm() : ''}
 
-      ${contracts.map((c) => `
+      ${contracts.map((c) => (state.contractEdit === c.id ? renderContractEditForm(c) : `
         <div class="card">
           <div class="hd"><h3>${esc(c.po_no)} — ${esc(c.project_name)}</h3>
-            <label class="toggle ${c.status === 'active' ? 'on' : ''}"
-                   title="${c.status === 'active'
-                     ? 'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ'
-                     : 'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)'}">
-              <input type="checkbox" class="ctgAct" data-contract="${esc(c.id)}"
-                     ${c.status === 'active' ? 'checked' : ''}>
-              <span class="tk"></span>
-              <span class="tl">${c.status === 'active' ? 'กำลังดำเนินการ' : 'ปิดอยู่'}</span>
-            </label>
+            <div class="rowacts">
+              <label class="toggle ${c.status === 'active' ? 'on' : ''}"
+                     title="${c.status === 'active'
+                       ? 'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ'
+                       : 'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)'}">
+                <input type="checkbox" class="ctgAct" data-contract="${esc(c.id)}"
+                       ${c.status === 'active' ? 'checked' : ''}>
+                <span class="tk"></span>
+                <span class="tl">${c.status === 'active' ? 'กำลังดำเนินการ' : 'ปิดอยู่'}</span>
+              </label>
+              <button class="btn sm icon" data-edit-contract="${esc(c.id)}"
+                title="แก้ไขข้อมูลสัญญา" aria-label="แก้ไข">${icon('edit')}</button>
+            </div>
           </div>
           <div class="bd"><div class="g2">
             <dl class="kv">
@@ -2780,7 +2950,7 @@ async function renderMaster() {
             </dl>
           </div>
           </div>
-        </div>`).join('')}
+        </div>`)).join('')}
     </div>
 
     <div class="tp ${tab === 3 ? 'on' : ''}" data-mpane="3">
@@ -3116,6 +3286,56 @@ async function renderMaster() {
       toast(`เพิ่ม "${nameTh}" แล้ว`);
       state.customerAdd = false;
       await loadContractSwitch();   // สัญญาใหม่อาจกลายเป็น active (ถ้าเป็นสัญญาแรกของระบบ)
+      renderMaster();
+    } catch (error) {
+      toast(error.message, true);
+      btn.disabled = false;
+    }
+  });
+
+  main.querySelectorAll('[data-edit-contract]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.contractEdit = btn.dataset.editContract;
+      renderMaster();
+    });
+  });
+  el('ctgEditCancel')?.addEventListener('click', () => {
+    state.contractEdit = null;
+    renderMaster();
+  });
+
+  el('ctgEditSave')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const customerNameTh = el('ccNameTh').value.trim();
+    const taxId = el('ccTaxId').value.trim();
+    const poNo = el('ccPoNo').value.trim();
+    const projectName = el('ccProjectName').value.trim();
+    const startDate = el('ccStartDate').value;
+    const endDate = el('ccEndDate').value;
+    if (!customerNameTh || !taxId || !poNo || !projectName || !startDate || !endDate) {
+      toast('กรอกชื่อบริษัท เลขผู้เสียภาษี เลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน', true);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await api(`/contracts/${encodeURIComponent(btn.dataset.contract)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          customerNameTh, taxId, poNo, projectName, startDate, endDate,
+          contractNo: el('ccContractNo').value.trim() || null,
+          divisorMode: el('ccDivisorMode').value,
+          divisorValue: Number(el('ccDivisorValue').value) || 20,
+          vatRate: (Number(el('ccVat').value) || 0) / 100,
+          whtRate: (Number(el('ccWht').value) || 0) / 100,
+          creditDays: Number(el('ccCreditDays').value) || 30,
+          contactName: el('ccContactName').value.trim() || null,
+          contactPhone: el('ccContactPhone').value.trim() || null,
+          billingPlace: el('ccBillingPlace').value.trim() || null,
+        }),
+      });
+      toast(`บันทึกการแก้ไข "${customerNameTh}" แล้ว`);
+      state.contractEdit = null;
+      await loadContractSwitch();   // ชื่อบริษัท/โครงการอาจเปลี่ยน — อัปเดตตัวเลือกบนแถบบนด้วย
       renderMaster();
     } catch (error) {
       toast(error.message, true);

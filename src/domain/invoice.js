@@ -43,27 +43,55 @@ export function buildInvoice({
   const periodEnd = entries[0]?.manday.calendar.lastDate ?? `${period}-28`;
   const servicePeriod = `${thaiDate(periodStart)} ถึง ${thaiDate(periodEnd)}`;
 
-  const items = entries.map((entry, index) => ({
-    seq: index + 1,
-    /** ชื่อตำแหน่งบนใบแจ้งหนี้ต้องมาจากฐานข้อมูล ไม่ใช่จาก Timesheet */
-    name: entry.employee.invoicePosition,
-    description: `${entry.employee.nameTh} · ${servicePeriod}`,
-    employeeId: entry.employee.id,
-    employeeName: entry.employee.nameTh,
-    quantity: 1,
-    unitName: 'Months',
-    pricePerUnit: round2(entry.manday.monthlyRate),
-    discount: round2(entry.manday.discount),
-    amount: round2(entry.manday.lineAmount),
-    payableDays: entry.manday.payableDays,
-    standardWorkingDays: entry.manday.standardWorkingDays,
-    leaveCount: entry.manday.leaveCount,
-    dailyRate: entry.manday.dailyRate,
-    quotationNo: entry.employee.quotationNo,
-  }));
+  /* OT ขึ้นเป็นบรรทัดแยกต่างหาก (ไม่ยัดเข้าไปในรายการเดิมของพนักงานคนนั้น) — ปลอดภัยกว่าการเอา
+     ไปหักลบกับ "discount" (ส่วนลดวันลา) เพราะ FlowAccount ไม่มีฟิลด์ "ยอดบวกเพิ่ม" ให้ตรงๆ ในระดับ
+     รายการ ยัดใน discountAmount แบบติดลบเสี่ยงเกินไป (ไม่เคยทดสอบว่า FlowAccount รับค่าติดลบได้จริง
+     ไหม) ขึ้นเป็นบรรทัดแยกก็ตรงไปตรงมากว่าด้วย — ลูกค้าเห็นชัดว่ามีค่า OT แยกจากค่าจ้างปกติ
+     เกิดเฉพาะตอนพนักงานคนนั้นมี OT จริง (otTotal > 0) เท่านั้น ไม่งั้นไม่มีบรรทัดเพิ่ม */
+  const items = [];
+  for (const entry of entries) {
+    items.push({
+      seq: items.length + 1,
+      /** ชื่อตำแหน่งบนใบแจ้งหนี้ต้องมาจากฐานข้อมูล ไม่ใช่จาก Timesheet */
+      name: entry.employee.invoicePosition,
+      description: `${entry.employee.nameTh} · ${servicePeriod}`,
+      employeeId: entry.employee.id,
+      employeeName: entry.employee.nameTh,
+      quantity: 1,
+      unitName: 'Months',
+      pricePerUnit: round2(entry.manday.monthlyRate),
+      discount: round2(entry.manday.discount),
+      amount: round2(entry.manday.monthlyRate - entry.manday.discount),
+      payableDays: entry.manday.payableDays,
+      standardWorkingDays: entry.manday.standardWorkingDays,
+      leaveCount: entry.manday.leaveCount,
+      dailyRate: entry.manday.dailyRate,
+      quotationNo: entry.employee.quotationNo,
+    });
+
+    const otTotal = round2(entry.manday.otTotal ?? 0);
+    if (otTotal > 0) {
+      items.push({
+        seq: items.length + 1,
+        name: `ค่าล่วงเวลา (OT) — ${entry.employee.invoicePosition}`,
+        description: `${entry.employee.nameTh} · OT ${entry.manday.otDays.length} วัน · ${servicePeriod}`,
+        employeeId: entry.employee.id,
+        employeeName: entry.employee.nameTh,
+        quantity: 1,
+        unitName: 'Job',
+        pricePerUnit: otTotal,
+        discount: 0,
+        amount: otTotal,
+        isOvertimeLine: true,
+        otDays: entry.manday.otDays,
+        quotationNo: entry.employee.quotationNo,
+      });
+    }
+  }
 
   const total = round2(items.reduce((sum, i) => sum + i.pricePerUnit, 0));
   const discountTotal = round2(items.reduce((sum, i) => sum + i.discount, 0));
+  const otGrandTotal = round2(items.filter((i) => i.isOvertimeLine).reduce((sum, i) => sum + i.pricePerUnit, 0));
   const totalAfterDiscount = round2(total - discountTotal);
   const vat = round2(totalAfterDiscount * vatRate);
   const grandTotal = round2(totalAfterDiscount + vat);
@@ -84,6 +112,7 @@ export function buildInvoice({
     totals: {
       total,
       discountTotal,
+      otGrandTotal,
       totalAfterDiscount,
       vatRate,
       vat,

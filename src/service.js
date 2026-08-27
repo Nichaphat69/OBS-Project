@@ -150,6 +150,52 @@ export function setActiveContract(contractId, { actor }) {
   return listContracts().find((c) => c.id === contractId);
 }
 
+/**
+ * แก้ไขข้อมูลลูกค้า+สัญญาที่มีอยู่แล้วในคราวเดียว (ไอคอนดินสอในหน้า "ข้อมูลหลัก → ลูกค้า & สัญญา")
+ * แก้ได้ทั้งสองตารางพร้อมกันเพราะฟอร์มเดียวกันตอน "เพิ่มลูกค้าใหม่" ก็สร้างทั้งคู่พร้อมกันอยู่แล้ว
+ */
+export function updateContract({
+  contractId, poNo, contractNo = null, projectName, startDate, endDate,
+  creditDays = 30, divisorMode = 'fixed', divisorValue = 20, vatRate = 0.07, whtRate = 0.03,
+  customerNameTh, taxId, contactName = null, contactPhone = null, billingPlace = null,
+  actor,
+}) {
+  const contract = get('SELECT id, customer_id FROM contracts WHERE id = $id', { id: contractId });
+  if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
+  if (!poNo || !projectName || !startDate || !endDate) {
+    throw Object.assign(
+      new Error('ต้องระบุเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบ'),
+      { status: 400 },
+    );
+  }
+  if (!customerNameTh || !taxId) {
+    throw Object.assign(new Error('ต้องระบุชื่อบริษัทและเลขผู้เสียภาษีให้ครบ'), { status: 400 });
+  }
+  tx(() => {
+    run(
+      `UPDATE customers SET name_th = $customerNameTh, tax_id = $taxId, contact_name = $contactName,
+         contact_phone = $contactPhone, billing_place = $billingPlace WHERE id = $customerId`,
+      { customerNameTh, taxId, contactName, contactPhone, billingPlace, customerId: contract.customer_id },
+    );
+    run(
+      `UPDATE contracts SET po_no = $poNo, contract_no = $contractNo, project_name = $projectName,
+         start_date = $startDate, end_date = $endDate, credit_days = $creditDays,
+         divisor_mode = $divisorMode, divisor_value = $divisorValue, vat_rate = $vatRate, wht_rate = $whtRate
+       WHERE id = $contractId`,
+      {
+        poNo, contractNo, projectName, startDate, endDate,
+        creditDays: Number(creditDays) || 30, divisorMode, divisorValue: Number(divisorValue) || 20,
+        vatRate: Number(vatRate), whtRate: Number(whtRate), contractId,
+      },
+    );
+  });
+  logAudit({
+    actor, action: 'update_contract', entityType: 'contract', entityId: contractId,
+    detail: { poNo, projectName, customerNameTh },
+  });
+  return listContracts().find((c) => c.id === contractId);
+}
+
 /** ปิดสัญญาฉบับนี้โดยไม่เปิดฉบับอื่นแทน — ปล่อยให้ "ไม่มีสัญญา active เลย" ได้ชั่วคราว
  * (หน้าเว็บควรเตือนให้เลือกฉบับอื่น ไม่ใช่ปิดไปเงียบๆ) */
 export function deactivateContract(contractId, { actor }) {
@@ -642,11 +688,17 @@ export function recomputeTimesheet(id, { actor = 'system' } = {}) {
     { id },
   );
 
+  const overtime = all(
+    'SELECT date, hours FROM overtime_days WHERE timesheet_id = $id',
+    { id },
+  );
+
   const manday = calculateManday({
     period: row.period,
     monthlyRate: row.monthly_rate,
     reportedWorkDays: row.reported_workdays,
     leaveDays: leave,
+    otDays: overtime,
     holidays: holidayMap(row.customer_id),
     divisor: { mode: row.divisor_mode, value: row.divisor_value },
     reportedDayLabels: dayLabels,
@@ -1823,6 +1875,7 @@ export async function ingestTimesheet({
   tx(() => {
     run('DELETE FROM leave_days WHERE timesheet_id = $id', { id: documentNo });
     run('DELETE FROM timesheet_days WHERE timesheet_id = $id', { id: documentNo });
+    run('DELETE FROM overtime_days WHERE timesheet_id = $id', { id: documentNo });
     run('DELETE FROM timesheets WHERE id = $id', { id: documentNo });
 
     run(
@@ -1879,6 +1932,13 @@ export async function ingestTimesheet({
           id: documentNo, date: day.date, in: day.timeIn, out: day.timeOut,
           label: day.label, job: day.jobDescription,
         },
+      );
+    }
+
+    for (const ot of data.otDays ?? []) {
+      run(
+        `INSERT INTO overtime_days (timesheet_id, date, hours) VALUES ($id, $date, $hours)`,
+        { id: documentNo, date: ot.date, hours: Number(ot.hours) },
       );
     }
   });
@@ -2216,6 +2276,9 @@ export function buildEmailDraft({
   const monthLabel = thaiMonth(invoice.period);
 
   const companyName = company.nameTh ?? 'บริษัท ไอ แพสชั่น จำกัด';
+  // นับพนักงานจาก employeeId ที่ไม่ซ้ำกัน ไม่ใช่ items.length ตรงๆ — คนที่มี OT จะมี 2 รายการ
+  // (รายการปกติ + รายการ OT แยก) ในใบเดียวกัน นับ items.length ตรงๆ จะได้จำนวนคนเกินจริง
+  const employeeCount = new Set(invoice.items.map((i) => i.employeeId)).size;
 
   const body = [
     `เรียน ${contract.customer_name}`,
@@ -2224,7 +2287,7 @@ export function buildEmailDraft({
     'รายละเอียดการวางบิล',
     '',
     `* รอบการให้บริการ: ${monthLabel}`,
-    `* จำนวนพนักงาน: ${invoice.items.length} คน`,
+    `* จำนวนพนักงาน: ${employeeCount} คน`,
     `* เลขที่ใบวางบิล: ${documentNo ?? '—'}`,
     `* ยอดรวมสุทธิ: ${money(t.paymentAmount)} บาท`,
     '',
@@ -2260,7 +2323,9 @@ export function buildEmailDraft({
         invoiceId,
         timesheetId: null,
       },
-      ...invoice.items.map((i) => {
+      /* หนึ่งไฟล์แนบต่อพนักงานหนึ่งคน ไม่ใช่ต่อ item — คนที่มี OT จะมี 2 items (ปกติ + OT แยก)
+         ในใบเดียวกัน ไม่ต้องการ Timesheet ไฟล์เดียวกันแนบซ้ำสองรอบ จึง dedupe ด้วย employeeId ก่อน */
+      ...[...new Map(invoice.items.map((i) => [i.employeeId, i])).values()].map((i) => {
         const sheet = get(
           `SELECT id FROM timesheets WHERE contract_id = $c AND employee_id = $e AND period = $p
              ORDER BY created_at DESC LIMIT 1`,
@@ -2724,7 +2789,11 @@ function saveInvoice({
       },
     );
 
+    /* จับคู่ item → timesheet ด้วย employeeId ไม่ใช่ index ตรงๆ — คนที่มี OT จะมี 2 items
+       (รายการปกติ + รายการ OT แยก) ในใบเดียวกัน ทำให้ items.length มากกว่า entries.length
+       จับคู่ตาม index ตรงๆ แบบเดิมจะเอา timesheet ผิดคนให้ item ตัวถัดๆไปทั้งหมด */
     for (const [index, item] of preview.invoice.items.entries()) {
+      const entry = preview.entries.find((e) => e.employee.id === item.employeeId);
       run(
         `INSERT INTO invoice_items
            (invoice_id, seq, employee_id, timesheet_id, name, description,
@@ -2735,7 +2804,7 @@ function saveInvoice({
           invoiceId,
           seq: index + 1,
           employeeId: item.employeeId,
-          timesheetId: preview.entries[index]?.timesheetId ?? null,
+          timesheetId: entry?.timesheetId ?? null,
           name: item.name,
           description: item.description,
           quantity: item.quantity,

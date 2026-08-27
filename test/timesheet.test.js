@@ -326,6 +326,18 @@ test('verifyExtraction เจอวันลาที่ไม่มีแถว
   assert.ok(result.issues.some((i) => /ไม่มีแถวในตาราง/.test(i.message)));
 });
 
+test('verifyExtraction ไม่ฟ้อง "ไม่มีแถวในตาราง" ถ้า days ว่างเปล่าทั้งตาราง (เจอจริงกับ ABBYY '
+  + 'แบบตารางใหม่ — days ว่างเปล่าโดยตั้งใจ ตรวจไม่ได้จริงอยู่แล้ว ไม่ใช่แค่ขาดแถวของวันนั้น)', () => {
+  const data = fakeTimesheetData('2026-01');
+  data.days = [];
+  data.totalLeaveDays = 1;
+  data.leaveDays = [{ date: '2026-01-10', type: 'sick', rawLabel: 'Sick leave' }];
+
+  const result = verifyExtraction(data, { expectedPeriod: '2026-01' });
+
+  assert.ok(!result.issues.some((i) => /ไม่มีแถวในตาราง/.test(i.message)));
+});
+
 test('verifyExtraction ไม่ฟ้องวันที่ซ้ำทุกแถวถ้ารอบเดือนเองก็ผิดรูปแบบอยู่แล้ว', () => {
   // โมเดลบางครั้งคืนสตริง "null" ที่ nullifyLiteralNullStrings แปลงเป็น null จริงแล้วก่อนถึงจุดนี้
   const data = fakeTimesheetData('2026-01');

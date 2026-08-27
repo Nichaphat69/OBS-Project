@@ -21,16 +21,23 @@
  * Skill "Timesheet" รุ่นแรก) มี 2 รูปแบบที่ต้องรองรับพร้อมกัน:
  *   1) รุ่นแรก — field ตารางแต่ละคอลัมน์เป็น "ก้อนข้อความเดียว" คั่นด้วย "\n" ต่อวัน ไม่ใช่แถวจริง
  *      และ field "Date" ว่างเปล่าเสมอ ต้องจับคู่ตำแหน่งเอาเอง ดู buildDayRowsFromFlatFields()
- *   2) Timesheet2 — ได้ตารางเป็นแถวจริงแล้ว (RootObject.Fields[].List[].Value.Fields[] ต่อแถว)
- *      แต่ตรวจกับผลจริงพบว่าค่าในคอลัมน์ยังสลับตำแหน่งกันไม่คงที่ต่อแถว (ไม่ใช่ shift แบบตายตัวที่แก้
- *      โค้ดตามได้) ดูคอมเมนต์ hasStructuredTable() ด้านล่าง — ยังไม่ดึงเวลาเข้า-ออกจากตารางนี้เลย
- * ทั้งสองแบบ: ไม่มั่นใจว่าจับคู่ถูกแถวจริงเมื่อไหร่ ให้คืน [] ดีกว่าใส่ข้อมูลผิดแบบเงียบๆ
+ *   2) Timesheet2/OBS Timesheet — ได้ตารางเป็นแถวจริงแล้ว (RootObject.Fields[].List[].Value.Fields[]
+ *      ต่อแถว) ช่วงแรกพบว่าค่าในคอลัมน์สลับตำแหน่งกันไม่คงที่ต่อแถว จึงยังไม่ดึงเวลาเข้า-ออก/รายละเอียด
+ *      งานอัตโนมัติ — 25 ส.ค. 69 หลังปรับให้เทรน Skill กรอก Type/Description ครบทุกแถวไม่เว้นว่างเลย
+ *      แม้แต่ Weekend/Public Holiday คอลัมน์เสถียรขึ้นมาก จึงเปิดดึงเวลาเข้า-ออก/รายละเอียดงานแล้ว
+ *      ดู buildDayRowsFromStructuredTable() — ยังคงสแกนหารูปแบบเอาเองแทนเชื่อชื่อคอลัมน์ตรงๆทุกจุด
+ *      (ยกเว้น Description ที่ไม่มีรูปแบบให้ pattern-match ได้ จึงต้องเชื่อชื่อคอลัมน์)
+ * ฝั่งรุ่นแรก: ไม่มั่นใจว่าจับคู่ถูกแถวจริงเมื่อไหร่ ให้คืน [] ดีกว่าใส่ข้อมูลผิดแบบเงียบๆ
  *
- * ข้อยกเว้นเดียว (21 ส.ค. 69 ตามที่ขอ): วันลา (leaveDays) — ดึงจากตาราง "New Table" ของ Timesheet2
- * โดยสแกนค่าทุกคอลัมน์ของแถว (ยกเว้น Description) หาคำที่บ่งบอกว่าเป็นวันลา ด้วย classifyDayKind()
- * ตัวเดียวกับที่ทางโมเดลในเครื่องใช้อยู่แล้ว (ทนคอลัมน์สลับตำแหน่งได้เพราะไม่ยึดว่าต้องอยู่คอลัมน์ไหน)
- * — ยอมรับความเสี่ยงนี้ตามที่ผู้ใช้ขอ แม้จะรู้ว่าตารางยังไม่น่าเชื่อ 100% เพราะกระทบแค่ "วันไหนเป็นวันลา"
- * ไม่ได้ไปยุ่งกับเวลาเข้า-ออก/รายละเอียดงานที่เสี่ยงกว่า — ยังคงแนบโน้ตเตือนไว้ให้ตรวจทานกับ PDF จริงก่อนยืนยัน
+ * วันลา (leaveDays) — ดึงจากตาราง "New Table" ของ Timesheet2/OBS Timesheet เหมือนกัน โดยสแกนค่า
+ * ทุกคอลัมน์ของแถว (ยกเว้น Description ตอนเช็คแบบ substring) หาคำที่บ่งบอกว่าเป็นวันลา ด้วย
+ * classifyDayKind() ตัวเดียวกับที่ทางโมเดลในเครื่องใช้อยู่แล้ว (ทนคอลัมน์สลับตำแหน่งได้เพราะไม่ยึดว่า
+ * ต้องอยู่คอลัมน์ไหน) — ยังคงแนบโน้ตเตือนไว้ให้ตรวจทานกับ PDF จริงก่อนยืนยัน
+ *
+ * OT รายวัน (otDays, 25 ส.ค. 69 ตามที่ขอ) — ดึงเฉพาะคอลัมน์ "OT" (จำนวนชั่วโมงรวม) ตรงๆ ไม่สแกน
+ * หาแบบวันลา เพราะเป็นตัวเลขล้วนไม่มีรูปแบบให้ pattern-match แม่นยำ 97% จากผลทดสอบจริงใน Skill
+ * Monitor (ต่างจาก "OT In"/"OT Out" เวลาเข้า-ออก OT ที่ยังไม่แม่นพอ 5%/50% จึงไม่ดึง) — ระบบเอาไปคิด
+ * ค่าจ้าง OT เพิ่มให้อัตโนมัติที่ src/domain/manday.js (สูตร (ชั่วโมง OT ÷ 8) × เรทต่อวัน ต่อวันที่มี OT)
  */
 
 import { classifyDayKind, classifyLeaveType } from './normalize.js';
@@ -317,17 +324,12 @@ function buildDayRowsFromFlatFields(fields, period) {
 }
 
 /**
- * ตาราง "New Table" ของ Skill "Timesheet2" (21 ส.ค. 69) — ตอนนี้ ABBYY คืนมาเป็นแถวจริงแล้ว
- * (ไม่ใช่ก้อนข้อความเหมือนเดิม) แต่ตรวจกับผลจริงแล้วพบว่า**ค่าในแต่ละคอลัมน์ยังสลับตำแหน่งกันไม่คงที่
- * ต่างกันไปทุกแถว** (เช่นแถวหนึ่ง "Time Out" ดันมีค่าที่ควรเป็นเวลาเข้า อีกแถว "Type" ดันมีค่าเวลาออก)
- * ไม่ใช่การสลับแบบตายตัวที่เขียนโค้ดแก้ตามได้ — ถ้าอ่านค่าคอลัมน์ตรงชื่อไปเลยจะได้เวลา/รายละเอียดผิด
- * แบบดูสมเหตุสมผลแต่ผิดจริง อันตรายกว่าตารางว่างเปล่า จึง**ไม่ดึงเวลาเข้า-ออก/รายละเอียดงานจากตารางนี้
- * เลยตอนนี้** — ปล่อยให้ [] ไว้ก่อน (คนตรวจพิมพ์เพิ่มเองได้) จนกว่า Skill จะ train ตารางนี้ให้
- * คอลัมน์ตรงตำแหน่งสม่ำเสมอทุกแถวก่อน
- *
- * สิ่งเดียวที่ดึงมาใช้ได้อย่างปลอดภัยจากตารางนี้คือ "แถวไหนเป็นวันจริงในเดือน" (ฟิลด์ "Date" เป็น
- * เลขล้วนๆ) เพื่อกันไม่ให้แถวหัวตาราง/แถวลายเซ็นที่หลุดเข้ามาปนถูกนับเป็นวันทำงาน — ใช้แค่นับ
- * จำนวนแถวเป็นตัวเช็คคร่าวๆเท่านั้น ไม่ได้ใช้คำนวณอะไรที่กระทบยอดเงิน
+ * ตาราง "New Table" ของ Skill "Timesheet2"/"OBS Timesheet" — ตอนนี้ ABBYY คืนมาเป็นแถวจริงแล้ว
+ * (ไม่ใช่ก้อนข้อความเหมือนเดิม) ช่วงแรก (21 ส.ค. 69) พบว่าค่าในแต่ละคอลัมน์ยังสลับตำแหน่งกันไม่คงที่
+ * ต่างกันไปทุกแถว (เช่นแถวหนึ่ง "Time Out" ดันมีค่าที่ควรเป็นเวลาเข้า) จึงยังไม่ดึงเวลาเข้า-ออก/
+ * รายละเอียดงานจากตารางนี้ตอนนั้น — 25 ส.ค. 69 หลังปรับให้เทรน Skill กรอก Type/Description ครบ
+ * ทุกแถวไม่เว้นว่างเลย คอลัมน์เสถียรขึ้นมาก จึงเปิดดึงข้อมูลเต็มแถวแล้ว (ดู buildDayRowsFromStructuredTable)
+ * ยังคงสแกนหารูปแบบเอาเองแทนเชื่อชื่อคอลัมน์ตรงๆ (วันที่/เวลา) เผื่อคอลัมน์ยังสลับหลงเหลืออยู่บ้าง
  */
 function hasStructuredTable(rootObject) {
   const table = rootObject?.Fields?.find((f) => f.Name === 'New Table');
@@ -367,6 +369,74 @@ function hasExactLeaveWord(cols) {
   return Object.values(cols).some((v) => EXACT_LEAVE_WORDS.has(String(v ?? '').trim().toLowerCase()));
 }
 
+/** "9:00" / "18:30" → นาทีนับจากเที่ยงคืน (ไว้เทียบว่าค่าไหนเช้ากว่า) — null ถ้าไม่ใช่รูปแบบเวลา */
+function parseTimeToMinutes(value) {
+  const m = String(value ?? '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+/**
+ * ดึงเวลาเข้า-ออกจากแถว โดยสแกนหาค่าที่ตรงรูปแบบเวลา (เช่น "9:00") ในทุกคอลัมน์ ไม่ยึดว่าต้อง
+ * เป็นคอลัมน์ชื่อ "Time In"/"Time Out" เพราะค่าเคยสลับคอลัมน์กันมาแล้วจริง (ดูคอมเมนต์หัวไฟล์)
+ * รับเฉพาะกรณีเจอค่าเวลาพอดี 2 ค่าในแถว (Time In + Time Out ปกติ) — น้อยกว่านั้นแปลว่าไม่ทำงานวันนั้น
+ * (Weekend/Holiday ไม่มีเวลาเลย) มากกว่านั้นแปลว่ามีคอลัมน์ OT In/OT Out ติดมาด้วย ไม่แน่ใจว่าคู่ไหน
+ * เป็นเวลาทำงานปกติ ปล่อยเป็น null ดีกว่าเดาผิด — เวลาที่น้อยกว่าคือเข้างาน มากกว่าคือออกงาน
+ */
+function extractRowTimes(cols) {
+  const times = Object.values(cols)
+    .map((v) => ({ raw: v, minutes: parseTimeToMinutes(v) }))
+    .filter((t) => t.minutes !== null);
+  if (times.length !== 2) return { timeIn: null, timeOut: null };
+  times.sort((a, b) => a.minutes - b.minutes);
+  return { timeIn: times[0].raw, timeOut: times[1].raw };
+}
+
+/**
+ * สร้าง days[] จากตาราง "New Table" ของ Timesheet2/OBS Timesheet (25 ส.ค. 69) — เปิดใช้หลังจาก
+ * ปรับ Skill ให้กรอก Type/Description ครบทุกแถวไม่เว้นว่างแม้แต่ Weekend/Public Holiday (ตามที่ขอ)
+ * ทำให้ตำแหน่งคอลัมน์แต่ละแถวเสถียรขึ้นมาก ก่อนหน้านี้ปล่อย [] ไว้เพราะคอลัมน์ยังสลับตำแหน่งกัน
+ * (ดูคอมเมนต์หัวไฟล์) — ยังคงระมัดระวังแบบเดิม ไม่เชื่อชื่อคอลัมน์ตรงๆ ทุกจุด:
+ *   - วันที่/เวลา: สแกนหารูปแบบเอาเอง (parseTableRowDate/extractRowTimes) เหมือนวันลาที่ทำมาก่อนแล้ว
+ *   - label: รวมทุกคอลัมน์ยกเว้น Description/วันที่/เวลาที่จับได้แล้ว เอาไปให้ classifyDayKind()
+ *     ตัดสินต่อ (ตัวเดียวกับที่ใช้ทั้งฝั่งโมเดลในเครื่องและ extractLeaveDaysFromTable) ไม่ยึดว่า
+ *     ต้องอยู่คอลัมน์ "Type" เป๊ะๆ
+ *   - jobDescription: เชื่อคอลัมน์ "Description" ตรงๆ (ไม่มีรูปแบบให้ pattern-match แบบวันที่/เวลา
+ *     ได้อยู่แล้ว เป็นข้อความอิสระ) ความเสี่ยงลดลงมากเพราะตอนนี้ทุกแถวกรอกครบไม่มีช่องว่างให้สลับ
+ */
+function buildDayRowsFromStructuredTable(rootObject) {
+  const table = rootObject?.Fields?.find((f) => f.Name === 'New Table');
+  if (!Array.isArray(table?.List)) return [];
+
+  const days = [];
+  for (const row of table.List) {
+    const cols = {};
+    for (const f of row.Value?.Fields ?? []) cols[f.Name] = f.List?.[0]?.Value ?? null;
+
+    const date = parseTableRowDate(cols);
+    if (!date) continue; // แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปน ข้ามไป
+
+    const { timeIn, timeOut } = extractRowTimes(cols);
+    const jobDescription = cols['Description'] ?? null;
+    // ตัดคอลัมน์ Description ออก (แยกเก็บเป็น jobDescription แล้ว) และตัดค่าที่เป็นรูปแบบวันที่/เวลา
+    // ออกด้วย (ไม่ใช่แค่เทียบเท่ากับ date/timeIn/timeOut ที่ parse ได้ เพราะ "Day"/"Date" มักมีทั้งค่า
+    // DD/MM/YY จริงและเลขลำดับแถวเปล่าๆปนกัน — เหลือแค่คำอธิบายประเภทวัน เช่น "Working"/"Weekend")
+    const isDateOrTimeLike = (v) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(v ?? ''))
+      || parseTimeToMinutes(v) !== null;
+    const labelParts = Object.entries(cols)
+      .filter(([name, value]) => name !== 'Description' && !isDateOrTimeLike(value))
+      .map(([, value]) => value)
+      .filter(Boolean);
+    const label = labelParts.length ? labelParts.join(' ') : null;
+
+    days.push({ date, timeIn, timeOut, label, type: null, remark: null, jobDescription });
+  }
+  return days;
+}
+
 /**
  * ดึงวันลาจากตาราง "New Table" — สแกนค่าทุกคอลัมน์ของแถว (ยกเว้น "Description" ตอนเช็คแบบ substring
  * เพราะเป็นย่อหน้าบรรยายงานอิสระ เสี่ยงจับคำว่า "ลา" ผิดที่แทรกอยู่กลางคำอื่น เหมือนที่เจอมาแล้วฝั่งโมเดล
@@ -399,6 +469,30 @@ function extractLeaveDaysFromTable(rootObject) {
 }
 
 /**
+ * ดึงชั่วโมง OT รายวันจากตาราง "New Table" — อ่านเฉพาะคอลัมน์ชื่อ "OT" ตรงๆ (ไม่ใช่สแกนทุกคอลัมน์
+ * แบบวันลา) เพราะ "OT" เป็นตัวเลขล้วนๆ ไม่มีรูปแบบให้จับแบบวันที่/คำวันลา และผลทดสอบจริงจาก
+ * ABBYY Skill Monitor (25 ส.ค. 69) พบว่าฟิลด์นี้แม่นยำ 97% ต่างจาก "OT In"/"OT Out" (5%/50%)
+ * ที่ยังไม่น่าเชื่อพอ — จึงดึงมาใช้ได้เฉพาะจำนวนชั่วโมงรวม ไม่ได้ดึงเวลาเข้า-ออก OT
+ */
+function extractOtHoursFromTable(rootObject) {
+  const table = rootObject?.Fields?.find((f) => f.Name === 'New Table');
+  if (!Array.isArray(table?.List)) return [];
+
+  const otDays = [];
+  for (const row of table.List) {
+    const cols = {};
+    for (const f of row.Value?.Fields ?? []) cols[f.Name] = f.List?.[0]?.Value ?? null;
+
+    const date = parseTableRowDate(cols);
+    if (!date) continue;
+
+    const hours = Number(cols['OT']);
+    if (Number.isFinite(hours) && hours > 0) otDays.push({ date, hours });
+  }
+  return otDays;
+}
+
+/**
  * แปลงผลลัพธ์ดิบจาก ABBYY (Transaction.Documents[0].ExtractedData.RootObject) ให้ตรงกับ
  * TIMESHEET_SCHEMA ที่ src/extract/timesheet.js ใช้ต่อ (verifyExtraction, calculateManday ฯลฯ
  * ใช้ schema เดียวกันไม่ว่าจะมาจาก ABBYY หรือโมเดลในเครื่อง)
@@ -423,9 +517,9 @@ export function mapAbbyyResult(rawResult) {
   const rawLeaveSick = fields['Leave Sick'];
 
   const isStructuredTable = hasStructuredTable(rootObject);
-  // ตารางแถวจริงของ Timesheet2 ยังไม่น่าเชื่อพอจะดึงเวลาเข้า-ออกอัตโนมัติ (ดูคอมเมนต์ hasStructuredTable)
-  // ส่วนตารางก้อนข้อความของ Timesheet รุ่นแรกยังลองแบบเดิมได้ตามปกติ
-  const days = isStructuredTable ? [] : buildDayRowsFromFlatFields(fields, period);
+  // ตารางแถวจริงของ Timesheet2/OBS Timesheet — ดึงเวลาเข้า-ออก/รายละเอียดงานแล้ว (25 ส.ค. 69
+  // หลังปรับ Skill ให้กรอก Type/Description ครบทุกแถว ดูคอมเมนต์ buildDayRowsFromStructuredTable)
+  const days = isStructuredTable ? buildDayRowsFromStructuredTable(rootObject) : buildDayRowsFromFlatFields(fields, period);
   // วันลา: ยอมเสี่ยงดึงจากตารางตามที่ขอ (ดูคอมเมนต์หัวไฟล์) — มีแถวไหนจับได้ว่าเป็นวันลา ใช้จำนวนนั้น
   // เป็นตัวเลขจริง (แม่นกว่าฟิลด์สรุป "Leave Sick" เพราะรู้วันที่ด้วย) ถ้าตารางจับไม่ได้เลยสักแถว
   // ค่อย fallback ไปใช้ตัวเลขจากฟิลด์สรุปแทน (ไม่มีวันที่ให้ ก็ยังต้องให้คนกรอกวันเองอยู่ดี)
@@ -433,12 +527,21 @@ export function mapAbbyyResult(rawResult) {
   const totalLeaveDays = leaveDays.length > 0
     ? leaveDays.length
     : (rawLeaveSick ? Number(rawLeaveSick) : 0);
+  // OT รายวัน: ดึงเฉพาะทางตารางแถวจริง (คอลัมน์ "OT" แม่นยำ 97% จากผลทดสอบจริง — ดูคอมเมนต์
+  // extractOtHoursFromTable) ทางตารางก้อนข้อความเดิมไม่มีฟิลด์ OT แยกให้ดึงเลย จึงว่างเปล่าเสมอ
+  const otDays = isStructuredTable ? extractOtHoursFromTable(rootObject) : [];
 
   const missingFieldNotes = [];
   if (isStructuredTable) {
-    missingFieldNotes.push(
-      'ABBYY อ่านตารางรายวันมาเป็นแถวแล้ว แต่คอลัมน์ยังสลับตำแหน่งกันไม่คงที่ต่อแถว — ไม่ได้ดึงเวลาเข้า-ออก/รายละเอียดงานให้อัตโนมัติ ต้องกรอกเพิ่มเอง',
-    );
+    if (days.length === 0) {
+      missingFieldNotes.push(
+        'ABBYY ยังไม่ได้ตารางรายวันมาเลย (ตาราง "New Table" ว่างเปล่าหรือหาวันที่ในแถวไม่เจอสักแถว) — ต้องกรอกเพิ่มเอง',
+      );
+    } else {
+      missingFieldNotes.push(
+        'เวลาเข้า-ออก/รายละเอียดงานด้านล่างนี้ดึงมาจากตารางที่คอลัมน์เคยสลับตำแหน่งมาก่อน — ตรวจสอบกับ PDF ต้นฉบับก่อนยืนยัน',
+      );
+    }
     if (leaveDays.length > 0) {
       missingFieldNotes.push(
         'วันลาด้านล่างนี้ตรวจจับมาจากตารางเดียวกันที่คอลัมน์ยังไม่แม่นยำ 100% — ตรวจสอบวันที่กับ PDF ต้นฉบับก่อนยืนยัน',
@@ -447,6 +550,11 @@ export function mapAbbyyResult(rawResult) {
     if (rawLeaveSick && Number(rawLeaveSick) !== leaveDays.length) {
       missingFieldNotes.push(
         `ช่องสรุป "Leave Sick" บอกว่ามีวันลา ${rawLeaveSick} วัน แต่ตรวจจากตารางเจอ ${leaveDays.length} วัน — ไม่ตรงกัน ตรวจสอบเพิ่ม`,
+      );
+    }
+    if (otDays.length > 0) {
+      missingFieldNotes.push(
+        `ตรวจพบ OT ${otDays.length} วันจากตาราง — ระบบคำนวณค่าจ้างเพิ่มให้อัตโนมัติในหน้าตรวจ Manday ตรวจสอบชั่วโมงกับ PDF ต้นฉบับก่อนยืนยัน`,
       );
     }
   } else if (fields['Time In'] && days.length === 0) {
@@ -471,6 +579,7 @@ export function mapAbbyyResult(rawResult) {
     totalHours: Number.isFinite(totalHours) ? totalHours : null,
     days,
     leaveDays,
+    otDays,
     // ไม่มีฟิลด์ชื่อกำกับลายเซ็นพนักงานแยกต่างหาก (ฟิลด์ "Employee's signature" เป็นรูปภาพ ไม่ใช่ตัวอักษร)
     // ใช้ Employee Name เป็นตัวแทน — มีชื่อพนักงานแปลว่าน่าจะมีลายเซ็นกำกับอยู่ในเอกสารเดียวกัน
     signedByEmployee: Boolean(employeeName),

@@ -269,6 +269,9 @@ const EMPTY_PAGE_DATA = {
   vendor: null, clientName: null, projectName: null, employeeName: null, position: null, period: null,
   documentNo: null, approvalStatus: null, failedPages: [], totalPages: 0,
   totalWorkDays: 0, totalLeaveDays: 0, totalHours: null, days: [], leaveDays: [],
+  // otDays ว่างเปล่าเสมอสำหรับทางโมเดลในเครื่อง — ยังไม่ได้ทำการดึง OT รายวันจากทางนี้ (ดึงเฉพาะ
+  // ทาง ABBYY เท่านั้นตอนนี้ ดู extractOtHoursFromTable() ที่ src/extract/abbyy.js)
+  otDays: [],
   signedByEmployee: false, employeeSignatureName: null,
   signedByProjectManager: false, projectManagerSignatureName: null, notes: [],
 };
@@ -930,20 +933,26 @@ export function verifyExtraction(data, { expectedPeriod } = {}) {
     });
   }
 
-  // วันลาต้องอยู่ในรายการวันด้วย และแถวนั้นไม่ควรมีเวลาเข้า-ออก
-  const dayByDate = new Map(data.days.map((d) => [d.date, d]));
-  for (const leave of data.leaveDays) {
-    const row = dayByDate.get(leave.date);
-    if (!row) {
-      issues.push({
-        severity: 'fail',
-        message: `วันลา ${leave.date} ไม่มีแถวในตาราง`,
-      });
-    } else if ((row.timeIn || row.timeOut) && !isPartialDayLeave(leave)) {
-      issues.push({
-        severity: 'fail',
-        message: `${leave.date} เป็นวันลา แต่มีเวลาเข้า-ออกในตาราง`,
-      });
+  /* วันลาต้องอยู่ในรายการวันด้วย และแถวนั้นไม่ควรมีเวลาเข้า-ออก — เช็คได้เฉพาะตอนมีตารางรายวันจริง
+     (days ไม่ว่างเปล่า) เท่านั้น ตั้งแต่ ABBYY แบบตารางใหม่ (Timesheet2/OBS Timesheet) days จะว่างเปล่า
+     ตลอดโดยตั้งใจ (คอลัมน์สลับตำแหน่งไม่คงที่ ดึงเวลาเข้า-ออกอัตโนมัติไม่ได้ ดู mapAbbyyResult ที่
+     src/extract/abbyy.js) ถ้ายังเช็คแบบเดิมทุกวันลาจะโดน "ไม่มีแถวในตาราง" เป็น fail บล็อกตลอด
+     ทั้งที่ตรวจไม่ได้จริงอยู่แล้วในกรณีนี้ (ไม่มีตารางให้เทียบเลย ไม่ใช่แค่ขาดแถวของวันนั้นวันเดียว) */
+  if (data.days.length > 0) {
+    const dayByDate = new Map(data.days.map((d) => [d.date, d]));
+    for (const leave of data.leaveDays) {
+      const row = dayByDate.get(leave.date);
+      if (!row) {
+        issues.push({
+          severity: 'fail',
+          message: `วันลา ${leave.date} ไม่มีแถวในตาราง`,
+        });
+      } else if ((row.timeIn || row.timeOut) && !isPartialDayLeave(leave)) {
+        issues.push({
+          severity: 'fail',
+          message: `${leave.date} เป็นวันลา แต่มีเวลาเข้า-ออกในตาราง`,
+        });
+      }
     }
   }
 

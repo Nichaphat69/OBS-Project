@@ -327,6 +327,11 @@ const routes = [
       : svc.setActiveContract(contractId, { actor: session.nameTh });
   }],
 
+  ['PATCH', /^\/api\/contracts\/([^/]+)$/, (m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.updateContract({ ...body, contractId: decodeURIComponent(m[1]), actor: session.nameTh });
+  }],
+
   ['GET', /^\/api\/employees$/, (_m, url) =>
     svc.listEmployees({ contractId: url.searchParams.get('contractId') ?? undefined })],
 

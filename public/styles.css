@@ -500,6 +500,8 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   background: var(--grad-brand); box-shadow: 0 0 0 3px var(--tint);
 }
 .card > .hd .rt { margin-left: auto; font-size: 12px; color: var(--mut); }
+/* กลุ่มปุ่ม เปิด/ปิดสัญญา + ไอคอนแก้ไข บนหัวการ์ดบริษัท — ดันไปสุดขวาแทนที่จะติดกับชื่อหัวข้อ */
+.card > .hd .rowacts { margin-left: auto; }
 .card > .bd { padding: 26px 24px; }
 .card > .bd.flush { padding: 0; }
 
@@ -1659,6 +1661,23 @@ td.n, .docid { white-space: nowrap; }
 .fsec.hrdd .fsec-h b svg{ color:var(--brand); flex:none; }
 .hrdd-actions{ display:flex; align-items:center; gap:10px; }
 .hrddMeta{ font-size:12px; color:var(--mut); }
+
+/* แผง "แก้ไข" ในตารางเทียบ HRDD — เลือกจะเอาตาม Timesheet/HRDD/ทางเลือกอื่น + เหตุผลบังคับกรอก */
+.hrdd-row.resolved{ opacity:.75; }
+.hrddResolvePanel{ padding:12px 4px; }
+.hrr-choices{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+.hrr-choice{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink); cursor:pointer; }
+.hrr-choice input[type="radio"]{ margin:0; accent-color:var(--brand); }
+.hrr-hint{ color:var(--mut); font-size:12px; }
+.hrr-custom-select{ margin-left:4px; padding:4px 8px; font-size:12.5px; border-radius:var(--r-ctl);
+  border:1px solid var(--rule); width:auto; }
+.hrr-reason-label{ display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px; }
+.hrr-req{ color:var(--cr); font-weight:700; margin-left:2px; }
+.hrr-reason{ width:100%; border:1px solid var(--rule); border-radius:var(--r-ctl); padding:8px 10px;
+  font:inherit; font-size:13px; resize:vertical; outline:none; background:var(--paper); color:var(--ink); }
+.hrr-reason:focus{ outline:2px solid var(--brand); outline-offset:-1px; }
+.hrr-reason.invalid{ border-color:var(--cr); }
+.hrr-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:10px; }
 
 /* แถววันลา — วันที่ · ประเภท · ปุ่มลบ */
 .lrow{ display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-bottom:8px; }
