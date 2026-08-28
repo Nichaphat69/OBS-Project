@@ -3350,6 +3350,13 @@ function renderCustomerAddForm(faCompanies = []) {
         </div>
         <small class="fhint">${tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ')} "${tx('พนักงาน & ชื่อพ้อง')}"</small>
       </div>
+      <div class="fsec">
+        <div class="fsec-h"><b>${tx('การอ่าน Timesheet ด้วย ABBYY')}</b></div>
+        <div class="frm">
+          <label>${tx('ABBYY Skill ID เฉพาะบริษัทนี้')}
+            <input id="ncAbbyySkillId" type="text" placeholder="${tx('เว้นว่าง = ใช้ Skill กลาง')}" autocomplete="off"></label>
+        </div>
+      </div>
     </div>
     <div class="ft">
       <button class="btn" id="custAddCancel">${tx('ยกเลิก')}</button>
@@ -3911,6 +3918,7 @@ async function renderMaster() {
           startDate, endDate,
           vatRate: (Number(el('ncVat').value) || 0) / 100,
           whtRate: (Number(el('ncWht').value) || 0) / 100,
+          abbyySkillId: el('ncAbbyySkillId').value.trim() || null,
         }),
       });
       toast(`เพิ่ม "${nameTh}" แล้ว`);

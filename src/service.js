@@ -142,7 +142,7 @@ export async function listFlowAccountCompanies() {
 export function createContract({
   customerId, poNo, contractNo = null, projectName, poDate = null, startDate, endDate,
   creditDays = 30, divisorMode = 'fixed', divisorValue = 20, vatRate = 0.07, whtRate = 0.03,
-  actor,
+  abbyySkillId = null, actor,
 }) {
   const customer = get('SELECT id FROM customers WHERE id = $id', { id: customerId });
   if (!customer) throw Object.assign(new Error('ไม่พบลูกค้ารายนี้'), { status: 404 });
@@ -157,14 +157,15 @@ export function createContract({
   run(
     `INSERT INTO contracts
        (id, customer_id, po_no, contract_no, project_name, po_date, start_date, end_date,
-        credit_days, divisor_mode, divisor_value, vat_rate, wht_rate, status)
+        credit_days, divisor_mode, divisor_value, vat_rate, wht_rate, status, abbyy_skill_id)
      VALUES ($id, $customerId, $poNo, $contractNo, $projectName, $poDate, $startDate, $endDate,
-             $creditDays, $divisorMode, $divisorValue, $vatRate, $whtRate, $status)`,
+             $creditDays, $divisorMode, $divisorValue, $vatRate, $whtRate, $status, $abbyySkillId)`,
     {
       id, customerId, poNo, contractNo, projectName, poDate, startDate, endDate,
       creditDays: Number(creditDays) || 30, divisorMode, divisorValue: Number(divisorValue) || 20,
       vatRate: Number(vatRate), whtRate: Number(whtRate),
       status: hasActive ? 'inactive' : 'active',
+      abbyySkillId: abbyySkillId?.trim() || null,
     },
   );
   logAudit({
