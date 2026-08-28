@@ -3318,6 +3318,7 @@ function renderCustomerAddForm(faCompanies = []) {
             ${faCompanies.map((c, i) => `<option value="${i}">${esc(c.nameTh)} (${esc(c.quotationNo ?? '—')})</option>`).join('')}
           </select></span>
         </label>
+        <small class="fhint" id="ncFaEmpHint"></small>
       </div>` : ''}
       <div class="frm">
         <label>${tx('ชื่อบริษัท')}<input id="ncNameTh" type="text" placeholder="เช่น บริษัท ทดสอบ จำกัด" autocomplete="off"></label>
@@ -3878,6 +3879,17 @@ async function renderMaster() {
     el('ncContactEmail').value = c.contactEmail ?? '';
     if (c.projectName) el('ncProjectName').value = c.projectName;
     e.target.dataset.faContactId = c.flowaccountContactId;
+    const hint = el('ncFaEmpHint');
+    if (hint) {
+      const en = state.lang === 'en';
+      hint.textContent = c.employees?.length
+        ? (en
+          ? `Will auto-import ${c.employees.length} employee(s) + monthly rate from this quotation.`
+          : `ดึงพนักงาน ${c.employees.length} คน + เรทต่อเดือนจากใบเสนอราคานี้มาให้อัตโนมัติ`)
+        : (en
+          ? 'This quotation has no employee line items — add employees later from the "Employees & aliases" tab.'
+          : 'ใบเสนอราคานี้ไม่มีรายชื่อพนักงานให้ดึง — เพิ่มพนักงานเองทีหลังได้จากแท็บ "พนักงาน & ชื่อพ้อง"');
+    }
   });
 
   el('custAddSave')?.addEventListener('click', async (event) => {
@@ -3908,7 +3920,7 @@ async function renderMaster() {
           flowaccountContactId: el('ncFromFA')?.dataset.faContactId || null,
         }),
       });
-      await api('/contracts', {
+      const contract = await api('/contracts', {
         method: 'POST',
         body: JSON.stringify({
           customerId: customer.id, poNo, projectName,
@@ -3921,7 +3933,33 @@ async function renderMaster() {
           abbyySkillId: el('ncAbbyySkillId').value.trim() || null,
         }),
       });
-      toast(`เพิ่ม "${nameTh}" แล้ว`);
+
+      /* เลือกบริษัทจาก FlowAccount มา → ใบเสนอราคาใบนั้นมีรายชื่อพนักงาน+เรทต่อเดือนติดมาด้วย
+         (items[] ของใบ QT) สร้างพนักงานทุกคนให้พร้อมสัญญาเลยทีเดียว ไม่ต้องพิมพ์ซ้ำทีละคน */
+      const faIndex = el('ncFromFA')?.value;
+      const faCompany = faIndex ? faCompanies[Number(faIndex)] : null;
+      let addedEmployees = 0;
+      if (faCompany?.employees?.length) {
+        for (const emp of faCompany.employees) {
+          try {
+            await api('/employees', {
+              method: 'POST',
+              body: JSON.stringify({
+                contractId: contract.id, nameTh: emp.nameTh, invoicePosition: emp.invoicePosition,
+                monthlyRate: emp.monthlyRate, startDate, endDate,
+                quotationNo: faCompany.quotationNo || null,
+              }),
+            });
+            addedEmployees += 1;
+          } catch (empError) {
+            toast(`เพิ่มพนักงาน "${emp.nameTh}" ไม่สำเร็จ: ${empError.message}`, true);
+          }
+        }
+      }
+
+      toast(addedEmployees
+        ? `เพิ่ม "${nameTh}" พร้อมพนักงาน ${addedEmployees} คนแล้ว`
+        : `เพิ่ม "${nameTh}" แล้ว`);
       state.customerAdd = false;
       await loadContractSwitch();   // สัญญาใหม่อาจกลายเป็น active (ถ้าเป็นสัญญาแรกของระบบ)
       renderMaster();

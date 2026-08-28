@@ -106,6 +106,11 @@ export function createCustomer({
  * contactName/contactAddress/contactTaxId/contactBranch/contactPerson/contactEmail/contactNumber
  * ตรงตัว ใบเสนอราคาหลายใบอาจเป็นบริษัทเดียวกัน จึง dedupe ด้วย contactId เอาใบล่าสุด (publishedOn)
  * ของแต่ละบริษัท เผื่อข้อมูลติดต่อเปลี่ยนไปตามเวลา
+ *
+ * แต่ละใบยังมี items[] ติดมาด้วย (ยิงจริงเจอ name/description/pricePerUnit ต่อรายการ) — แต่ละแถวคือ
+ * "ตำแหน่งที่วางบิล" (name เช่น "Backend Develop") ของพนักงานคนหนึ่ง (description เช่น "นายศราวุฒิ...")
+ * พร้อมเรทต่อเดือน (pricePerUnit) — เอามาโชว์เป็นรายชื่อพนักงานให้เลือกสร้างพร้อมกันตอนเพิ่มลูกค้าใหม่
+ * เลย ไม่ต้องพิมพ์ซ้ำ (28 ส.ค. 69 ตามที่ขอ — "ดึง api มาแล้วก็ดึงมาให้หมด")
  */
 export async function listFlowAccountCompanies() {
   const client = newFlowAccountClient();
@@ -131,6 +136,13 @@ export async function listFlowAccountCompanies() {
       contactEmail: q.contactEmail || null,
       quotationNo: q.documentSerial ?? null,
       projectName: q.projectName || null,
+      employees: (q.items ?? [])
+        .filter((item) => (item.description || '').trim() && Number(item.pricePerUnit) > 0)
+        .map((item) => ({
+          nameTh: item.description.trim(),
+          invoicePosition: item.name || '',
+          monthlyRate: Number(item.pricePerUnit) || 0,
+        })),
     }));
 }
 
