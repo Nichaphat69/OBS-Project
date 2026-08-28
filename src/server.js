@@ -348,6 +348,11 @@ const routes = [
     return svc.updateContract({ ...body, contractId: decodeURIComponent(m[1]), actor: session.nameTh });
   }],
 
+  ['DELETE', /^\/api\/contracts\/([^/]+)$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.deleteContract(decodeURIComponent(m[1]), { actor: session.nameTh });
+  }],
+
   /** ตัวเลือกประเภทหัก ณ ที่จ่ายในหน้าตรวจ Timesheet ก่อนยืนยัน — แก้เฉพาะ wht_rate ไม่แตะฟิลด์อื่น */
   ['PATCH', /^\/api\/contracts\/([^/]+)\/wht-rate$/, (m, _url, body, session) => {
     requireAdmin(session);

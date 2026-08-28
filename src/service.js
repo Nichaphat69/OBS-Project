@@ -252,6 +252,65 @@ export function updateContract({
 }
 
 /**
+ * ลบสัญญาทิ้ง — ใช้ล้างสัญญาที่กรอกผิด/สัญญาทดสอบออกจากหน้า "ลูกค้า & สัญญา" (28 ส.ค. 69 ตามที่ขอ)
+ * กันลบทับประวัติวางบิลจริงโดยเผลอ — ถ้าสัญญานี้เคยออกใบแจ้งหนี้ไปแล้วแม้แต่ใบเดียว ห้ามลบ ต้องเก็บ
+ * ไว้เป็นหลักฐาน ลบได้เฉพาะสัญญาที่ยังไม่เคยวางบิลจริงเท่านั้น (ยังลบพนักงาน/Timesheet ที่พ่วงมาด้วยได้
+ * เพราะยังไม่มีผลทางบัญชีอะไรผูกอยู่) พนักงานที่ผูกกับสัญญานี้เพียงอย่างเดียวลบทิ้งไปด้วยเลย กันเหลือ
+ * "พนักงานลอย" ไม่มีสัญญาไหนอ้างถึง — แต่ถ้าพนักงานคนนั้นมีอัตราจ้างกับสัญญาอื่นด้วย เก็บไว้
+ */
+export function deleteContract(contractId, { actor }) {
+  const contract = get(
+    'SELECT id, po_no, project_name, customer_id FROM contracts WHERE id = $id', { id: contractId },
+  );
+  if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
+
+  const invoiceCount = get(
+    'SELECT COUNT(*) AS n FROM invoices WHERE contract_id = $id', { id: contractId },
+  ).n;
+  if (invoiceCount > 0) {
+    throw Object.assign(
+      new Error(`ลบไม่ได้ — สัญญานี้เคยออกใบแจ้งหนี้ไปแล้ว ${invoiceCount} ใบ`),
+      { status: 400 },
+    );
+  }
+
+  tx(() => {
+    const timesheetIds = all(
+      'SELECT id FROM timesheets WHERE contract_id = $id', { id: contractId },
+    ).map((t) => t.id);
+    for (const timesheetId of timesheetIds) {
+      run('DELETE FROM timesheet_days WHERE timesheet_id = $id', { id: timesheetId });
+      run('DELETE FROM leave_days WHERE timesheet_id = $id', { id: timesheetId });
+      run('DELETE FROM overtime_days WHERE timesheet_id = $id', { id: timesheetId });
+    }
+    run('DELETE FROM timesheets WHERE contract_id = $id', { id: contractId });
+    run('DELETE FROM cycle_approvals WHERE contract_id = $id', { id: contractId });
+
+    const employeeIds = all(
+      'SELECT employee_id FROM assignments WHERE contract_id = $id', { id: contractId },
+    ).map((a) => a.employee_id);
+    run('DELETE FROM assignments WHERE contract_id = $id', { id: contractId });
+    for (const employeeId of employeeIds) {
+      const stillAssigned = get(
+        'SELECT COUNT(*) AS n FROM assignments WHERE employee_id = $id', { id: employeeId },
+      ).n;
+      if (stillAssigned === 0) {
+        run('DELETE FROM employee_aliases WHERE employee_id = $id', { id: employeeId });
+        run('DELETE FROM employees WHERE id = $id', { id: employeeId });
+      }
+    }
+
+    run('DELETE FROM contracts WHERE id = $id', { id: contractId });
+  });
+
+  logAudit({
+    actor, action: 'delete_contract', entityType: 'contract', entityId: contractId,
+    detail: { poNo: contract.po_no, projectName: contract.project_name },
+  });
+  return { deleted: true, contractId };
+}
+
+/**
  * แก้เฉพาะอัตราหัก ณ ที่จ่ายของสัญญา — ใช้จากตัวเลือกประเภทหัก ณ ที่จ่ายในหน้าตรวจ Timesheet
  * (ก่อนยืนยัน) แยกจาก updateContract() ตรงๆเพราะ updateContract() เป็น full-replace ต้องมีครบ
  * ทุกฟิลด์ (taxId, po_no, ช่วงสัญญา ฯลฯ) ถ้าเรียกจากหน้านี้ที่มีแค่ contractId+เปอร์เซ็นต์

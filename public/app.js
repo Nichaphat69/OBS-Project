@@ -261,6 +261,7 @@ const T = {
   'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)':
     'Inactive — turn on to make the system work with this company (auto-switches off any other active one)',
   'กำลังดำเนินการ': 'Active', 'ปิดอยู่': 'Inactive', 'แก้ไขข้อมูลสัญญา': 'Edit contract',
+  'ลบสัญญานี้': 'Delete this contract',
   'เลขที่สัญญา': 'Contract no.', 'จำนวนคน': 'Headcount', 'ยอดต่อเดือน': 'Monthly total',
   'ผู้ประสานงาน': 'Coordinator', 'สถานที่วางบิล': 'Billing address', 'ปฏิทินวันหยุด': 'Holiday calendar',
   'ชื่อวันหยุด': 'Holiday name', 'ขอบเขต': 'Scope',
@@ -3554,6 +3555,8 @@ async function renderMaster() {
               </label>
               <button class="btn sm icon" data-edit-contract="${esc(c.id)}"
                 title="${tx('แก้ไขข้อมูลสัญญา')}" aria-label="${tx('แก้ไข')}">${icon('edit')}</button>
+              <button class="btn sm icon dgr" data-delete-contract="${esc(c.id)}"
+                title="${tx('ลบสัญญานี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button>
             </div>
           </div>
           <div class="bd"><div class="g2">
@@ -3975,6 +3978,30 @@ async function renderMaster() {
       renderMaster();
     });
   });
+
+  main.querySelectorAll('[data-delete-contract]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const contractId = btn.dataset.deleteContract;
+      const card = btn.closest('.card');
+      const title = card?.querySelector('.hd h3')?.textContent ?? contractId;
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: 'ลบสัญญานี้?',
+        message: `"<b>${esc(title)}</b>" จะหายไปทั้งหมด รวมพนักงาน/Timesheet ที่ยังไม่ได้วางบิลของสัญญานี้ — กู้คืนไม่ได้`,
+        confirmLabel: 'ลบ',
+      });
+      if (!ok) return;
+      try {
+        await api(`/contracts/${encodeURIComponent(contractId)}`, { method: 'DELETE' });
+        toast('ลบสัญญาแล้ว');
+        await loadContractSwitch();   // เอาสัญญาที่ลบออกจาก dropdown เลือกบริษัทบนแถบบนด้วย
+        renderMaster();
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+  });
+
   el('ctgEditCancel')?.addEventListener('click', () => {
     state.contractEdit = null;
     renderMaster();
