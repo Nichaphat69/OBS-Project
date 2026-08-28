@@ -57,6 +57,8 @@ const ADDED_COLUMNS = [
   ['timesheet_days', 'normal_hours', 'REAL'],
   ['timesheet_days', 'ot_hours', 'REAL'],
   ['timesheet_days', 'total_hours', 'REAL'],
+  // Skill ID ของ ABBYY เฉพาะสัญญานี้ — ดูคอมเมนต์ที่ schema.sql (28 ส.ค. 69)
+  ['contracts', 'abbyy_skill_id', 'TEXT'],
 ];
 
 function addMissingColumns(database) {

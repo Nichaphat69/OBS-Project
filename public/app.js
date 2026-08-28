@@ -274,8 +274,15 @@ const T = {
   'คลิกเพื่อแก้ไข': 'Click to edit', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ไม่มี': 'None',
   'ลบ': 'Delete', 'นี้': 'this', 'ใหม่': 'new', 'แก้เรท': 'Edit rate',
   'กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว': 'Enter the company and its first contract at once',
-  'ชื่อบริษัท': 'Company name', 'เลขผู้เสียภาษี': 'Tax ID', 'สาขา': 'Branch',
+  'ชื่อบริษัท': 'Company name', 'เลขผู้เสียภาษี': 'Tax ID', 'สาขา': 'Branch', 'ที่อยู่': 'Address',
+  'ดึงข้อมูลจาก FlowAccount': 'Import from FlowAccount',
+  '— เลือกบริษัทจากใบเสนอราคาที่มีอยู่แล้ว —': '— Pick a company from an existing quotation —',
   'เครดิต (วัน)': 'Credit (days)', 'เบอร์ผู้ประสานงาน': 'Coordinator phone',
+  'การอ่าน Timesheet ด้วย ABBYY': 'Reading Timesheets with ABBYY',
+  'ABBYY Skill ID เฉพาะบริษัทนี้': "This company's ABBYY Skill ID",
+  'เว้นว่าง = ใช้ Skill กลาง': 'Leave blank to use the shared Skill',
+  'ถ้าลูกค้ารายนี้มี Timesheet คนละแบบฟอร์ม เทรน Skill แยกใน ABBYY Vantage แล้วใส่ Skill ID ไว้ที่นี่ — ตอนอัปโหลด Timesheet ระบบจะเลือกใช้ Skill นี้ให้เองตามบริษัทที่กำลังดำเนินการอยู่ ไม่ต้องเลือกอะไรเพิ่ม เว้นว่างไว้ถ้ายังไม่มี Skill เฉพาะ ระบบจะใช้ Skill กลางแทน':
+    "If this customer's Timesheets use a different layout, train a separate Skill in ABBYY Vantage and put its Skill ID here — when uploading a Timesheet, the system will automatically use this Skill based on the currently active company, no extra selection needed. Leave blank if there's no dedicated Skill yet; the shared Skill will be used instead.",
   'อีเมลผู้ประสานงาน': 'Coordinator email', 'สัญญาแรก': 'First contract',
   'เลขที่ใบว่าจ้าง (PO)': 'PO number', 'เลขที่สัญญา': 'Contract no.', 'ชื่อโครงการ': 'Project name',
   'ตัวหารอัตราต่อวัน': 'Daily-rate divisor', 'คงที่ (ระบุจำนวนวัน)': 'Fixed (specify days)',
@@ -1243,6 +1250,12 @@ async function openSheet(id) {
   // ตารางรายละเอียดรายวันใช้ประเภทวันลาที่ classifyLeaveType() ตัดสินไว้แล้วจากตัวนี้ (แม่นกว่าเดาจาก
   // ข้อความ type/label ในตารางเอง) ให้สีป้ายตรงกับไอคอนในแท็บปฏิทินเป๊ะ — ดู leaveTypeByDate ด้านล่าง
   const leaveTypeByDate = new Map((manday?.leaveDays ?? []).map((l) => [l.date, l.type]));
+  // ชื่อวันหยุดนักขัตฤกษ์จริง (เช่น "วันแรงงานแห่งชาติ") จากปฏิทินวันหยุดของบริษัทนี้ — ใช้แทนคำว่า
+  // "Public Holiday" เฉยๆที่ ABBYY อ่านมาจาก Timesheet เอง เพราะวันที่เป็นตัวบอกที่แม่นกว่าเสมอสำหรับ
+  // วันหยุดราชการ (Timesheet ต้นฉบับมักเขียนกำกวมแค่ "Holiday" ไม่บอกว่าเป็นวันหยุดอะไร) (28 ส.ค. 69)
+  const holidayLabelByDate = new Map(
+    (manday?.calendar?.days ?? []).filter((d) => d.kind === 'holiday').map((d) => [d.date, d.label]),
+  );
   const failures = (manday?.checks ?? []).filter((c) => c.severity === 'fail');
   const step = sheet.status === 'billed' ? 4
     : failures.length || !sheet.check?.checked ? 2
@@ -1404,7 +1417,7 @@ async function openSheet(id) {
                 <td class="n">${d.time_in && d.time_out ? `${esc(d.time_in)} – ${esc(d.time_out)}` : '—'}</td>
                 <td class="n">${d.ot_time_in && d.ot_time_out ? `${esc(d.ot_time_in)} – ${esc(d.ot_time_out)}` : '—'}</td>
                 <td><span class="tg ${info.tone}">${esc(info.label)}</span></td>
-                <td style="white-space:pre-line">${esc(dedupeRepeatedText(d.job_desc ?? d.remark ?? '—'))}</td>
+                <td style="white-space:pre-line">${esc(holidayLabelByDate.get(d.date) ?? dedupeRepeatedText(d.job_desc ?? d.remark ?? '—'))}</td>
                 <td class="r n">${hoursCell(d.normal_hours)}</td>
                 <td class="r n">${hoursCell(d.ot_hours)}</td>
                 <td class="r n" style="font-weight:600">${hoursCell(d.total_hours)}</td>
@@ -2987,7 +3000,11 @@ function bindUploadTab() {
     btn.disabled = true;
     btn.textContent = 'ระบบกำลังอ่านไฟล์… (อ่านทีละหน้า อาจใช้เวลาหลายนาทีถ้าไฟล์มีหลายหน้า)';
     try {
-      const body = JSON.stringify({ fileBase64: await fileToBase64(picked), fileName: picked.name });
+      // ส่ง contractId ของบริษัทที่กำลังดำเนินการอยู่ไปด้วย — ให้ backend เลือก Skill ABBYY เฉพาะ
+      // สัญญานี้ถ้าเคยตั้งไว้ (28 ส.ค. 69 ตามที่ขอ) ผู้ใช้เลือกบริษัทจากแถบบนไว้ก่อนอัปโหลดอยู่แล้วเสมอ
+      const body = JSON.stringify({
+        fileBase64: await fileToBase64(picked), fileName: picked.name, contractId: state.contractId,
+      });
       // การ์ดรอขึ้นทันทีเหมือนฝั่ง Gmail — ดูเหตุผลที่ startPendingRead()
       pendingKey = startPendingRead({ fileName: picked.name, email: false, tab: 1 });
       const result = await api('/timesheets/read', { method: 'POST', body });
@@ -3287,16 +3304,26 @@ function renderRateCell(e) {
  * ลูกค้าที่ไม่มีสัญญาเลยใช้งานอะไรไม่ได้ (ไม่มีอัตราจ้าง ไม่มีรอบบิล) แยกเป็นสองปุ่มจะสร้างสถานะ
  * "ลูกค้าลอยๆ ไม่มีสัญญา" ที่ไม่มีที่ไหนในระบบรองรับ
  */
-function renderCustomerAddForm() {
+function renderCustomerAddForm(faCompanies = []) {
   return `
   <div class="card">
     <div class="hd"><h3>${tx('เพิ่มลูกค้าใหม่')}</h3>
       <span class="rt">${tx('กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว')}</span></div>
     <div class="bd">
+      ${faCompanies.length ? `
+      <div class="frm" style="margin-bottom:16px">
+        <label>${tx('ดึงข้อมูลจาก FlowAccount')}
+          <span class="selectchip grow"><select id="ncFromFA">
+            <option value="">${tx('— เลือกบริษัทจากใบเสนอราคาที่มีอยู่แล้ว —')}</option>
+            ${faCompanies.map((c, i) => `<option value="${i}">${esc(c.nameTh)} (${esc(c.quotationNo ?? '—')})</option>`).join('')}
+          </select></span>
+        </label>
+      </div>` : ''}
       <div class="frm">
         <label>${tx('ชื่อบริษัท')}<input id="ncNameTh" type="text" placeholder="เช่น บริษัท ทดสอบ จำกัด" autocomplete="off"></label>
         <label>${tx('เลขผู้เสียภาษี')}<input id="ncTaxId" type="text" autocomplete="off"></label>
         <label>${tx('สาขา')}<input id="ncBranch" type="text" value="สำนักงานใหญ่" autocomplete="off"></label>
+        <label>${tx('ที่อยู่')}<input id="ncAddress" type="text" autocomplete="off"></label>
         <label>${tx('เครดิต (วัน)')}<input id="ncCreditDays" type="number" min="0" value="30"></label>
         <label>${tx('ผู้ประสานงาน')}<input id="ncContactName" type="text" autocomplete="off"></label>
         <label>${tx('เบอร์ผู้ประสานงาน')}<input id="ncContactPhone" type="text" autocomplete="off"></label>
@@ -3424,6 +3451,15 @@ function renderContractEditForm(c) {
           <label>${tx('เครดิต (วัน)')}<input id="ccCreditDays" type="number" min="0" value="${int(c.credit_days)}"></label>
         </div>
       </div>
+      <div class="fsec">
+        <div class="fsec-h"><b>${tx('การอ่าน Timesheet ด้วย ABBYY')}</b></div>
+        <div class="frm">
+          <label>${tx('ABBYY Skill ID เฉพาะบริษัทนี้')}
+            <input id="ccAbbyySkillId" type="text" value="${esc(c.abbyy_skill_id ?? '')}"
+                   placeholder="${tx('เว้นว่าง = ใช้ Skill กลาง')}" autocomplete="off"></label>
+        </div>
+        <small class="fhint">${tx('ถ้าลูกค้ารายนี้มี Timesheet คนละแบบฟอร์ม เทรน Skill แยกใน ABBYY Vantage แล้วใส่ Skill ID ไว้ที่นี่ — ตอนอัปโหลด Timesheet ระบบจะเลือกใช้ Skill นี้ให้เองตามบริษัทที่กำลังดำเนินการอยู่ ไม่ต้องเลือกอะไรเพิ่ม เว้นว่างไว้ถ้ายังไม่มี Skill เฉพาะ ระบบจะใช้ Skill กลางแทน')}</small>
+      </div>
     </div>
     <div class="ft">
       <button class="btn" id="ctgEditCancel">${tx('ยกเลิก')}</button>
@@ -3434,9 +3470,12 @@ function renderContractEditForm(c) {
 
 async function renderMaster() {
   const holidayYear = state.holidayYear ?? new Date().getFullYear();
-  const [employees, contracts, holidayData] = await Promise.all([
+  // ดึงรายชื่อบริษัทจาก FlowAccount เฉพาะตอนเปิดฟอร์ม "เพิ่มลูกค้าใหม่" เท่านั้น — ไม่ต้องยิงทุกครั้งที่
+  // เข้าแท็บนี้ (28 ส.ค. 69) ถ้าดึงไม่สำเร็จ (โหมด dry-run/หลุดสาย) ให้ฟอร์มยังกรอกมือได้ตามปกติ ไม่พัง
+  const [employees, contracts, holidayData, faCompanies] = await Promise.all([
     api(`/employees${contractQuery()}`), api('/contracts'),
     api(`/holidays?year=${holidayYear}`),
+    state.customerAdd ? api('/flowaccount/companies').catch(() => []) : Promise.resolve([]),
   ]);
   const tab = state.masterTab;
   const activeContract = contracts.find((c) => c.id === state.contractId) ?? null;
@@ -3490,7 +3529,7 @@ async function renderMaster() {
         <button class="btn pri sm" id="custAddBtn">${icon('grid', 'i sm')} ${tx('เพิ่มลูกค้าใหม่')}</button>
       </div>
 
-      ${state.customerAdd ? renderCustomerAddForm() : ''}
+      ${state.customerAdd ? renderCustomerAddForm(faCompanies) : ''}
 
       ${contracts.map((c) => (state.contractEdit === c.id ? renderContractEditForm(c) : `
         <div class="card">
@@ -3817,6 +3856,23 @@ async function renderMaster() {
     renderMaster();
   });
 
+  /* เลือกบริษัทจาก FlowAccount แล้วเติมฟอร์มให้เอง — ยังแก้มือต่อได้ก่อนกดบันทึกจริง คนละขั้นกับ
+     "ยืนยัน" ตั้งใจให้ตรวจทานได้ก่อน (28 ส.ค. 69) เก็บ flowaccountContactId ไว้ใน dataset ของ select
+     เอง ส่งไปพร้อม POST /customers ทีหลัง กันสร้าง contact ซ้ำใน FlowAccount ตอนวางบิลจริงครั้งแรก */
+  el('ncFromFA')?.addEventListener('change', (e) => {
+    const c = faCompanies[Number(e.target.value)];
+    if (!c) return;
+    el('ncNameTh').value = c.nameTh;
+    el('ncTaxId').value = c.taxId;
+    el('ncBranch').value = c.branch || 'สำนักงานใหญ่';
+    el('ncAddress').value = c.address ?? '';
+    el('ncContactName').value = c.contactName ?? '';
+    el('ncContactPhone').value = c.contactPhone ?? '';
+    el('ncContactEmail').value = c.contactEmail ?? '';
+    if (c.projectName) el('ncProjectName').value = c.projectName;
+    e.target.dataset.faContactId = c.flowaccountContactId;
+  });
+
   el('custAddSave')?.addEventListener('click', async (event) => {
     const btn = event.currentTarget;
     const nameTh = el('ncNameTh').value.trim();
@@ -3836,11 +3892,13 @@ async function renderMaster() {
         body: JSON.stringify({
           nameTh, taxId,
           branch: el('ncBranch').value.trim() || undefined,
+          address: el('ncAddress').value.trim() || null,
           creditDays: Number(el('ncCreditDays').value) || 30,
           contactName: el('ncContactName').value.trim() || null,
           contactPhone: el('ncContactPhone').value.trim() || null,
           contactEmail: el('ncContactEmail').value.trim() || null,
           billingPlace: el('ncBillingPlace').value.trim() || null,
+          flowaccountContactId: el('ncFromFA')?.dataset.faContactId || null,
         }),
       });
       await api('/contracts', {
@@ -3903,6 +3961,7 @@ async function renderMaster() {
           contactName: el('ccContactName').value.trim() || null,
           contactPhone: el('ccContactPhone').value.trim() || null,
           billingPlace: el('ccBillingPlace').value.trim() || null,
+          abbyySkillId: el('ccAbbyySkillId').value.trim() || null,
         }),
       });
       toast(`บันทึกการแก้ไข "${customerNameTh}" แล้ว`);

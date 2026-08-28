@@ -183,6 +183,7 @@ const routes = [
       fileBase64: body.fileBase64,
       fileName: body.fileName ?? null,
       expectedPeriod: body.expectedPeriod || null,
+      contractId: body.contractId || null,
     });
     const documentNo = svc.logAiRead({ source: 'upload', fileName: body.fileName ?? null, result, actor: session.nameTh });
     const { fileBytes, ...clientResult } = result;
@@ -316,6 +317,12 @@ const routes = [
   ['GET', /^\/api\/contracts$/, () => svc.listContracts()],
   /** สัญญาที่กำลังดำเนินการอยู่ตอนนี้ — แถบบนใช้ตั้งค่าเริ่มต้นของตัวเลือกบริษัทตอนเปิดหน้าเว็บ */
   ['GET', /^\/api\/contracts\/active$/, () => svc.getActiveContract()],
+
+  /** รายชื่อบริษัทจากใบเสนอราคาที่มีอยู่แล้วใน FlowAccount — ให้เลือกตอนเพิ่มลูกค้าใหม่แทนพิมพ์มือ */
+  ['GET', /^\/api\/flowaccount\/companies$/, (_m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.listFlowAccountCompanies();
+  }],
 
   /* ── เพิ่มลูกค้า/สัญญาใหม่ + สลับว่าใครกำลัง active — แก้ข้อมูลหลักเฉพาะ admin เหมือนกัน ── */
   ['POST', /^\/api\/customers$/, (_m, _url, body, session) => {

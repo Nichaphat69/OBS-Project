@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS contracts (
   vat_rate       REAL NOT NULL DEFAULT 0.07,
   wht_rate       REAL NOT NULL DEFAULT 0.03,
   status         TEXT NOT NULL DEFAULT 'active',
+  -- Skill ID ของ ABBYY Vantage เฉพาะลูกค้ารายนี้ — ว่าง = ใช้ ABBYY_SKILL_ID กลางจาก .env แทน
+  -- (28 ส.ค. 69) ลูกค้าแต่ละรายอาจมี Timesheet คนละแบบฟอร์ม เทรน Skill แยกต่างหากได้แม่นกว่า
+  abbyy_skill_id TEXT,
   created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 

@@ -466,8 +466,10 @@ function mergePageResults(pageResults) {
  * @param {object} [options]
  * @param {string} [options.expectedPeriod]  รอบบิลที่คาดไว้ ใช้เตือนเมื่อไม่ตรง
  * @param {typeof fetch} [options.fetchImpl]  ใช้แทนตอนเทสต์เท่านั้น
+ * @param {string} [options.skillId]  Skill ID ของ ABBYY เฉพาะสัญญา/ลูกค้านี้ (28 ส.ค. 69) — ไม่ส่งมา
+ *   หรือส่ง undefined = ใช้ ABBYY_SKILL_ID กลางจาก .env ตามค่า default ของ AbbyyClient เอง
  */
-export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forceVision = false } = {}) {
+export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forceVision = false, skillId } = {}) {
   const pdfBuffer = Buffer.isBuffer(source) ? source : await readFile(source);
 
   /* เปลี่ยนไปใช้ ABBYY Vantage แทนโมเดลในเครื่องตาม requirement 14/08/2569 — เช็คจาก .env สด
@@ -475,7 +477,7 @@ export async function extractTimesheet(source, { expectedPeriod, fetchImpl, forc
      ก็สลับมาทางนี้ทันทีไม่ต้องแก้โค้ด ไม่ใส่ = ยังใช้โมเดลในเครื่องด้านล่างเหมือนเดิม (เทสต์เดิม
      ทั้งหมดไม่ได้ import env.js จึงไม่มี ABBYY_* ใน process.env ตอนรันเทสต์ ไม่กระทบเทสต์เดิม) */
   if (hasAbbyyCredentials()) {
-    return extractViaAbbyy(pdfBuffer, expectedPeriod, fetchImpl);
+    return extractViaAbbyy(pdfBuffer, expectedPeriod, fetchImpl, skillId);
   }
 
   /* ทางเร็ว — เอกสารส่วนใหญ่ export มาจาก Excel จึงมีชั้นข้อความอยู่แล้ว ไม่ต้องให้โมเดลมองรูป
@@ -716,8 +718,11 @@ async function runPages(pageCount, buildRequest, { expectedPeriod, fetchImpl, mo
  * ทุกประการ (documents/data/verification/usage/model) ผู้เรียก (service.js) จึงไม่ต้องรู้เลยว่า
  * ใช้ทางไหนอยู่ — verifyExtraction() ตัวเดียวกันตรวจทั้งสองทาง
  */
-async function extractViaAbbyy(pdfBuffer, expectedPeriod, fetchImpl) {
-  const client = new AbbyyClient({ fetchImpl });
+async function extractViaAbbyy(pdfBuffer, expectedPeriod, fetchImpl, skillId) {
+  // ไม่ส่ง key skillId เลยถ้าไม่มีค่า (แทนที่จะส่ง undefined ตรงๆ) เผื่อวันหลังมีคนเรียกด้วย
+  // { skillId: null } ตรงๆ — destructuring default ของ AbbyyClient ทำงานเฉพาะตอนไม่มี key นี้เลย
+  // ไม่ทำงานถ้า key มีอยู่แต่ค่าเป็น null จะได้ไม่พลาดตกไปใช้ null แทนที่จะ fallback ไป .env
+  const client = new AbbyyClient(skillId ? { fetchImpl, skillId } : { fetchImpl });
   const { rawResult } = await client.extractDocument(pdfBuffer, 'timesheet.pdf');
   const data = mapAbbyyResult(rawResult);
   const verification = verifyExtraction(data, { expectedPeriod });

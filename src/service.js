@@ -73,7 +73,8 @@ function nextId(prefix, table) {
  */
 export function createCustomer({
   nameTh, nameEn = null, taxId, branch = 'สำนักงานใหญ่', address = null, creditDays = 30,
-  billingPlace = null, contactName = null, contactPhone = null, contactEmail = null, actor,
+  billingPlace = null, contactName = null, contactPhone = null, contactEmail = null,
+  flowaccountContactId = null, actor,
 }) {
   if (!nameTh || !taxId) {
     throw Object.assign(new Error('ต้องระบุชื่อบริษัทและเลขผู้เสียภาษีให้ครบ'), { status: 400 });
@@ -82,16 +83,55 @@ export function createCustomer({
   run(
     `INSERT INTO customers
        (id, name_th, name_en, tax_id, branch, address, credit_days, billing_place,
-        contact_name, contact_phone, contact_email)
+        contact_name, contact_phone, contact_email, flowaccount_contact_id)
      VALUES ($id, $nameTh, $nameEn, $taxId, $branch, $address, $creditDays, $billingPlace,
-             $contactName, $contactPhone, $contactEmail)`,
+             $contactName, $contactPhone, $contactEmail, $flowaccountContactId)`,
     {
       id, nameTh, nameEn, taxId, branch, address, creditDays: Number(creditDays) || 30,
       billingPlace, contactName, contactPhone, contactEmail,
+      flowaccountContactId: flowaccountContactId ? String(flowaccountContactId) : null,
     },
   );
   logAudit({ actor, action: 'create_customer', entityType: 'customer', entityId: id, detail: { nameTh, taxId } });
   return get('SELECT * FROM customers WHERE id = $id', { id });
+}
+
+/**
+ * ดึงรายชื่อบริษัทลูกค้าจากใบเสนอราคา (ใบ QT) ที่มีอยู่แล้วใน FlowAccount มาให้เลือกตอนเพิ่มลูกค้าใหม่
+ * (28 ส.ค. 69 ตามที่ขอ) — กันคนพิมพ์ชื่อ/เลขผู้เสียภาษี/ที่อยู่ซ้ำมือเปล่าๆทั้งที่ FlowAccount มี contact
+ * ตัวจริงอยู่แล้ว เอา contactId ติดมาด้วยเลย ครั้งแรกที่วางบิลจริงจะได้ไม่ต้องสร้าง contact ซ้ำ (ดู
+ * flowaccount_contact_id ใน schema กับ toFlowAccountPayload() ที่ domain/invoice.js)
+ *
+ * ยิง sandbox จริงแล้ว 28 ส.ค. 69 — /quotations คืน { data: { list: [...] } } แต่ละใบมี contactId/
+ * contactName/contactAddress/contactTaxId/contactBranch/contactPerson/contactEmail/contactNumber
+ * ตรงตัว ใบเสนอราคาหลายใบอาจเป็นบริษัทเดียวกัน จึง dedupe ด้วย contactId เอาใบล่าสุด (publishedOn)
+ * ของแต่ละบริษัท เผื่อข้อมูลติดต่อเปลี่ยนไปตามเวลา
+ */
+export async function listFlowAccountCompanies() {
+  const client = newFlowAccountClient();
+  const result = await client.listDocuments({ type: 'quotations' });
+  const rows = result.data?.list ?? [];
+  const byContact = new Map();
+  for (const q of rows) {
+    if (!q.contactId) continue;
+    const existing = byContact.get(q.contactId);
+    if (existing && existing.publishedOn >= q.publishedOn) continue;
+    byContact.set(q.contactId, q);
+  }
+  return [...byContact.values()]
+    .sort((a, b) => (a.contactName ?? '').localeCompare(b.contactName ?? ''))
+    .map((q) => ({
+      flowaccountContactId: String(q.contactId),
+      nameTh: q.contactName || '',
+      taxId: q.contactTaxId || '',
+      branch: q.contactBranch || 'สำนักงานใหญ่',
+      address: q.contactAddress || null,
+      contactName: q.contactPerson || null,
+      contactPhone: q.contactNumber || null,
+      contactEmail: q.contactEmail || null,
+      quotationNo: q.documentSerial ?? null,
+      projectName: q.projectName || null,
+    }));
 }
 
 /**
@@ -158,7 +198,7 @@ export function updateContract({
   contractId, poNo, contractNo = null, projectName, startDate, endDate,
   creditDays = 30, divisorMode = 'fixed', divisorValue = 20, vatRate = 0.07, whtRate = 0.03,
   customerNameTh, taxId, contactName = null, contactPhone = null, billingPlace = null,
-  actor,
+  abbyySkillId = null, actor,
 }) {
   const contract = get('SELECT id, customer_id FROM contracts WHERE id = $id', { id: contractId });
   if (!contract) throw Object.assign(new Error('ไม่พบสัญญานี้'), { status: 404 });
@@ -180,12 +220,14 @@ export function updateContract({
     run(
       `UPDATE contracts SET po_no = $poNo, contract_no = $contractNo, project_name = $projectName,
          start_date = $startDate, end_date = $endDate, credit_days = $creditDays,
-         divisor_mode = $divisorMode, divisor_value = $divisorValue, vat_rate = $vatRate, wht_rate = $whtRate
+         divisor_mode = $divisorMode, divisor_value = $divisorValue, vat_rate = $vatRate, wht_rate = $whtRate,
+         abbyy_skill_id = $abbyySkillId
        WHERE id = $contractId`,
       {
         poNo, contractNo, projectName, startDate, endDate,
         creditDays: Number(creditDays) || 30, divisorMode, divisorValue: Number(divisorValue) || 20,
         vatRate: Number(vatRate), whtRate: Number(whtRate), contractId,
+        abbyySkillId: abbyySkillId?.trim() || null,
       },
     );
   });
@@ -1123,14 +1165,22 @@ export async function readTimesheetFile({
   filePath,
   fileName = null,
   expectedPeriod = null,
+  contractId = null,
   extractor = extractTimesheet,
 }) {
   if (!fileBase64 && !filePath) {
     throw Object.assign(new Error('ยังไม่ได้เลือกไฟล์ Timesheet'), { status: 400 });
   }
 
+  /* ผู้ใช้เลือก "บริษัทที่กำลังดำเนินการอยู่" จากแถบบนไว้ก่อนอัปโหลดเสมอ (28 ส.ค. 69 ตามที่ขอ) —
+     ระบบจึงรู้อยู่แล้วว่าไฟล์นี้เป็นของสัญญาไหนตั้งแต่ก่อนอ่านไฟล์ด้วยซ้ำ ใช้ Skill ABBYY ของสัญญานั้น
+     ถ้าเคยตั้งไว้ ยังไม่มี (ลูกค้าใหม่/ยังไม่ได้เทรน) ก็ปล่อยให้ extractTimesheet() ใช้ Skill กลางจาก
+     .env แทนแบบเดิม — ผู้ใช้ไม่ต้องเลือกอะไรเพิ่ม ไม่รู้สึกถึงความต่างเลย */
+  const contract = contractId ? get('SELECT abbyy_skill_id FROM contracts WHERE id = $id', { id: contractId }) : null;
+  const skillId = contract?.abbyy_skill_id || undefined;
+
   const source = fileBase64 ? Buffer.from(fileBase64, 'base64') : filePath;
-  const extracted = await extractor(source, { expectedPeriod });
+  const extracted = await extractor(source, { expectedPeriod, skillId });
   const { usage, model } = extracted;
 
   /* ไฟล์เดียวอาจมี Timesheet ของหลายคน (ดู groupPagesByEmployee ใน extract/timesheet.js)
