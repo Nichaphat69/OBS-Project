@@ -757,6 +757,35 @@ function newFlowAccountClient() {
   return new FlowAccountClient({ mode: settings.mode, documentType: settings.documentType });
 }
 
+/** โหมด FlowAccount ที่ใช้งานจริงตอนนี้ — settings ใน DB ถ้าเคยตั้งไว้ ไม่งั้นตาม .env (ดู newFlowAccountClient) */
+function currentFlowAccountMode() {
+  return getSetting('flowaccount', { mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run' }).mode;
+}
+
+/**
+ * เปิด/ปิดสวิตช์เชื่อมต่อ FlowAccount จากแถบบนของเว็บ (28 ส.ค. 69 ตามที่ขอ) — ปิด = dry-run
+ * (ไม่ยิงออกไปหา FlowAccount จริงเลยสักคำขอ) เปิด = ใช้โหมดจริงตามที่ตั้งไว้ใน .env
+ * (FLOWACCOUNT_MODE เช่น sandbox/live) ตัวแปรเดียวกับที่ newFlowAccountClient() ใช้อยู่แล้ว
+ * จึงมีผลทันทีกับทั้งการดึงข้อมูล (listFlowAccountCompanies) และตอนกดอนุมัติวางบิลจริง
+ */
+export function setFlowAccountConnected(enabled, { actor }) {
+  const hasCredentials = Boolean(
+    process.env.FLOWACCOUNT_CLIENT_ID && process.env.FLOWACCOUNT_CLIENT_SECRET,
+  );
+  const realMode = process.env.FLOWACCOUNT_MODE ?? 'dry-run';
+  if (enabled && (!hasCredentials || realMode === 'dry-run')) {
+    throw Object.assign(
+      new Error('เชื่อมต่อไม่ได้ — ยังไม่ได้ตั้ง FLOWACCOUNT_CLIENT_ID/SECRET/MODE (sandbox หรือ live) ใน .env'),
+      { status: 400 },
+    );
+  }
+  const current = getSetting('flowaccount', { documentType: 'billing-note' });
+  const mode = enabled ? realMode : 'dry-run';
+  setSetting('flowaccount', { ...current, mode });
+  logAudit({ actor, action: 'set_flowaccount_connected', entityType: 'settings', entityId: 'flowaccount', detail: { mode } });
+  return { mode };
+}
+
 /** ชื่อไฟล์ใบวางบิลที่ใช้ทั้งในรายการไฟล์แนบและตอนแนบเข้า Gmail — ต้องตรงกันทั้งสองที่ */
 export function invoiceFileName({ document_no: documentNo, id }) {
   return `ใบวางบิล ${documentNo || id}.pdf`;
@@ -3820,7 +3849,12 @@ export function billingCycles({ contractId } = {}) {
 }
 
 export function pulse({ actor = 'ยังไม่ได้ระบุผู้ใช้', role = null } = {}) {
-  const sheets = listTimesheets();
+  /* ป้ายบนเมนูต้องนับเฉพาะของบริษัทที่กำลังดำเนินการอยู่ตอนนี้ — ให้ตรงกับที่หน้า "ตรวจ Manday"/
+     "วางบิล" เองก็กรองด้วย contractId เดียวกัน (ดู contractQuery() ที่ public/app.js) ไม่งั้นป้ายจะ
+     ขึ้นเลขรวมทุกบริษัท ทั้งที่กดเข้าไปแล้วเห็นแค่ของบริษัทที่ active อยู่ ตัวเลขไม่ตรงกับหน้าจริง
+     (28 ส.ค. 69 พบว่าป้ายขึ้น 6 แต่หน้าตรวจว่างเปล่า เพราะ 6 นั้นเป็นของบริษัทอื่นที่ไม่ได้ active) */
+  const activeContract = getActiveContract();
+  const sheets = listTimesheets(activeContract ? { contractId: activeContract.id } : {});
   const byStatus = {};
   for (const sheet of sheets) {
     byStatus[sheet.status] = (byStatus[sheet.status] ?? 0) + 1;
@@ -3834,8 +3868,8 @@ export function pulse({ actor = 'ยังไม่ได้ระบุผู�
   ).length;
 
   let readyToApprove = 0;
-  for (const contract of listContracts()) {
-    for (const cycle of contractCycles(contract.id)) {
+  if (activeContract) {
+    for (const cycle of contractCycles(activeContract.id)) {
       if (cycle.state === CYCLE_STATE.READY) readyToApprove += 1;
     }
   }
@@ -3847,9 +3881,11 @@ export function pulse({ actor = 'ยังไม่ได้ระบุผู�
     /* สายกิจกรรมของกระดิ่ง — ติดมากับ pulse เพราะหน้าจอถามอยู่แล้วทุก 60 วิ
        ป้ายบนกระดิ่งจึงขึ้นเองโดยไม่ต้องยิงถามเพิ่มอีกเส้น */
     feed: activityFeed({ limit: 25 }),
-    /* คนที่กดอนุมัติต้องรู้ว่านี่ยิงเข้า FlowAccount จริงหรือแค่ dry-run
+    /* คนที่กดอนุมัติต้องรู้ว่านี่ยิงเข้า FlowAccount จริงหรือแค่ dry-run — ต้องอ่านค่าที่ใช้งานจริง
+       (settings ใน DB ถ้าเคยตั้งไว้ผ่านสวิตช์บนแถบบน ไม่ใช่ .env ตรงๆ) ไม่งั้นสลับสวิตช์แล้วป้าย
+       บนแถบบนจะไม่เปลี่ยนตาม ทั้งที่ระบบเชื่อมต่อจริงเปลี่ยนไปแล้ว (ดู setFlowAccountConnected)
        ติดมากับ pulse เพราะถามอยู่แล้ว ไม่ต้องมี endpoint หรือหน้าตั้งค่าเพิ่ม */
-    flowAccountMode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
+    flowAccountMode: currentFlowAccountMode(),
     manualMode: getSetting('billing_rules', {})?.requireHumanCheck !== false,
     /* ชื่อที่จะถูกบันทึกว่าเป็นคนกด — ต้องโชว์บนหน้าจอให้ตรงกับที่บันทึกจริง
        ไม่งั้นหน้าจอขึ้นชื่อหนึ่ง แต่ audit log เก็บอีกชื่อหนึ่ง

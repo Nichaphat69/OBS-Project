@@ -4529,6 +4529,7 @@ async function syncBadges() {
      server บล็อกไว้เป็นด่านหลักอยู่แล้ว (ดู requireAdmin ที่ PATCH /api/contracts/:id/active)
      ที่นี่แค่ปิดปุ่มไว้ไม่ให้ user ทั่วไปกดแล้วเจอ error ทันที แต่ยังเห็นว่าตอนนี้ทำงานให้บริษัทไหนอยู่ */
   el('contractSwitchBtn').disabled = p.role !== 'admin';
+  el('envChip').disabled = p.role !== 'admin';
 }
 
 /* หนึ่งการกระทำมักบันทึกหลายเหตุการณ์ติดกัน (เช่นอนุมัติรอบบิล)
@@ -4916,6 +4917,28 @@ async function loadContractSwitch() {
   el('contractSwitchLabel').textContent = active ? ctxLabel(active) : 'ยังไม่มีบริษัทที่กำลังดำเนินการ';
   wrap.hidden = false;
 }
+
+/* สวิตช์เชื่อมต่อ FlowAccount บนแถบบน — เปิด = ยิงออกไปหา FlowAccount จริงตามโหมดใน .env
+   (sandbox/live) ปิด = dry-run ทั้งระบบ ไม่ยิงออกไปเลยสักคำขอ (28 ส.ค. 69 ตามที่ขอ) */
+el('envChip').addEventListener('click', async () => {
+  const turningOn = el('envChip').classList.contains('dry');
+  const ok = await confirmModal({
+    iconName: turningOn ? 'signin' : 'signout', danger: !turningOn,
+    title: turningOn ? 'เชื่อมต่อ FlowAccount?' : 'ปิดการเชื่อมต่อ FlowAccount?',
+    message: turningOn
+      ? 'ระบบจะเริ่มเชื่อมต่อกับ FlowAccount จริง ดึงข้อมูลบริษัท/พนักงานได้ และใช้ยิงเอกสารตอนกดอนุมัติวางบิล'
+      : 'ทุกคำขอจะกลายเป็น dry-run (ข้อมูลจำลอง) ทั้งระบบ ไม่เชื่อมต่อกับ FlowAccount จริงอีก จนกว่าจะเปิดใหม่',
+    confirmLabel: turningOn ? 'เชื่อมต่อ' : 'ปิดการเชื่อมต่อ',
+  });
+  if (!ok) return;
+  try {
+    await api('/settings/flowaccount-connected', {
+      method: 'PATCH', body: JSON.stringify({ enabled: turningOn }),
+    });
+    toast(turningOn ? 'เชื่อมต่อ FlowAccount แล้ว' : 'ปิดการเชื่อมต่อ FlowAccount แล้ว');
+    syncBadges();
+  } catch (error) { toast(error.message, true); }
+});
 
 el('contractSwitchBtn').addEventListener('click', (e) => {
   e.stopPropagation();

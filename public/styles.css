@@ -414,7 +414,12 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px;
   font-weight: 600; padding: 5px 12px 5px 6px; border-radius: var(--r-pill);
   letter-spacing: .01em; background: var(--paper);
+  /* เดิมเป็น <span> อ่านอย่างเดียว ตอนนี้เป็น <button> กดเปิด/ปิดการเชื่อมต่อได้ (28 ส.ค. 69)
+     รีเซ็ตสไตล์ default ของปุ่มที่ไม่ได้มาจาก .env เอง */
+  font-family: inherit; cursor: pointer; transition: box-shadow .15s var(--ease);
 }
+.env:hover:not(:disabled) { box-shadow: var(--sh1); }
+.env:disabled { cursor: default; opacity: .55; }
 .env .sw {
   position: relative; width: 26px; height: 15px; border-radius: 999px; flex: none;
   transition: background .15s var(--ease);

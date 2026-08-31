@@ -381,6 +381,12 @@ const routes = [
   ['GET', /^\/api\/activity$/, (_m, url) =>
     svc.activityFeed({ limit: Number(url.searchParams.get('limit') ?? 30) })],
   ['GET', /^\/api\/settings$/, () => svc.settingsSnapshot()],
+
+  /** สวิตช์เชื่อมต่อ FlowAccount บนแถบบน — เปิด/ปิดได้จาก admin เท่านั้น (มีผลกับทั้งระบบทันที) */
+  ['PATCH', /^\/api\/settings\/flowaccount-connected$/, (_m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.setFlowAccountConnected(Boolean(body?.enabled), { actor: session.nameTh });
+  }],
   ['GET', /^\/api\/pulse$/, (_m, _url, _body, session) => svc.pulse({ actor: session.nameTh, role: session.role })],
   ['GET', /^\/api\/cycles$/, (_m, url) =>
     svc.billingCycles({ contractId: url.searchParams.get('contractId') ?? undefined })],
