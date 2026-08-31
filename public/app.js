@@ -2248,6 +2248,31 @@ const WHT_TYPES = [
  * โผล่ตอนบวก/ลบด้วยสเต็ปเปอร์ทศนิยม (28 ส.ค. 69 ตามที่ขอ — เผื่ออัตราที่ไม่ใช่เลขจำนวนเต็ม) */
 const pctRound = (n) => Math.round(n * 100) / 100;
 
+/** กดปุ่มค้างไว้ให้ทำซ้ำเรื่อยๆ (31 ส.ค. 69 ตามที่ขอ — สเต็ปเปอร์ +/- ทีละ 0.1 กดทีละคลิกช้าไป
+ * ถ้าต้องปรับขึ้นหลายจุด) กดครั้งแรกทำทันที 1 ครั้ง แล้วรอ `delay` ก่อนเริ่มถี่ทุก `interval`
+ * (ไม่งั้นกดคลิกเดียวจะโดนนับซ้ำเป็น 2 ครั้งจาก mousedown+click) รองรับทั้งเมาส์และจอสัมผัส */
+function bindHoldRepeat(button, callback, { delay = 400, interval = 80 } = {}) {
+  let timeoutId = null;
+  let intervalId = null;
+  const stop = () => {
+    clearTimeout(timeoutId);
+    clearInterval(intervalId);
+    timeoutId = null;
+    intervalId = null;
+  };
+  const start = (e) => {
+    e.preventDefault();
+    callback();
+    timeoutId = setTimeout(() => { intervalId = setInterval(callback, interval); }, delay);
+  };
+  button.addEventListener('mousedown', start);
+  button.addEventListener('touchstart', start, { passive: false });
+  button.addEventListener('mouseup', stop);
+  button.addEventListener('mouseleave', stop);
+  button.addEventListener('touchend', stop);
+  button.addEventListener('touchcancel', stop);
+}
+
 /** อ่านไฟล์เป็น base64 โดยไม่มีส่วนหัว data: */
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -3109,10 +3134,16 @@ function bindUploadTab() {
         whtTypes.querySelectorAll('.wht-type').forEach((x) => x.classList.toggle('on', x === t));
         renderWht(Number(t.dataset.pct));
       });
-      card.querySelector('.whtPlus')?.addEventListener('click', () =>
-        renderWht(pctRound(Math.min(30, parseFloat(valEl.textContent) + 0.1))));
-      card.querySelector('.whtMinus')?.addEventListener('click', () =>
-        renderWht(pctRound(Math.max(0, parseFloat(valEl.textContent) - 0.1))));
+      const whtPlusBtn = card.querySelector('.whtPlus');
+      const whtMinusBtn = card.querySelector('.whtMinus');
+      if (whtPlusBtn) {
+        bindHoldRepeat(whtPlusBtn, () =>
+          renderWht(pctRound(Math.min(30, parseFloat(valEl.textContent) + 0.1))));
+      }
+      if (whtMinusBtn) {
+        bindHoldRepeat(whtMinusBtn, () =>
+          renderWht(pctRound(Math.max(0, parseFloat(valEl.textContent) - 0.1))));
+      }
     })();
 
     card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
@@ -4908,6 +4939,15 @@ function renderCtxPop() {
         ctxContracts = ctxContracts.map((c) => ({ ...c, status: c.id === contractId ? 'active' : 'inactive' }));
         el('contractSwitchLabel').textContent = target ? ctxLabel(target) : '…';
         toast(`สลับไปทำงานกับ "${target ? ctxLabel(target) : contractId}" แล้ว`);
+        /* สลับบริษัทแล้วต้องพากลับหน้าแดชบอร์ดของบริษัทใหม่เสมอ (31 ส.ค. 69 ตามที่ขอ) — เปิดหน้า
+           รายละเอียด Timesheet/รอบบิลของบริษัทเดิมค้างไว้แล้วสลับบริษัท หน้านั้นเป็นของเอกสารเฉพาะ
+           ใบนั้นถาวร เปลี่ยนบริษัทที่ active ไม่ทำให้เอกสารเปลี่ยนบริษัทตาม จึงต้องออกจากหน้านั้นไปเลย
+           กันคนเข้าใจผิดว่าทำไมข้อมูลบนจอไม่ตรงกับบริษัทที่เพิ่งเลือก */
+        state.view = 'dash';
+        state.detailId = null;
+        state.cycleContractId = null;
+        state.cyclePeriod = null;
+        markTab('dash');
         render();
       } catch (error) {
         toast(error.message, true);
