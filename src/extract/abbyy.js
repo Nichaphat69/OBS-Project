@@ -379,13 +379,35 @@ function parseTimeToMinutes(value) {
   return h * 60 + min;
 }
 
+/** เช็คว่าข้อความขึ้นต้นด้วยเวลารูปแบบ "H:MM"/"HH:MM" ตามด้วยช่องว่างแล้วค่อยเป็นข้อความอื่นไหม
+ * (ยิงจริง 31 ส.ค. 69 เจอแถวที่ ABBYY เอาค่า "OT Out" ไปแปะไว้หน้า Description แทนแยกฟิลด์ของตัวเอง
+ * เช่น "21:00 Working dev Sack-train-ml, ติดตั้ง Pi#3 (edge003)" ทั้งที่ Time In/Time Out/OT In
+ * อยู่ในฟิลด์ของตัวเองถูกต้องหมด ขาดแค่ OT Out ตัวเดียว) — ใช้เป็นตัวกู้เวลาที่ 4 เฉพาะตอน extractRowTimes()
+ * เจอเวลาจากคอลัมน์ตรงๆ แค่ 3 ค่า (ควรมี 4) เท่านั้น ไม่แตะตอนข้อมูลครบ 2/4 อยู่แล้ว กันไปตัดคำอธิบาย
+ * งานจริงที่บังเอิญขึ้นต้นด้วยตัวเลขคล้ายเวลา */
+function extractLeadingTimeFromDescription(description) {
+  const m = String(description ?? '').match(/^(\d{1,2}:\d{2})\s+(.*)$/s);
+  if (!m || parseTimeToMinutes(m[1]) === null) return null;
+  return { time: m[1], rest: m[2].trim() || null };
+}
+
+/** ตัดคำที่ซ้ำกับคอลัมน์ "Type" ทิ้งออกจากหน้าข้อความ ถ้าเวลาที่หลุดไปติด Description ลากเอาคำนี้ติด
+ * มาด้วย (ยิงจริง 31 ส.ค. 69 — Description ที่กู้เวลาออกมาแล้วเหลือ "Working dev Sack-train-ml..."
+ * ทั้งที่ "Working" มีอยู่แล้วในคอลัมน์ "Type" แยกต่างหาก ต้นฉบับจริงมีแค่ "dev Sack-train-ml...") */
+function stripLeadingDuplicateType(text, type) {
+  if (!text || !type) return text;
+  const escaped = String(type).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`^${escaped}\\s+`, 'i'), '').trim() || null;
+}
+
 /**
  * ดึงเวลาเข้า-ออกจากแถว โดยสแกนหาค่าที่ตรงรูปแบบเวลา (เช่น "9:00") ในทุกคอลัมน์ ไม่ยึดว่าต้อง
  * เป็นคอลัมน์ชื่อ "Time In"/"Time Out" เพราะค่าเคยสลับคอลัมน์กันมาแล้วจริง (ดูคอมเมนต์หัวไฟล์)
  * เจอค่าเวลาพอดี 2 ค่าในแถว = เวลาทำงานปกติเท่านั้น (Weekend/Holiday ไม่มีเวลาเลยจึงเจอ 0 ค่า)
  * เจอ 4 ค่า (27 ส.ค. 69 ตามที่ขอ) = มีเวลา OT ติดมาด้วย — คู่แรก (เช้ากว่า) คือเข้า-ออกงานปกติ
  * คู่หลัง (ดึกกว่า) คือเข้า-ออก OT เพราะ OT ต้องเกิดหลังเลิกงานปกติเสมอ ไม่มี OT ก่อนเข้างาน
- * จำนวนอื่น (1, 3, มากกว่า 4) = รูปแบบที่ไม่มั่นใจ ปล่อย null ทั้งหมดดีกว่าเดาผิด
+ * เจอ 3 ค่า — ลองกู้ค่าที่ 4 จาก Description ก่อนยอมแพ้ (ดู extractLeadingTimeFromDescription)
+ * จำนวนอื่น (1, มากกว่า 4) = รูปแบบที่ไม่มั่นใจ ปล่อย null ทั้งหมดดีกว่าเดาผิด
  */
 function extractRowTimes(cols) {
   const times = Object.values(cols)
@@ -394,12 +416,26 @@ function extractRowTimes(cols) {
     .sort((a, b) => a.minutes - b.minutes);
 
   if (times.length === 2) {
-    return { timeIn: times[0].raw, timeOut: times[1].raw, otTimeIn: null, otTimeOut: null };
+    return { timeIn: times[0].raw, timeOut: times[1].raw, otTimeIn: null, otTimeOut: null, recovered: false };
   }
   if (times.length === 4) {
-    return { timeIn: times[0].raw, timeOut: times[1].raw, otTimeIn: times[2].raw, otTimeOut: times[3].raw };
+    return {
+      timeIn: times[0].raw, timeOut: times[1].raw, otTimeIn: times[2].raw, otTimeOut: times[3].raw,
+      recovered: false,
+    };
   }
-  return { timeIn: null, timeOut: null, otTimeIn: null, otTimeOut: null };
+  if (times.length === 3) {
+    const leaked = extractLeadingTimeFromDescription(cols['Description']);
+    if (leaked) {
+      const merged = [...times, { raw: leaked.time, minutes: parseTimeToMinutes(leaked.time) }]
+        .sort((a, b) => a.minutes - b.minutes);
+      return {
+        timeIn: merged[0].raw, timeOut: merged[1].raw, otTimeIn: merged[2].raw, otTimeOut: merged[3].raw,
+        recovered: true, descriptionOverride: stripLeadingDuplicateType(leaked.rest, cols['Type']),
+      };
+    }
+  }
+  return { timeIn: null, timeOut: null, otTimeIn: null, otTimeOut: null, recovered: false };
 }
 
 /** ชั่วโมงระหว่างเวลาเข้า-ออก (เช่น "9:00" → "18:00" = 9) — null ถ้าเวลาใดเวลาหนึ่งไม่ใช่รูปแบบเวลา
@@ -471,8 +507,12 @@ function buildDayRowsFromStructuredTable(rootObject) {
     const date = parseTableRowDate(cols);
     if (!date) continue; // แถวหัวตาราง/แถวลายเซ็นที่หลุดมาปน ข้ามไป
 
-    const { timeIn, timeOut, otTimeIn, otTimeOut } = extractRowTimes(cols);
-    const jobDescription = cols['Description'] ? dedupeRepeatedText(cols['Description']) : null;
+    const { timeIn, timeOut, otTimeIn, otTimeOut, recovered, descriptionOverride } = extractRowTimes(cols);
+    // recovered = true เฉพาะตอนกู้เวลาที่หลุดไปติดหน้า Description มาได้ (ดู extractRowTimes) ต้องตัด
+    // เวลาที่กู้มาออกจากคำอธิบายงานจริงด้วย (descriptionOverride อาจเป็น null ได้ถ้าทั้งข้อความมีแค่เวลา
+    // ล้วนๆ ไม่มีคำอธิบายอื่นต่อท้าย — ต้องแยกจากกรณี "ไม่ได้กู้อะไรเลย" ที่ต้องใช้ค่าดิบเดิม)
+    const rawDescription = recovered ? descriptionOverride : cols['Description'];
+    const jobDescription = rawDescription ? dedupeRepeatedText(rawDescription) : null;
     // ตัดคอลัมน์ Description ออก (แยกเก็บเป็น jobDescription แล้ว) และตัดค่าที่เป็นรูปแบบวันที่/เวลา
     // ออกด้วย (ไม่ใช่แค่เทียบเท่ากับ date/timeIn/timeOut ที่ parse ได้ เพราะ "Day"/"Date" มักมีทั้งค่า
     // DD/MM/YY จริงและเลขลำดับแถวเปล่าๆปนกัน — เหลือแค่คำอธิบายประเภทวัน เช่น "Working"/"Weekend")

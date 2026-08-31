@@ -2244,6 +2244,10 @@ const WHT_TYPES = [
   { pct: 5, name: 'ค่าเช่าทรัพย์สิน' },
 ];
 
+/** ปัดอัตราหัก ณ ที่จ่ายเป็น 2 ตำแหน่งทศนิยม — กันเศษเลข floating point (เช่น 3.0000000000004)
+ * โผล่ตอนบวก/ลบด้วยสเต็ปเปอร์ทศนิยม (28 ส.ค. 69 ตามที่ขอ — เผื่ออัตราที่ไม่ใช่เลขจำนวนเต็ม) */
+const pctRound = (n) => Math.round(n * 100) / 100;
+
 /** อ่านไฟล์เป็น base64 โดยไม่มีส่วนหัว data: */
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -2813,14 +2817,14 @@ function whtSectionHtml(read, key) {
       <div class="note">${icon('info')}<span>จับคู่ชื่อพนักงานกับคนในระบบก่อน ถึงจะเลือกประเภทหัก ณ ที่จ่ายได้</span></div>
     </div>`;
   }
-  const defaultPct = Math.round((read.contract.whtRate ?? 0.03) * 100);
+  const defaultPct = pctRound((read.contract.whtRate ?? 0.03) * 100);
   const base = Number(read.contract.monthlyRate) || 0;
   return `<div class="fsec">
     <div class="fsec-h"><b>${icon('money', 'i sm')} หัก ณ ที่จ่าย</b>
       <span style="font-size:12px;color:var(--mut)">ตามที่ฝ่ายบัญชีกำหนด</span></div>
     <div class="wht-types" data-wht-types>
       ${WHT_TYPES.map((w) => `<div class="wht-type ${w.pct === defaultPct ? 'on' : ''}" data-pct="${w.pct}">
-        <div class="nm">${esc(w.name)}</div><div class="code">${w.pct}%</div></div>`).join('')}
+        <div class="nm">${esc(w.name)}</div></div>`).join('')}
     </div>
     <div class="stepper-row">
       <div class="lbl">อัตราหัก ณ ที่จ่าย<small>ปรับได้เองถ้าเงื่อนไขต่างจากค่ามาตรฐานของประเภทที่เลือก</small></div>
@@ -3106,9 +3110,9 @@ function bindUploadTab() {
         renderWht(Number(t.dataset.pct));
       });
       card.querySelector('.whtPlus')?.addEventListener('click', () =>
-        renderWht(Math.min(30, parseInt(valEl.textContent, 10) + 1)));
+        renderWht(pctRound(Math.min(30, parseFloat(valEl.textContent) + 0.5))));
       card.querySelector('.whtMinus')?.addEventListener('click', () =>
-        renderWht(Math.max(0, parseInt(valEl.textContent, 10) - 1)));
+        renderWht(pctRound(Math.max(0, parseFloat(valEl.textContent) - 0.5))));
     })();
 
     card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
@@ -3147,8 +3151,8 @@ function bindUploadTab() {
       const whtField = field('rWht');
       if (whtField && current.contract) {
         const newPct = Number(whtField.value);
-        const currentPct = Math.round((current.contract.whtRate ?? 0.03) * 100);
-        if (Number.isFinite(newPct) && newPct !== currentPct) {
+        const currentPct = pctRound((current.contract.whtRate ?? 0.03) * 100);
+        if (Number.isFinite(newPct) && Math.abs(newPct - currentPct) > 0.001) {
           try {
             await api(`/contracts/${encodeURIComponent(current.contract.id)}/wht-rate`, {
               method: 'PATCH',
@@ -4823,13 +4827,15 @@ async function loginHrdd() {
 }
 
 /* ปุ่มในข้อความ LINE พา query string มาเปิดหน้าที่ต้องทำงานต่อได้ทันที ไม่ต้องกดเมนูหาเอง
-     ?view=queue                              → คิว "ตรวจ Manday"
+     ?view=queue&contract=…                   → คิว "ตรวจ Manday" ของสัญญานั้น (สลับบริษัทที่กำลัง
+                                                  ดำเนินการอยู่ให้เองด้วย — ดู startApp())
      ?view=cycle&contract=…&period=YYYY-MM    → หน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้น
    เช็คแค่ตอนเปิดแอปครั้งแรกเท่านั้น ไม่งั้นจะดึงกลับหน้านั้นซ้ำๆทุกครั้งที่ browser back/forward
    เพราะ query string ยังติดอยู่ใน URL
 
-   คืนรอบบิลที่ต้องเปิดต่อ (ถ้ามี) แทนที่จะเปิดเองที่นี่ เพราะ openCycle() ต้องรอ API
-   ต้องให้ startApp เป็นคนสั่งเปิดหลังหน้าแรกขึ้นแล้ว จะได้ไม่มีจอโล่งค้างระหว่างโหลด */
+   คืน { type, contractId, period? } ที่ต้องทำต่อ (ถ้ามี) แทนที่จะเปิดเองที่นี่ เพราะทั้งสลับบริษัท
+   (queue) และเปิดรอบบิล (cycle) ต้องรอ API ต้องให้ startApp เป็นคนสั่งทำหลังหน้าแรกขึ้นแล้ว
+   จะได้ไม่มีจอโล่งค้างระหว่างโหลด */
 function applyDeepLinkView() {
   const q = new URLSearchParams(window.location.search);
   const requested = q.get('view');
@@ -4839,8 +4845,14 @@ function applyDeepLinkView() {
     const period = q.get('period');
     if (contractId && period) {
       markTab('cycle');
-      return { contractId, period };
+      return { type: 'cycle', contractId, period };
     }
+  }
+  if (requested === 'queue') {
+    state.view = 'queue';
+    markTab('queue');
+    const contractId = q.get('contract');
+    return contractId ? { type: 'queue', contractId } : null;
   }
   if (requested && RENDER[requested]) {
     state.view = requested;
@@ -4965,13 +4977,23 @@ async function startApp() {
   hideLoginScreen();
   applySideState(localStorage.getItem(SIDE_KEY) === '1');
   applyLang(state.lang);
-  const deepCycle = applyDeepLinkView();
+  const deepLink = applyDeepLinkView();
+
+  if (deepLink?.type === 'queue') {
+    try {
+      // ไม่ใช่ admin หรือสลับไม่สำเร็จก็ปล่อยผ่าน — แสดงหน้าตามบริษัทที่ active อยู่เดิมแทน
+      // ดีกว่าปล่อยให้หน้าเปิดไม่ขึ้นเลยเพราะสลับบริษัทไม่ได้
+      await api(`/contracts/${encodeURIComponent(deepLink.contractId)}/active`, {
+        method: 'PATCH', body: JSON.stringify({ active: true }),
+      });
+    } catch { /* เงียบไว้ ดูคอมเมนต์ข้างบน */ }
+  }
 
   await loadContractSwitch();
 
-  if (deepCycle) {
+  if (deepLink?.type === 'cycle') {
     syncBadges();  // render() ปกติเป็นคนเรียกให้ แต่รอบนี้ข้าม render() ไปเปิดรอบบิลตรงๆ
-    await openCycle(deepCycle.contractId, deepCycle.period);
+    await openCycle(deepLink.contractId, deepLink.period);
   } else {
     render();      // render() เรียก syncBadges() ให้ป้ายขึ้นรอบแรกอยู่แล้ว
   }

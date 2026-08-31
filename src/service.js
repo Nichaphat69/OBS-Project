@@ -1908,10 +1908,16 @@ function appBase() {
   return base ? base.replace(/\/+$/, '') : null;
 }
 
-/** ลิงก์กดเข้าหน้า "ตรวจ Manday" ตรงจากข้อความ LINE */
-function queueLink() {
+/** ลิงก์กดเข้าหน้า "ตรวจ Manday" ตรงจากข้อความ LINE — แนบ contractId ของเอกสารที่แจ้งเตือนไปด้วย
+ * (31 ส.ค. 69 ตามที่ขอ) ให้เว็บสลับบริษัทที่กำลังดำเนินการอยู่ให้ตรงกับที่แจ้งเตือนอัตโนมัติตอนกดเข้ามา
+ * ไม่งั้นหน้าตรวจ Manday จะกรองด้วยบริษัทที่ใครสักคน active ค้างไว้ก่อนหน้า ซึ่งอาจเป็นคนละบริษัทกับ
+ * ที่แจ้งเตือนจริง เห็นเป็นหน้าว่างเปล่าทั้งที่มีของจริงรอตรวจอยู่ */
+function queueLink(contractId) {
   const base = appBase();
-  return base ? `${base}/?view=queue` : null;
+  if (!base) return null;
+  return contractId
+    ? `${base}/?view=queue&contract=${encodeURIComponent(contractId)}`
+    : `${base}/?view=queue`;
 }
 
 /** ลิงก์กดเข้าหน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้นโดยตรง — ใช้กับปุ่มในคำขออนุมัติ */
@@ -1958,64 +1964,41 @@ function thaiList(items) {
 }
 
 /**
- * แจ้งทีมบัญชีทาง LINE ว่าตอนนี้มี Timesheet รอตรวจ Manday อยู่กี่ใบ — สรุปทั้งคิว "ต้องตรวจ" ทุกครั้ง
- * ที่มีใบใหม่ผ่านการตรวจอัตโนมัติเข้ามา (ไม่ใช่แจ้งแค่ใบล่าสุดใบเดียว) เพราะเปิดมาทีเดียวเห็นภาพรวม
- * ทั้งหมดที่ยังค้างอยู่จริงในระบบ ไม่ต้องนับเองว่ามีกี่ใบ — ไม่ได้ตรวจไม่ผ่านแบบ notifyCheckFailed
- * เดิมไม่มีการแจ้งเตือนจุดนี้เลย ทำให้ Timesheet ค้างอยู่ในคิวโดยไม่มีใครรู้จนกว่าจะเปิดเว็บมาดูเอง
+ * แจ้งทีมบัญชีทาง LINE ว่ามี Timesheet ใบใหม่รอตรวจ Manday — แจ้งทีละใบต่อการแจ้งเตือนหนึ่งครั้ง
+ * (31 ส.ค. 69 ตามที่ขอ — เดิมรวมทุกใบที่ยังค้างอยู่ทั้งระบบมาสรุปเป็นข้อความเดียวทุกครั้งที่มีใบใหม่
+ * เข้ามา พอทดสอบอัปโหลดซ้ำหลายรอบข้อความเลยพอกพูนยาวขึ้นเรื่อยๆ ปนกันจนแยกไม่ออกว่าใบไหนใหม่ ใบไหน
+ * เคยแจ้งไปแล้ว) เอกสารเดียวก็รู้ชัดว่าเป็นบริษัท/สัญญาไหน ปุ่ม "ตรวจ Manday" จึงแนบ contractId ของ
+ * สัญญานั้นไปกับลิงก์ได้ตรงตัว (ดู queueLink) กดแล้วสลับบริษัทที่กำลังดำเนินการอยู่ให้ตรงกับที่แจ้งเตือน
+ * อัตโนมัติ ไม่ต้องไปสลับเองก่อนถึงจะเห็นใบที่ค้างตรวจอยู่
  */
-/* LINE รับ carousel ได้ไม่เกิน 12 ใบ — กันไว้ที่ 10 เผื่อพื้นที่ ถ้าลูกค้าเยอะกว่านี้จริง
-   จะตัดออกแล้วบันทึกไว้ใน audit log ว่าตัดไปกี่ราย ไม่ปล่อยให้หายเงียบๆเหมือนไม่มีอยู่ */
-const NEEDS_CHECK_MAX_BUBBLES = 10;
-
-async function notifyNeedsCheck({ client } = {}) {
-  const pending = listTimesheets().filter((s) => s.status === 'verified' && !s.check?.checked);
-  if (!pending.length) return;
+async function notifyNeedsCheck({ documentNo, contractId, period, client } = {}) {
+  const contract = get(
+    `SELECT c.project_name, cu.name_th AS customer_name FROM contracts c
+       JOIN customers cu ON cu.id = c.customer_id WHERE c.id = $id`,
+    { id: contractId },
+  );
 
   const line = client ?? new LineClient({ approverTarget: null });
   const targets = lineApproverTargets();
-  const queueUrl = queueLink();
-  const entityId = pending.map((s) => s.id).join(',');
-
-  /* แยกบับเบิลตามลูกค้า — ใบเดียวโชว์ชื่อลูกค้าเดียวได้ ถ้ารวมหลายลูกค้าไว้ในบับเบิลเดียว
-     ชื่อบริษัทบนหัวจะกลายเป็นของผิดคน คนอ่านเข้าใจผิดว่าเอกสารทุกใบเป็นของลูกค้ารายนั้น */
-  const byCustomer = new Map();
-  for (const sheet of pending) {
-    const key = sheet.contract?.customerName ?? '—';
-    if (!byCustomer.has(key)) byCustomer.set(key, []);
-    byCustomer.get(key).push(sheet);
-  }
-
-  const groups = [...byCustomer.entries()];
-  const shown = groups.slice(0, NEEDS_CHECK_MAX_BUBBLES);
-  const dropped = groups.length - shown.length;
-
-  const bubbles = shown.map(([customerName, sheets]) => {
-    const periods = [...new Set(sheets.map((s) => s.period))];
-    return buildNeedsCheckFlex({
-      customerName,
-      projectName: sheets[0].contract?.projectName ?? null,
-      documentNos: sheets.map((s) => s.id),
-      periodLabel: thaiList(periods.map((p) => thaiMonth(p))),
-      queueUrl,
-    });
+  const bubble = buildNeedsCheckFlex({
+    customerName: contract?.customer_name ?? '—',
+    projectName: contract?.project_name ?? null,
+    documentNos: [documentNo],
+    periodLabel: thaiMonth(period),
+    queueUrl: queueLink(contractId),
   });
-
-  const allPeriods = [...new Set(pending.map((s) => s.period))];
-  const altText =
-    `ตรวจ Manday — มี ${pending.length} รายการรอตรวจ ` +
-    `ประจำเดือน ${thaiList(allPeriods.map((p) => thaiMonth(p)))}`;
+  const altText = `ตรวจ Manday — ${contract?.customer_name ?? '—'} เอกสาร ${documentNo} ประจำเดือน ${thaiMonth(period)}`;
 
   try {
-    await line.pushNeedsCheck({ bubbles, altText, targets });
+    await line.pushNeedsCheck({ bubbles: [bubble], altText, targets });
     logAudit({
       actor: 'system', action: 'notify_line_needs_check',
-      entityType: 'timesheet', entityId,
-      detail: { count: pending.length, bubbles: bubbles.length, ...(dropped ? { dropped } : {}) },
+      entityType: 'timesheet', entityId: documentNo, detail: { contractId, period },
     });
   } catch (error) {
     logAudit({
       actor: 'system', action: 'notify_line_needs_check_error',
-      entityType: 'timesheet', entityId, detail: { message: error.message },
+      entityType: 'timesheet', entityId: documentNo, detail: { message: error.message },
     });
   }
 }
@@ -2255,7 +2238,7 @@ export async function ingestTimesheet({
   if (nextAction === NEXT_ACTION.FIX_MISMATCH) {
     await notifyCheckFailed({ documentNo, employeeName: employee.nameTh, period, failures, client: lineClient });
   } else {
-    await notifyNeedsCheck({ client: lineClient });
+    await notifyNeedsCheck({ documentNo, contractId: assignment.contract_id, period, client: lineClient });
   }
 
   return {

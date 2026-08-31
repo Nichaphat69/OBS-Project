@@ -291,7 +291,7 @@ test('Timesheet ที่ตัวเลขไม่ตรงปฏิทิน 
   assert.equal(line.flex.length, 1, 'ยังต้องแจ้ง LINE ตามปกติ (สรุปคิวที่รอตรวจแบบบับเบิล) แม้ตัวเลขไม่ตรงปฏิทิน');
 });
 
-test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE สรุปทั้งคิวที่รอตรวจ (ไม่ใช่ข้อความตรวจไม่ผ่าน)', async () => {
+test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE เฉพาะใบนี้ใบเดียว (ไม่ใช่ข้อความตรวจไม่ผ่าน)', async () => {
   const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
 
   const line = new FakeLineClient();
@@ -308,14 +308,17 @@ test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE สร�
   assert.equal(line.flex.length, 1, 'ตรวจผ่านแล้วก็ยังต้องแจ้งว่ามีของใหม่รอคนกดยืนยัน');
 
   const message = line.flex[0];
-  assert.match(message.altText, /ตรวจ Manday — มี \d+ รายการรอตรวจ/, 'altText ต้องอ่านรู้เรื่องบนหน้า lock screen');
+  // แจ้งทีละใบต่อการแจ้งเตือนหนึ่งครั้ง (31 ส.ค. 69 ตามที่ขอ) — ไม่รวมยอดทั้งคิวเหมือนเดิมอีกแล้ว
+  assert.match(
+    message.altText, /ตรวจ Manday — .*2026020103.*กุมภาพันธ์ 2569/,
+    'altText ต้องอ่านรู้เรื่องบนหน้า lock screen และบอกได้ว่าเป็นใบไหน',
+  );
+  assert.equal(message.bubbles.length, 1, 'แจ้งเตือนหนึ่งครั้งต้องมีแค่บับเบิลเดียวของใบนี้');
 
-  // บับเบิลสรุปทั้งคิว "ต้องตรวจ" ไม่ใช่แค่ใบนี้ใบเดียว — เจ้าใบนี้ต้องอยู่ในรายการที่แจ้งด้วย
   const texts = message.bubbles.flatMap(bubbleTexts);
   assert.ok(texts.includes('ตรวจ Manday'), 'หัวบับเบิลต้องเป็น "ตรวจ Manday"');
   assert.ok(texts.includes('2026020103'), 'ต้องมีเลขเอกสารของใบที่เพิ่งเข้ามา');
   assert.ok(texts.some((t) => t.includes('บริษัท ไทยประกันชีวิต')), 'ต้องบอกด้วยว่าเป็นของลูกค้าราย');
-  // คิวอาจคาบหลายเดือน แถวนี้จึงเป็น "มกราคม 2569 และ กุมภาพันธ์ 2569" ได้ ขอแค่มีเดือนของใบนี้อยู่
   assert.ok(texts.some((t) => t.includes('กุมภาพันธ์ 2569')), 'ต้องบอกรอบเดือน');
   assert.ok(
     !texts.some((t) => t.includes('ไม่ผ่าน')),
@@ -323,7 +326,7 @@ test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE สร�
   );
 });
 
-test('บับเบิลรอตรวจแยกตามลูกค้า และมีปุ่มพาเข้าหน้าตรวจ Manday เมื่อมี APP_BASE_URL', async () => {
+test('บับเบิลรอตรวจมีแค่ใบเดียว และปุ่มพาเข้าหน้าตรวจ Manday แนบ contractId ของสัญญานั้นไปด้วย', async () => {
   const before = process.env.APP_BASE_URL;
   process.env.APP_BASE_URL = 'https://obs.example.com/';
 
@@ -338,13 +341,16 @@ test('บับเบิลรอตรวจแยกตามลูกค้�
     });
 
     const { bubbles } = line.flex[0];
-    // ข้อมูลตั้งต้นมีลูกค้ารายเดียว — คิวทั้งหมดจึงต้องรวมอยู่ในบับเบิลใบเดียว ไม่แตกเป็นใบต่อเอกสาร
-    assert.equal(bubbles.length, 1, 'ลูกค้ารายเดียวต้องได้บับเบิลใบเดียว');
+    // แจ้งทีละใบต่อการแจ้งเตือนหนึ่งครั้ง (31 ส.ค. 69) — ไม่รวมของค้างเก่าเข้าบับเบิลเดียวกันอีกแล้ว
+    assert.equal(bubbles.length, 1, 'แจ้งเตือนหนึ่งครั้งต้องมีแค่บับเบิลเดียวของใบนี้');
 
     const button = bubbles[0].footer.contents[0];
     assert.equal(button.action.type, 'uri', 'ต้องเป็นปุ่มเปิดเว็บ ไม่ใช่ลิงก์เปล่าในข้อความ');
     assert.equal(button.action.label, 'ตรวจ Manday');
-    assert.equal(button.action.uri, 'https://obs.example.com/?view=queue', 'ต้องตัด / ท้าย base ทิ้งไม่ให้ซ้ำ');
+    assert.equal(
+      button.action.uri, 'https://obs.example.com/?view=queue&contract=CT-26B0113',
+      'ต้องแนบ contractId ของสัญญานี้ไปด้วย ให้เว็บสลับบริษัทที่กำลังดำเนินการอยู่ให้ตรงกันตอนกดเข้ามา',
+    );
   } finally {
     if (before === undefined) delete process.env.APP_BASE_URL;
     else process.env.APP_BASE_URL = before;
