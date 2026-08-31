@@ -3110,9 +3110,9 @@ function bindUploadTab() {
         renderWht(Number(t.dataset.pct));
       });
       card.querySelector('.whtPlus')?.addEventListener('click', () =>
-        renderWht(pctRound(Math.min(30, parseFloat(valEl.textContent) + 0.5))));
+        renderWht(pctRound(Math.min(30, parseFloat(valEl.textContent) + 0.1))));
       card.querySelector('.whtMinus')?.addEventListener('click', () =>
-        renderWht(pctRound(Math.max(0, parseFloat(valEl.textContent) - 0.5))));
+        renderWht(pctRound(Math.max(0, parseFloat(valEl.textContent) - 0.1))));
     })();
 
     card.querySelector('.confirmBtn')?.addEventListener('click', async () => {
