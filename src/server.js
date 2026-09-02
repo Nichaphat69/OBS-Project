@@ -11,14 +11,17 @@ import { readFile, stat } from 'node:fs/promises';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { randomBytes } from 'node:crypto';
 import * as svc from './service.js';
 import { getDb, closeDb } from './db/index.js';
 import { onChange } from './events.js';
 import {
   SESSION_COOKIE, parseCookies, resolveSession, verifyLogin, createSession, destroySession, hasAnyUser,
-  listUsers, createUser, updateUserRole, setUserActive, deleteUser,
+  listUsers, createUser, updateUserRole, updateUserEmployee, setUserActive, deleteUser,
+  registerUser, requestPasswordReset, verifyResetCode, resetPasswordWithToken, findOrCreateGoogleUser,
 } from './auth.js';
 import { localLlmBaseUrl, localTextModel, localVisionModel, keepModelWarm } from './llm/localClient.js';
+import { googleEnabled, googleRedirectUri, buildGoogleAuthUrl, fetchGoogleProfile } from './integrations/googleOAuth.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, '..', 'public');
@@ -35,7 +38,10 @@ const PORT = Number(process.env.PORT ?? 4300);
  * ซึ่งทำให้ audit log ผิดความจริงทันทีที่มีคนที่สองมาใช้ (ดู src/auth.js)
  */
 const PUBLIC_API_PATTERNS = [
-  /^\/api\/auth\/(login|logout|me)$/,
+  /^\/api\/auth\/(login|logout|me|config)$/,
+  /^\/api\/auth\/register$/,
+  /^\/api\/auth\/(forgot-password|verify-reset-code|reset-password)$/,
+  /^\/api\/auth\/google\/(start|callback)$/,
   /^\/api\/timesheets\/ingest$/,
   /^\/api\/cycles\/ready$/,
   /^\/api\/cycles\/[^/]+\/[0-9]{4}-[0-9]{2}\/request-approval$/,
@@ -56,7 +62,7 @@ const routes = [
     if (!body?.username || !body?.password) throw httpError(400, 'ต้องระบุ username และ password');
     const user = verifyLogin(body.username, body.password);
     if (!user) throw httpError(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-    return { __session: createSession(user.username), ...user };
+    return { __session: createSession(user.username, body.remember !== false), ...user };
   }],
 
   ['POST', /^\/api\/auth\/logout$/, (_m, _url, _body, session, req) => {
@@ -66,6 +72,48 @@ const routes = [
 
   ['GET', /^\/api\/auth\/me$/, (_m, _url, _body, session) =>
     (session ? { loggedIn: true, ...session } : { loggedIn: false })],
+
+  /** หน้า login ใช้เช็คว่าจะโชว์ปุ่ม "เข้าสู่ระบบด้วย Google" ไหม — ไม่ได้ตั้งค่าไว้ = ไม่โชว์ปุ่มเลย
+   *  (31 ส.ค. 69 ตามที่ขอ) */
+  ['GET', /^\/api\/auth\/config$/, () => ({ googleEnabled: googleEnabled() })],
+
+  /** ลงทะเบียนเอง — บัญชีที่ได้ต้องรอ admin/accounting เปิดใช้งานก่อนถึง login ได้จริง
+   *  (เหตุผลเดียวกับพนักงานอัปโหลด Timesheet เองต้องรอตรวจซ้ำ ดูคอมเมนต์ registerUser ใน auth.js) */
+  ['POST', /^\/api\/auth\/register$/, (_m, _url, body) => {
+    const { username, nameTh } = registerUser({ email: body?.email, nameTh: body?.nameTh, password: body?.password });
+    return { username, nameTh, pending: true };
+  }],
+
+  /** ลืมรหัสผ่าน ขั้น 1 — ขอรหัสยืนยัน 6 หลักทางอีเมล ตอบข้อความเดียวกันเสมอไม่ว่าเจอบัญชีหรือไม่
+   *  (กันคนเดาว่าอีเมลไหนมีอยู่ในระบบจากข้อความตอบกลับที่ต่างกัน) ส่งอีเมลไม่สำเร็จก็ log ไว้เฉยๆ
+   *  ไม่ทำให้ผู้ใช้เห็น error ที่บอกใบ้ได้ว่าอีเมลนี้มีอยู่จริงหรือเปล่า */
+  ['POST', /^\/api\/auth\/forgot-password$/, async (_m, _url, body) => {
+    if (!body?.email) throw httpError(400, 'ต้องระบุอีเมล');
+    const result = requestPasswordReset(body.email);
+    if (result) {
+      try {
+        await svc.sendPasswordResetCodeEmail(result.username, result.code);
+      } catch (error) {
+        console.error('[forgot-password] ส่งอีเมลรหัสยืนยันไม่สำเร็จ:', error.message);
+      }
+    }
+    return { ok: true, message: 'ถ้าอีเมลนี้มีอยู่ในระบบ จะได้รับรหัสยืนยัน 6 หลักทางอีเมลภายในไม่กี่นาที' };
+  }],
+
+  /** ลืมรหัสผ่าน ขั้น 2 — ยืนยันรหัส 6 หลัก ผ่านแล้วได้ resetToken ไปตั้งรหัสผ่านใหม่จริงที่ขั้น 3 */
+  ['POST', /^\/api\/auth\/verify-reset-code$/, (_m, _url, body) => {
+    if (!body?.email || !body?.code) throw httpError(400, 'ต้องระบุอีเมลและรหัสยืนยัน');
+    return verifyResetCode(body.email, body.code);
+  }],
+
+  /** ลืมรหัสผ่าน ขั้น 3 — ตั้งรหัสผ่านใหม่จริงด้วย resetToken จากขั้น 2 */
+  ['POST', /^\/api\/auth\/reset-password$/, (_m, _url, body) => {
+    if (!body?.email || !body?.resetToken || !body?.newPassword) {
+      throw httpError(400, 'ต้องระบุอีเมล resetToken และรหัสผ่านใหม่');
+    }
+    resetPasswordWithToken(body.email, body.resetToken, body.newPassword);
+    return { ok: true };
+  }],
 
   /* ── จัดการระบบ → ผู้ใช้ — เฉพาะ admin (เดิมทำได้แค่ผ่าน scripts/create-user.js/SQL) ── */
   ['GET', /^\/api\/users$/, (_m, _url, _body, session) => {
@@ -77,7 +125,7 @@ const routes = [
     requireAdmin(session);
     return createUser({
       username: body?.username, nameTh: body?.nameTh, password: body?.password, role: body?.role,
-      actor: session.nameTh,
+      employeeId: body?.employeeId || null, actor: session.nameTh,
     });
   }],
 
@@ -90,7 +138,10 @@ const routes = [
     let result;
     if (body?.role !== undefined) result = updateUserRole(username, body.role, { actor: session.nameTh });
     if (body?.active !== undefined) result = setUserActive(username, Boolean(body.active), { actor: session.nameTh });
-    if (!result) throw httpError(400, 'ต้องระบุ role หรือ active อย่างใดอย่างหนึ่ง');
+    if (body?.employeeId !== undefined) {
+      result = updateUserEmployee(username, body.employeeId || null, { actor: session.nameTh });
+    }
+    if (!result) throw httpError(400, 'ต้องระบุ role หรือ active หรือ employeeId อย่างใดอย่างหนึ่ง');
     return result;
   }],
 
@@ -149,8 +200,10 @@ const routes = [
     return sheet;
   }],
 
-  ['POST', /^\/api\/timesheets\/([^/]+)\/recompute$/, (m, _url, _body, session) =>
-    svc.recomputeTimesheet(decodeURIComponent(m[1]), { actor: session.nameTh })],
+  ['POST', /^\/api\/timesheets\/([^/]+)\/recompute$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.recomputeTimesheet(decodeURIComponent(m[1]), { actor: session.nameTh });
+  }],
 
   /** เทียบวันลาที่ Timesheet รายงานกับวันลาที่อนุมัติแล้วจริงใน HRDD — อ่านอย่างเดียว
    * ไม่มีเขียน/แก้/ลบฝั่ง HRDD เด็ดขาด (ดูคอมเมนต์ที่ svc.checkTimesheetAgainstHrdd) */
@@ -159,25 +212,32 @@ const routes = [
 
   /** เทียบวันลากับ HRDD ตอนรีวิวก่อนบันทึกในหน้า "อัปโหลด Timesheet" — ยังไม่มี timesheetId
    * (ดูคอมเมนต์ที่ svc.checkLeavesAgainstHrdd) อ่านอย่างเดียวเหมือนกัน ไม่มีเขียน/แก้/ลบฝั่ง HRDD */
-  ['POST', /^\/api\/hrdd-compare-preview$/, (_m, _url, body) =>
-    svc.checkLeavesAgainstHrdd({
+  ['POST', /^\/api\/hrdd-compare-preview$/, (_m, _url, body, session) => {
+    requireNotExecutive(session);
+    return svc.checkLeavesAgainstHrdd({
       employeeId: body?.employeeId, period: body?.period, leaveDays: body?.leaveDays ?? [],
-    })],
+    });
+  }],
 
   ['POST', /^\/api\/timesheets\/([^/]+)\/reject$/, (m, _url, body, session) => {
+    requireAdmin(session);
     if (!body?.reason) throw httpError(400, 'ต้องระบุเหตุผลที่ตีกลับ');
     return svc.rejectTimesheet(decodeURIComponent(m[1]), { actor: session.nameTh, reason: body.reason });
   }],
 
-  /** ขั้นที่ 2 ของโหมด manual — คนกดยืนยันว่าตรวจใบนี้แล้ว */
-  ['POST', /^\/api\/timesheets\/([^/]+)\/check$/, (m, _url, _body, session) =>
-    svc.markTimesheetChecked(decodeURIComponent(m[1]), { actor: session.nameTh })],
+  /** ขั้นที่ 2 ของโหมด manual — คนกดยืนยันว่าตรวจใบนี้แล้ว — เฉพาะ admin/แผนกบัญชี (31 ส.ค. 69 ตามที่ขอ)
+   * ใบที่พนักงาน (role 'user') อัปโหลด/ยืนยันเองต้องผ่านคนกลุ่มนี้ตรวจซ้ำก่อนเสมอ กดขั้นนี้เองไม่ได้ */
+  ['POST', /^\/api\/timesheets\/([^/]+)\/check$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.markTimesheetChecked(decodeURIComponent(m[1]), { actor: session.nameTh });
+  }],
 
   /**
    * ขั้นที่ 1 ของโหมด manual — อัปโหลดไฟล์เอง ให้ AI อ่านให้ดูก่อน ยังไม่บันทึก
    * แยกจาก /ingest เพราะคนต้องได้ตรวจสิ่งที่ AI อ่านมาก่อนเข้าระบบ
    */
   ['POST', /^\/api\/timesheets\/read$/, async (_m, _url, body, session) => {
+    requireNotExecutive(session);
     if (!body?.fileBase64) throw httpError(400, 'ยังไม่ได้แนบไฟล์ Timesheet');
     const result = await svc.readTimesheetFile({
       fileBase64: body.fileBase64,
@@ -191,8 +251,12 @@ const routes = [
   }],
 
   /** คนตรวจสิ่งที่ AI อ่านแล้วกดยืนยัน → บันทึกเข้าระบบด้วยเส้นเดียวกับ n8n */
-  ['POST', /^\/api\/timesheets\/confirm$/, (_m, _url, body, session) =>
-    svc.confirmTimesheet({ ...body, actor: session.nameTh })],
+  ['POST', /^\/api\/timesheets\/confirm$/, (_m, _url, body, session) => {
+    requireNotExecutive(session);
+    // role 'user' บังคับเป็น self_obs เสมอ ห้ามเชื่อค่าจาก client — ฝ่ายบัญชี/admin เลือกเองได้ตอนกรอกเอง
+    const submissionMethod = session.role === 'user' ? 'self_obs' : (body?.submissionMethod || 'self_email');
+    return svc.confirmTimesheet({ ...body, submissionMethod, actor: session.nameTh });
+  }],
 
   /** ประวัติที่ AI เคยอ่านแล้ว ทั้งจากอัปโหลดไฟล์เองและดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง */
   ['GET', /^\/api\/ai-reads$/, (_m, url) =>
@@ -205,6 +269,7 @@ const routes = [
   }],
 
   ['POST', /^\/api\/ai-reads\/dismiss$/, (_m, _url, body, session) => {
+    requireAdmin(session);
     if (!body?.id) throw httpError(400, 'ต้องระบุรายการที่จะลบ');
     svc.dismissAiRead(Number(body.id), { actor: session.nameTh });
     return { ok: true };
@@ -221,6 +286,7 @@ const routes = [
 
   /** ดึงอีเมล 1 ฉบับ → AI อ่านทั้งเนื้อเมลและไฟล์แนบ → คืนให้คนตรวจ (ยังไม่บันทึก) */
   ['POST', /^\/api\/gmail\/read$/, async (_m, _url, body, session) => {
+    requireNotExecutive(session);
     if (!body?.messageId) throw httpError(400, 'ต้องระบุอีเมลที่จะดึง');
     const result = await svc.readTimesheetFromEmail({
       messageId: body.messageId,
@@ -233,6 +299,7 @@ const routes = [
 
   /** ซ่อนอีเมลฉบับนี้ทิ้งจากรายการ — ไม่ลบอีเมลจริงใน Gmail */
   ['POST', /^\/api\/gmail\/dismiss$/, (_m, _url, body, session) => {
+    requireAdmin(session);
     if (!body?.messageId) throw httpError(400, 'ต้องระบุอีเมลที่จะซ่อน');
     return svc.dismissGmailMessage(body.messageId, { actor: session.nameTh });
   }],
@@ -242,8 +309,10 @@ const routes = [
    * ไม่ต้องมีอีเมล ไม่ต้องเรียก AI เลย แต่ผ่านการตรวจชุดเดียวกับ n8n
    * เลขที่เอกสารระบบออกให้อัตโนมัติ (ดู nextDocumentNo) ไม่ต้องให้คนพิมพ์เองแล้ว
    */
-  ['POST', /^\/api\/timesheets\/manual$/, (_m, _url, body, session) =>
-    svc.enterTimesheetManually({ ...body, actor: session.nameTh })],
+  ['POST', /^\/api\/timesheets\/manual$/, (_m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.enterTimesheetManually({ ...body, submissionMethod: body?.submissionMethod, actor: session.nameTh });
+  }],
 
   /**
    * จุดต่อหลักกับ n8n — รับไฟล์ Timesheet เข้าระบบครบวงจร
@@ -308,8 +377,10 @@ const routes = [
   }],
 
   /* ── ปิดงาน: คนส่งเมลเองแล้วมายืนยัน ── */
-  ['POST', /^\/api\/invoices\/([^/]+)\/sent$/, (m, _url, _body, session) =>
-    svc.markInvoiceEmailSent({ invoiceId: decodeURIComponent(m[1]), actor: session.nameTh })],
+  ['POST', /^\/api\/invoices\/([^/]+)\/sent$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.markInvoiceEmailSent({ invoiceId: decodeURIComponent(m[1]), actor: session.nameTh });
+  }],
 
   /** ให้ n8n ตัวตั้งเวลาถามว่า "วันนี้ต้องวางบิลอะไร" */
   ['GET', /^\/api\/cycles\/ready$/, () => svc.readyCycles()],
@@ -378,8 +449,14 @@ const routes = [
   }],
   ['GET', /^\/api\/invoices$/, (_m, url) =>
     svc.listInvoices({ contractId: url.searchParams.get('contractId') ?? undefined })],
-  ['GET', /^\/api\/activity$/, (_m, url) =>
-    svc.activityFeed({ limit: Number(url.searchParams.get('limit') ?? 30) })],
+  /** role 'executive' เห็นภาพรวมทุกบริษัทพร้อมกันอยู่แล้ว (ไม่มีตัวสลับบริษัทบนแถบบนให้ด้วย) จึงไม่กรอง
+   * ตามบริษัท active ให้ — role อื่น (admin/accounting) กรองด้วยบริษัทที่ active อยู่ตอนนี้เสมอ ให้ตรงกับ
+   * ที่หน้าตรวจ Manday/วางบิลกรองด้วย contractId เดียวกัน (ไม่งั้นเห็นแจ้งเตือนของพนักงานบริษัทอื่นปนมา) */
+  ['GET', /^\/api\/activity$/, (_m, url, _body, session) =>
+    svc.activityFeed({
+      limit: Number(url.searchParams.get('limit') ?? 30),
+      contractId: session.role === 'executive' ? null : (svc.getActiveContract()?.id ?? null),
+    })],
   ['GET', /^\/api\/settings$/, () => svc.settingsSnapshot()],
 
   /** สวิตช์เชื่อมต่อ FlowAccount บนแถบบน — เปิด/ปิดได้จาก admin เท่านั้น (มีผลกับทั้งระบบทันที) */
@@ -387,7 +464,51 @@ const routes = [
     requireAdmin(session);
     return svc.setFlowAccountConnected(Boolean(body?.enabled), { actor: session.nameTh });
   }],
-  ['GET', /^\/api\/pulse$/, (_m, _url, _body, session) => svc.pulse({ actor: session.nameTh, role: session.role })],
+  /** สารบัญ Skill ABBYY — อ่านได้ทั้ง admin/แผนกบัญชี/user (ใช้เติม dropdown เลือก Skill ต่อสัญญา)
+   * เพิ่ม/ลบได้เฉพาะ admin จริงๆเท่านั้น (ดู requireSuperAdmin) */
+  ['GET', /^\/api\/abbyy-skills$/, () => svc.listAbbyySkills()],
+  ['POST', /^\/api\/abbyy-skills$/, (_m, _url, body, session) => {
+    requireSuperAdmin(session);
+    return svc.createAbbyySkill({ ...body, actor: session.nameTh });
+  }],
+  ['DELETE', /^\/api\/abbyy-skills\/([^/]+)$/, (m, _url, _body, session) => {
+    requireSuperAdmin(session);
+    return svc.deleteAbbyySkill(decodeURIComponent(m[1]), { actor: session.nameTh });
+  }],
+
+  ['GET', /^\/api\/pulse$/, (_m, _url, _body, session) =>
+    svc.pulse({ actor: session.nameTh, role: session.role, employeeId: session.employeeId })],
+
+  /** ความคืบหน้าของตัวเอง — เฉพาะ role 'user' (พนักงาน) ใช้ session.employeeId เสมอ ไม่รับจาก client
+   * (กันสวมสิทธิ์ดูของคนอื่น) บัญชียังไม่ผูกพนักงานเลยคืน null ให้หน้าเว็บโชว์ข้อความแจ้งแทน */
+  ['GET', /^\/api\/my-progress$/, (_m, _url, _body, session) => {
+    if (session.role !== 'user') throw httpError(403, 'มีแค่ role พนักงานเท่านั้นที่ดูหน้านี้ได้');
+    if (!session.employeeId) return null;
+    return svc.employeeProgress(session.employeeId);
+  }],
+
+  /** "การแจ้งเตือน" ของ role 'user' — เห็นแค่สถานะ Timesheet ของตัวเอง ไม่ใช่ฟีดรวมทั้งระบบแบบ
+   * /api/activity (1 ก.ย. 69 ตามที่ขอ) ใช้ session.employeeId เสมอเหมือน /api/my-progress ด้านบน */
+  ['GET', /^\/api\/my-notifications$/, (_m, _url, _body, session) => {
+    if (session.role !== 'user') throw httpError(403, 'มีแค่ role พนักงานเท่านั้นที่ดูหน้านี้ได้');
+    if (!session.employeeId) return { items: [], latestAt: null, counts: { total: 0, critical: 0 } };
+    return svc.employeeTimesheetFeed(session.employeeId);
+  }],
+
+  /** พนักงานกดขอรหัสผูกไลน์ 6 หลัก แล้วเอาไปพิมพ์ส่งในแชทไลน์ของบริษัทเอง (1 ก.ย. 69 ตามที่ขอ) */
+  ['POST', /^\/api\/my-line-link\/start$/, (_m, _url, _body, session) => {
+    if (session.role !== 'user') throw httpError(403, 'มีแค่ role พนักงานเท่านั้นที่ผูกไลน์ได้');
+    if (!session.employeeId) throw httpError(400, 'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหนเลย');
+    return svc.startEmployeeLineLink(session.employeeId);
+  }],
+
+  /** เลิกผูกไลน์ตัวเอง — เผื่อผูกผิดคน หรือเปลี่ยนบัญชีไลน์ */
+  ['POST', /^\/api\/my-line-link\/unlink$/, (_m, _url, _body, session) => {
+    if (session.role !== 'user') throw httpError(403, 'มีแค่ role พนักงานเท่านั้นที่ผูกไลน์ได้');
+    if (!session.employeeId) throw httpError(400, 'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหนเลย');
+    return svc.unlinkEmployeeLine(session.employeeId);
+  }],
+
   ['GET', /^\/api\/cycles$/, (_m, url) =>
     svc.billingCycles({ contractId: url.searchParams.get('contractId') ?? undefined })],
 
@@ -396,30 +517,45 @@ const routes = [
   ['GET', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})$/, (m) =>
     svc.cycleDetail(decodeURIComponent(m[1]), m[2])],
 
-  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/approve$/, (m, _url, _body, session) =>
-    svc.approveCycle(decodeURIComponent(m[1]), m[2], { actor: session.nameTh })],
+  /** ให้ role 'executive' กดจากหน้า "ภาพรวมทุกบริษัท" เข้าไปดูสถานะ Timesheet ของทุกคนในสัญญานี้
+   * ได้ (1 ก.ย. 69 ตามที่ขอ) — อ่านอย่างเดียว ไม่มีปุ่มทำรายการใดๆ จึงไม่ต้องมี requireX กั้น
+   * เหมือน /api/timesheets ที่ role ไหนก็เรียกได้อยู่แล้ว */
+  ['GET', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/employees$/, (m) =>
+    svc.contractPeriodEmployees(decodeURIComponent(m[1]), m[2])],
+
+  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/approve$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.approveCycle(decodeURIComponent(m[1]), m[2], { actor: session.nameTh });
+  }],
 
   /**
    * ขั้น 4.2 — ประตูมนุษย์จริงก่อนสร้างร่างใน FlowAccount — เส้นนี้ n8n เรียกได้โดยไม่ต้อง login
    * (อยู่ใน PUBLIC_API_PATTERNS) ที่นี่แค่ส่งสรุปเข้า LINE ให้คนกด ไม่สร้างเอกสารใดๆ
    * เรียกจากหน้าเว็บได้ด้วย — ตอนนั้น session มีค่า actor จะเป็นชื่อคนที่กดจริง ไม่ใช่ 'n8n'
+   * ต้องเช็ค session ก่อนเรียก requireAdmin (session เป็น undefined ตอน n8n เรียกแบบไม่ login)
    */
-  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/request-approval$/, (m, _url, _body, session) =>
-    svc.requestCycleApproval(decodeURIComponent(m[1]), m[2], { actor: session?.nameTh ?? 'n8n' })],
+  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/request-approval$/, (m, _url, _body, session) => {
+    if (session) requireAdmin(session);
+    return svc.requestCycleApproval(decodeURIComponent(m[1]), m[2], { actor: session?.nameTh ?? 'n8n' });
+  }],
 
   ['GET', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/approval$/, (m) =>
     svc.getCycleApproval(decodeURIComponent(m[1]), m[2])],
 
   /** ขั้นที่ 4 — ให้ AI เรียบเรียงอีเมลจากตัวเลขที่คำนวณไว้ (ยังไม่ส่ง) */
-  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/email-draft$/, (m, _url, _body, session) =>
-    svc.draftEmailWithAi(decodeURIComponent(m[1]), m[2], { actor: session.nameTh })],
+  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/email-draft$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.draftEmailWithAi(decodeURIComponent(m[1]), m[2], { actor: session.nameTh });
+  }],
 
   /**
    * ขั้นที่ 4 — วางร่างไว้ในกล่อง Drafts ของ Gmail
    * ชื่อ endpoint เป็น draft ไม่ใช่ send โดยเจตนา — ระบบไม่มีทางส่งอีเมลออกเอง
    */
-  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/gmail-draft$/, (m, _url, _body, session) =>
-    svc.createGmailDraft(decodeURIComponent(m[1]), m[2], { actor: session.nameTh })],
+  ['POST', /^\/api\/cycles\/([^/]+)\/([0-9]{4}-[0-9]{2})\/gmail-draft$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.createGmailDraft(decodeURIComponent(m[1]), m[2], { actor: session.nameTh });
+  }],
 ];
 
 function httpError(status, message, extra = {}) {
@@ -427,9 +563,29 @@ function httpError(status, message, extra = {}) {
 }
 
 /** ใช้กับ route ที่แก้ข้อมูลหลัก (เรท/สัญญา/ชื่อพ้อง/วันหยุด) — เฉพาะ admin */
+/* แผนกบัญชี (role 'accounting') ทำได้ทุกอย่างเหมือน admin เป๊ะ (31 ส.ค. 69 ตามที่ขอ) ยกเว้นจัดการ
+   Skill ABBYY (ดู requireSuperAdmin ด้านล่าง) — requireAdmin เดิมจึงยอมทั้งสอง role นี้ ไม่ใช่แค่ 'admin' */
 function requireAdmin(session) {
+  if (session.role !== 'admin' && session.role !== 'accounting') {
+    throw httpError(403, 'ต้องเป็น admin หรือแผนกบัญชีเท่านั้นถึงจะแก้ข้อมูลหลักได้');
+  }
+}
+
+/** ใช้กับ route "อัปโหลด Timesheet ของตัวเอง" (อ่านไฟล์/ยืนยันบันทึกครั้งแรก) — พนักงาน (role 'user')
+ * ทำได้ด้วย (31 ส.ค. 69 ตามที่ขอ) กันแค่ role 'executive' ที่ตั้งใจให้ดูได้อย่างเดียวทุกจุด
+ * ใบที่พนักงานส่งเข้ามาเองยังต้องผ่านขั้น "ตรวจ Manday" ให้แผนกบัญชี/admin กด check/reject/approve
+ * ซ้ำอีกทีเสมอ (ดู requireAdmin ที่ route เหล่านั้น) — พนักงานเองกด check/reject/approve เองไม่ได้ */
+function requireNotExecutive(session) {
+  if (session.role === 'executive') {
+    throw httpError(403, 'role ผู้บริหารดูข้อมูลได้อย่างเดียว ทำรายการนี้ไม่ได้');
+  }
+}
+
+/** จัดการ Skill ABBYY (เพิ่ม/ลบ) — เข้มกว่า requireAdmin ปกติ ยอมเฉพาะ role 'admin' จริงๆเท่านั้น
+   แผนกบัญชีเลือกใช้ Skill ที่มีอยู่แล้วได้ แต่กำหนด/เพิ่ม Skill ใหม่ไม่ได้ */
+function requireSuperAdmin(session) {
   if (session.role !== 'admin') {
-    throw httpError(403, 'ต้องเป็น admin เท่านั้นถึงจะแก้ข้อมูลหลักได้');
+    throw httpError(403, 'ต้องเป็น admin เท่านั้นถึงจะจัดการ Skill ABBYY ได้');
   }
 }
 
@@ -592,6 +748,62 @@ const server = createServer(async (req, res) => {
   // ไม่ผ่านตารางเส้นทางด้านล่าง เพราะสายนี้เปิดค้างไว้ ไม่ได้ตอบ JSON ก้อนเดียวแล้วจบ
   if (url.pathname === '/api/stream' && req.method === 'GET') {
     openStream(req, res);
+    return;
+  }
+
+  /**
+   * เข้าสู่ระบบด้วย Google — สองเส้นทางนี้ตอบเป็น redirect (302) ไม่ใช่ JSON ก้อนเดียว
+   * จึงต้องแยกออกมานอกตาราง routes ด้านล่างเหมือน /api/stream ข้างบน
+   *
+   * state เก็บไว้ใน cookie ชั่วคราวเทียบกับค่าที่ Google ส่งกลับมาตอน callback (CSRF) —
+   * อายุสั้นแค่ 5 นาทีพอสำหรับกดยินยอมที่ฝั่ง Google เสร็จ
+   */
+  if (url.pathname === '/api/auth/google/start' && req.method === 'GET') {
+    if (!googleEnabled()) {
+      sendJson(res, 501, { error: 'ยังไม่ได้ตั้งค่า Google Sign-In — ใส่ GOOGLE_CLIENT_ID/SECRET ใน .env ก่อน' });
+      return;
+    }
+    const state = randomBytes(16).toString('hex');
+    res.writeHead(302, {
+      'Set-Cookie': `obs_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=300`,
+      Location: buildGoogleAuthUrl({ redirectUri: googleRedirectUri(req), state }),
+    });
+    res.end();
+    return;
+  }
+
+  if (url.pathname === '/api/auth/google/callback' && req.method === 'GET') {
+    try {
+      const state = url.searchParams.get('state');
+      const cookieState = parseCookies(req.headers.cookie).obs_oauth_state;
+      if (!state || !cookieState || state !== cookieState) {
+        throw httpError(400, 'session สำหรับเข้าสู่ระบบด้วย Google หมดอายุ — ลองใหม่อีกครั้ง');
+      }
+      const code = url.searchParams.get('code');
+      if (!code) throw httpError(400, 'Google ไม่ได้ส่ง code กลับมา');
+
+      const profile = await fetchGoogleProfile({ code, redirectUri: googleRedirectUri(req) });
+      const user = findOrCreateGoogleUser(profile);
+      const clearState = 'obs_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
+
+      if (!user.active) {
+        res.writeHead(302, { 'Set-Cookie': clearState, Location: '/?googlePending=1' });
+        res.end();
+        return;
+      }
+      const { token, expiresAt } = createSession(user.username, true);
+      res.writeHead(302, {
+        'Set-Cookie': [
+          `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Expires=${new Date(expiresAt).toUTCString()}`,
+          clearState,
+        ],
+        Location: '/',
+      });
+      res.end();
+    } catch (error) {
+      res.writeHead(302, { Location: `/?loginError=${encodeURIComponent(error.message)}` });
+      res.end();
+    }
     return;
   }
 

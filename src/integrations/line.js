@@ -180,6 +180,16 @@ export class LineClient {
   }
 
   /**
+   * ส่งข้อความหา userId คนเดียวตรงๆ — ต่างจาก pushPlainText/pushNeedsCheck ที่ส่งเข้ารายชื่อ
+   * ผู้รับแจ้งเตือนฝ่ายบัญชี (targets) เสมอ ใช้กับแจ้งเตือนสถานะ Timesheet ส่วนตัวของพนักงานแต่ละคน
+   * (1 ก.ย. 69 ตามที่ขอ) — เงียบไม่ throw ถ้ายังไม่ได้ผูกบัญชีไลน์ (userId ว่าง) เรียกได้โดยไม่ต้องเช็คก่อนทุกที่
+   */
+  async pushToUser(userId, text) {
+    if (!userId) return null;
+    return this.call('/message/push', { to: userId, messages: [{ type: 'text', text }] });
+  }
+
+  /**
    * ส่งข้อความธรรมดา ไม่มีปุ่ม ให้ **ทุกคน** ในรายชื่อผู้รับแจ้งเตือนช่องทาง LINE (targets)
    * ใช้แจ้งเตือนที่ไม่ต้องมีคนกดตอบ (ข้อ 2.6 แจ้งทีมเมื่อ Manday ไม่ผ่าน)
    */

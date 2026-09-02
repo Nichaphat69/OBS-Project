@@ -58,11 +58,16 @@
   <symbol id="i-house" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM9 22V12h6v10"/></symbol>
   <symbol id="i-invoice" viewBox="0 0 24 24"><path d="M7 2.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"/><path d="M14 2.5v4h4M9 12h6M9 15.5h6"/><circle cx="17" cy="18" r="2.6"/><path d="M17 16.6v2.8"/></symbol>
   <symbol id="i-envelope-plus" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="14" height="12" rx="2"/><path d="m3 6.5 7 5 7-5"/><path d="M19.5 13v6M16.5 16h6"/></symbol>
+  <!-- ไอคอนดวงตา — โชว์/ซ่อนรหัสผ่าน (31 ส.ค. 69 ตามที่ขอ ใช้ทุกช่องกรอกรหัสผ่านในระบบ) -->
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.4 4.4M6.6 6.6C4 8.3 2 12 2 12s3.6 7 10 7a10.4 10.4 0 0 0 4-.8"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
 </svg>
 
-<!-- ══ หน้า login — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ══
+<!-- ══ หน้า login/ลงทะเบียน/ลืมรหัสผ่าน — คลุมทับทุกอย่างจนกว่าจะยืนยันตัวได้ ══
      สองคอลัมน์: ซ้ายเป็นภาพประกอบแบรนด์ (ตกแต่งล้วนๆ aria-hidden ใช้รูปจริง /img/login-orb.png)
-     ขวาเป็นฟอร์มจริง — ไอดีของฟอร์ม/ช่องกรอกเดิมทั้งหมดยังอยู่ครบ จาวาสคริปต์ที่ล็อกอินไม่ต้องแก้อะไรเลย ══ -->
+     ขวาเป็นฟอร์มจริง — สามหน้าจอสลับกันด้วย hidden (ดู app.js: showLoginScreen/showRegisterScreen/
+     showForgotScreen) ทั้งสามใช้ .login-art/.login-panel/.login-card ร่วมกันหมด (31 ส.ค. 69 ตามที่ขอ
+     เพิ่มลงทะเบียนเอง + ลืมรหัสผ่าน + Google + ไอคอนดวงตา + จดจำฉัน) ══ -->
 <div class="login-screen" id="loginScreen" hidden>
   <div class="login-art" aria-hidden="true"></div>
   <div class="login-panel">
@@ -70,11 +75,106 @@
       <h1 data-th="เข้าสู่ระบบ OBS" data-en="Sign in to OBS">เข้าสู่ระบบ OBS</h1>
       <p class="lc-sub" data-th="ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้"
          data-en="Outsource billing system — use the username/password your admin created for you">ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
+      <div class="lc-info" id="loginInfo" hidden></div>
       <label>Username<input id="loginUser" type="text" autocomplete="username" required></label>
-      <label><span data-th="รหัสผ่าน" data-en="Password">รหัสผ่าน</span><input id="loginPass" type="password" autocomplete="current-password" required></label>
+      <label><span data-th="รหัสผ่าน" data-en="Password">รหัสผ่าน</span>
+        <div class="pwrap">
+          <input id="loginPass" type="password" autocomplete="current-password" required>
+          <button type="button" class="eye" data-target="loginPass" data-th-aria="แสดง/ซ่อนรหัสผ่าน" data-en-aria="Show/hide password" aria-label="แสดง/ซ่อนรหัสผ่าน" tabindex="-1"><svg class="i"><use href="#i-eye"></use></svg></button>
+        </div>
+      </label>
+      <div class="lc-row">
+        <label class="lc-chk"><input type="checkbox" id="loginRemember" checked>
+          <span data-th="จดจำฉัน (30 วัน)" data-en="Remember me (30 days)">จดจำฉัน (30 วัน)</span></label>
+        <button type="button" class="lc-link" id="gotoForgotBtn" data-th="ลืมรหัสผ่าน?" data-en="Forgot password?">ลืมรหัสผ่าน?</button>
+      </div>
       <div class="lc-err" id="loginErr" hidden></div>
       <button class="btn pri" type="submit" id="loginBtn" data-th="เข้าสู่ระบบ" data-en="Sign in">เข้าสู่ระบบ</button>
+      <button type="button" class="btn google" id="googleLoginBtn" hidden>
+        <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.95v2.33A9 9 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.95A9 9 0 0 0 0 9c0 1.45.35 2.83.95 4.05l3.02-2.33Z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.59-2.59A8.9 8.9 0 0 0 9 0 9 9 0 0 0 .95 4.95l3.02 2.33C4.68 5.16 6.66 3.58 9 3.58Z"/></svg>
+        <span data-th="เข้าสู่ระบบด้วย Google" data-en="Sign in with Google">เข้าสู่ระบบด้วย Google</span>
+      </button>
+      <p class="lc-sw"><span data-th="ยังไม่มีบัญชี?" data-en="No account yet?">ยังไม่มีบัญชี?</span>
+        <button type="button" class="lc-link" id="gotoRegisterBtn" data-th="ลงทะเบียน" data-en="Register">ลงทะเบียน</button></p>
     </form>
+  </div>
+</div>
+
+<!-- ══ ลงทะเบียนเอง — บัญชีที่ได้ต้องรอ admin/accounting เปิดใช้งานก่อนถึง login ได้จริง ══ -->
+<div class="login-screen" id="registerScreen" hidden>
+  <div class="login-art" aria-hidden="true"></div>
+  <div class="login-panel">
+    <form class="login-card" id="registerForm">
+      <h1 data-th="ลงทะเบียนใช้งาน OBS" data-en="Register for OBS">ลงทะเบียนใช้งาน OBS</h1>
+      <p class="lc-sub" data-th="ลงทะเบียนแล้วต้องรอผู้ดูแลระบบตรวจสอบและเปิดใช้งานก่อน จึงจะเข้าสู่ระบบได้"
+         data-en="After registering, an admin must review and activate your account before you can sign in">ลงทะเบียนแล้วต้องรอผู้ดูแลระบบตรวจสอบและเปิดใช้งานก่อน จึงจะเข้าสู่ระบบได้</p>
+      <label><span data-th="ชื่อ-นามสกุล" data-en="Full name">ชื่อ-นามสกุล</span><input id="regName" type="text" required></label>
+      <label><span data-th="อีเมล" data-en="Email">อีเมล</span><input id="regEmail" type="email" autocomplete="email" required></label>
+      <label><span data-th="รหัสผ่าน" data-en="Password">รหัสผ่าน</span>
+        <div class="pwrap">
+          <input id="regPass" type="password" autocomplete="new-password" minlength="8" required>
+          <button type="button" class="eye" data-target="regPass" aria-label="แสดง/ซ่อนรหัสผ่าน" tabindex="-1"><svg class="i"><use href="#i-eye"></use></svg></button>
+        </div>
+      </label>
+      <div class="lc-err" id="registerErr" hidden></div>
+      <button class="btn pri" type="submit" id="registerBtn" data-th="ลงทะเบียน" data-en="Register">ลงทะเบียน</button>
+      <button type="button" class="btn google" id="googleRegisterBtn" hidden>
+        <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.95v2.33A9 9 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.95A9 9 0 0 0 0 9c0 1.45.35 2.83.95 4.05l3.02-2.33Z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.59-2.59A8.9 8.9 0 0 0 9 0 9 9 0 0 0 .95 4.95l3.02 2.33C4.68 5.16 6.66 3.58 9 3.58Z"/></svg>
+        <span data-th="ลงทะเบียนด้วย Google" data-en="Register with Google">ลงทะเบียนด้วย Google</span>
+      </button>
+      <p class="lc-sw"><span data-th="มีบัญชีอยู่แล้ว?" data-en="Already have an account?">มีบัญชีอยู่แล้ว?</span>
+        <button type="button" class="lc-link" id="gotoLoginFromRegisterBtn" data-th="เข้าสู่ระบบ" data-en="Sign in">เข้าสู่ระบบ</button></p>
+    </form>
+    <div class="login-card" id="registerSuccess" hidden>
+      <h1 data-th="ลงทะเบียนสำเร็จ" data-en="Registered">ลงทะเบียนสำเร็จ</h1>
+      <p class="lc-sub" data-th="รอผู้ดูแลระบบตรวจสอบและเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้"
+         data-en="Wait for an admin to review and activate your account before signing in">รอผู้ดูแลระบบตรวจสอบและเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้</p>
+      <button type="button" class="btn pri" id="registerSuccessBackBtn" data-th="กลับไปเข้าสู่ระบบ" data-en="Back to sign in">กลับไปเข้าสู่ระบบ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ลืมรหัสผ่าน — สามขั้นตอนในการ์ดเดียวกัน สลับด้วย hidden (ไม่ใช่หน้าคนละหน้า) ══ -->
+<div class="login-screen" id="forgotScreen" hidden>
+  <div class="login-art" aria-hidden="true"></div>
+  <div class="login-panel">
+    <form class="login-card" id="forgotStep1">
+      <h1 data-th="ลืมรหัสผ่าน" data-en="Forgot password">ลืมรหัสผ่าน</h1>
+      <p class="lc-sub" data-th="กรอกอีเมลที่ใช้เข้าสู่ระบบ จะส่งรหัสยืนยัน 6 หลักไปให้ทางอีเมล"
+         data-en="Enter the email you sign in with — we'll send a 6-digit code">กรอกอีเมลที่ใช้เข้าสู่ระบบ จะส่งรหัสยืนยัน 6 หลักไปให้ทางอีเมล</p>
+      <label><span data-th="อีเมล" data-en="Email">อีเมล</span><input id="forgotEmail" type="email" autocomplete="email" required></label>
+      <div class="lc-err" id="forgotStep1Err" hidden></div>
+      <button class="btn pri" type="submit" id="forgotStep1Btn" data-th="ส่งรหัสยืนยัน" data-en="Send code">ส่งรหัสยืนยัน</button>
+      <p class="lc-sw"><button type="button" class="lc-link" id="gotoLoginFromForgot1Btn" data-th="กลับไปเข้าสู่ระบบ" data-en="Back to sign in">กลับไปเข้าสู่ระบบ</button></p>
+    </form>
+
+    <form class="login-card" id="forgotStep2" hidden>
+      <h1 data-th="กรอกรหัสยืนยัน" data-en="Enter the code">กรอกรหัสยืนยัน</h1>
+      <p class="lc-sub" id="forgotStep2Sub"></p>
+      <label><span data-th="รหัสยืนยัน 6 หลัก" data-en="6-digit code">รหัสยืนยัน 6 หลัก</span>
+        <input id="forgotCode" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required></label>
+      <div class="lc-err" id="forgotStep2Err" hidden></div>
+      <button class="btn pri" type="submit" id="forgotStep2Btn" data-th="ยืนยันรหัส" data-en="Verify code">ยืนยันรหัส</button>
+      <p class="lc-sw"><button type="button" class="lc-link" id="gotoLoginFromForgot2Btn" data-th="กลับไปเข้าสู่ระบบ" data-en="Back to sign in">กลับไปเข้าสู่ระบบ</button></p>
+    </form>
+
+    <form class="login-card" id="forgotStep3" hidden>
+      <h1 data-th="ตั้งรหัสผ่านใหม่" data-en="Set a new password">ตั้งรหัสผ่านใหม่</h1>
+      <label><span data-th="รหัสผ่านใหม่" data-en="New password">รหัสผ่านใหม่</span>
+        <div class="pwrap">
+          <input id="forgotNewPass" type="password" autocomplete="new-password" minlength="8" required>
+          <button type="button" class="eye" data-target="forgotNewPass" aria-label="แสดง/ซ่อนรหัสผ่าน" tabindex="-1"><svg class="i"><use href="#i-eye"></use></svg></button>
+        </div>
+      </label>
+      <div class="lc-err" id="forgotStep3Err" hidden></div>
+      <button class="btn pri" type="submit" id="forgotStep3Btn" data-th="ตั้งรหัสผ่านใหม่" data-en="Set new password">ตั้งรหัสผ่านใหม่</button>
+    </form>
+
+    <div class="login-card" id="forgotSuccess" hidden>
+      <h1 data-th="ตั้งรหัสผ่านใหม่สำเร็จ" data-en="Password updated">ตั้งรหัสผ่านใหม่สำเร็จ</h1>
+      <p class="lc-sub" data-th="เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย" data-en="You can now sign in with your new password">เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย</p>
+      <button type="button" class="btn pri" id="forgotSuccessBackBtn" data-th="ไปเข้าสู่ระบบ" data-en="Go to sign in">ไปเข้าสู่ระบบ</button>
+    </div>
   </div>
 </div>
 
@@ -106,14 +206,6 @@
     <span class="opt on" data-set="th">ไทย</span>
     <span class="opt" data-set="en">EN</span>
   </div>
-  <div class="bellwrap">
-    <button class="bell" id="bellBtn" title="การแจ้งเตือน" aria-label="การแจ้งเตือน"
-            aria-expanded="false" aria-controls="bellPop">
-      <svg class="i"><use href="#i-bell"/></svg>
-      <span class="dot" id="bellCount" hidden>0</span>
-    </button>
-    <div class="bellpop" id="bellPop" role="dialog" aria-label="อะไรเพิ่งเกิดขึ้น" hidden></div>
-  </div>
   <div class="who">
     <button class="whobtn" id="whoBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="whoPop">
       <span class="av" id="actorAvatar">?</span>
@@ -136,24 +228,38 @@
     <!-- data-step ใช้แทนเลขที่เคยเป็นวงกลม — ตอนหุบเมนูเหลือแต่ไอคอน
          ลำดับขั้นจึงอ่านจากเลขมุมไอคอนกับ tooltip แทน -->
     <nav class="snav" id="tabbar" aria-label="เมนูหลัก">
-      <button class="mtab on" data-view="dash" title="แดชบอร์ด">
+      <button class="mtab on" data-view="dash" title="แดชบอร์ด" id="dashNavBtn">
         <svg class="i"><use href="#i-grid"/></svg> <span data-th="แดชบอร์ด" data-en="Dashboard">แดชบอร์ด</span></button>
+      <button class="mtab" data-view="myProgress" title="ความคืบหน้าของฉัน" id="myProgressNavBtn" hidden>
+        <svg class="i"><use href="#i-grid"/></svg> <span data-th="ความคืบหน้าของฉัน" data-en="My Progress">ความคืบหน้าของฉัน</span></button>
+      <button class="mtab" data-view="execOverview" title="ภาพรวมทุกบริษัท" id="execOverviewNavBtn" hidden>
+        <svg class="i"><use href="#i-building"/></svg> <span data-th="ภาพรวมทุกบริษัท" data-en="All Companies">ภาพรวมทุกบริษัท</span></button>
 
-      <span class="sgrp" data-th="ขั้นตอนการทำงาน" data-en="Workflow">ขั้นตอนการทำงาน</span>
-      <button class="mtab" data-view="upload" data-step="1" title="ขั้น 1 · อัปโหลด Timesheet">
+      <!-- ย้ายเข้ามาจากแถบบนแทน (1 ก.ย. 69 ตามที่ขอ) — เดิมเป็นแผงลอย (popup) เปลี่ยนเป็นหน้าเต็ม
+           เหมือนแท็บอื่นทุกอย่างแล้ว จึงมี data-view ปกติ ผูกกับ setNav() ได้เลยไม่ต้องแยกพิเศษ -->
+      <button class="mtab" data-view="notifications" title="การแจ้งเตือน" id="bellBtn">
+        <svg class="i"><use href="#i-bell"/></svg>
+        <span data-th="การแจ้งเตือน" data-en="Notifications">การแจ้งเตือน</span>
+        <span class="bdg" id="bellCount" hidden>0</span>
+      </button>
+
+      <span class="sgrp" data-th="ขั้นตอนการทำงาน" data-en="Workflow" id="workflowGroupLabel">ขั้นตอนการทำงาน</span>
+      <button class="mtab" data-view="upload" data-step="1" title="ขั้น 1 · อัปโหลด Timesheet" id="uploadNavBtn">
         <svg class="i"><use href="#i-envelope-plus"/></svg> <span data-th="อัปโหลด Timesheet" data-en="Upload Timesheet">อัปโหลด Timesheet</span></button>
-      <button class="mtab" data-view="queue" data-step="2" title="ขั้น 2 · ตรวจ Manday">
+      <button class="mtab" data-view="queue" data-step="2" title="ขั้น 2 · ตรวจ Manday" id="queueNavBtn">
         <svg class="i"><use href="#i-list-chk"/></svg> <span data-th="ตรวจ Manday" data-en="Review Manday">ตรวจ Manday</span>
         <span class="bdg" id="queueBadge">–</span></button>
-      <button class="mtab" data-view="cycles" data-step="3" title="ขั้น 3 · วางบิล และร่างอีเมล">
+      <button class="mtab" data-view="cycles" data-step="3" title="ขั้น 3 · วางบิล และร่างอีเมล" id="cyclesNavBtn">
         <svg class="i"><use href="#i-invoice"/></svg> <span data-th="วางบิล &amp; ร่างอีเมล" data-en="Billing &amp; Email">วางบิล &amp; ร่างอีเมล</span>
         <span class="bdg" id="cycleBadge">–</span></button>
 
-      <span class="sgrp" data-th="อ้างอิง" data-en="Reference">อ้างอิง</span>
-      <button class="mtab" data-view="invoices" title="ใบแจ้งหนี้">
+      <span class="sgrp" data-th="อ้างอิง" data-en="Reference" id="refGroupLabel">อ้างอิง</span>
+      <button class="mtab" data-view="invoices" title="ใบแจ้งหนี้" id="invoicesNavBtn">
         <svg class="i"><use href="#i-doc"/></svg> <span data-th="ใบแจ้งหนี้" data-en="Invoices">ใบแจ้งหนี้</span></button>
       <button class="mtab" data-view="master" title="ข้อมูลหลัก" id="masterNavBtn" hidden>
         <svg class="i"><use href="#i-users"/></svg> <span data-th="ข้อมูลหลัก" data-en="Master Data">ข้อมูลหลัก</span></button>
+      <button class="mtab" data-view="abbyySkills" title="Skill ABBYY" id="abbyySkillsNavBtn" hidden>
+        <svg class="i"><use href="#i-monitor"/></svg> <span data-th="Skill ABBYY" data-en="ABBYY Skills">Skill ABBYY</span></button>
       <button class="mtab" data-view="sysadmin" title="จัดการระบบ" id="sysAdminTab" hidden>
         <svg class="i"><use href="#i-cog"/></svg> <span data-th="จัดการระบบ" data-en="System Admin">จัดการระบบ</span></button>
     </nav>

@@ -64,7 +64,7 @@ test('ตั้งชื่อ username ซ้ำไม่ได้', () => {
 
 test('login ด้วยรหัสถูก → ได้ข้อมูลผู้ใช้กลับมารวม role', () => {
   const user = auth.verifyLogin('nicha', 'sup3rsecret');
-  assert.deepEqual(user, { username: 'nicha', nameTh: 'นิชา', role: 'user' });
+  assert.deepEqual(user, { username: 'nicha', nameTh: 'นิชา', role: 'user', employeeId: null });
 });
 
 test('login ด้วยรหัสผิด → null', () => {
@@ -81,7 +81,7 @@ test('สร้าง session แล้ว resolve กลับมาได้�
   assert.ok(new Date(expiresAt).getTime() > Date.now());
 
   const resolved = auth.resolveSession(token);
-  assert.deepEqual(resolved, { username: 'nicha', nameTh: 'นิชา', role: 'user' });
+  assert.deepEqual(resolved, { username: 'nicha', nameTh: 'นิชา', role: 'user', employeeId: null });
 });
 
 test('resolveSession คืน null เมื่อ token ไม่มีอยู่จริง', () => {
@@ -116,7 +116,10 @@ test('listUsers คืนทุกคน เรียงตาม username ไ�
   const users = auth.listUsers();
   assert.ok(users.length >= 2);
   const nicha = users.find((u) => u.username === 'nicha');
-  assert.deepEqual(Object.keys(nicha).sort(), ['active', 'created_at', 'name_th', 'role', 'username'].sort());
+  assert.deepEqual(
+    Object.keys(nicha).sort(),
+    ['active', 'created_at', 'email', 'employee_id', 'name_th', 'role', 'self_registered', 'selfRegistered', 'username'].sort(),
+  );
   assert.equal(nicha.active, true);
 });
 
@@ -186,5 +189,83 @@ test('resetPassword กับ username ที่ไม่มีอยู่ → 
   assert.throws(
     () => auth.resetPassword('ghost', 'longenough1'),
     (error) => error.status === 404,
+  );
+});
+
+/* ── ลงทะเบียนเอง (31 ส.ค. 69 ตามที่ขอ) ── */
+
+test('registerUser สร้างบัญชีได้ แต่ active=0 เสมอ — รอ admin เปิดใช้งานก่อน', () => {
+  const result = auth.registerUser({ email: 'someone@ipassion.co.th', nameTh: 'คนสมัครเอง', password: 'longenough1' });
+  assert.equal(result.username, 'someone@ipassion.co.th');
+  assert.equal(auth.verifyLogin('someone@ipassion.co.th', 'longenough1'), null, 'ยัง login ไม่ได้จนกว่า admin จะเปิดใช้งาน');
+
+  const listed = auth.listUsers().find((u) => u.username === 'someone@ipassion.co.th');
+  assert.equal(listed.active, false);
+  assert.equal(listed.selfRegistered, true);
+  assert.equal(listed.role, 'user');
+});
+
+test('registerUser อีเมลรูปแบบผิด → error 400', () => {
+  assert.throws(
+    () => auth.registerUser({ email: 'ไม่ใช่อีเมล', nameTh: 'x', password: 'longenough1' }),
+    (error) => error.status === 400,
+  );
+});
+
+test('registerUser ซ้ำอีเมลเดิม → error 409', () => {
+  assert.throws(
+    () => auth.registerUser({ email: 'someone@ipassion.co.th', nameTh: 'อีกคน', password: 'longenough1' }),
+    (error) => error.status === 409,
+  );
+});
+
+/* ── ลืมรหัสผ่านทางอีเมล (31 ส.ค. 69 ตามที่ขอ) ── */
+
+test('requestPasswordReset คืน null เงียบๆ ถ้าไม่เจอบัญชี — กัน enumeration', () => {
+  assert.equal(auth.requestPasswordReset('ghost@ipassion.co.th'), null);
+});
+
+test('requestPasswordReset คืน null ถ้าบัญชียังไม่ active (สมัครเองแล้วยังไม่ได้รับอนุมัติ)', () => {
+  assert.equal(auth.requestPasswordReset('someone@ipassion.co.th'), null);
+});
+
+test('ลืมรหัสผ่านครบ 3 ขั้น — ขอรหัส → ยืนยันรหัส → ตั้งรหัสผ่านใหม่ ใช้รหัสใหม่ login ได้จริง', () => {
+  auth.createUser({ username: 'forgetful@ipassion.co.th', nameTh: 'คนขี้ลืม', password: 'oldpassword1' });
+
+  const requested = auth.requestPasswordReset('forgetful@ipassion.co.th');
+  assert.ok(requested);
+  assert.match(requested.code, /^[0-9]{6}$/);
+
+  assert.throws(
+    () => auth.verifyResetCode('forgetful@ipassion.co.th', '000000'),
+    (error) => error.status === 400,
+    'รหัสผิดต้อง throw',
+  );
+
+  const { resetToken } = auth.verifyResetCode('forgetful@ipassion.co.th', requested.code);
+  assert.ok(resetToken);
+
+  assert.throws(
+    () => auth.resetPasswordWithToken('forgetful@ipassion.co.th', 'ไม่ใช่token', 'newpassword1'),
+    (error) => error.status === 400,
+    'token ผิดต้อง throw',
+  );
+
+  auth.resetPasswordWithToken('forgetful@ipassion.co.th', resetToken, 'newpassword1');
+  assert.equal(auth.verifyLogin('forgetful@ipassion.co.th', 'oldpassword1'), null, 'รหัสเดิมต้องใช้ไม่ได้อีก');
+  assert.ok(auth.verifyLogin('forgetful@ipassion.co.th', 'newpassword1'), 'รหัสใหม่ต้อง login ได้');
+
+  assert.throws(
+    () => auth.resetPasswordWithToken('forgetful@ipassion.co.th', resetToken, 'anotherpass1'),
+    (error) => error.status === 400,
+    'resetToken เดิมใช้ซ้ำไม่ได้',
+  );
+});
+
+test('verifyResetCode กับบัญชีที่ไม่เคยขอรหัสไว้ → error 400', () => {
+  auth.createUser({ username: 'neverasked@ipassion.co.th', nameTh: 'ไม่เคยขอ', password: 'longenough1' });
+  assert.throws(
+    () => auth.verifyResetCode('neverasked@ipassion.co.th', '123456'),
+    (error) => error.status === 400,
   );
 });

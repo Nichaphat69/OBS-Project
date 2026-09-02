@@ -297,3 +297,17 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- ── สารบัญ Skill ABBYY ที่เทรนไว้แล้ว (31 ส.ค. 69 ตามที่ขอ) ──────────
+-- ก่อนหน้านี้ contracts.abbyy_skill_id เก็บ Skill ID (GUID) ดิบๆ ต้องไปคัดลอกจาก ABBYY Vantage
+-- มาวางเองทุกครั้ง คนที่ไม่ใช่ admin ก็ไม่รู้ว่า GUID ไหนคือ Skill ของบริษัทแบบฟอร์มไหน ตารางนี้ตั้งชื่อ
+-- ให้ Skill ID แต่ละตัว (เช่น "OBS Timesheet2" → 89aa1af3-...) ให้เลือกจากชื่อได้แทนจำ GUID เอง —
+-- เฉพาะ admin จริงๆเท่านั้นที่เพิ่ม/ลบตารางนี้ได้ (ดู requireSuperAdmin ที่ src/server.js) แผนกบัญชี
+-- (role 'accounting') เลือกใช้ Skill ที่มีอยู่แล้วให้แต่ละสัญญาได้ (ยังคงเก็บที่ contracts.abbyy_skill_id
+-- เหมือนเดิม ไม่ผูก foreign key กับตารางนี้ ลบชื่อออกจากสารบัญไม่กระทบสัญญาที่เคยเลือก Skill ID นั้นไปแล้ว)
+CREATE TABLE IF NOT EXISTS abbyy_skills (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  skill_id   TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);

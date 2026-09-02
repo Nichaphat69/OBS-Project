@@ -203,6 +203,7 @@ svg.i.solid { stroke: none; fill: currentColor; }
   border: none; border-radius: var(--r-side); position: relative;
   transition: color .15s var(--ease), background .15s var(--ease), transform .15s var(--ease);
 }
+.mtab[hidden] { display: none; }
 .mtab > span:first-of-type { flex: 1; }
 .mtab:hover { color: var(--ink); background: var(--hov); }
 .mtab:active { transform: scale(.985); }
@@ -264,6 +265,9 @@ body.side-collapsed .mtab .bdg {
   min-width: 16px; font-size: 9.5px; padding: 0 4px; line-height: 15px;
   border: 1.5px solid var(--paper);
 }
+/* display: block ด้านบน (ผ่าน id ที่ specificity สูงกว่า class ล้วนๆ) ทับ [hidden] ของเบราว์เซอร์
+   ตอนหุบเมนู ต้องสั่งซ่อนเองไม่งั้นป้ายกระดิ่งค้างเลข 0 ตอนไม่มีเรื่องแจ้งเตือน */
+#bellCount[hidden] { display: none; }
 body.side-collapsed .mtab .bdg.zero { display: none; }
 
 /* หัวข้อกลุ่มเหลือเป็นเส้นคั่น — ตัวหนังสือไม่มีที่พอและอ่านไม่ออกอยู่ดี */
@@ -336,7 +340,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 .who .whobtn[aria-expanded="true"] { background: var(--hov); border-color: var(--rule); }
 .who .whobtn[aria-expanded="true"] .cv { transform: rotate(180deg); }
 
-/* เมนูบัญชีใต้ชิป — โครงเดียวกับแผงแจ้งเตือนใต้กระดิ่ง (.bellpop) ให้เปิดมาแล้วรู้สึกเป็นชุดเดียวกัน */
+/* เมนูบัญชีใต้ชิป — โครงเดียวกับ .ctxpop (สลับบริษัท) ให้เปิดมาแล้วรู้สึกเป็นชุดเดียวกัน */
 .whopop {
   position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; min-width: 216px;
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
@@ -366,17 +370,18 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
    เพราะ CSS จาก author เหนือกว่า user-agent default ไม่ว่า specificity จะเท่ากันหรือไม่ */
 .login-screen[hidden] { display: none; }
 
-/* ── คอลัมน์ซ้าย — รูปจริงที่ผู้ใช้สร้างไว้ (public/img/login-orb.png) เต็มคอลัมน์
-   ไม่ใช่กราฟิกที่วาดเอง — cover ให้เต็มพื้นที่เสมอไม่ว่าจอจะสูง/เตี้ยแค่ไหน
-   center top เพราะลูกแก้วอยู่ค่อนไปทางบนของภาพ ไม่อยากให้โดนตัดหัวตอนจอเตี้ย */
+/* ── คอลัมน์ซ้าย — รูปจริงที่ผู้ใช้สร้างไว้ (public/img/login-emblem.png, 1 ก.ย. 69 เปลี่ยนจาก
+   login-orb.png ตามที่ขอ) เต็มคอลัมน์ ไม่ใช่กราฟิกที่วาดเอง — cover ให้เต็มพื้นที่เสมอไม่ว่าจอจะสูง/เตี้ยแค่ไหน
+   center เพราะตราสัญลักษณ์อยู่กลางภาพพอดี */
 .login-art {
-  background: url('/img/login-orb.png') center top / cover no-repeat, #0A5FB0;
+  background: url('/img/login-emblem.png') center / cover no-repeat, #0A5FB0;
 }
 
 /* ── คอลัมน์ขวา — ฟอร์มจริง วางตรงกลางบนพื้นขาวเรียบ ไม่ต้องมีการ์ดลอยซ้อนอีกชั้น ── */
 .login-panel {
   display: grid; place-items: center; background: var(--paper); padding: 24px;
 }
+.login-card[hidden] { display: none; }
 .login-card {
   width: 100%; max-width: 380px;
   display: flex; flex-direction: column; gap: 14px;
@@ -401,6 +406,37 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   font-size: 12.5px; color: var(--cr); background: var(--crb); border: 1px solid var(--crl);
   border-radius: var(--r-ctl); padding: 8px 11px;
 }
+.login-card .lc-info {
+  font-size: 12.5px; color: var(--brand-d); background: var(--tint); border: 1px solid var(--bline);
+  border-radius: var(--r-ctl); padding: 8px 11px;
+}
+
+/* ── รหัสผ่านที่มีปุ่มดวงตาโชว์/ซ่อนต่อท้าย — ใช้ทุกช่องกรอกรหัสผ่านในระบบ (31 ส.ค. 69 ตามที่ขอ) ── */
+.pwrap { position: relative; display: flex; }
+.pwrap input { flex: 1; padding-right: 42px; }
+.pwrap .eye {
+  position: absolute; top: 0; right: 0; height: 100%; width: 40px;
+  display: grid; place-items: center; background: none; border: none; cursor: pointer;
+  color: var(--fnt); border-radius: 0 var(--r-ctl) var(--r-ctl) 0;
+}
+.pwrap .eye:hover { color: var(--mut); }
+.pwrap .eye:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+
+/* ── แถวจดจำฉัน + ลืมรหัสผ่าน บนฟอร์ม login ── */
+.lc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: -4px; }
+.login-card .lc-chk { display: flex; flex-direction: row; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 500; color: var(--ink2); cursor: pointer; }
+.lc-chk input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+.lc-link {
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand); background: none;
+  border: none; padding: 0; cursor: pointer; text-decoration: none;
+}
+.lc-link:hover { text-decoration: underline; }
+.lc-sw { font-size: 12.5px; color: var(--mut); text-align: center; margin: 2px 0 0; }
+.lc-sw .lc-link { margin-left: 4px; }
+
+/* ── ปุ่ม "เข้าสู่ระบบ/ลงทะเบียนด้วย Google" — ซ่อนไว้ก่อนจนกว่า /api/auth/config จะบอกว่าเปิดใช้แล้ว ── */
+.btn.google { justify-content: center; height: 46px; font-size: 13.5px; }
 
 /* จอแคบ — ตัดภาพประกอบซ้ายออกไปเลย เหลือแต่ฟอร์มเต็มจอ ดีกว่าบีบสองคอลัมน์จนอ่านไม่ออก */
 @media (max-width: 820px) {
@@ -410,6 +446,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 
 /* พื้นหลังขาว+เส้นกรอบสี (ไม่ใช่พื้นทึบ) แล้วใช้สวิต on/off แทนจุดกลมเดิม บอกสถานะเชื่อมต่อ
    FlowAccount ชัดเจนกว่า: live = สวิตติด (สีเขียว เลื่อนขวา), sandbox/dry-run = สวิตดับ (เทา เลื่อนซ้าย) */
+.env[hidden] { display: none; }
 .env {
   display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px;
   font-weight: 600; padding: 5px 12px 5px 6px; border-radius: var(--r-pill);
@@ -468,6 +505,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 /* หัวหน้า .phd / .greet กำหนดรวมกันไว้ที่หัวข้อ "หัวหน้าแบบเอกสารทางการ" ด้านล่าง */
 
 /* ── ปุ่ม ───────────────────────────────────────────────── */
+.btn[hidden] { display: none; }
 .btn {
   font: inherit; font-size: 13.5px; font-weight: 600; border-radius: var(--r-ctl);
   min-height: var(--h-ctl); padding: 0 20px; cursor: pointer; border: 1px solid var(--rule);
@@ -1534,6 +1572,10 @@ a.file:hover { background: var(--hov); border-color: var(--brand); color: var(--
   background: linear-gradient(100deg, var(--brand-h) 10%, var(--brand) 55%, var(--brand-l) 100%);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
+/* .tg (ป้ายสถานะ) วางไว้ใน .kv ของการ์ด .kpi.a ได้ (หน้ารายละเอียดบริษัทของ role executive)
+   ต้องรีเซ็ต fill/clip ที่ไล่ลงมาจากด้านบนก่อน ไม่งั้นตัวหนังสือในป้ายโดน clip เป็นโปร่งใสไปด้วย
+   ทั้งที่ป้ายไม่มี background แบบไล่สีให้ clip เกาะ กลายเป็นป้ายว่างไม่มีตัวอักษรเลย */
+.kpi.a .kv .tg { -webkit-background-clip: border-box; background-clip: border-box; -webkit-text-fill-color: currentColor; }
 
 .pill {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
@@ -1871,43 +1913,11 @@ td.n, .docid { white-space: nowrap; }
 }
 
 
-/* กระดิ่งแจ้งเตือน */
-.bell {
-  position: relative; width: 36px; height: 36px; border-radius: var(--r-ctl);
-  border: 1px solid var(--rule); background: var(--paper);
-  display: grid; place-items: center; cursor: pointer; color: var(--ink2);
-}
-.bell:hover { background: var(--hov); color: var(--ink); }
-.bell:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.bell .dot {
-  position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px;
-  border-radius: 999px; background: var(--red); color: #fff; font-size: 10.5px;
-  font-weight: 600; display: grid; place-items: center; padding: 0 5px;
-  border: 2px solid var(--paper); font-variant-numeric: tabular-nums;
-}
-/* display: grid ด้านบนทับ [hidden] ของเบราว์เซอร์ ต้องสั่งซ่อนเองไม่งั้นป้ายขึ้นเลข 0 */
-.bell .dot[hidden] { display: none; }
-
-
-/* ═══ แผงแจ้งเตือนใต้กระดิ่ง ═══ */
-.bellwrap { position: relative; display: flex; }
-
-.bellpop {
-  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60;
-  width: 400px; max-width: calc(100vw - 32px);
-  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-card);
-  box-shadow: var(--sh2); overflow: hidden;
-}
-.bellpop[hidden] { display: none; }
-
-.bp-hd {
-  display: flex; align-items: baseline; gap: 10px; padding: 15px 18px;
-  border-bottom: 1px solid var(--hair);
-}
-.bp-hd b { font-size: 14px; font-weight: 600; }
-.bp-hd span { margin-left: auto; font-size: 12.5px; color: var(--mut); }
-
-.bp-list { list-style: none; margin: 0; padding: 6px; max-height: 60vh; overflow-y: auto; }
+/* กระดิ่งแจ้งเตือน — ย้ายเข้าเมนูข้างเป็นหน้าเต็มแทนแล้ว (1 ก.ย. 69 ตามที่ขอ 2 รอบ: ครั้งแรกย้ายจาก
+   แถบบนมาเป็นแผงลอยในเมนูข้าง ครั้งที่สองเลิกเป็นแผงลอย เปลี่ยนเป็นหน้าเต็มเหมือนแท็บอื่น) ปุ่มใช้ style
+   ของ .mtab/.bdg ร่วมกับรายการเมนูอื่นเลย ส่วนรายการแจ้งเตือนอยู่ใน .card ธรรมดาเหมือนหน้าอื่นๆ
+   เหลือแค่ .bp-list กับลูกๆ ที่ยังใช้อยู่ (เดิมมี .bp-hd/.bp-ft/.bellpop สำหรับตอนเป็นแผงลอย ตัดทิ้งแล้ว) */
+.bp-list { list-style: none; margin: 0; padding: 6px; }
 .bp-list button {
   display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: start;
   width: 100%; font: inherit; text-align: left; cursor: pointer;
@@ -1930,16 +1940,6 @@ td.n, .docid { white-space: nowrap; }
   content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
   background: var(--brand); margin-left: 7px; vertical-align: 1px;
 }
-
-.bp-ft {
-  display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 18px;
-  border-top: 1px solid var(--hair); background: var(--sunk);
-}
-.bp-ft .lk {
-  font: inherit; font-size: 12.5px; font-weight: 500; color: var(--brand-d);
-  background: none; border: none; padding: 0; cursor: pointer;
-}
-.bp-ft .lk:hover { text-decoration: underline; }
 
 .bp-empty { padding: 34px 18px; text-align: center; font-size: 13px; color: var(--mut); }
 

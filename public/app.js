@@ -46,6 +46,10 @@ const int = (value) => (value === null || value === undefined ? '—' : Number(v
 
 const icon = (name, cls = 'i sm') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 
+/** แผนกบัญชี (role 'accounting') ทำได้ทุกอย่างเหมือน admin เป๊ะ (31 ส.ค. 69 ตามที่ขอ) ยกเว้นจัดการ
+ * Skill ABBYY (เช็คแยกเป็น role === 'admin' ตรงๆ ที่จุดนั้น ไม่ใช้ isStaff) */
+const isStaff = (role) => role === 'admin' || role === 'accounting';
+
 /* ── สลับภาษา ไทย/อังกฤษ (27 ส.ค. 69) ─────────────────────────
    tx(str) แปลข้อความ UI คงที่ (หัวข้อ/ปุ่ม/label/หัวตาราง) — คีย์คือข้อความไทยต้นฉบับเป๊ะๆ ไม่ใช่ key
    เชิงความหมาย เพื่อให้เห็นชัดว่าแปลอะไรอยู่โดยไม่ต้องเปิดคู่ดิกชันนารี ไม่ครอบคลุมข้อมูลจริง
@@ -2284,6 +2288,10 @@ function fileToBase64(file) {
 }
 
 async function renderUpload() {
+  // role 'user' (พนักงาน) อัปโหลดไฟล์เองได้ทางเดียวเท่านั้น ไม่มีสิทธิ์ตรวจ จึงไม่ต้องเห็น
+  // "ดึงจาก Gmail"/"กรอกเอง"/"ประวัติ" ที่เป็นเครื่องมือของฝ่ายบัญชี (1 ก.ย. 69 ตามที่ขอ)
+  const isEmployee = state.role === 'user';
+  if (isEmployee && state.uploadTab !== 1) state.uploadTab = 1;
   const [contracts, settings, employees] = await Promise.all([
     api('/contracts'), api('/settings'), api('/employees'),
   ]);
@@ -2297,15 +2305,16 @@ async function renderUpload() {
 
     <div class="tabs" role="tablist">
       <button class="tab ${state.uploadTab === 1 ? 'on' : ''}" data-utab="1">${tx('อัปโหลดไฟล์')}</button>
+      ${isEmployee ? '' : `
       <button class="tab ${state.uploadTab === 3 ? 'on' : ''}" data-utab="3">${tx('ดึงจาก Gmail')}
         ${settings.env.hasGmail ? '' : `<span class="tg mu">${tx('ยังไม่ต่อ')}</span>`}</button>
       <button class="tab ${state.uploadTab === 2 ? 'on' : ''}" data-utab="2">${tx('กรอกเอง')}</button>
-      <button class="tab ${state.uploadTab === 4 ? 'on' : ''}" data-utab="4">${tx('ประวัติ')}</button>
+      <button class="tab ${state.uploadTab === 4 ? 'on' : ''}" data-utab="4">${tx('ประวัติ')}</button>`}
     </div>
 
     <!-- ── ดึงจาก Gmail ── -->
     <div class="tp ${state.uploadTab === 3 ? 'on' : ''}" data-upane="3">
-      ${settings.env.hasGmail ? `
+      ${isEmployee ? '' : settings.env.hasGmail ? `
         <div class="card">
           <div class="hd"><h3>${tx('อีเมลแจ้งอนุมัติ Timesheet')}</h3>
             <span class="rt" id="gmailAcct">${tx('กำลังเชื่อมต่อ…')}</span></div>
@@ -2352,6 +2361,7 @@ async function renderUpload() {
 
     </div>
 
+    ${isEmployee ? '' : `
     <!-- ── กรอกเอง ── -->
     <div class="tp ${state.uploadTab === 2 ? 'on' : ''}" data-upane="2">
       <div class="card">
@@ -2369,6 +2379,12 @@ async function renderUpload() {
                 <input id="eBy" type="text" value="Project Manager (TLI)" autocomplete="off">
               </label>
               <label>${tx('วันที่ลูกค้าอนุมัติ')}<input id="eAt" type="date"></label>
+              <label>${tx('ใครเป็นคนส่ง Timesheet ฉบับนี้')}
+                <select id="eSubMethod">
+                  <option value="self_email">${tx('พนักงานส่งเองทางอีเมล')}</option>
+                  <option value="proxy_email">${tx('ผู้อื่นส่งแทนทางอีเมล (เช่น ผู้ดูแลพนักงานคนนั้น)')}</option>
+                </select>
+              </label>
             </div>
             <div class="fsec">
               <div class="fsec-h"><b>${tx('วันลา')}</b><button class="btn sm" id="eAddLeave">${tx('+ เพิ่มวันลา')}</button></div>
@@ -2387,7 +2403,7 @@ async function renderUpload() {
           <span class="rt">${tx('ทั้งจากอัปโหลดไฟล์และดึงจาก Gmail — ด่านแรกก่อนเข้าระบบวางบิลจริง')}</span></div>
         <div class="bd flush"><div id="aiHistoryList"><div class="loading">${tx('กำลังโหลด…')}</div></div></div>
       </div>
-    </div>
+    </div>`}
 
     <!-- ผลที่ AI อ่านได้ — วางไว้นอกแท็บในโค้ด แต่โชว์เฉพาะของแท็บที่กำลังเปิดอยู่ (กรอง tab ตรงนี้)
          กันไม่ให้การ์ดจากแท็บอื่นโผล่มาปนตอนสับแท็บไปมา — แต่ละแท็บโชว์ได้พร้อมกันหลายใบ (คนละการ์ด)
@@ -3246,6 +3262,7 @@ function bindManualTab(contracts) {
           approvedBy: el('eBy').value.trim() || null,
           approvedAt: el('eAt').value || null,
           customerId: contracts[0]?.customer_id ?? null,
+          submissionMethod: el('eSubMethod')?.value || 'self_email',
         }),
       });
       // endpoint คืนคีย์ชื่อ timesheetId ไม่ใช่ id — เคยพลาดตรงนี้จนเกิด uncaught error
@@ -3340,7 +3357,20 @@ function renderRateCell(e) {
  * ลูกค้าที่ไม่มีสัญญาเลยใช้งานอะไรไม่ได้ (ไม่มีอัตราจ้าง ไม่มีรอบบิล) แยกเป็นสองปุ่มจะสร้างสถานะ
  * "ลูกค้าลอยๆ ไม่มีสัญญา" ที่ไม่มีที่ไหนในระบบรองรับ
  */
-function renderCustomerAddForm(faCompanies = []) {
+/** ช่องเลือก Skill ABBYY ตามชื่อแทนต้องพิมพ์/วาง Skill ID (GUID) เอง (31 ส.ค. 69 ตามที่ขอ)
+ * ใช้ทั้งในฟอร์ม "เพิ่มลูกค้าใหม่" กับ "แก้ไขข้อมูลสัญญา" — ถ้าสัญญานี้เคยตั้ง Skill ID ที่ไม่ตรงกับชื่อ
+ * ไหนในสารบัญเลย (เช่น พิมพ์ GUID เองก่อนมีฟีเจอร์นี้ หรือ Skill ถูกลบออกจากสารบัญไปแล้ว) ยังต้องเห็น
+ * ค่าเดิมอยู่ ไม่งั้นจะดูเหมือนตั้งค่าหายไปเงียบๆทั้งที่จริงยังใช้ Skill ID นั้นอยู่ */
+function abbyySkillSelectHtml(id, selectedSkillId, abbyySkills) {
+  const known = abbyySkills.some((s) => s.skill_id === selectedSkillId);
+  return `<span class="selectchip grow"><select id="${id}">
+    <option value="">${tx('เว้นว่าง = ใช้ Skill กลาง')}</option>
+    ${abbyySkills.map((s) => `<option value="${esc(s.skill_id)}" ${s.skill_id === selectedSkillId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+    ${selectedSkillId && !known ? `<option value="${esc(selectedSkillId)}" selected>${tx('(ไม่ทราบชื่อ)')} ${esc(selectedSkillId)}</option>` : ''}
+  </select></span>`;
+}
+
+function renderCustomerAddForm(faCompanies = [], abbyySkills = []) {
   return `
   <div class="card">
     <div class="hd"><h3>${tx('เพิ่มลูกค้าใหม่')}</h3>
@@ -3390,8 +3420,8 @@ function renderCustomerAddForm(faCompanies = []) {
       <div class="fsec">
         <div class="fsec-h"><b>${tx('การอ่าน Timesheet ด้วย ABBYY')}</b></div>
         <div class="frm">
-          <label>${tx('ABBYY Skill ID เฉพาะบริษัทนี้')}
-            <input id="ncAbbyySkillId" type="text" placeholder="${tx('เว้นว่าง = ใช้ Skill กลาง')}" autocomplete="off"></label>
+          <label>${tx('ABBYY Skill เฉพาะบริษัทนี้')}
+            ${abbyySkillSelectHtml('ncAbbyySkillId', null, abbyySkills)}</label>
         </div>
       </div>
     </div>
@@ -3462,7 +3492,7 @@ function renderEmployeeEditForm(e) {
  * ฟอร์ม "แก้ไขข้อมูลสัญญา" — เปิดจากไอคอนดินสอบนการ์ดบริษัท แก้ได้ทั้งข้อมูลลูกค้าและสัญญา
  * ในคราวเดียว (เหมือนตอน "เพิ่มลูกค้าใหม่" ที่สร้างทั้งคู่พร้อมกัน)
  */
-function renderContractEditForm(c) {
+function renderContractEditForm(c, abbyySkills = []) {
   return `
   <div class="card">
     <div class="hd"><h3>${tx('แก้ไขข้อมูลสัญญา')}</h3>
@@ -3498,9 +3528,8 @@ function renderContractEditForm(c) {
       <div class="fsec">
         <div class="fsec-h"><b>${tx('การอ่าน Timesheet ด้วย ABBYY')}</b></div>
         <div class="frm">
-          <label>${tx('ABBYY Skill ID เฉพาะบริษัทนี้')}
-            <input id="ccAbbyySkillId" type="text" value="${esc(c.abbyy_skill_id ?? '')}"
-                   placeholder="${tx('เว้นว่าง = ใช้ Skill กลาง')}" autocomplete="off"></label>
+          <label>${tx('ABBYY Skill เฉพาะบริษัทนี้')}
+            ${abbyySkillSelectHtml('ccAbbyySkillId', c.abbyy_skill_id ?? null, abbyySkills)}</label>
         </div>
         <small class="fhint">${tx('ถ้าลูกค้ารายนี้มี Timesheet คนละแบบฟอร์ม เทรน Skill แยกใน ABBYY Vantage แล้วใส่ Skill ID ไว้ที่นี่ — ตอนอัปโหลด Timesheet ระบบจะเลือกใช้ Skill นี้ให้เองตามบริษัทที่กำลังดำเนินการอยู่ ไม่ต้องเลือกอะไรเพิ่ม เว้นว่างไว้ถ้ายังไม่มี Skill เฉพาะ ระบบจะใช้ Skill กลางแทน')}</small>
       </div>
@@ -3516,10 +3545,11 @@ async function renderMaster() {
   const holidayYear = state.holidayYear ?? new Date().getFullYear();
   // ดึงรายชื่อบริษัทจาก FlowAccount เฉพาะตอนเปิดฟอร์ม "เพิ่มลูกค้าใหม่" เท่านั้น — ไม่ต้องยิงทุกครั้งที่
   // เข้าแท็บนี้ (28 ส.ค. 69) ถ้าดึงไม่สำเร็จ (โหมด dry-run/หลุดสาย) ให้ฟอร์มยังกรอกมือได้ตามปกติ ไม่พัง
-  const [employees, contracts, holidayData, faCompanies] = await Promise.all([
+  const [employees, contracts, holidayData, faCompanies, abbyySkills] = await Promise.all([
     api(`/employees${contractQuery()}`), api('/contracts'),
     api(`/holidays?year=${holidayYear}`),
     state.customerAdd ? api('/flowaccount/companies').catch(() => []) : Promise.resolve([]),
+    api('/abbyy-skills'),
   ]);
   const tab = state.masterTab;
   const activeContract = contracts.find((c) => c.id === state.contractId) ?? null;
@@ -3573,9 +3603,9 @@ async function renderMaster() {
         <button class="btn pri sm" id="custAddBtn">${icon('grid', 'i sm')} ${tx('เพิ่มลูกค้าใหม่')}</button>
       </div>
 
-      ${state.customerAdd ? renderCustomerAddForm(faCompanies) : ''}
+      ${state.customerAdd ? renderCustomerAddForm(faCompanies, abbyySkills) : ''}
 
-      ${contracts.map((c) => (state.contractEdit === c.id ? renderContractEditForm(c) : `
+      ${contracts.map((c) => (state.contractEdit === c.id ? renderContractEditForm(c, abbyySkills) : `
         <div class="card">
           <div class="hd"><h3>${esc(c.po_no)} — ${esc(c.project_name)}</h3>
             <div class="rowacts">
@@ -4108,9 +4138,10 @@ async function renderMaster() {
    ข้อมูลหลัก), จัดการผู้ใช้ (เพิ่ม/เปลี่ยน role/ปิดใช้งาน), และบันทึกทุกการเปลี่ยนแปลงในระบบ */
 async function renderSystemAdmin() {
   const tab = state.sysTab;
-  const [settings, users, recipients, lineUsers, log] = await Promise.all([
+  const [settings, users, allEmployees, recipients, lineUsers, log] = await Promise.all([
     api('/settings'),
     tab === 2 ? api('/users') : Promise.resolve(null),
+    tab === 2 ? api('/employees') : Promise.resolve([]),
     tab === 3 ? api('/notification-recipients') : Promise.resolve(null),
     tab === 3 ? api('/line/known-users') : Promise.resolve(null),
     tab === 4 ? api('/audit-log?limit=200') : Promise.resolve(null),
@@ -4181,10 +4212,20 @@ async function renderSystemAdmin() {
           <div class="frm">
             <label>Username / ${tx('อีเมล')}<input id="uUsername" type="text" autocomplete="off"></label>
             <label>${tx('ชื่อ')}<input id="uName" type="text" autocomplete="off"></label>
-            <label>${tx('รหัสผ่าน')} <small>${tx('(อย่างน้อย 8 ตัวอักษร)')}</small><input id="uPassword" type="password" autocomplete="new-password"></label>
+            <label>${tx('รหัสผ่าน')} <small>${tx('(อย่างน้อย 8 ตัวอักษร)')}</small>
+              <div class="pwrap"><input id="uPassword" type="password" autocomplete="new-password">
+                <button type="button" class="eye" data-target="uPassword" aria-label="แสดง/ซ่อนรหัสผ่าน" tabindex="-1"><svg class="i"><use href="#i-eye"></use></svg></button>
+              </div>
+            </label>
             <label>Role<span class="selectchip"><select id="uRole">
               <option value="user">user</option>
+              <option value="accounting">accounting</option>
               <option value="admin">admin</option>
+              <option value="executive">executive</option>
+            </select>${icon('cd')}</span></label>
+            <label>${tx('ผูกกับพนักงาน (เฉพาะ role user)')}<span class="selectchip grow"><select id="uEmployeeId">
+              <option value="">${tx('— ไม่ผูก —')}</option>
+              ${(allEmployees ?? []).map((e) => `<option value="${esc(e.id)}">${esc(e.name_th)}${e.customer_name ? ` — ${esc(e.customer_name)}` : ''}</option>`).join('')}
             </select>${icon('cd')}</span></label>
           </div>
         </div>
@@ -4192,7 +4233,7 @@ async function renderSystemAdmin() {
       </div>
 
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>Username</th><th>${tx('ชื่อ')}</th><th>Role</th><th>${tx('สถานะ')}</th><th>${tx('สร้างเมื่อ')}</th><th></th></tr></thead>
+        <thead><tr><th>Username</th><th>${tx('ชื่อ')}</th><th>Role</th><th>${tx('พนักงานที่ผูก')}</th><th>${tx('สถานะ')}</th><th>${tx('สร้างเมื่อ')}</th><th></th></tr></thead>
         <tbody>${(users ?? []).map((u) => {
           const isSelf = u.username === state.username;
           return `
@@ -4201,8 +4242,14 @@ async function renderSystemAdmin() {
             <td><span class="selectchip"><select class="uRoleSel" data-user="${esc(u.username)}"
                   ${isSelf ? `disabled title="${tx('แก้ role ของตัวเองไม่ได้')}"` : ''}>
                 <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
+                <option value="accounting" ${u.role === 'accounting' ? 'selected' : ''}>accounting</option>
                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+                <option value="executive" ${u.role === 'executive' ? 'selected' : ''}>executive</option>
               </select>${icon('cd')}</span></td>
+            <td>${u.role === 'user' ? `<span class="selectchip"><select class="uEmployeeSel" data-user="${esc(u.username)}">
+                <option value="">${tx('— ไม่ผูก —')}</option>
+                ${(allEmployees ?? []).map((e) => `<option value="${esc(e.id)}" ${u.employee_id === e.id ? 'selected' : ''}>${esc(e.name_th)}</option>`).join('')}
+              </select>${icon('cd')}</span>` : '—'}</td>
             <td><label class="toggle ${u.active ? 'on' : ''}"
                   title="${isSelf ? tx('ปิดใช้งานบัญชีตัวเองไม่ได้')
                     : tx(u.active ? 'ใช้งานอยู่ — กดเพื่อปิดใช้งาน' : 'ปิดใช้งานอยู่ — กดเพื่อเปิดใช้งาน')}">
@@ -4368,12 +4415,13 @@ async function renderSystemAdmin() {
     const nameTh = el('uName').value.trim();
     const password = el('uPassword').value;
     const role = el('uRole').value;
+    const employeeId = el('uEmployeeId').value || null;
     if (!username || !nameTh || !password) {
       toast('ต้องกรอก username, ชื่อ, และรหัสผ่านให้ครบ', true);
       return;
     }
     try {
-      await api('/users', { method: 'POST', body: JSON.stringify({ username, nameTh, password, role }) });
+      await api('/users', { method: 'POST', body: JSON.stringify({ username, nameTh, password, role, employeeId }) });
       toast(`เพิ่มผู้ใช้ "${nameTh}" แล้ว`);
       renderSystemAdmin();
     } catch (error) { toast(error.message, true); }
@@ -4387,6 +4435,17 @@ async function renderSystemAdmin() {
         });
         toast(`เปลี่ยน role ของ ${sel.dataset.user} เป็น ${sel.value} แล้ว`);
         renderSystemAdmin();
+      } catch (error) { toast(error.message, true); renderSystemAdmin(); }
+    });
+  });
+
+  main.querySelectorAll('.uEmployeeSel').forEach((sel) => {
+    sel.addEventListener('change', async () => {
+      try {
+        await api(`/users/${encodeURIComponent(sel.dataset.user)}`, {
+          method: 'PATCH', body: JSON.stringify({ employeeId: sel.value || null }),
+        });
+        toast(`ผูกพนักงานให้ ${sel.dataset.user} แล้ว`);
       } catch (error) { toast(error.message, true); renderSystemAdmin(); }
     });
   });
@@ -4433,6 +4492,317 @@ async function renderSystemAdmin() {
         renderSystemAdmin();
       } catch (error) { toast(error.message, true); }
     });
+  });
+}
+
+/* ══ สารบัญ Skill ABBYY ══════════════════════════════════════
+   หน้าเฉพาะ admin จริงๆเท่านั้น (31 ส.ค. 69 ตามที่ขอ) — ตั้งชื่อให้ Skill ID แต่ละตัวที่เทรนไว้แล้วใน
+   ABBYY Vantage (เช่น "OBS Timesheet2" → 89aa1af3-...) ให้เลือกจากชื่อได้ตอนตั้งค่าสัญญาแต่ละราย
+   แทนต้องคัดลอก GUID มาวางเอง แผนกบัญชี (role 'accounting') เห็นแค่ dropdown เลือก Skill ที่หน้า
+   ข้อมูลหลัก (renderContractEditForm/renderCustomerAddForm) แต่เข้าหน้านี้ไม่ได้ — server บล็อกด้วย
+   requireSuperAdmin อยู่แล้ว ฝั่งนี้ซ่อนปุ่มเมนูไว้เป็นความสะดวก (ดู syncBadges) */
+async function renderAbbyySkills() {
+  const skills = await api('/abbyy-skills');
+
+  main.innerHTML = `
+  <div class="page">
+    <div class="phd"><div><span class="ey">${tx('ผู้ดูแลระบบ')}</span><h1>Skill ABBYY</h1>
+      <p>${tx('ตั้งชื่อ Skill ID ที่เทรนไว้แล้วใน ABBYY Vantage ให้เลือกจากชื่อได้ตอนตั้งค่าสัญญาแต่ละบริษัท')}</p></div></div>
+
+    <div class="card">
+      <div class="hd"><h3>${tx('เพิ่ม Skill ใหม่')}</h3></div>
+      <div class="bd">
+        <div class="frm">
+          <label>${tx('ชื่อ Skill')}<input id="skNewName" type="text" placeholder="เช่น OBS Timesheet - Thailife" autocomplete="off"></label>
+          <label>Skill ID (ABBYY)<input id="skNewSkillId" type="text" placeholder="เช่น 89aa1af3-1e04-4477-9b91-00023980402c" autocomplete="off"></label>
+        </div>
+      </div>
+      <div class="ft"><button class="btn pri" id="skAddBtn">${tx('+ เพิ่ม Skill ใหม่')}</button></div>
+    </div>
+
+    <div class="card"><div class="tw"><table>
+      <thead><tr><th>${tx('ชื่อ Skill')}</th><th>Skill ID</th><th>${tx('สร้างเมื่อ')}</th><th></th></tr></thead>
+      <tbody>${skills.length ? skills.map((s) => `
+        <tr><td>${esc(s.name)}</td><td class="n">${esc(s.skill_id)}</td><td>${dt(s.created_at)}</td>
+          <td><button class="btn sm icon dgr" data-del-skill="${esc(s.id)}" data-name="${esc(s.name)}"
+                title="${tx('ลบ Skill นี้')}" aria-label="${tx('ลบ')}">${icon('trash')}</button></td></tr>`).join('')
+        : `<tr><td colspan="4"><div class="empty">${icon('info')}<div>${tx('ยังไม่มี Skill ในสารบัญ')}</div></div></td></tr>`}
+      </tbody>
+    </table></div></div>
+  </div>`;
+
+  el('skAddBtn')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const name = el('skNewName').value.trim();
+    const skillId = el('skNewSkillId').value.trim();
+    if (!name || !skillId) { toast('กรอกชื่อ Skill และ Skill ID ให้ครบก่อน', true); return; }
+    btn.disabled = true;
+    try {
+      await api('/abbyy-skills', { method: 'POST', body: JSON.stringify({ name, skillId }) });
+      toast(`เพิ่ม Skill "${name}" แล้ว`);
+      renderAbbyySkills();
+    } catch (error) {
+      toast(error.message, true);
+      btn.disabled = false;
+    }
+  });
+
+  main.querySelectorAll('[data-del-skill]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: 'ลบ Skill นี้?',
+        message: `Skill "<b>${esc(btn.dataset.name)}</b>" จะหายไปจากรายการให้เลือก — สัญญาที่เคยเลือก Skill นี้ไปแล้วยังใช้งานได้ปกติ ไม่กระทบ`,
+        confirmLabel: 'ลบ',
+      });
+      if (!ok) return;
+      try {
+        await api(`/abbyy-skills/${encodeURIComponent(btn.dataset.delSkill)}`, { method: 'DELETE' });
+        toast('ลบ Skill แล้ว');
+        renderAbbyySkills();
+      } catch (error) { toast(error.message, true); }
+    });
+  });
+}
+
+/* ══ ความคืบหน้าของฉัน — หน้าเริ่มต้นของ role 'user' (พนักงาน, 31 ส.ค. 69 ตามที่ขอ) ══════════
+   ดูได้แค่ progress รอบบิลเดือนนี้ของสัญญาที่ตัวเองมีอัตราจ้างอยู่ ไม่เห็นยอดเงิน/ของคนอื่น
+   ไม่มีปุ่มตรวจ/อนุมัติใดๆทั้งสิ้น — ทำได้แค่กด "อัปโหลด Timesheet" ไปอัปโหลดของตัวเองเท่านั้น */
+async function renderMyProgress() {
+  const [progress, settings] = await Promise.all([api('/my-progress'), api('/settings')]);
+
+  if (!progress) {
+    main.innerHTML = `
+    <div class="page">
+      <div class="phd"><div><h1>${tx('ความคืบหน้าของฉัน')}</h1></div></div>
+      <div class="card"><div class="empty">${icon('alt', 'i')}
+        <div>${tx('บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหน — แจ้ง admin ให้ผูกบัญชีกับชื่อพนักงานก่อน')}</div>
+      </div></div>
+    </div>`;
+    return;
+  }
+
+  // ไอคอน/สี .tic หัวการ์ดแต่ละรอบ — ยืมชุดเดียวกับการ์ดแจ้งเตือน (LEVEL_TONE) ให้เข้าธีมเดียวกัน
+  const periodIcon = (status) => {
+    if (status === 'mismatch') return { tone: 'cr', ic: 'alt' };
+    if (status === 'rejected') return { tone: 'wn', ic: 'alt' };
+    if (status === 'verified' || status === 'approved' || status === 'billed') return { tone: 'ok', ic: 'chk' };
+    if (status === 'not_submitted') return { tone: 'mu', ic: 'clock' };
+    return { tone: 'info', ic: 'info' };
+  };
+
+  const periodCard = (p) => {
+    const { tone, ic } = periodIcon(p.timesheetStatus);
+    return `
+    <div class="rec">
+      <div class="rec-hd">
+        <span class="tic ${tone}">${icon(ic)}</span>
+        <span>
+          <span class="nm2">${esc(p.periodLabel)}</span>
+          <span class="mt2">${p.invoiceNo ? `${tx('เลขที่เอกสาร')} ${esc(p.invoiceNo)}` : tx('ยังไม่มีเลขที่เอกสาร')}</span>
+        </span>
+        <span class="rt2"><span class="tg ${STATUS_CLASS[p.timesheetStatus] ?? 'mu'}">${esc(p.timesheetStatusLabel)}</span></span>
+      </div>
+      <div class="minitab">
+        <div class="mr">
+          <span class="lb2">${tx('ส่ง Timesheet')}</span><span class="q"></span>
+          <span class="p">${p.receivedAt ? dt(p.receivedAt) : '—'}</span>
+        </div>
+        <div class="mr">
+          <span class="lb2">${tx('ตรวจ Manday')}<small>${p.checkedBy ? esc(p.checkedBy) : tx('ยังไม่มีคนตรวจ')}</small></span>
+          <span class="q"></span>
+          <span class="p">${p.checkedAt ? dt(p.checkedAt) : '—'}</span>
+        </div>
+        <div class="mr">
+          <span class="lb2">${tx('อนุมัติวางบิล')}<small>${p.billedBy ? esc(p.billedBy) : tx('ยังไม่วางบิล')}</small></span>
+          <span class="q"></span>
+          <span class="p">${p.billedAt ? dt(p.billedAt) : '—'}</span>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  main.innerHTML = `
+  <div class="page">
+    <div class="phd"><div><h1>${tx('ความคืบหน้าของฉัน')}</h1>
+      <p>${esc(progress.employee.nameTh)}${progress.employee.position ? ` — ${esc(progress.employee.position)}` : ''}</p></div>
+      ${settings.env.hasLine ? `<div>${progress.employee.lineLinked
+        ? `<span class="tg ok">${icon('chk')} ${tx('เชื่อมต่อไลน์แล้ว')}</span>
+           <button class="btn sm" id="lineUnlinkBtn">${tx('เลิกเชื่อมต่อ')}</button>`
+        : `<button class="btn sm pri" id="lineLinkBtn">${tx('เชื่อมต่อไลน์')}</button>`}</div>` : ''}
+    </div>
+    <div id="lineLinkBox"></div>
+
+    ${progress.contracts.length ? progress.contracts.map((c) => `
+      <div class="card">
+        <div class="hd"><h3>${esc(c.customerName)}</h3><span class="rt">${esc(c.projectName)}</span></div>
+        <div class="bd">
+          <div class="cardgrid" style="grid-template-columns:1fr">
+            ${c.periods.map(periodCard).join('')}
+          </div>
+        </div>
+      </div>`).join('')
+      : `<div class="card"><div class="empty">${icon('info')}<div>${tx('ยังไม่มีสัญญาที่ผูกกับตัวเอง')}</div></div></div>`}
+  </div>`;
+
+  el('lineLinkBtn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const r = await api('/my-line-link/start', { method: 'POST' });
+      if (r.alreadyLinked) { toast('เชื่อมต่อไลน์อยู่แล้ว'); renderMyProgress(); return; }
+      el('lineLinkBox').innerHTML = `
+        <div class="note info">${icon('info')}<span>
+          ${tx('เพิ่มเพื่อนไลน์ของบริษัทก่อน แล้วพิมพ์รหัสนี้ส่งไปในแชท (หมดอายุใน 10 นาที)')}<br>
+          <b style="font-size:1.3em;letter-spacing:.05em">${esc(r.code)}</b>
+        </span></div>`;
+    } catch (error) {
+      btn.disabled = false;
+      toast(error.message, true);
+    }
+  });
+
+  el('lineUnlinkBtn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const ok = await confirmModal({
+      iconName: 'alt', danger: false,
+      title: 'เลิกเชื่อมต่อไลน์?',
+      message: 'จะไม่ได้รับแจ้งเตือนสถานะ Timesheet ผ่านไลน์ส่วนตัวอีก — เชื่อมต่อใหม่ได้ทุกเมื่อ',
+      confirmLabel: 'เลิกเชื่อมต่อ',
+    });
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      await api('/my-line-link/unlink', { method: 'POST' });
+      toast('เลิกเชื่อมต่อแล้ว');
+      renderMyProgress();
+    } catch (error) {
+      btn.disabled = false;
+      toast(error.message, true);
+    }
+  });
+}
+
+/* ══ ภาพรวมทุกบริษัท — หน้าเริ่มต้นของ role 'executive' (31 ส.ค. 69 ตามที่ขอ) ══════════════════
+   ดูได้ล้วนๆ ทุกบริษัทพร้อมกันในหน้าเดียว (ต่างจากหน้าอื่นที่กรองด้วยบริษัท active ทีละบริษัทเสมอ)
+   ใช้ /api/cycles ตัวเดิมไม่ใส่ contractId — คืนทุกสัญญามาให้พร้อมความคืบหน้าอยู่แล้ว ไม่ต้องมี
+   endpoint ใหม่ */
+async function renderExecOverview() {
+  const [{ contracts }, employees] = await Promise.all([api('/cycles'), api('/employees')]);
+
+  const totalValue = contracts.reduce((sum, c) => sum + (c.contractValue ?? 0), 0);
+  const totalBilled = contracts.reduce((sum, c) => sum + (c.billedValue ?? 0), 0);
+
+  main.innerHTML = `
+  <div class="page">
+    <div class="phd"><div><span class="ey">${tx('ผู้บริหาร')}</span><h1>${tx('ภาพรวมทุกบริษัท')}</h1>
+      <p>${tx('ข้อมูลรวมทุกบริษัทพร้อมกัน อัปเดตแบบเรียลไทม์')}</p></div></div>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="kh"><span class="ic">${icon('building')}</span><span class="kl">${tx('บริษัททั้งหมด')}</span></div>
+        <span class="kv">${int(contracts.length)}</span>
+      </div>
+      <div class="kpi">
+        <div class="kh"><span class="ic">${icon('users')}</span><span class="kl">${tx('พนักงานทั้งหมด')}</span></div>
+        <span class="kv">${int(employees.length)}</span>
+      </div>
+      <div class="kpi a">
+        <div class="kh"><span class="ic">${icon('money')}</span><span class="kl">${tx('มูลค่าสัญญารวม')}</span></div>
+        <span class="kv">${money(totalValue)}</span>
+        <span class="kf">${tx('วางบิลแล้ว')} ${money(totalBilled)} ${tx('บาท')}</span>
+      </div>
+    </div>
+
+    <div class="card"><div class="tw"><table>
+      <thead><tr><th>${tx('บริษัท')}</th><th>${tx('โครงการ')}</th><th class="r">${tx('พนักงาน')}</th>
+        <th class="r">${tx('มูลค่าสัญญา')}</th><th class="r">${tx('วางบิลแล้ว')}</th><th>${tx('ความคืบหน้า')}</th></tr></thead>
+      <tbody>${contracts.map((c) => `
+        <tr class="rw" data-execco="${esc(c.id)}"><td>${esc(c.customerName)}</td><td>${esc(c.projectName)}</td>
+          <td class="r n">${int(c.headcount)}</td>
+          <td class="r n">${money(c.contractValue)}</td>
+          <td class="r n">${money(c.billedValue)}</td>
+          <td><div class="bar"><span style="width:${c.progress}%"></span></div><small>${c.progress}%</small></td></tr>`).join('')}
+      </tbody>
+    </table></div></div>
+  </div>`;
+
+  main.querySelectorAll('[data-execco]').forEach((row) => {
+    row.addEventListener('click', () => openExecCompany(row.dataset.execco));
+  });
+}
+
+/* ══ รายละเอียดบริษัทเดียว — เฉพาะ role 'executive' กดจากหน้า "ภาพรวมทุกบริษัท" ══════════════
+   อ่านอย่างเดียวล้วนๆ ไม่มีปุ่มทำรายการใดๆ เลย (1 ก.ย. 69 ตามที่ขอ "กดเข้าไปดูรอบเดือนของบริษัทนั้นๆ
+   เห็นพนักงานแต่ละคน และสถานะการวางบิลว่าถึงขั้นไหนแล้ว") เลือกดูรอบเดือนไหนก็ได้ของบริษัทนั้น
+   ไม่ใช่แค่เดือนปัจจุบัน — คนละหน้ากับ openCycle() ที่เน้นทำรายการวางบิลจริงและต้องรอเอกสารพร้อมก่อน */
+async function openExecCompany(contractId, period) {
+  state.view = 'execCompanyDetail';
+  state.execCompanyId = contractId;
+  markTab('execCompanyDetail');
+
+  main.innerHTML = '<div class="loading">กำลังโหลด…</div>';
+  const { contracts } = await api(`/cycles?contractId=${encodeURIComponent(contractId)}`);
+  const contract = contracts[0];
+  if (!contract) { setNav('execOverview'); return; }
+
+  // ไม่ระบุรอบมา (เพิ่งกดเข้ามาจากตาราง) — เดาเป็นเดือนปัจจุบัน ไม่มีก็เอารอบล่าสุดที่มีของสัญญานี้
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const chosenPeriod = period ?? (
+    contract.periods.find((p) => p.period === thisMonth)?.period ?? contract.periods.at(-1)?.period ?? null
+  );
+  state.execPeriod = chosenPeriod;
+  const cyclePeriod = contract.periods.find((p) => p.period === chosenPeriod) ?? null;
+
+  const employees = chosenPeriod
+    ? await api(`/cycles/${encodeURIComponent(contractId)}/${chosenPeriod}/employees`)
+    : [];
+
+  main.innerHTML = `
+  <div class="page">
+    <button class="back" id="backBtn">${icon('cl')} ${tx('กลับภาพรวมทุกบริษัท')}</button>
+
+    <div class="phd"><div><span class="ey">${tx('ผู้บริหาร')}</span><h1>${esc(contract.customerName)}</h1>
+      <p>${tx('โครงการ')} ${esc(contract.projectName)}${contract.poNo ? ` · ${tx('ใบว่าจ้าง')} ${esc(contract.poNo)}` : ''}</p></div></div>
+
+    ${contract.periods.length ? `<div class="tabs" role="tablist">
+      ${contract.periods.map((p) => `
+        <button class="tab ${p.period === chosenPeriod ? 'on' : ''}" data-execperiod="${esc(p.period)}">
+          ${esc(p.periodLabel)}</button>`).join('')}
+    </div>` : ''}
+
+    ${cyclePeriod ? `
+    <div class="kpis">
+      <div class="kpi">
+        <div class="kh"><span class="ic">${icon('list-chk')}</span><span class="kl">${tx('Timesheet ที่ได้รับ')}</span></div>
+        <span class="kv">${int(cyclePeriod.received)} / ${int(cyclePeriod.expected)}</span>
+      </div>
+      <div class="kpi">
+        <div class="kh"><span class="ic">${icon('money')}</span><span class="kl">${tx('มูลค่ารอบนี้')}</span></div>
+        <span class="kv">${money(cyclePeriod.value ?? 0)}</span>
+      </div>
+      <div class="kpi a">
+        <div class="kh"><span class="ic">${icon('invoice')}</span><span class="kl">${tx('สถานะรอบบิล')}</span></div>
+        <span class="kv"><span class="tg ${CYCLE_STATE_CLASS[cyclePeriod.state] ?? 'mu'}">${esc(cyclePeriod.stateLabel)}</span></span>
+      </div>
+    </div>` : `<div class="card"><div class="empty">${icon('info')}<div>${tx('ยังไม่มีรอบบิลของสัญญานี้')}</div></div></div>`}
+
+    ${chosenPeriod ? `<div class="card">
+      <div class="hd"><h3>${tx('พนักงานในรอบนี้')}</h3><span class="rt">${employees.length} ${tx('คน')}</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>${tx('พนักงาน')}</th><th>${tx('ตำแหน่ง')}</th><th>${tx('สถานะ Timesheet')}</th></tr></thead>
+        <tbody>${employees.length ? employees.map((e) => `
+          <tr><td>${esc(e.nameTh)}</td><td>${esc(e.position ?? '—')}</td>
+            <td><span class="tg ${STATUS_CLASS[e.status] ?? 'mu'}">${esc(e.statusLabel)}</span></td></tr>`).join('')
+          : `<tr><td colspan="3"><div class="empty">${icon('info')}<div>${tx('ยังไม่มีพนักงานผูกกับสัญญานี้')}</div></div></td></tr>`}
+        </tbody>
+      </table></div>
+    </div>` : ''}
+  </div>`;
+
+  el('backBtn').addEventListener('click', () => setNav('execOverview'));
+  main.querySelectorAll('[data-execperiod]').forEach((btn) => {
+    btn.addEventListener('click', () => openExecCompany(contractId, btn.dataset.execperiod));
   });
 }
 
@@ -4495,10 +4865,12 @@ const RENDER = {
   dash: renderDashboard,
   upload: renderUpload, queue: renderQueue, cycles: renderCycles,
   invoices: renderInvoices, master: renderMaster, sysadmin: renderSystemAdmin,
+  abbyySkills: renderAbbyySkills, myProgress: renderMyProgress, execOverview: renderExecOverview,
+  notifications: renderNotifications,
 };
 
 /** แท็บที่ควรถูกไฮไลต์เมื่ออยู่ในหน้าย่อย */
-const PARENT_TAB = { detail: 'queue', cycle: 'cycles' };
+const PARENT_TAB = { detail: 'queue', cycle: 'cycles', execCompanyDetail: 'execOverview' };
 
 function markTab(view) {
   const active = PARENT_TAB[view] ?? view;
@@ -4537,14 +4909,14 @@ async function syncBadges() {
   cycle.classList.toggle('zero', p.readyToApprove === 0);
 
   paintBell(p.feed);
-  if (!el('bellPop').hidden) renderBellPop(p.feed);   // แผงเปิดอยู่ก็เห็นของใหม่ทันที
+  if (state.view === 'notifications') renderNotifications();   // เปิดหน้านี้ค้างอยู่ก็เห็นของใหม่ทันที
 
   const chip = el('envChip');
   chip.className = `env ${p.flowAccountMode === 'dry-run' ? 'dry' : 'live'}`;
   chip.innerHTML = `<span class="sw"></span> FlowAccount: ${esc(p.flowAccountMode)}`;
 
   /* ชื่อบนแถบบนต้องเป็นชื่อเดียวกับที่ audit log บันทึก ไม่ใช่ป้ายตกแต่ง — มาจาก session ที่ login เข้ามา */
-  const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', user: 'ผู้ใช้งาน' };
+  const ROLE_LABEL = { admin: 'ผู้ดูแลระบบ', accounting: 'แผนกบัญชี', user: 'พนักงาน', executive: 'ผู้บริหาร' };
   el('actorName').textContent = p.actor;
   el('actorAvatar').textContent = initials(p.actor);
   el('actorRole').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
@@ -4553,18 +4925,62 @@ async function syncBadges() {
   el('actorUser').textContent = state.username ?? p.actor;
   el('actorRole2').textContent = ROLE_LABEL[p.role] ?? 'ผู้ใช้ระบบ';
 
-  /* เมนู "จัดการระบบ" กับ "ข้อมูลหลัก" (เรทพนักงาน สัญญา ชื่อพ้อง วันหยุด) เห็นเฉพาะ admin —
-     server บล็อก 403 ไว้อีกชั้นอยู่แล้วที่ทุก endpoint เขียนข้อมูล (ดู requireAdmin ใน server.js)
-     ฝั่งนี้ซ่อนเมนูไว้เป็นแค่ความสะดวก ไม่ใช่ตัวกันหลัก — user ไม่ควรเห็นปุ่มที่กดแล้วเจอ error ตั้งแต่แรก
-     renderMaster()/renderSystemAdmin() เองก็เช็ค role ซ้ำอีกชั้น เผื่อมีคนสลับ view ตรงๆ ทาง URL/console */
+  /* เมนูข้างทั้งหมด ขึ้นอยู่กับ role (31 ส.ค. 69 ตามที่ขอ 4 role: admin/accounting/user/executive)
+     server บล็อก 403 ไว้อีกชั้นอยู่แล้วที่ทุก endpoint ที่มีผล (ดู requireAdmin/requireNotExecutive/
+     requireSuperAdmin ใน server.js) ฝั่งนี้ซ่อนเมนูไว้เป็นแค่ความสะดวก ไม่ใช่ตัวกันหลัก — ไม่ควรเห็นปุ่ม
+     ที่กดแล้วเจอ error ตั้งแต่แรก renderXxx() เองก็เช็ค role ซ้ำอีกชั้นในบางหน้า เผื่อมีคนสลับ view ตรงๆ
+     ทาง URL/console
+     - admin/accounting: เหมือนเดิมทุกอย่าง (accounting ยกเว้น Skill ABBYY)
+     - user (พนักงาน): เห็นแค่ "ความคืบหน้าของฉัน" + "อัปโหลด Timesheet" ของตัวเอง
+     - executive: เห็นแค่ "ภาพรวมทุกบริษัท" อย่างเดียว ดูได้ล้วนๆ ทำอะไรไม่ได้เลย */
   state.role = p.role;
-  el('sysAdminTab').hidden = p.role !== 'admin';
-  el('masterNavBtn').hidden = p.role !== 'admin';
-  /* สลับบริษัทที่กำลังดำเนินการอยู่กระทบทั้งระบบ (เหมือนแก้ข้อมูลหลักอื่นๆ) จึงให้แค่ admin กดได้
+  const role = p.role;
+  const NAV_VISIBLE = {
+    dashNavBtn: role === 'admin' || role === 'accounting',
+    myProgressNavBtn: role === 'user',
+    execOverviewNavBtn: role === 'executive' || role === 'admin',
+    uploadNavBtn: role === 'admin' || role === 'accounting' || role === 'user',
+    queueNavBtn: isStaff(role),
+    cyclesNavBtn: isStaff(role),
+    invoicesNavBtn: isStaff(role),
+    masterNavBtn: isStaff(role),
+    abbyySkillsNavBtn: role === 'admin',
+    sysAdminTab: isStaff(role),
+    workflowGroupLabel: role === 'admin' || role === 'accounting' || role === 'user',
+    refGroupLabel: isStaff(role),
+  };
+  for (const [id, visible] of Object.entries(NAV_VISIBLE)) el(id).hidden = !visible;
+
+  /* หน้าที่เปิดค้างอยู่ไม่ตรงกับสิทธิ์ของ role นี้แล้ว (เช่นเพิ่งสลับ role หรือเพิ่ง login) —
+     พากลับไปหน้าเริ่มต้นที่ role นี้เข้าได้จริง กันจอโล่ง/ค้างอยู่หน้าที่ API จะ 403 ทุกคำขอ */
+  const ALLOWED_VIEWS = {
+    admin: ['dash', 'execOverview', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'abbyySkills', 'sysadmin', 'detail', 'cycle'],
+    accounting: ['dash', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'sysadmin', 'detail', 'cycle'],
+    user: ['myProgress', 'notifications', 'upload'],
+    executive: ['execOverview', 'notifications', 'execCompanyDetail'],
+  };
+  const DEFAULT_VIEW = { admin: 'dash', accounting: 'dash', user: 'myProgress', executive: 'execOverview' };
+  if (!(ALLOWED_VIEWS[role] ?? []).includes(state.view)) {
+    state.view = DEFAULT_VIEW[role] ?? 'dash';
+    markTab(state.view);
+  }
+
+  /* สลับบริษัทที่กำลังดำเนินการอยู่กระทบทั้งระบบ (เหมือนแก้ข้อมูลหลักอื่นๆ) จึงให้ admin/แผนกบัญชีกดได้
      server บล็อกไว้เป็นด่านหลักอยู่แล้ว (ดู requireAdmin ที่ PATCH /api/contracts/:id/active)
      ที่นี่แค่ปิดปุ่มไว้ไม่ให้ user ทั่วไปกดแล้วเจอ error ทันที แต่ยังเห็นว่าตอนนี้ทำงานให้บริษัทไหนอยู่ */
-  el('contractSwitchBtn').disabled = p.role !== 'admin';
-  el('envChip').disabled = p.role !== 'admin';
+  el('contractSwitchBtn').disabled = !isStaff(role);
+  el('envChip').disabled = !isStaff(role);
+
+  /* role 'executive'/'user' ไม่เกี่ยวกับ "บริษัทที่กำลังดำเนินการอยู่"/FlowAccount เลย (executive
+     เห็นทุกบริษัทพร้อมกันอยู่แล้ว, user เห็นแค่ของตัวเอง) เดิมแค่ปิดปุ่มไว้ (disabled) แต่ยังโผล่ให้เห็น
+     เฉยๆ ทำให้งง — ซ่อนไปเลยดีกว่า (1 ก.ย. 69 ตามที่ขอ) ต้องทำหลัง loadContractSwitch() เสมอ
+     (startApp() เรียกเรียงตามนี้อยู่แล้ว) ไม่งั้นโดนค่า wrap.hidden=false ของมันทับ */
+  if (role === 'executive' || role === 'user') {
+    el('contractSwitchWrap').hidden = true;
+    el('envChip').hidden = true;
+  } else {
+    el('envChip').hidden = false;
+  }
 }
 
 /* หนึ่งการกระทำมักบันทึกหลายเหตุการณ์ติดกัน (เช่นอนุมัติรอบบิล)
@@ -4624,7 +5040,10 @@ async function render({ silent = false } = {}) {
   if (!silent) window.scrollTo({ top: 0 });
 }
 
-document.querySelectorAll('.mtab').forEach((btn) => {
+/* [data-view] กันปุ่มกระดิ่งแจ้งเตือน (ก็ใช้ class .mtab เอาสไตล์เดียวกัน แต่ไม่ใช่การนำทาง
+   ไปหน้าไหน — ไม่มี data-view) ไม่ให้โดน setNav() จับด้วย ไม่งั้น state.view จะเป็น undefined
+   แล้ว RENDER[state.view]() พังทันที */
+document.querySelectorAll('.mtab[data-view]').forEach((btn) => {
   btn.addEventListener('click', () => setNav(btn.dataset.view));
 });
 
@@ -4673,6 +5092,7 @@ el('langSwitch').addEventListener('click', (e) => {
      (ดู render()) ต้องเรียกฟังก์ชันเปิดหน้านั้นซ้ำเอง render() เฉยๆจะหา RENDER['detail'] ไม่เจอแล้ว throw */
   if (state.view === 'detail' && state.detailId) openSheet(state.detailId);
   else if (state.view === 'cycle' && state.cycleContractId) openCycle(state.cycleContractId, state.cyclePeriod);
+  else if (state.view === 'execCompanyDetail' && state.execCompanyId) openExecCompany(state.execCompanyId, state.execPeriod);
   else if (RENDER[state.view]) render();
 });
 
@@ -4720,11 +5140,6 @@ function ago(iso) {
   return dateOnly(iso);
 }
 
-function closeBell() {
-  el('bellPop').hidden = true;
-  el('bellBtn').setAttribute('aria-expanded', 'false');
-}
-
 /** ป้ายบนกระดิ่ง = จำนวนรายการที่ยังไม่ได้กดอ่าน */
 function paintBell(feed) {
   const read = readIds();
@@ -4735,95 +5150,263 @@ function paintBell(feed) {
   el('bellBtn').title = unread ? `${unread} เรื่องที่ยังไม่ได้อ่าน` : 'อ่านครบแล้ว';
 }
 
-function renderBellPop(feed) {
+/** หน้าเต็ม "การแจ้งเตือน" (1 ก.ย. 69 ตามที่ขอ — เดิมเป็นแผงลอยใต้กระดิ่ง เปลี่ยนเป็นหน้าเต็มแทน) */
+async function renderNotifications() {
+  // role 'user' เห็นแค่สถานะ Timesheet ของตัวเอง ไม่ใช่ฟีดรวมทั้งระบบ (1 ก.ย. 69 ตามที่ขอ)
+  // — ทรงข้อมูลเดียวกันทั้งคู่ (items/latestAt/counts) โค้ดด้านล่างนี้ใช้ร่วมกันได้เลยไม่ต้องแยก
+  const feed = state.role === 'user' ? await api('/my-notifications') : await api('/activity?limit=50');
   const read = readIds();
   const unreadCount = feed.items.filter((i) => !read.has(i.id)).length;
+  paintBell(feed);   // เผื่อป้ายบนเมนูข้างยังไม่ตรงกับฟีดชุดนี้ (เช่นเพิ่งมาจากลิงก์ deep-link ตรงๆ)
 
-  el('bellPop').innerHTML = `
-    <div class="bp-hd">
-      <b>การแจ้งเตือน</b>
-      <span>${unreadCount ? `ยังไม่ได้อ่าน ${int(unreadCount)} เรื่อง` : 'อ่านครบแล้ว'}</span>
+  main.innerHTML = `
+  <div class="page">
+    <div class="phd">
+      <div><h1>${tx('การแจ้งเตือน')}</h1>
+        <p>${unreadCount ? `${tx('ยังไม่ได้อ่าน')} ${int(unreadCount)} ${tx('เรื่อง')}` : tx('อ่านครบแล้ว')}</p></div>
+      ${unreadCount ? `<div class="acts"><button class="btn" id="bellMarkAllBtn">${tx('อ่านแล้วทั้งหมด')}</button></div>` : ''}
     </div>
-    ${feed.items.length
-      ? `<ul class="bp-list">${feed.items.map((n, i) => `
-          <li><button data-bnotif="${i}" class="${read.has(n.id) ? '' : 'unread'}">
-            <span class="tic ${LEVEL_TONE[n.level] ?? 'info'}">
-              ${icon(n.level === 'critical' || n.level === 'warn' ? 'alt' : n.level === 'ok' ? 'chk' : 'info')}</span>
-            <span class="bp-tx">
-              <span class="bp-t">${esc(n.title)}</span>
-              <span class="bp-d">${esc(n.detail)}</span>
-              <span class="bp-m">${esc(ago(n.at))} · โดย ${esc(n.by)}</span>
-            </span>
-            ${LEVEL_LABEL[n.level]
-              ? `<span class="tg ${LEVEL_TONE[n.level]}">${LEVEL_LABEL[n.level]}</span>` : ''}
-          </button></li>`).join('')}</ul>
-         <div class="bp-ft">
-           ${unreadCount ? '<button class="lk" id="bellAll">อ่านแล้วทั้งหมด</button>' : ''}
-         </div>`
-      : '<div class="bp-empty">ยังไม่มีเหตุการณ์ในระบบ</div>'}`;
+    <div class="card">
+      ${feed.items.length
+        ? `<ul class="bp-list">${feed.items.map((n, i) => `
+            <li><button data-bnotif="${i}" class="${read.has(n.id) ? '' : 'unread'}">
+              <span class="tic ${LEVEL_TONE[n.level] ?? 'info'}">
+                ${icon(n.level === 'critical' || n.level === 'warn' ? 'alt' : n.level === 'ok' ? 'chk' : 'info')}</span>
+              <span class="bp-tx">
+                <span class="bp-t">${esc(n.title)}</span>
+                <span class="bp-d">${esc(n.detail)}</span>
+                <span class="bp-m">${esc(ago(n.at))} · โดย ${esc(n.by)}</span>
+              </span>
+              ${LEVEL_LABEL[n.level]
+                ? `<span class="tg ${LEVEL_TONE[n.level]}">${LEVEL_LABEL[n.level]}</span>` : ''}
+            </button></li>`).join('')}</ul>`
+        : `<div class="bp-empty">${tx('ยังไม่มีเหตุการณ์ในระบบ')}</div>`}
+    </div>
+  </div>`;
 
-  el('bellPop').querySelectorAll('[data-bnotif]').forEach((btn) => {
+  main.querySelectorAll('[data-bnotif]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const item = feed.items[Number(btn.dataset.bnotif)];
       markRead([item.id]);          // อ่านทีละรายการ ป้ายลดลงทีละหนึ่ง
       paintBell(feed);
-      if (item.link) { closeBell(); openNotification(item); }
-      else renderBellPop(feed);     // รายการที่ไม่มีที่ให้ไป แค่ทำเป็นอ่านแล้ว
+      if (item.link) openNotification(item);
+      else renderNotifications();   // รายการที่ไม่มีที่ให้ไป แค่ทำเป็นอ่านแล้ว รีเฟรชหน้าให้เห็น
     });
   });
-  el('bellAll')?.addEventListener('click', () => {
+  el('bellMarkAllBtn')?.addEventListener('click', () => {
     markRead(feed.items.map((i) => i.id));
     paintBell(feed);
-    renderBellPop(feed);
+    renderNotifications();
   });
 }
 
-el('bellBtn').addEventListener('click', async (e) => {
-  e.stopPropagation();
-  /* ต้องสั่งปิดเมนูอื่นตรงนี้เอง — stopPropagation ข้างบนกันไม่ให้คลิกลอยไปถึง document
-     ตัวปิดเมนูอื่นที่ดักไว้ที่ document จึงไม่มีวันได้ทำงาน แล้วสองแผงจะเปิดซ้อนกัน */
-  closeWho();
-  closeCtx();
-  const pop = el('bellPop');
-  if (!pop.hidden) { closeBell(); return; }
-  try {
-    const feed = await api('/activity?limit=25');
-    /* ทาสีป้ายจากชุดข้อมูลเดียวกับที่กำลังจะแสดงในแผง
-       ไม่มีบรรทัดนี้ ป้ายจะค้างเลขเก่าจนถึงรอบถามถัดไป (60 วินาที)
-       คนจึงเห็น "แจ้งเตือน 6" แล้วกดเข้าไปเจอแผงว่าง */
-    paintBell(feed);
-    renderBellPop(feed);            // เปิดดูเฉยๆ ไม่นับว่าอ่าน ต้องกดรายการเอง
-    pop.hidden = false;
-    el('bellBtn').setAttribute('aria-expanded', 'true');
-  } catch (error) { toast(error.message, true); }
-});
+/** พาไปหน้าที่รายการแจ้งเตือนชี้ไว้ — รูปร่าง link มาจาก FEED_SHAPE ใน src/service.js เท่านั้น */
+function openNotification(item) {
+  const link = item.link;
+  if (!link) return;
+  if (link.view === 'detail' && link.id) { openSheet(link.id); return; }
+  if (link.view === 'cycle' && link.contractId && link.period) { openCycle(link.contractId, link.period); return; }
+  setNav(link.view);
+}
 
-document.addEventListener('click', (e) => {
-  if (!el('bellPop').hidden && !e.target.closest('.bellwrap')) closeBell();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeBell();
-});
+/* ── login / ลงทะเบียน / ลืมรหัสผ่าน / logout ─────────────────
+   สามหน้าจอเป็น overlay คลุมทับทุกอย่างคนละใบ (ดู .login-screen ใน styles.css) สลับกันด้วย
+   hidden — ไม่ต้องแยกหน้าจริง แค่โชว์/ซ่อนทับของเดิม เพราะ shell ที่เหลือไม่ทำอะไรถ้าไม่มี session
+   อยู่แล้ว (31 ส.ค. 69 ตามที่ขอ เพิ่มลงทะเบียนเอง + ลืมรหัสผ่าน + Google + ไอคอนดวงตา + จดจำฉัน) */
 
-/* ── login / logout ──────────────────────────────────────────
-   หน้า login เป็น overlay คลุมทับทุกอย่าง (ดู .login-screen ใน styles.css)
-   ไม่ต้องแยกหน้าจริง แค่โชว์/ซ่อนทับของเดิม เพราะ shell ที่เหลือไม่ทำอะไรถ้าไม่มี session อยู่แล้ว */
+function hideAuthScreens() {
+  el('loginScreen').hidden = true;
+  el('registerScreen').hidden = true;
+  el('forgotScreen').hidden = true;
+}
 
-function showLoginScreen(message) {
+function showLoginScreen(message, info) {
+  hideAuthScreens();
   el('loginScreen').hidden = false;
-  if (message) {
-    el('loginErr').textContent = message;
-    el('loginErr').hidden = false;
-  }
+  el('loginErr').hidden = true;
+  el('loginInfo').hidden = true;
+  if (message) { el('loginErr').textContent = message; el('loginErr').hidden = false; }
+  if (info) { el('loginInfo').textContent = info; el('loginInfo').hidden = false; }
   clearInterval(pulseTimer);
   changeStream?.close();
 }
 
 function hideLoginScreen() {
-  el('loginScreen').hidden = true;
+  hideAuthScreens();
   el('loginErr').hidden = true;
+  el('loginInfo').hidden = true;
   el('loginForm').reset();
 }
+
+function showRegisterScreen() {
+  hideAuthScreens();
+  el('registerScreen').hidden = false;
+  el('registerForm').hidden = false;
+  el('registerSuccess').hidden = true;
+  el('registerErr').hidden = true;
+  el('registerForm').reset();
+}
+
+/* ขั้นตอนลืมรหัสผ่านสามขั้น อยู่ในการ์ดคนละใบใต้ #forgotScreen เดียวกัน — email/resetToken ต้อง
+   จำข้ามขั้นไว้เอง เพราะฟอร์มขั้น 2/3 ไม่มีช่องกรอกอีเมลซ้ำให้คนกรอกอีกรอบ */
+let forgotEmailValue = '';
+let forgotResetToken = '';
+
+function showForgotScreen() {
+  hideAuthScreens();
+  forgotEmailValue = '';
+  forgotResetToken = '';
+  el('forgotScreen').hidden = false;
+  el('forgotStep1').hidden = false;
+  el('forgotStep2').hidden = true;
+  el('forgotStep3').hidden = true;
+  el('forgotSuccess').hidden = true;
+  el('forgotStep1Err').hidden = true;
+  el('forgotStep1').reset();
+}
+
+function showForgotStep2() {
+  el('forgotStep1').hidden = true;
+  el('forgotStep2').hidden = false;
+  el('forgotStep2Err').hidden = true;
+  el('forgotStep2Sub').textContent = `ส่งรหัสยืนยัน 6 หลักไปที่ ${forgotEmailValue} แล้ว — รหัสใช้ได้ภายใน 10 นาที`;
+  el('forgotStep2').reset();
+  el('forgotCode').focus();
+}
+
+function showForgotStep3() {
+  el('forgotStep2').hidden = true;
+  el('forgotStep3').hidden = false;
+  el('forgotStep3Err').hidden = true;
+  el('forgotStep3').reset();
+  el('forgotNewPass').focus();
+}
+
+function showForgotSuccess() {
+  el('forgotStep3').hidden = true;
+  el('forgotSuccess').hidden = false;
+}
+
+el('gotoForgotBtn').addEventListener('click', () => showForgotScreen());
+el('gotoRegisterBtn').addEventListener('click', () => showRegisterScreen());
+el('gotoLoginFromRegisterBtn').addEventListener('click', () => showLoginScreen());
+el('registerSuccessBackBtn').addEventListener('click', () => showLoginScreen());
+el('gotoLoginFromForgot1Btn').addEventListener('click', () => showLoginScreen());
+el('gotoLoginFromForgot2Btn').addEventListener('click', () => showLoginScreen());
+el('forgotSuccessBackBtn').addEventListener('click', () => showLoginScreen());
+
+el('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = el('registerBtn');
+  btn.disabled = true;
+  el('registerErr').hidden = true;
+  try {
+    await api('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: el('regEmail').value.trim(),
+        nameTh: el('regName').value.trim(),
+        password: el('regPass').value,
+      }),
+    });
+    el('registerForm').hidden = true;
+    el('registerSuccess').hidden = false;
+  } catch (error) {
+    el('registerErr').textContent = error.message;
+    el('registerErr').hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+el('forgotStep1').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = el('forgotStep1Btn');
+  btn.disabled = true;
+  el('forgotStep1Err').hidden = true;
+  try {
+    forgotEmailValue = el('forgotEmail').value.trim();
+    await api('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email: forgotEmailValue }) });
+    showForgotStep2();
+  } catch (error) {
+    el('forgotStep1Err').textContent = error.message;
+    el('forgotStep1Err').hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+el('forgotStep2').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = el('forgotStep2Btn');
+  btn.disabled = true;
+  el('forgotStep2Err').hidden = true;
+  try {
+    const { resetToken } = await api('/auth/verify-reset-code', {
+      method: 'POST',
+      body: JSON.stringify({ email: forgotEmailValue, code: el('forgotCode').value.trim() }),
+    });
+    forgotResetToken = resetToken;
+    showForgotStep3();
+  } catch (error) {
+    el('forgotStep2Err').textContent = error.message;
+    el('forgotStep2Err').hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+el('forgotStep3').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = el('forgotStep3Btn');
+  btn.disabled = true;
+  el('forgotStep3Err').hidden = true;
+  try {
+    await api('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: forgotEmailValue, resetToken: forgotResetToken, newPassword: el('forgotNewPass').value,
+      }),
+    });
+    showForgotSuccess();
+  } catch (error) {
+    el('forgotStep3Err').textContent = error.message;
+    el('forgotStep3Err').hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ปุ่มดวงตาโชว์/ซ่อนรหัสผ่าน — delegated ใบเดียวใช้ได้ทั้งช่องที่อยู่ในหน้าตั้งแต่แรก (login/register/
+   ลืมรหัสผ่าน) และช่องที่ render() สร้างทีหลังแบบ innerHTML (ฟอร์มเพิ่มผู้ใช้ในหน้าจัดการระบบ) */
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.eye[data-target]');
+  if (!btn) return;
+  const input = el(btn.dataset.target);
+  if (!input) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.querySelector('use').setAttribute('href', showing ? '#i-eye' : '#i-eye-off');
+});
+
+/* ปุ่ม "เข้าสู่ระบบ/ลงทะเบียนด้วย Google" — โชว์เฉพาะตอนเซิร์ฟเวอร์ตั้งค่า GOOGLE_CLIENT_ID/SECRET
+   ไว้แล้วเท่านั้น (ดู GET /api/auth/config) ไม่งั้นกดไปก็เจอแค่ error เปล่าๆ */
+api('/auth/config').then(({ googleEnabled }) => {
+  if (!googleEnabled) return;
+  el('googleLoginBtn').hidden = false;
+  el('googleRegisterBtn').hidden = false;
+}).catch(() => {});
+el('googleLoginBtn').addEventListener('click', () => { window.location.href = '/api/auth/google/start'; });
+el('googleRegisterBtn').addEventListener('click', () => { window.location.href = '/api/auth/google/start'; });
+
+/* Google callback พากลับมาที่ "/" พร้อม query param บอกผล — ?googlePending=1 = ลงทะเบียน/ผูกบัญชี
+   ผ่าน Google สำเร็จแต่ยังรอ admin เปิดใช้งาน, ?loginError=... = ฝั่ง Google/callback มีปัญหา
+   อ่านตรงนี้ก่อน boot() ด้านล่างจะได้เอาไปโชว์ตอนเรียก showLoginScreen() รอบแรก (ต้องล้าง query
+   ออกจาก URL ทันทีด้วย ไม่งั้นกด refresh แล้วจะเห็นข้อความเดิมซ้ำอีกรอบ) */
+const googleRedirectParams = new URLSearchParams(window.location.search);
+const googlePending = googleRedirectParams.get('googlePending');
+const googleLoginError = googleRedirectParams.get('loginError');
+if (googlePending || googleLoginError) window.history.replaceState(null, '', window.location.pathname);
 
 /* ── login เข้า HRDD (WorkDD) เพิ่มเติม ───────────────────────
    ยิงหลังจาก login เข้าระบบ OBS สำเร็จ เพื่อเอา accessToken มาเก็บไว้เรียกข้อมูลจาก HRDD
@@ -4994,7 +5577,6 @@ el('envChip').addEventListener('click', async () => {
 
 el('contractSwitchBtn').addEventListener('click', (e) => {
   e.stopPropagation();
-  closeBell();
   closeWho();
   const pop = el('contractSwitchPop');
   if (!pop.hidden) { closeCtx(); return; }
@@ -5031,11 +5613,16 @@ async function startApp() {
 
   await loadContractSwitch();
 
+  /* ต้อง await ตรงนี้ก่อน (31 ส.ค. 69) — syncBadges() เป็นคนแก้ state.view ให้ตรงกับ role ตอนเพิ่งเข้า
+     แอปครั้งแรก (เช่น role 'user'/'executive' ไม่ให้เห็นหน้า dash ปกติ) ถ้าปล่อยให้ render() เรียกแบบ
+     ไม่ await เหมือนทุกครั้งปกติ จะเกิด race — render() อ่าน state.view ไปเรียก RENDER[...] ก่อนที่
+     syncBadges() จะแก้ค่าทันเวลา หน้าแรกที่เห็นเลยเป็นหน้าที่ role นั้นไม่ควรเห็น */
+  await syncBadges();
+
   if (deepLink?.type === 'cycle') {
-    syncBadges();  // render() ปกติเป็นคนเรียกให้ แต่รอบนี้ข้าม render() ไปเปิดรอบบิลตรงๆ
     await openCycle(deepLink.contractId, deepLink.period);
   } else {
-    render();      // render() เรียก syncBadges() ให้ป้ายขึ้นรอบแรกอยู่แล้ว
+    render();
   }
   listenForChanges();
   startPulse();
@@ -5052,6 +5639,7 @@ el('loginForm').addEventListener('submit', async (e) => {
       body: JSON.stringify({
         username: el('loginUser').value.trim(),
         password: el('loginPass').value,
+        remember: el('loginRemember').checked,
       }),
     });
     await loginHrdd();
@@ -5075,7 +5663,6 @@ function closeWho() {
 el('whoBtn').addEventListener('click', () => {
   const pop = el('whoPop');
   if (pop.hidden) {
-    closeBell();               // เปิดทีละอัน ไม่ให้สองแผงซ้อนกัน
     closeCtx();
     pop.hidden = false;
     el('whoBtn').setAttribute('aria-expanded', 'true');
@@ -5113,5 +5700,9 @@ el('logoutBtn').addEventListener('click', async (e) => {
     state.username = me.username; // ใช้กันแก้ role/ปิดใช้งานบัญชีตัวเองในหน้าจัดการระบบ
     if (!localStorage.getItem(HRDD_TOKEN_KEY)) await loginHrdd(); // รีเฟรชหน้า/เปิดแท็บใหม่ตอน session OBS ยังอยู่ แต่ยังไม่มี HRDD token
     await startApp();
+  } else if (googlePending) {
+    showLoginScreen(null, 'เชื่อมบัญชี Google สำเร็จ — รอผู้ดูแลระบบเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้');
+  } else if (googleLoginError) {
+    showLoginScreen(googleLoginError);
   } else showLoginScreen();
 })();

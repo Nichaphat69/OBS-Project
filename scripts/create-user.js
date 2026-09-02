@@ -5,7 +5,7 @@
  *   npm run user:create
  *
  * รันแบบระบุค่าตรงในคำสั่งเดียว (เหมาะตอนสั่งจากสคริปต์/เอเจนต์อื่น ไม่มี terminal โต้ตอบสด):
- *   npm run user:create -- <username> "<ชื่อที่โชว์ในบันทึก>" "<รหัสผ่าน>" [admin|user]
+ *   npm run user:create -- <username> "<ชื่อที่โชว์ในบันทึก>" "<รหัสผ่าน>" [admin|accounting|user]
  *   role ไม่ระบุ = user (ทำงานประจำวันได้ แก้ข้อมูลหลักไม่ได้ — ดู ROLES ใน src/auth.js)
  *
  * เก็บรหัสผ่านแบบ hash (scrypt) เท่านั้น ไม่มีที่ไหนในระบบเก็บรหัสผ่านตัวจริง
