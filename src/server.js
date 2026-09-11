@@ -192,15 +192,15 @@ const routes = [
     return svc.listKnownLineUsers();
   }],
 
-  /** หน้า "แจ้งปัญหา" — ตั๋วที่พนักงานแจ้งเข้ามาผ่าน LINE (7 ก.ย. 69 ตามที่ขอ) admin/accounting ดูและ
-   *  กดแก้ได้เหมือนกัน (ไม่ใช่ requireSuperAdmin เพราะไม่ใช่เรื่องคุมสิทธิ์บัญชีคนอื่น) */
+  /** หน้า "แจ้งปัญหา" — ตั๋วที่พนักงานแจ้งเข้ามาผ่าน LINE (7 ก.ย. 69 ตามที่ขอ, จำกัดเหลือ admin เท่านั้น
+   *  11 ก.ย. 69 ตามที่ขอ — เดิม accounting เห็นด้วย เปลี่ยนใจให้ admin ดูแลเรื่องนี้คนเดียวพอ) */
   ['GET', /^\/api\/support-tickets$/, (_m, url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.listSupportTickets({ status: url.searchParams.get('status') });
   }],
 
   ['POST', /^\/api\/support-tickets\/([^/]+)\/resolve$/, (m, _url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.resolveSupportTicket(Number(m[1]), { actor: session.nameTh });
   }],
 

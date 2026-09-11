@@ -5153,7 +5153,7 @@ async function syncBadges() {
     invoicesNavBtn: isStaff(role),
     masterNavBtn: isStaff(role),
     abbyySkillsNavBtn: role === 'admin',
-    ticketsNavBtn: role === 'admin' || role === 'accounting',
+    ticketsNavBtn: role === 'admin',
     // "จัดการระบบ" เป็นของ admin เท่านั้น accounting ไม่เห็นเมนูนี้เลย (1 ก.ย. 69 ตามที่ขอ) — ต่างจาก
     // เมนูอื่นส่วนใหญ่ที่ accounting ทำได้เท่า admin เพราะหน้านี้คุมสิทธิ์บัญชีคนอื่น/ดู audit log ดิบ
     sysAdminTab: role === 'admin',
@@ -5166,7 +5166,7 @@ async function syncBadges() {
      พากลับไปหน้าเริ่มต้นที่ role นี้เข้าได้จริง กันจอโล่ง/ค้างอยู่หน้าที่ API จะ 403 ทุกคำขอ */
   const ALLOWED_VIEWS = {
     admin: ['dash', 'execOverview', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'abbyySkills', 'sysadmin', 'tickets', 'detail', 'cycle'],
-    accounting: ['dash', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'tickets', 'detail', 'cycle'],
+    accounting: ['dash', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'detail', 'cycle'],
     user: ['myProgress', 'notifications', 'upload'],
     executive: ['execOverview', 'notifications', 'execCompanyDetail'],
   };
