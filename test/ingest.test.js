@@ -164,9 +164,9 @@ test('ครบทุกคนแต่ยังไม่มีคนกดย�
   );
 });
 
-test('คนกดยืนยันครบทุกใบ → รอบบิลพร้อมวางบิล', () => {
+test('คนกดยืนยันครบทุกใบ → รอบบิลพร้อมวางบิล', async () => {
   for (const id of ['2026020101', '2026020100']) {
-    const result = svc.markTimesheetChecked(id, { actor: 'ผู้ตรวจทดสอบ' });
+    const result = await svc.markTimesheetChecked(id, { actor: 'ผู้ตรวจทดสอบ' });
     assert.equal(result.check.checked, true);
     assert.equal(result.check.by, 'ผู้ตรวจทดสอบ');
   }
@@ -394,6 +394,26 @@ test('เอกสารที่วางบิลแล้ว → ไม่เ
 
   assert.equal(result.nextAction, svc.NEXT_ACTION.ALREADY_BILLED);
   assert.equal(result.created, false);
+});
+
+test('รอบที่วางบิลแล้ว ส่งใบใหม่มาด้วยเลขที่เอกสารคนละเลข → ต้องปฏิเสธเหมือนกัน ไม่ใช่แค่กันเขียนทับเลขเดิม', async () => {
+  const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
+
+  // ใบ 2026020101 (รอบ ก.พ. ของพนักงานคนเดียวกัน สร้างไว้แล้วในเทสต์ก่อนหน้า) จำลองว่าวางบิลไปแล้ว
+  const { run } = await import('../src/db/index.js');
+  run("UPDATE timesheets SET status = 'billed' WHERE id = '2026020101'");
+
+  const before = svc.listTimesheets().length;
+  const result = await svc.ingestTimesheet({
+    documentNo: '2026020199',   // เลขที่เอกสารใหม่ ไม่ใช่ 2026020101 — จำลอง n8n ยิงซ้ำด้วยเลขต่างออกไป
+    fileBase64: Buffer.from('x').toString('base64'),
+    extractor: stubExtractor(data),
+  });
+
+  assert.equal(result.nextAction, svc.NEXT_ACTION.ALREADY_BILLED);
+  assert.equal(result.created, false);
+  assert.equal(result.timesheetId, null);
+  assert.equal(svc.listTimesheets().length, before, 'ต้องไม่มีแถวใหม่เกิดขึ้น');
 });
 
 test('ไม่ส่งไฟล์มาเลย → ปฏิเสธพร้อมบอกเหตุผล', async () => {

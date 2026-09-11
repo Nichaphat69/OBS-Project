@@ -10,8 +10,12 @@ const api = async (path, options) => {
   });
   const data = await response.json();
   /* session หลุด (หมดอายุ/ยังไม่ login) กลางทาง — พาไปหน้า login ทันที ยกเว้นตอนกำลัง
-     ล็อกอินอยู่แล้ว (401 ตรงนั้นคือ "รหัสผ่านผิด" ต้องโชว์ในฟอร์ม ไม่ใช่เด้งไปไหน) */
-  if (response.status === 401 && path !== '/auth/login') {
+     ล็อกอินอยู่แล้ว (401 ตรงนั้นคือ "รหัสผ่านผิด" ต้องโชว์ในฟอร์ม ไม่ใช่เด้งไปไหน)
+     เช็คจาก data.sessionExpired ไม่ใช่ response.status === 401 เฉยๆ — endpoint อื่นก็คืน 401 ได้เหมือนกัน
+     แต่ไม่เกี่ยวกับ session ของ OBS เลย (เช่น /gmail/inbox คืน 401 ตอน GMAIL_REFRESH_TOKEN หมดอายุ ซึ่งเป็น
+     คนละเรื่องกับ session — บั๊กจริงที่เจอ 8 ก.ย. 69: กดแท็บ "ดึงจาก Gmail" แล้วเด้งออกจากระบบทั้งที่ยัง
+     ล็อกอินอยู่ปกติ เพราะเดิมเช็คแค่ status code เฉยๆ) */
+  if (data.sessionExpired && path !== '/auth/login') {
     showLoginScreen();
   }
   if (!response.ok) {
@@ -744,7 +748,9 @@ async function renderDashboard() {
 
 function bindRows() {
   main.querySelectorAll('[data-cycle]').forEach((row) => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (e) => {
+      // ปุ่มลบใบแจ้งหนี้อยู่ในแถวเดียวกัน (หน้าใบแจ้งหนี้) กดแล้วต้องไม่พาเปิดหน้ารอบบิลไปด้วย
+      if (e.target.closest('[data-del-invoice]')) return;
       const [contractId, period] = row.dataset.cycle.split('|');
       openCycle(contractId, period);
     });
@@ -1246,7 +1252,17 @@ async function openSheet(id) {
 
   main.innerHTML = '<div class="loading">กำลังโหลด…</div>';
   syncBadges();
-  const sheet = await api(`/timesheets/${encodeURIComponent(id)}`);
+  // ใบนี้อาจหาไม่เจอแล้ว (ถูกลบ/คำนวณใหม่ทับ/ถูกกรองบริษัทออกไป) — เดิมไม่มี try/catch เลย พอ fetch
+  // พัง หน้าจะค้างที่ "กำลังโหลด…" ตลอดไป ไม่ error ไม่พาไปไหน (พบจาก UAT TC-SC12-007-ADM, 4 ก.ย. 69)
+  let sheet;
+  try {
+    sheet = await api(`/timesheets/${encodeURIComponent(id)}`);
+  } catch (error) {
+    main.innerHTML = `<div class="page"><div class="card"><div class="empty">
+      ${icon('alt', 'i')}<div>${esc(error.message)}</div></div></div></div>`;
+    toast(error.message, true);
+    return;
+  }
   const manday = sheet.manday;
   const dayCounts = manday?.calendar?.counts ?? { workday: 0, leave: 0, holiday: 0, weekend: 0 };
   // สรุปประจำเดือนขอให้แยกวันลาแต่ละประเภทแทนยอดรวม "ลา" อันเดียว ("ขอให้มีครบทุกสถานะ")
@@ -2297,6 +2313,23 @@ async function renderUpload() {
   ]);
   const reads = state.reads;
 
+  // เปิดดูรายละเอียดจากแท็บ "ประวัติ" มา — โชว์เป็นหน้าเดี่ยวแยกจากแท็บ/ตารางด้านหลังไปเลย ไม่ปนกัน
+  // กันคนงงว่าทำไมต้องเลื่อนจอลงไปไกลถึงจะเห็นการ์ด (1 ก.ย. 69 ตามที่ขอ)
+  const historyRead = reads.find((r) => r.fromHistory);
+  if (historyRead) {
+    main.innerHTML = `
+    <div class="page">
+      <button class="back" id="histBackBtn">${icon('cl')} ${tx('กลับไปหน้าประวัติ')}</button>
+      ${readResultHtml(historyRead, employees)}
+    </div>`;
+    el('histBackBtn').addEventListener('click', () => {
+      state.reads = state.reads.filter((r) => r._key !== historyRead._key);
+      renderUpload();
+    });
+    bindReadCards();
+    return;
+  }
+
   main.innerHTML = `
   <div class="page">
     <div class="phd">
@@ -2319,7 +2352,12 @@ async function renderUpload() {
           <div class="hd"><h3>${tx('อีเมลแจ้งอนุมัติ Timesheet')}</h3>
             <span class="rt" id="gmailAcct">${tx('กำลังเชื่อมต่อ…')}</span></div>
           <div class="bd">
+            <div id="gmailFilterNote"></div>
             <div id="gmailList"></div>
+            <div class="gmail-dismissed">
+              <a href="#" id="gmailDismissedToggle">${tx('ประวัติอีเมลที่ระบบเคยอ่าน')}</a>
+              <div id="gmailDismissedWrap" hidden></div>
+            </div>
           </div>
         </div>` : `
         <div class="card"><div class="bd">
@@ -2422,6 +2460,7 @@ async function renderUpload() {
   bindGmailTab();
   bindManualTab(contracts);
   bindAiHistoryTab();
+  bindReadCards();
 }
 
 /* ── ขั้นที่ 1 ทางที่สอง: เลือกอีเมลจากกล่องแล้วให้ AI อ่านทั้งฉบับ ──
@@ -2433,8 +2472,58 @@ function bindGmailTab() {
   const load = async () => {
     el('gmailList').innerHTML = '<div class="loading">กำลังดึงรายการเมล…</div>';
     try {
-      const inbox = await api('/gmail/inbox');
+      const inbox = await api(`/gmail/inbox${state.gmailShowAll ? '?all=1' : ''}`);
       el('gmailAcct').textContent = `กล่องของ ${inbox.account}`;
+
+      /* กรองตามโดเมนอีเมลของบริษัทที่ active อยู่ให้อัตโนมัติ (3 ก.ย. 69 ตามที่ขอ) — บอกให้รู้ว่ากำลัง
+         กรองอยู่ พร้อมทางออกกดดูทุกบริษัทได้เอง ถ้าบริษัทนั้นยังไม่ได้ตั้งโดเมนไว้เตือนให้ไปตั้งที่
+         "จัดการระบบ → โดเมนอีเมล" แทน (accounting เห็นข้อความเตือนได้แต่ตั้งเองไม่ได้ เมนูนั้น admin เท่านั้น) */
+      el('gmailFilterNote').innerHTML = state.gmailShowAll
+        ? `<div class="note info">${icon('info')}<span>${tx('กำลังแสดงทุกบริษัท')} —
+             <a href="#" data-gmail-scope="active">${tx('กลับไปกรองเฉพาะบริษัทที่เลือกอยู่')}</a></span></div>`
+        : inbox.domain
+          ? `<div class="note info">${icon('info')}<span>${tx('กรองเฉพาะอีเมลของ')}
+               <b>${esc(inbox.activeCompanyName ?? '')}</b> (${esc(inbox.domain)}) —
+               <a href="#" data-gmail-scope="all">${tx('แสดงทุกบริษัท')}</a></span></div>`
+          : inbox.domainMissing
+            /* บริษัทใหม่ที่ admin ยังไม่ทันมาตั้งโดเมนให้ — accounting เลือกเองได้เลยจากอีเมลที่เห็น
+               ด้านล่าง (มาจากผู้ส่งฉบับนั้นๆ) ไม่ต้องรอ admin แต่ผูกได้แค่ครั้งแรกครั้งเดียว (ดู
+               claimCustomerEmailDomain) ผูกผิดแก้เองไม่ได้ ต้องให้ admin แก้ที่ "จัดการระบบ" แทน */
+            ? `<div class="note wn">${icon('alt')}<span>
+                 <b>${tx('ยังไม่ได้ตั้งโดเมนอีเมลของ')} ${esc(inbox.activeCompanyName ?? '')}</b>
+                 ${tx('— ตอนนี้เห็นอีเมลจากทุกบริษัท (subject Timesheet ทั้งหมด)')}
+                 <div class="gmail-claim">
+                   <input type="text" class="dinput" id="gmailClaimDomain"
+                     placeholder="${tx('พิมพ์โดเมนจากอีเมลผู้ส่งของบริษัทนี้ เช่น thailife.com')}" autocomplete="off">
+                   <button class="btn sm pri" id="gmailClaimBtn">${tx('ผูกโดเมนนี้ให้บริษัทนี้')}</button>
+                 </div>
+               </span></div>`
+            : '';
+      el('gmailFilterNote').querySelectorAll('[data-gmail-scope]').forEach((a) => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          state.gmailShowAll = a.dataset.gmailScope === 'all';
+          load();
+        });
+      });
+      if (el('gmailClaimBtn')) {
+        el('gmailClaimBtn').addEventListener('click', async () => {
+          const domain = el('gmailClaimDomain').value.trim();
+          if (!domain) { toast('ต้องพิมพ์โดเมนก่อน', true); return; }
+          const btn = el('gmailClaimBtn');
+          btn.disabled = true;
+          try {
+            await api(`/customers/${encodeURIComponent(inbox.activeCustomerId)}/email-domain/claim`, {
+              method: 'POST', body: JSON.stringify({ domain }),
+            });
+            toast(`ผูกโดเมน "${domain}" ให้ ${inbox.activeCompanyName} แล้ว`);
+            load();
+          } catch (error) {
+            toast(error.message, true);
+            btn.disabled = false;
+          }
+        });
+      }
 
       /* บางฉบับดึงรายละเอียดไม่สำเร็จ (ถูกลบพอดี หรือ Gmail สะดุด) — รายการที่เห็นจึงยังไม่ครบ
          ต้องบอกไว้ ไม่งั้นคนเข้าใจว่ากล่องมีแค่นี้จริงๆ แล้วไปตามหาอีเมลที่หายไปไม่เจอ */
@@ -2479,14 +2568,10 @@ function bindGmailTab() {
           : `<div class="empty">${icon('mail', 'i')}<div>ไม่พบอีเมลที่ตรงกับคำค้น —
               แก้คำค้นได้ที่ <code>GMAIL_QUERY</code> ในไฟล์ .env</div></div>`);
 
+      // ไม่ไล่อ่านให้เองอีกต่อไป (1 ก.ย. 69 ตามที่ขอ) — ต้องกด "อ่านข้อมูล" เองทีละไฟล์เท่านั้น
       el('gmailList').querySelectorAll('[data-mail]').forEach((btn) => {
         btn.addEventListener('click', () => readOneAttachment(btn));
       });
-
-      /* ไล่อ่านให้เองทันทีที่เข้าแท็บ — ทีละไฟล์เรียงกัน ไม่ยิงพร้อมกัน เพราะ GPU มีตัวเดียว
-         ยิงพร้อมกันจะแย่งกันจนช้ากว่าเดิมและกินหน่วยความจำการ์ดจอเกิน
-         มีปุ่มหยุดให้กดได้ตลอด เพราะกล่องเมลอาจมีหลายฉบับและอ่านนานเป็นนาทีต่อฉบับ */
-      autoReadPending();
 
       el('gmailList').querySelectorAll('[data-dismiss]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -2517,6 +2602,50 @@ function bindGmailTab() {
       el('gmailList').innerHTML = `<div class="note cr">${icon('alt')}<span>${esc(error.message)}</span></div>`;
     }
   };
+
+  /* รายการที่เคยกด "ซ่อน" ไว้ — เดิมกดซ่อนแล้วไม่มีทางกลับมาเลย (พบจาก UAT TC-SC04-019-ADM, 4 ก.ย. 69)
+     ไม่โหลดล่วงหน้าตอนเข้าแท็บ (ปกติมีน้อย/ไม่มีเลย) โหลดเฉพาะตอนกดขยายดูเท่านั้น */
+  const loadDismissed = async () => {
+    const wrap = el('gmailDismissedWrap');
+    wrap.innerHTML = '<div class="loading">กำลังโหลด…</div>';
+    try {
+      const rows = await api('/gmail/dismissed');
+      wrap.innerHTML = rows.length
+        ? `<ul class="maillist">${rows.map((m) => `
+            <li>
+              <span class="mi">
+                <span class="ms">${m.subject ? esc(m.subject) : `<i>${tx('ไม่พบอีเมลนี้ใน Gmail แล้ว')}</i>`}</span>
+                ${m.from ? `<span class="mf">${esc(m.from)} · ${dt(m.receivedAt)}</span>` : ''}
+                <span class="mq">${tx('ซ่อนโดย')} ${esc(m.dismissedBy ?? '—')} · ${dt(m.dismissedAt)}</span>
+              </span>
+              <button class="btn sm" data-undismiss="${esc(m.id)}">${tx('นำกลับเข้ารายการหลัก')}</button>
+            </li>`).join('')}</ul>`
+        : `<div class="empty">${icon('mail', 'i')}<div>${tx('ยังไม่มีอีเมลที่ซ่อนไว้')}</div></div>`;
+      wrap.querySelectorAll('[data-undismiss]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            await api('/gmail/undismiss', { method: 'POST', body: JSON.stringify({ messageId: btn.dataset.undismiss }) });
+            toast('นำกลับเข้ารายการหลักแล้ว');
+            loadDismissed();
+            load();
+          } catch (error) {
+            btn.disabled = false;
+            toast(error.message, true);
+          }
+        });
+      });
+    } catch (error) {
+      wrap.innerHTML = `<div class="note cr">${icon('alt')}<span>${esc(error.message)}</span></div>`;
+    }
+  };
+
+  el('gmailDismissedToggle')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const wrap = el('gmailDismissedWrap');
+    wrap.hidden = !wrap.hidden;
+    if (!wrap.hidden) loadDismissed();
+  });
 
   // ดึงให้เองอัตโนมัติทันทีที่เข้าแท็บนี้ — เชื่อมกับกล่องเมลอยู่แล้ว ไม่ต้องมีปุ่มให้กดดึงเอง
   if (state.uploadTab === 3) load();
@@ -2576,7 +2705,9 @@ function bindAiHistoryTab() {
           try {
             const detail = await api(`/ai-reads/${tr.dataset.histOpen}`);
             if (!detail.extraction) { toast('ไม่พบข้อมูลที่ระบบอ่านไว้สำหรับรายการนี้', true); return; }
-            state.reads.push({ ...detail.extraction, _key: genId(), tab: 4 });
+            // fromHistory: true ทำให้ renderUpload() โชว์การ์ดนี้เป็นหน้าเดี่ยวแยกจากแท็บ/ตารางประวัติ
+            // เลย ไม่ต้องเลื่อนจอไปหาการ์ดที่ท้ายตารางอีกต่อไป (1 ก.ย. 69 ตามที่ขอ)
+            state.reads.push({ ...detail.extraction, _key: genId(), tab: 4, fromHistory: true });
             renderUpload();
           } catch (error) {
             toast(error.message, true);
@@ -2726,20 +2857,7 @@ function endPendingRead(key) {
 }
 
 
-/* ── ไล่อ่านไฟล์แนบใน Gmail ให้เองอัตโนมัติ ────────────────────────────
-   เดิมต้องกด "ให้ AI อ่าน" ทีละไฟล์แล้วนั่งรอ ซึ่งเป็นขั้นที่ไม่ได้ตัดสินใจอะไรเลย —
-   ยังไงก็ต้องอ่านทุกไฟล์อยู่แล้ว ประตูของคนอยู่ที่ "ยืนยันและบันทึก" ทีหลังต่างหาก */
-
-let autoReadRunning = false;
-let autoReadStop = false;
-/* ไฟล์ที่ลองอ่านไปแล้วในรอบนี้ — จำเป็นมาก ไม่ใช่แค่ optimization
-   เพราะพออ่านเสร็จจะ renderUpload() ซึ่งวาดแท็บ Gmail ใหม่แล้วเรียก autoReadPending() อีกรอบ
-   ถ้าไม่จำไว้ ไฟล์เดิมจะถูกอ่านซ้ำไม่รู้จบ (ทดสอบแล้วเจอจริง — 2 ไฟล์ยิงไป 5 ครั้ง)
-   อีเมลยังอยู่ในรายการจนกว่าคนจะกดยืนยันบันทึก จึงพึ่งสถานะปุ่มอย่างเดียวไม่ได้ */
-const autoReadDone = new Set();
-const attachmentKey = (btn) => `${btn.dataset.mail}::${btn.dataset.att ?? ''}`;
-
-/** อ่านไฟล์แนบหนึ่งไฟล์จากปุ่มที่ระบุ — ใช้ร่วมกันทั้งตอนกดเองและตอนไล่อ่านอัตโนมัติ */
+/** อ่านไฟล์แนบหนึ่งไฟล์จากปุ่มที่ระบุ — กดเองเท่านั้น ไม่ไล่อ่านให้อัตโนมัติแล้ว (1 ก.ย. 69 ตามที่ขอ) */
 async function readOneAttachment(btn) {
   if (btn.disabled) return;
   btn.disabled = true;
@@ -2773,63 +2891,6 @@ async function readOneAttachment(btn) {
     return false;
   }
 }
-
-/** ไล่อ่านทุกไฟล์ที่ยังไม่ได้อ่านในกล่อง ทีละไฟล์ */
-async function autoReadPending() {
-  // กำลังไล่อ่านอยู่แล้ว — แค่เอาแถบสถานะกลับขึ้นมา เพราะ renderUpload() เพิ่งลบทิ้งไป
-  if (autoReadRunning) { restoreAutoReadBar(); return; }
-
-  const queue = [...document.querySelectorAll('#gmailList [data-mail]')]
-    .filter((b) => !b.disabled && !autoReadDone.has(attachmentKey(b)));
-  if (!queue.length) return;
-
-  autoReadRunning = true;
-  autoReadStop = false;
-  try {
-    for (let i = 0; i < queue.length; i++) {
-      if (autoReadStop) break;
-      // ปุ่มถูกวาดใหม่ทุกครั้งที่ renderUpload() จึงต้องหาปุ่มตัวปัจจุบันจาก dataset ไม่ใช่ใช้ตัวเดิมที่เก็บไว้
-      const { mail, att } = queue[i].dataset;
-      const key = `${mail}::${att ?? ''}`;
-      if (autoReadDone.has(key)) continue;
-      autoReadDone.add(key);   // จำก่อนเริ่มอ่าน ไม่ใช่หลังอ่านเสร็จ — พลาดแล้วก็ไม่ต้องวนอ่านซ้ำเอง
-      const live = document.querySelector(`#gmailList [data-mail="${CSS.escape(mail)}"][data-att="${CSS.escape(att ?? '')}"]`);
-      if (!live || live.disabled) continue;
-      autoReadProgress = { current: i + 1, total: queue.length };
-      showAutoReadBar();
-      await readOneAttachment(live);
-    }
-  } finally {
-    autoReadRunning = false;
-    hideAutoReadBar();
-  }
-}
-
-let autoReadProgress = null;
-
-function showAutoReadBar() {
-  const list = el('gmailList');
-  if (!list || !autoReadProgress) return;
-  let bar = el('autoReadBar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'autoReadBar';
-    bar.className = 'note info autoread';
-    list.prepend(bar);
-  }
-  const { current, total } = autoReadProgress;
-  bar.innerHTML = `${icon('srch')}<span>กำลังไล่อ่านให้อัตโนมัติ — ไฟล์ที่ ${int(current)} จาก ${int(total)}</span>
-    <button class="btn sm" id="autoReadStopBtn" type="button">หยุด</button>`;
-  el('autoReadStopBtn').addEventListener('click', () => {
-    autoReadStop = true;
-    toast('หยุดแล้ว — ไฟล์ที่กำลังอ่านอยู่จะอ่านให้จบก่อน ที่เหลือกดอ่านเองได้');
-  });
-}
-
-/** เอาแถบกลับขึ้นมาหลัง renderUpload() วาดรายการเมลใหม่ */
-function restoreAutoReadBar() { if (autoReadRunning) showAutoReadBar(); }
-
-function hideAutoReadBar() { autoReadProgress = null; el('autoReadBar')?.remove(); }
 
 function readsFromResult(result, tab) {
   const { documents, data, verification, matching, contract, blockers, documentNo, ...shared } = result;
@@ -3069,10 +3130,14 @@ function bindUploadTab() {
       toast(error.message, true);
     }
   });
+}
 
-  /* ผลที่ AI อ่านได้มีได้หลายใบพร้อมกันบนจอ (อีเมลเดียวมีไฟล์แนบของหลายคนก็เจอบ่อย) แต่ละการ์ด
-     ผูก event ของตัวเองผ่าน data-read-key แทนการอ้าง id เดี่ยวแบบตอนมีใบเดียว — field(name) หา
-     ช่องกรอกในการ์ดนี้เท่านั้นด้วย id ที่ต่อท้ายด้วย key เดียวกับที่ readResultHtml() ตั้งไว้ */
+/* ผลที่ AI อ่านได้มีได้หลายใบพร้อมกันบนจอ (อีเมลเดียวมีไฟล์แนบของหลายคนก็เจอบ่อย) แต่ละการ์ด
+   ผูก event ของตัวเองผ่าน data-read-key แทนการอ้าง id เดี่ยวแบบตอนมีใบเดียว — field(name) หา
+   ช่องกรอกในการ์ดนี้เท่านั้นด้วย id ที่ต่อท้ายด้วย key เดียวกับที่ readResultHtml() ตั้งไว้
+   แยกเป็นฟังก์ชันของตัวเอง (ไม่ผูกกับ bindUploadTab) เพราะการ์ดที่เปิดจากแท็บ "ประวัติ" ตอนนี้เรนเดอร์
+   เป็นหน้าเดี่ยวแยกจากแท็บอัปโหลดไฟล์ ไม่มี #fileInput/#dropZone ให้ bindUploadTab เจอ (1 ก.ย. 69) */
+function bindReadCards() {
   main.querySelectorAll('[data-read-key]').forEach((card) => {
     const key = card.dataset.readKey;
     const entry = () => state.reads.find((r) => r._key === key);
@@ -3228,6 +3293,10 @@ function bindUploadTab() {
         });
         state.reads = state.reads.filter((r2) => r2._key !== key);
         if (r.nextAction === 'needs_match') { toast(r.reason, true); renderUpload(); return; }
+        // documentNo ที่ส่งมาไม่มีใบจริงให้เปิด (เช่น already_billed ที่ชนกับใบอื่นที่วางบิลไปแล้ว) —
+        // เดิมไม่เช็คจุดนี้ พอ timesheetId เป็น null ก็ยังเรียก openSheet(null) ต่อจนขึ้น "ไม่พบ Timesheet null"
+        // ทั้งที่ระบบมีเหตุผลชัดเจนอยู่แล้วใน r.reason (พบจาก UAT, 7 ก.ย. 69)
+        if (!r.timesheetId) { toast(r.reason ?? 'บันทึกไม่สำเร็จ', true); renderUpload(); return; }
         toast(`บันทึกแล้ว — ${r.status} · วางบิลได้ ${r.manday?.payableDays ?? '–'} วัน · ไปตรวจต่อได้เลย`);
         openSheet(r.timesheetId);
         syncBadges();
@@ -3266,6 +3335,9 @@ function bindManualTab(contracts) {
         }),
       });
       // endpoint คืนคีย์ชื่อ timesheetId ไม่ใช่ id — เคยพลาดตรงนี้จนเกิด uncaught error
+      // timesheetId เป็น null ได้เหมือนกัน (เช่น already_billed ชนกับใบอื่น) — ต้องเช็คก่อนเปิดใบ
+      // ไม่งั้น openSheet(null) ขึ้น "ไม่พบ Timesheet null" ทั้งที่มีเหตุผลอยู่แล้วใน r.reason (7 ก.ย. 69)
+      if (!r.timesheetId) { toast(r.reason ?? 'บันทึกไม่สำเร็จ', true); btn.disabled = false; return; }
       toast(`บันทึกแล้ว — ${r.status} · วางบิลได้ ${r.manday?.payableDays ?? '–'} วัน`);
       openSheet(r.timesheetId);
     } catch (error) {
@@ -4049,10 +4121,14 @@ async function renderMaster() {
       const contractId = btn.dataset.deleteContract;
       const card = btn.closest('.card');
       const title = card?.querySelector('.hd h3')?.textContent ?? contractId;
+      /* ข้อความเดิมบอกว่า "ลบเฉพาะที่ยังไม่ได้วางบิล" ทำให้เข้าใจผิดว่าลบได้บางส่วน — พฤติกรรมจริง
+         (deleteContract) ปฏิเสธการลบทั้งหมดถ้าสัญญานี้เคยออกใบแจ้งหนี้ไปแล้วแม้แต่ใบเดียว ไม่มีการลบ
+         บางส่วนเลย (พบจาก UAT TC-SC08-011-ADM, 4 ก.ย. 69) แก้ข้อความให้ตรงกับพฤติกรรมจริง */
       const ok = await confirmModal({
         iconName: 'trash-solid', danger: true,
         title: 'ลบสัญญานี้?',
-        message: `"<b>${esc(title)}</b>" จะหายไปทั้งหมด รวมพนักงาน/Timesheet ที่ยังไม่ได้วางบิลของสัญญานี้ — กู้คืนไม่ได้`,
+        message: `"<b>${esc(title)}</b>" และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้
+          (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยวางบิลไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)`,
         confirmLabel: 'ลบ',
       });
       if (!ok) return;
@@ -4138,13 +4214,14 @@ async function renderMaster() {
    ข้อมูลหลัก), จัดการผู้ใช้ (เพิ่ม/เปลี่ยน role/ปิดใช้งาน), และบันทึกทุกการเปลี่ยนแปลงในระบบ */
 async function renderSystemAdmin() {
   const tab = state.sysTab;
-  const [settings, users, allEmployees, recipients, lineUsers, log] = await Promise.all([
+  const [settings, users, allEmployees, recipients, lineUsers, log, customerDomains] = await Promise.all([
     api('/settings'),
     tab === 2 ? api('/users') : Promise.resolve(null),
     tab === 2 ? api('/employees') : Promise.resolve([]),
     tab === 3 ? api('/notification-recipients') : Promise.resolve(null),
     tab === 3 ? api('/line/known-users') : Promise.resolve(null),
     tab === 4 ? api('/audit-log?limit=200') : Promise.resolve(null),
+    tab === 5 ? api('/customers/domains') : Promise.resolve(null),
   ]);
 
   main.innerHTML = `
@@ -4153,7 +4230,7 @@ async function renderSystemAdmin() {
       <p>${tx('ผู้ใช้ในระบบ · การเชื่อมต่อกับบริการภายนอก · บันทึกทุกการเปลี่ยนแปลง')}</p></div></div>
 
     <div class="tabs" role="tablist">
-      ${['ภาพรวม', 'ผู้ใช้', 'ผู้รับแจ้งเตือน', 'บันทึกระบบ'].map((label, i) =>
+      ${['ภาพรวม', 'ผู้ใช้', 'ผู้รับแจ้งเตือน', 'บันทึกระบบ', 'โดเมนอีเมล'].map((label, i) =>
         `<button class="tab ${tab === i + 1 ? 'on' : ''}" data-systab="${i + 1}">${tx(label)}</button>`).join('')}
     </div>
 
@@ -4223,7 +4300,7 @@ async function renderSystemAdmin() {
               <option value="admin">admin</option>
               <option value="executive">executive</option>
             </select>${icon('cd')}</span></label>
-            <label>${tx('ผูกกับพนักงาน (เฉพาะ role user)')}<span class="selectchip grow"><select id="uEmployeeId">
+            <label id="uEmployeeWrap">${tx('ผูกกับพนักงาน (เฉพาะ role user)')}<span class="selectchip grow"><select id="uEmployeeId">
               <option value="">${tx('— ไม่ผูก —')}</option>
               ${(allEmployees ?? []).map((e) => `<option value="${esc(e.id)}">${esc(e.name_th)}${e.customer_name ? ` — ${esc(e.customer_name)}` : ''}</option>`).join('')}
             </select>${icon('cd')}</span></label>
@@ -4328,6 +4405,24 @@ async function renderSystemAdmin() {
       ${(log ?? []).length === 0 ? `<div class="empty">${tx('ยังไม่มีบันทึก')}</div>` : ''}</div>
     </div>
 
+    <div class="tp ${tab === 5 ? 'on' : ''}" data-spane="5">
+      <div class="card">
+        <div class="hd"><h3>${tx('โดเมนอีเมลลูกค้า')}</h3>
+          <span class="rt">${tx('ตั้งครั้งเดียวต่อบริษัท — ใช้กรองกล่อง Gmail ตอนดึง Timesheet ให้เห็นแค่เมลของบริษัทที่เลือกอยู่บนแถบบนเท่านั้น บริษัทที่ยังไม่ได้ตั้งไว้จะเห็นทุกฉบับเหมือนเดิม')}</span></div>
+        <div class="bd flush"><div class="domain-list">${(customerDomains ?? []).map((c) => `
+            <div class="domain-row">
+              <div class="dname">${esc(c.name)}
+                ${c.email_domain
+                  ? `<small><span class="tg ok">${tx('ตั้งค่าแล้ว')}</span></small>`
+                  : `<small><span class="tg wn">${tx('ยังไม่ได้ตั้ง')}</span></small>`}</div>
+              <div class="dfield"><input type="text" class="dinput cDomainInput" data-customer="${esc(c.id)}"
+                    placeholder="เช่น thailife.com" value="${esc(c.email_domain ?? '')}" autocomplete="off"></div>
+              <button class="btn sm pri" data-save-domain="${esc(c.id)}" disabled>${icon('chk')} ${tx('บันทึก')}</button>
+            </div>`).join('')}</div></div>
+        ${(customerDomains ?? []).length === 0 ? `<div class="empty">${tx('ยังไม่มีลูกค้าในระบบ')}</div>` : ''}
+      </div>
+    </div>
+
   </div>`;
 
   main.querySelectorAll('[data-systab]').forEach((btn) => {
@@ -4408,14 +4503,48 @@ async function renderSystemAdmin() {
     });
   }
 
+  if (tab === 5) {
+    // ปุ่มบันทึกกดไม่ได้จนกว่าจะแก้ค่าไปจากเดิม — กันกดเปล่าๆทั้งที่ไม่มีอะไรเปลี่ยน
+    main.querySelectorAll('.cDomainInput').forEach((input) => {
+      const btn = main.querySelector(`[data-save-domain="${CSS.escape(input.dataset.customer)}"]`);
+      const original = input.value;
+      input.addEventListener('input', () => { btn.disabled = input.value === original; });
+    });
+    main.querySelectorAll('[data-save-domain]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const input = main.querySelector(`.cDomainInput[data-customer="${CSS.escape(btn.dataset.saveDomain)}"]`);
+        const domain = input.value.trim();
+        btn.disabled = true;
+        try {
+          await api(`/customers/${encodeURIComponent(btn.dataset.saveDomain)}/email-domain`, {
+            method: 'PATCH', body: JSON.stringify({ domain: domain || null }),
+          });
+          toast(domain ? `ตั้งโดเมน "${domain}" แล้ว` : 'ล้างโดเมนแล้ว — กลับไปแสดงทุกฉบับเหมือนเดิม');
+          renderSystemAdmin();
+        } catch (error) {
+          toast(error.message, true);
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
   if (tab !== 2) return;
+
+  // ช่องผูกกับพนักงานให้เห็นเฉพาะตอนเลือก role "user" เท่านั้น (1 ก.ย. 69 ตามที่ขอ) — role อื่น
+  // ไม่มีความหมายกับช่องนี้เลย เห็นตลอดจะชวนงงว่าทำไม role admin ก็มีให้ผูกพนักงานได้เหมือนกัน
+  const syncEmployeeWrap = () => { el('uEmployeeWrap').hidden = el('uRole').value !== 'user'; };
+  syncEmployeeWrap();
+  el('uRole').addEventListener('change', syncEmployeeWrap);
 
   el('uAdd').addEventListener('click', async () => {
     const username = el('uUsername').value.trim();
     const nameTh = el('uName').value.trim();
     const password = el('uPassword').value;
     const role = el('uRole').value;
-    const employeeId = el('uEmployeeId').value || null;
+    // เผื่อเลือกพนักงานไว้ก่อนแล้วค่อยเปลี่ยน role ไปเป็นอย่างอื่นทีหลัง — ช่องนี้ซ่อนไปแล้วแต่ค่ายังค้าง
+    // อยู่ในดรอปดาวน์ ต้องไม่ส่งค่าที่ค้างนั้นไปด้วยถ้า role ไม่ใช่ user
+    const employeeId = role === 'user' ? (el('uEmployeeId').value || null) : null;
     if (!username || !nameTh || !password) {
       toast('ต้องกรอก username, ชื่อ, และรหัสผ่านให้ครบ', true);
       return;
@@ -4821,10 +4950,10 @@ async function renderInvoices() {
     <div class="phd"><div><span class="ey">${tx('เอกสาร')}</span><h1>${tx('ใบแจ้งหนี้')}</h1>
       <p>${tx('เอกสารที่ระบบสร้างเข้า FlowAccount — กางยอดภาษีของทุกรอบไว้เทียบกัน')}</p></div></div>
 
-    <div class="card"><div class="tw"><table style="min-width:960px">
+    <div class="card"><div class="tw"><table style="min-width:1020px">
       <thead><tr><th>${tx('เลขที่เอกสาร')}</th><th>${tx('รอบบิล')}</th><th>${tx('ลูกค้า')}</th>
         <th class="r">${tx('หลังส่วนลด')}</th><th class="r">VAT</th><th class="r">${tx('หัก ณ ที่จ่าย')}</th>
-        <th class="r">${tx('ยอดรับชำระ')}</th><th style="width:150px">${tx('สถานะ')}</th></tr></thead>
+        <th class="r">${tx('ยอดรับชำระ')}</th><th style="width:150px">${tx('สถานะ')}</th><th></th></tr></thead>
       <tbody>${invoices.length ? invoices.map((i) => {
         const fileHref = i.document_no ? `/api/invoices/${encodeURIComponent(i.id)}/file` : null;
         return `
@@ -4845,20 +4974,95 @@ async function renderInvoices() {
           <td><span class="st ${i.status === 'sent_to_flowaccount' ? 'ok' : i.status === 'failed' ? 'cr' : 'wn'}">
             ${tx(i.status === 'sent_to_flowaccount' ? 'สร้างร่างแล้ว' : i.status === 'failed' ? 'ส่งไม่สำเร็จ' : 'ร่าง')}</span>
             ${i.response?.mode === 'dry-run' ? '<span class="sub">dry-run</span>' : ''}
-            ${i.email_sent_at ? `<span class="sub">${tx('ส่งเมลแล้ว')} ${dt(i.email_sent_at)}</span>` : ''}</td></tr>`;
+            ${i.email_sent_at ? `<span class="sub">${tx('ส่งเมลแล้ว')} ${dt(i.email_sent_at)}</span>` : ''}</td>
+          <td class="r"><button class="btn sm dgr icon" data-del-invoice="${esc(i.id)}"
+            title="${tx('ลบใบแจ้งหนี้นี้ (ลบใน FlowAccount ด้วย)')}" aria-label="${tx('ลบ')}">${icon('trash')}</button></td>
+        </tr>`;
       }).join('')
-        : `<tr><td colspan="8" class="empty">${tx('ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3')}</td></tr>`}</tbody>
+        : `<tr><td colspan="9" class="empty">${tx('ยังไม่มีใบแจ้งหนี้ — สร้างได้ที่ขั้น 3')}</td></tr>`}</tbody>
       ${invoices.length ? `<tfoot><tr>
         <td colspan="3" style="font-weight:600">${tx('รวมยอดที่วางบิลแล้ว')}</td>
         <td class="r n">${money(sum('total_after_discount'))}</td>
         <td class="r n">${money(sum('vat'))}</td>
         <td class="r n" style="color:var(--cr)">−${money(sum('withholding_tax'))}</td>
         <td class="r n" style="font-weight:700;color:var(--brand-d)">${money(sum('payment_amount'))}</td>
-        <td></td></tr></tfoot>` : ''}
+        <td></td><td></td></tr></tfoot>` : ''}
     </table></div></div>
   </div>`;
 
   bindRows();
+
+  main.querySelectorAll('[data-del-invoice]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmModal({
+        iconName: 'trash-solid', danger: true,
+        title: 'ลบใบแจ้งหนี้นี้?',
+        message: 'จะลบเอกสารใน FlowAccount ด้วย และดึง Timesheet ทุกใบในรอบนี้กลับไปสถานะ "ตรวจผ่านแล้ว" '
+          + 'ให้วางบิลใหม่ได้อีกครั้ง — กู้คืนไม่ได้',
+        confirmLabel: 'ลบ',
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await api(`/invoices/${encodeURIComponent(btn.dataset.delInvoice)}`, { method: 'DELETE' });
+        toast('ลบใบแจ้งหนี้แล้ว — ส่ง Timesheet รอบนี้เข้ามาใหม่ได้แล้ว');
+        renderInvoices();
+      } catch (error) {
+        btn.disabled = false;
+        toast(error.message, true);
+      }
+    });
+  });
+}
+
+/** หน้า "แจ้งปัญหา" — ตั๋วที่พนักงานแจ้งเข้ามาผ่านคำสั่ง "แจ้งปัญหา" ใน LINE (7 ก.ย. 69 ตามที่ขอ)
+ *  โครงเดียวกับตารางผู้รับแจ้งเตือนใน renderSystemAdmin — ดึง array มา render แถว + ปุ่ม action ต่อแถว
+ *  แล้ว re-render ทั้งหน้าใหม่หลังกดปุ่ม (ไม่ซับซ้อนพอจะทำ diff เฉพาะแถว) */
+async function renderTickets() {
+  const tickets = await api('/support-tickets');
+  const openCount = tickets.filter((t) => t.status === 'open').length;
+
+  main.innerHTML = `
+  <div class="page">
+    <div class="phd"><div><span class="ey">${tx('การแจ้งปัญหา')}</span><h1>${tx('แจ้งปัญหา')}</h1>
+      <p>${tx('เรื่องที่พนักงานแจ้งเข้ามาผ่าน LINE — กด "ทำเครื่องหมายว่าแก้แล้ว" เมื่อจัดการเสร็จ')}</p></div></div>
+
+    <div class="card"><div class="tw"><table>
+      <thead><tr><th>${tx('เลขที่')}</th><th>${tx('พนักงาน')}</th><th>${tx('หมวด')}</th>
+        <th>${tx('รายละเอียด')}</th><th>${tx('แจ้งเมื่อ')}</th><th>${tx('สถานะ')}</th><th></th></tr></thead>
+      <tbody>${tickets.length ? tickets.map((t) => `
+        <tr>
+          <td class="n">#${t.id}</td>
+          <td>${esc(t.employeeName)}</td>
+          <td>${esc(t.categoryLabel)}</td>
+          <td>${esc(t.description)}</td>
+          <td class="n">${dt(t.createdAt)}</td>
+          <td><span class="st ${t.status === 'resolved' ? 'ok' : 'wn'}">
+            ${tx(t.status === 'resolved' ? 'แก้แล้ว' : 'รอดำเนินการ')}</span>
+            ${t.status === 'resolved' && t.resolvedAt ? `<span class="sub">${dt(t.resolvedAt)}</span>` : ''}</td>
+          <td>${t.status === 'open'
+            ? `<button class="btn sm pri" data-resolve-ticket="${t.id}">${tx('ทำเครื่องหมายว่าแก้แล้ว')}</button>`
+            : ''}</td>
+        </tr>`).join('')
+        : `<tr><td colspan="7" class="empty">${tx('ยังไม่มีการแจ้งปัญหา')}</td></tr>`}</tbody>
+    </table></div>
+    ${openCount === 0 && tickets.length ? `<div class="empty">${tx('แก้ครบทุกรายการแล้ว 🎉')}</div>` : ''}</div>
+  </div>`;
+
+  main.querySelectorAll('[data-resolve-ticket]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await api(`/support-tickets/${encodeURIComponent(btn.dataset.resolveTicket)}/resolve`, { method: 'POST' });
+        toast('ทำเครื่องหมายว่าแก้แล้ว');
+        renderTickets();
+        syncBadges();
+      } catch (error) {
+        btn.disabled = false;
+        toast(error.message, true);
+      }
+    });
+  });
 }
 
 const RENDER = {
@@ -4866,7 +5070,7 @@ const RENDER = {
   upload: renderUpload, queue: renderQueue, cycles: renderCycles,
   invoices: renderInvoices, master: renderMaster, sysadmin: renderSystemAdmin,
   abbyySkills: renderAbbyySkills, myProgress: renderMyProgress, execOverview: renderExecOverview,
-  notifications: renderNotifications,
+  notifications: renderNotifications, tickets: renderTickets,
 };
 
 /** แท็บที่ควรถูกไฮไลต์เมื่ออยู่ในหน้าย่อย */
@@ -4911,6 +5115,10 @@ async function syncBadges() {
   paintBell(p.feed);
   if (state.view === 'notifications') renderNotifications();   // เปิดหน้านี้ค้างอยู่ก็เห็นของใหม่ทันที
 
+  const ticket = el('ticketBadge');
+  ticket.textContent = int(p.openTicketCount);
+  ticket.classList.toggle('zero', p.openTicketCount === 0);
+
   const chip = el('envChip');
   chip.className = `env ${p.flowAccountMode === 'dry-run' ? 'dry' : 'live'}`;
   chip.innerHTML = `<span class="sw"></span> FlowAccount: ${esc(p.flowAccountMode)}`;
@@ -4945,7 +5153,10 @@ async function syncBadges() {
     invoicesNavBtn: isStaff(role),
     masterNavBtn: isStaff(role),
     abbyySkillsNavBtn: role === 'admin',
-    sysAdminTab: isStaff(role),
+    ticketsNavBtn: role === 'admin' || role === 'accounting',
+    // "จัดการระบบ" เป็นของ admin เท่านั้น accounting ไม่เห็นเมนูนี้เลย (1 ก.ย. 69 ตามที่ขอ) — ต่างจาก
+    // เมนูอื่นส่วนใหญ่ที่ accounting ทำได้เท่า admin เพราะหน้านี้คุมสิทธิ์บัญชีคนอื่น/ดู audit log ดิบ
+    sysAdminTab: role === 'admin',
     workflowGroupLabel: role === 'admin' || role === 'accounting' || role === 'user',
     refGroupLabel: isStaff(role),
   };
@@ -4954,8 +5165,8 @@ async function syncBadges() {
   /* หน้าที่เปิดค้างอยู่ไม่ตรงกับสิทธิ์ของ role นี้แล้ว (เช่นเพิ่งสลับ role หรือเพิ่ง login) —
      พากลับไปหน้าเริ่มต้นที่ role นี้เข้าได้จริง กันจอโล่ง/ค้างอยู่หน้าที่ API จะ 403 ทุกคำขอ */
   const ALLOWED_VIEWS = {
-    admin: ['dash', 'execOverview', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'abbyySkills', 'sysadmin', 'detail', 'cycle'],
-    accounting: ['dash', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'sysadmin', 'detail', 'cycle'],
+    admin: ['dash', 'execOverview', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'abbyySkills', 'sysadmin', 'tickets', 'detail', 'cycle'],
+    accounting: ['dash', 'notifications', 'upload', 'queue', 'cycles', 'invoices', 'master', 'tickets', 'detail', 'cycle'],
     user: ['myProgress', 'notifications', 'upload'],
     executive: ['execOverview', 'notifications', 'execCompanyDetail'],
   };

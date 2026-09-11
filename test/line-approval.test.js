@@ -24,10 +24,10 @@ process.env.LINE_APPROVER_TARGET = '';
 
 await import('../src/db/seed.js');
 const svc = await import('../src/service.js');
-const { closeDb } = await import('../src/db/index.js');
+const { closeDb, run } = await import('../src/db/index.js');
 const {
   verifyLineSignature, parseApprovalPostback, buildApprovalPostback, isAuthorizedApprover,
-  buildApprovalFlex, buildNeedsCheckFlex,
+  buildApprovalFlex, buildNeedsCheckFlex, buildBillingCycleFlex,
 } = await import('../src/integrations/line.js');
 
 test.after(() => {
@@ -83,15 +83,27 @@ async function ingestAndCheckBothEmployees(period, docNoA, docNoB, { holidayDate
     expectedPeriod: period,
     extractor: stubExtractor(fakeTimesheet(period, { employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager', holidayDates })),
   });
-  svc.markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ' });
-  svc.markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ' });
+  await svc.markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ' });
+  await svc.markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ' });
 }
 
 class FakeLineClient {
-  constructor() { this.sent = []; }
+  constructor() {
+    this.sent = []; this.replies = []; this.flexReplies = []; this.pushes = []; this.flexPushes = [];
+  }
   async pushApprovalRequest(payload) {
     this.sent.push(payload);
     return { sentTo: 'fake-target' };
+  }
+  async reply(replyToken, text, quickReply) { this.replies.push({ replyToken, text, quickReply }); return {}; }
+  async replyFlex(replyToken, altText, contents, quickReply) {
+    this.flexReplies.push({ replyToken, altText, contents, quickReply });
+    return {};
+  }
+  async pushToUser(userId, text, quickReply) { this.pushes.push({ userId, text, quickReply }); return {}; }
+  async pushFlexToUser(userId, altText, contents, quickReply) {
+    this.flexPushes.push({ userId, altText, contents, quickReply });
+    return {};
   }
 }
 
@@ -100,6 +112,51 @@ function signedWebhookBody(events, secret = 'test-secret') {
   const signature = createHmac('sha256', secret).update(raw).digest('base64');
   return { raw, signature };
 }
+
+/**
+ * markTimesheetChecked() ที่เพิ่งเพิ่มมา (7 ก.ย. 69 ตามที่ขอ) — เดิมทางเว็บ (คนอัปโหลด/กรอกเอง
+ * แล้วกดยืนยันเอง ไม่ได้ผ่าน n8n) ไม่เคยส่งขั้น "ขออนุมัติวางบิล" เข้า LINE เลยแม้รอบจะครบและ
+ * ทุกใบถูกกดยืนยันหมดแล้วก็ตาม ต้องรอ n8n cron 09:00 พรุ่งนี้มาเจอเอง — ตอนนี้กดยืนยันใบสุดท้าย
+ * ที่ทำให้รอบครบ (blockers หมด) ต้องยิงขออนุมัติทันทีในตัว ไม่ต้องรอ n8n
+ */
+test('กดยืนยันใบสุดท้ายที่ทำให้รอบครบ → ยิงขออนุมัติวางบิลเข้า LINE ทันทีในตัว ไม่ต้องรอ n8n', async () => {
+  const period = '2026-05';
+  const docNoA = '2026050201';
+  const docNoB = '2026050200';
+  const holidayDates = ['2026-05-01', '2026-05-04']; // วันแรงงาน + วันฉัตรมงคล — ดู HOLIDAYS_2026 ใน seed.js
+
+  await svc.ingestTimesheet({
+    documentNo: docNoA,
+    fileBase64: Buffer.from('x').toString('base64'),
+    expectedPeriod: period,
+    extractor: stubExtractor(fakeTimesheet(period, { employeeName: 'Pongpun Mamak', position: 'Java Programmer', holidayDates })),
+  });
+  await svc.ingestTimesheet({
+    documentNo: docNoB,
+    fileBase64: Buffer.from('x').toString('base64'),
+    expectedPeriod: period,
+    extractor: stubExtractor(fakeTimesheet(period, { employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager', holidayDates })),
+  });
+
+  const firstCheck = new FakeLineClient();
+  await svc.markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ', client: firstCheck });
+  assert.equal(firstCheck.sent.length, 0, 'ยังเหลืออีกใบที่ยังไม่กดยืนยัน รอบยังไม่ครบ ไม่ควรส่งขออนุมัติ');
+  assert.equal(
+    svc.getCycleApproval('CT-26B0113', period), null,
+    'ยังไม่ควรมีคำขออนุมัติค้างอยู่ก่อนใบสุดท้ายจะถูกยืนยัน',
+  );
+
+  const lastCheck = new FakeLineClient();
+  await svc.markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ', client: lastCheck });
+
+  assert.equal(lastCheck.sent.length, 1, 'กดยืนยันใบสุดท้ายแล้วต้องยิงขออนุมัติวางบิลเข้า LINE ทันที');
+  assert.equal(lastCheck.sent[0].contractId, 'CT-26B0113');
+  assert.equal(lastCheck.sent[0].headcount, 2);
+
+  const approval = svc.getCycleApproval('CT-26B0113', period);
+  assert.ok(approval, 'ต้องมีคำขออนุมัติถูกบันทึกไว้แล้ว');
+  assert.equal(approval.status, 'pending');
+});
 
 test('เตรียมรอบบิล ก.พ. 2026 ให้พร้อมส่งขออนุมัติ', async () => {
   await ingestAndCheckBothEmployees('2026-02', '2026020201', '2026020200');
@@ -287,13 +344,17 @@ test('บับเบิลสองเรื่องต้องคนละ�
     queueUrl: 'https://obs.example.com/?view=queue',
   });
 
-  assert.equal(approval.header.backgroundColor, '#0078D4', 'เรื่องเงิน/วางบิลใช้สีน้ำเงินตามเว็บ');
-  assert.equal(needsCheck.header.backgroundColor, '#1B998B', 'เรื่องตรวจสอบใช้เขียวเข้ม');
-  assert.notEqual(approval.header.backgroundColor, needsCheck.header.backgroundColor);
+  // หัวการ์ดเป็นไล่สี (background: linearGradient) แล้ว ไม่ใช่สีทึบเดี่ยวๆ แบบเดิม (8 ก.ย. 69 ตามที่ขอ
+  // "ไล่สีอ่อนสีเข้มสวยๆ") — เช็คที่ endColor แทน backgroundColor เดิม
+  assert.equal(approval.header.background.type, 'linearGradient');
+  assert.equal(approval.header.background.endColor, '#0078D4', 'เรื่องเงิน/วางบิลใช้สีน้ำเงินตามเว็บ');
+  assert.equal(needsCheck.header.background.endColor, '#1B998B', 'เรื่องตรวจสอบใช้เขียวเข้ม');
+  assert.notEqual(approval.header.background.endColor, needsCheck.header.background.endColor);
 
-  // ปุ่มต้องสีเดียวกับแถบหัวของใบตัวเอง ไม่ใช่หัวสีหนึ่งปุ่มอีกสีหนึ่ง
-  assert.equal(approval.footer.contents[0].color, approval.header.backgroundColor);
-  assert.equal(needsCheck.footer.contents[0].color, needsCheck.header.backgroundColor);
+  // ปุ่มต้องไล่สีเดียวกับแถบหัวของใบตัวเอง ไม่ใช่หัวสีหนึ่งปุ่มอีกสีหนึ่ง — ปุ่มตอนนี้เป็น box ไล่สี
+  // (gradientButton) ไม่ใช่ type:'button' สีทึบแบบเดิมแล้ว
+  assert.equal(approval.footer.contents[0].background.endColor, approval.header.background.endColor);
+  assert.equal(needsCheck.footer.contents[0].background.endColor, needsCheck.header.background.endColor);
 });
 
 test('requestCycleApproval ส่ง approveUrl ของรอบนั้นไปด้วยเมื่อมี APP_BASE_URL', async () => {
@@ -378,4 +439,135 @@ test('removeNotificationRecipient กับ id ที่ไม่มีอยู
     () => svc.removeNotificationRecipient(999999),
     (error) => error.status === 404,
   );
+});
+
+/* ── Milestone 1: การ์ดสถานะ/ตีกลับส่วนตัวของพนักงาน (Flex แทน text ธรรมดา, 7 ก.ย. 69 ตามที่ขอ) ── */
+
+test('พนักงานที่ผูกบัญชีแล้วพิมพ์ "สถานะ" → ตอบเป็น Flex การ์ด ไม่ใช่ text ธรรมดา และไม่มียอดเงินหลุดออกมา', async () => {
+  run("UPDATE employees SET line_user_id = 'Uemployee-status-test' WHERE id = 'EMP-0042'");
+  try {
+    const line = new FakeLineClient();
+    const { raw, signature } = signedWebhookBody([
+      {
+        type: 'message',
+        message: { type: 'text', text: 'สถานะ' },
+        replyToken: 'reply-status-1',
+        source: { userId: 'Uemployee-status-test' },
+      },
+    ]);
+
+    const result = await svc.processLineWebhook(raw, signature, { channelSecret: 'test-secret', client: line });
+
+    assert.equal(result.results[0].outcome, 'status');
+    assert.equal(line.replies.length, 0, 'ต้องไม่ตอบด้วยข้อความ text ธรรมดาแบบเดิม');
+    assert.equal(line.flexReplies.length, 1, 'ต้องตอบด้วย Flex การ์ดแทน');
+
+    const { contents } = line.flexReplies[0];
+    const asText = JSON.stringify(contents);
+    assert.ok(asText.includes('ไทยประกันชีวิต'), 'ต้องมีชื่อลูกค้าของสัญญาที่ผูกอยู่');
+    assert.ok(!asText.includes('บาท'), 'ห้ามมียอดเงิน/หน่วยเงินหลุดออกมาในการ์ดของพนักงาน');
+    assert.ok(!asText.includes('50,000'), 'ห้ามมีตัวเลขเรทค่าบริการ (เงินเดือน) หลุดออกมา');
+
+    const { quickReply } = line.flexReplies[0];
+    assert.equal(quickReply.items.length, 4, 'ต้องมีปุ่มลัด 4 ปุ่มแนบมาด้วยตามที่ขอ');
+    assert.deepEqual(
+      quickReply.items.map((i) => i.action.label),
+      ['ส่ง Timesheet', 'สรุปรอบวางบิล', 'สถานะการวางบิล', 'Help'],
+    );
+  } finally {
+    run("UPDATE employees SET line_user_id = NULL WHERE id = 'EMP-0042'");
+  }
+});
+
+test('ปุ่มลัด "สรุปรอบวางบิล" เป็นคำพ้องของ "สถานะ" — ตอบการ์ดเดียวกัน ไม่มียอดเงิน', async () => {
+  run("UPDATE employees SET line_user_id = 'Uemployee-status-alias-test' WHERE id = 'EMP-0042'");
+  try {
+    const line = new FakeLineClient();
+    const { raw, signature } = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'สรุปรอบวางบิล' },
+        replyToken: 'reply-alias-summary', source: { userId: 'Uemployee-status-alias-test' },
+      },
+    ]);
+    const result = await svc.processLineWebhook(raw, signature, { channelSecret: 'test-secret', client: line });
+
+    assert.equal(result.results[0].outcome, 'status', '"สรุปรอบวางบิล" ต้องเข้าเงื่อนไขเดียวกับ "สถานะ"');
+    assert.equal(line.flexReplies.length, 1);
+    assert.ok(!JSON.stringify(line.flexReplies[0].contents).includes('บาท'));
+  } finally {
+    run("UPDATE employees SET line_user_id = NULL WHERE id = 'EMP-0042'");
+  }
+});
+
+/* ── "สถานะการวางบิล" — flow 5 ขั้นของรอบบิล (8 ก.ย. 69 ตามที่ขอ แบบ mockup) ────────────────────── */
+
+test('buildBillingCycleFlex เรียงลำดับ done/current/future ถูกต้อง และไม่มียอดเงินหลุดออกมา', () => {
+  const input = {
+    contracts: [{
+      customerName: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)', projectName: 'Outsource for BAU Project',
+      periodLabel: 'กันยายน 2569', progressPercent: 75,
+      steps: [
+        { label: 'Timesheet ประจำเดือน', sub: 'พนักงานส่งเองทางอีเมล', dateLabel: '25 ก.ย. 69', done: true, state: 'done' },
+        { label: 'ตรวจ Manday', sub: 'ตรวจแล้ว', dateLabel: '26 ก.ย. 69', done: true, state: 'done' },
+        { label: 'ออกใบแจ้งหนี้ (FlowAccount)', sub: 'Drafted', dateLabel: '26 ก.ย. 69', done: true, state: 'done' },
+        { label: 'วางบิลส่งลูกค้า', sub: 'รอส่งลูกค้า (ร่างอีเมลและเอกสารแนบ)', dateLabel: 'กำหนดส่ง: 30 กันยายน 2569', done: false, state: 'current' },
+        { label: 'การรับชำระเงิน', sub: 'รอรับชำระ (คาดการณ์รับเงิน 30 ตุลาคม 2569)', dateLabel: 'Term 30 วัน', done: false, state: 'future' },
+      ],
+    }],
+  };
+
+  const flex = buildBillingCycleFlex(input);
+  const asText = JSON.stringify(flex);
+
+  assert.ok(!asText.includes('บาท'), 'ห้ามมียอดเงิน/หน่วยเงินหลุดออกมาในการ์ดของพนักงาน');
+  assert.ok(asText.includes('กันยายน 2569'), 'ต้องบอกรอบวางบิล');
+  for (const label of ['Timesheet ประจำเดือน', 'ตรวจ Manday', 'ออกใบแจ้งหนี้', 'วางบิลส่งลูกค้า', 'การรับชำระเงิน']) {
+    assert.ok(asText.includes(label), `ต้องมีขั้น "${label}"`);
+  }
+});
+
+test('พนักงานที่ผูกบัญชีแล้วพิมพ์ "สถานะการวางบิล" → ได้การ์ด flow คนละแบบกับ "สถานะ" ไม่มียอดเงิน', async () => {
+  run("UPDATE employees SET line_user_id = 'Uemployee-billingcycle-test' WHERE id = 'EMP-0042'");
+  try {
+    const line = new FakeLineClient();
+    const { raw, signature } = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'สถานะการวางบิล' },
+        replyToken: 'reply-billingcycle-1', source: { userId: 'Uemployee-billingcycle-test' },
+      },
+    ]);
+    const result = await svc.processLineWebhook(raw, signature, { channelSecret: 'test-secret', client: line });
+
+    assert.equal(result.results[0].outcome, 'billing_cycle_status');
+    assert.equal(line.flexReplies.length, 1);
+    assert.ok(line.flexReplies[0].quickReply, 'ต้องแนบปุ่มลัดมาตรฐานมาด้วย');
+
+    const asText = JSON.stringify(line.flexReplies[0].contents);
+    assert.ok(!asText.includes('บาท'), 'ห้ามมียอดเงิน/หน่วยเงินหลุดออกมาในการ์ดของพนักงาน');
+    assert.ok(asText.includes('ไทยประกันชีวิต'), 'ต้องมีชื่อลูกค้าของสัญญาที่ผูกอยู่');
+    assert.ok(asText.includes('ออกใบแจ้งหนี้'), 'ต้องเป็นการ์ด flow วางบิล ไม่ใช่การ์ดสถานะแบบเดิม');
+  } finally {
+    run("UPDATE employees SET line_user_id = NULL WHERE id = 'EMP-0042'");
+  }
+});
+
+test('ตีกลับ Timesheet ของพนักงานที่ผูกบัญชีไว้ → ส่ง Flex การ์ดพร้อมปุ่ม "ส่งฉบับแก้ไข" เข้าไลน์ส่วนตัว', () => {
+  // ใช้ใบ 2026050201 ที่เทสต์ "กดยืนยันใบสุดท้ายที่ทำให้รอบครบ" ด้านบนสร้าง+ยืนยันไว้แล้ว (ยังอยู่ใน
+  // สถานะ verified) ไม่ต้อง ingest ซ้ำ — เลขเอกสารนี้ผูกกับ EMP-0042 (Pongpun) อยู่แล้ว
+  run("UPDATE employees SET line_user_id = 'Uemployee-reject-test' WHERE id = 'EMP-0042'");
+  try {
+    const line = new FakeLineClient();
+    svc.rejectTimesheet('2026050201', { actor: 'ทดสอบ', reason: 'ยอดวันลาไม่ตรง', client: line });
+
+    assert.equal(line.pushes.length, 0, 'ต้องไม่ส่งเป็นข้อความ text ธรรมดาแบบเดิมสำหรับเคสตีกลับ');
+    assert.equal(line.flexPushes.length, 1, 'ต้องส่งเป็น Flex การ์ดแทน');
+
+    const { altText, contents } = line.flexPushes[0];
+    const asText = JSON.stringify(contents);
+    assert.match(altText, /ตีกลับ/);
+    assert.ok(asText.includes('ยอดวันลาไม่ตรง'), 'ต้องมีเหตุผลที่ตีกลับอยู่ในการ์ด');
+    assert.ok(asText.includes('ส่ง Timesheet ฉบับแก้ไข'), 'ต้องมีปุ่มให้กดส่งฉบับแก้ไข');
+  } finally {
+    run("UPDATE employees SET line_user_id = NULL WHERE id = 'EMP-0042'");
+  }
 });

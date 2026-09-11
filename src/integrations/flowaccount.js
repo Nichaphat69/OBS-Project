@@ -68,6 +68,15 @@ const SHARE_PATHS = {
   'tax-invoice': '/tax-invoices/sharedocument',
 };
 
+/* endpoint ลบเอกสาร — DELETE /billing-notes/{id} และ DELETE /tax-invoices/{id} ยืนยันจาก
+   flowaccount-csharp-client (auto-generated จาก OpenAPI spec จริงของ FlowAccount, เช็ค 3 ก.ย. 69)
+   ⚠️ ต่างจาก endpoint อื่นในไฟล์นี้ — จุดนี้ยังไม่เคยยิงทดสอบกับ sandbox จริง (แค่ยืนยันจากสเปกที่พบ
+   ไม่ใช่จากการยิงจริงแบบอื่นๆในไฟล์นี้) ถ้าพฤติกรรมจริงต่างจากที่คาด ต้องกลับมาแก้ตรงนี้ */
+const DELETE_PATHS = {
+  'billing-note': '/billing-notes',
+  'tax-invoice': '/tax-invoices',
+};
+
 export class FlowAccountError extends Error {
   constructor(message, { status = null, body = null } = {}) {
     super(message);
@@ -254,6 +263,35 @@ export class FlowAccountClient {
       });
     }
     return { mode: this.mode, ok: true, link: body?.data?.link ?? null };
+  }
+
+  /**
+   * ลบเอกสารทิ้งจาก FlowAccount จริง — ใช้ตอนกดลบใบแจ้งหนี้ในระบบเรา (เพื่อเปิดทางให้ส่ง Timesheet
+   * รอบเดือนนั้นเข้ามาใหม่ได้อีกครั้ง) ไม่มี endpoint "void" แยกต่างหากใน spec ที่พบ มีแต่ DELETE ตรงๆ
+   */
+  async deleteDocument(documentId) {
+    if (this.isDryRun) {
+      return { mode: MODE.DRY_RUN, ok: true, deleted: false, note: 'โหมด dry-run — ไม่มีเอกสารจริงให้ลบ' };
+    }
+    if (!documentId) {
+      throw new FlowAccountError('ต้องมี documentId ของเอกสารที่จะลบ');
+    }
+    const path = DELETE_PATHS[this.documentType];
+    if (!path) {
+      throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
+    }
+
+    const token = await this.getAccessToken();
+    const response = await this.fetch(`${BASE_URL}${path}/${documentId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      const body = await safeJson(response);
+      throw new FlowAccountError('ลบเอกสารใน FlowAccount ไม่สำเร็จ', { status: response.status, body });
+    }
+    return { mode: this.mode, ok: true, deleted: true };
   }
 
   /**

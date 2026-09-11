@@ -31,8 +31,11 @@ function fakeTimesheetData(period = '2026-01') {
     employeeName: 'Pongpun Mamak',
     position: 'Developer (Java)',
     period,
+    documentNo: null,
+    approvalStatus: null,
     totalWorkDays: 1,
     totalLeaveDays: 0,
+    totalHours: null,
     days: [{ date: `${period}-05`, timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: null }],
     leaveDays: [],
     signedByEmployee: true,
@@ -164,8 +167,8 @@ test('extractTimesheet อ่านทีละหน้าแล้วรวม
   // หน้า 1: เห็นแค่ตารางวันที่/เวลา (ฝั่งซ้าย) — ไม่เห็นชื่อพนักงานเลยในหน้านี้
   const page1 = {
     vendor: 'iPassion Co.,Ltd.', clientName: 'Thai Life Insurance PCL', projectName: 'Outsource for BAU Project',
-    employeeName: null, position: null, period: '2026-01',
-    totalWorkDays: 0, totalLeaveDays: 0,
+    employeeName: null, position: null, period: '2026-01', documentNo: null, approvalStatus: null,
+    totalWorkDays: 0, totalLeaveDays: 0, totalHours: null,
     days: [{ date: '2026-01-05', timeIn: '8:30', timeOut: '17:30', label: null, jobDescription: 'งาน A' }],
     leaveDays: [],
     signedByEmployee: false, employeeSignatureName: null,
@@ -174,8 +177,8 @@ test('extractTimesheet อ่านทีละหน้าแล้วรวม
   // หน้า 2: เห็นแค่ชื่อพนักงาน/ตำแหน่ง/สรุปยอด/ลายเซ็น (ฝั่งขวา) — ไม่เห็นตารางวันที่เลย
   const page2 = {
     vendor: null, clientName: null, projectName: null,
-    employeeName: 'Pongpun Mamak', position: 'Developer (Java)', period: null,
-    totalWorkDays: 1, totalLeaveDays: 0,
+    employeeName: 'Pongpun Mamak', position: 'Developer (Java)', period: null, documentNo: null, approvalStatus: null,
+    totalWorkDays: 1, totalLeaveDays: 0, totalHours: null,
     days: [], leaveDays: [],
     signedByEmployee: true, employeeSignatureName: 'Pongpun Mamak',
     signedByProjectManager: true, projectManagerSignatureName: 'Somsri Jaidee',
@@ -363,7 +366,8 @@ test('verifyExtraction ไม่ฟ้องวันที่ซ้ำทุก
 function pageWith(overrides) {
   return {
     vendor: null, clientName: null, projectName: null, employeeName: null, position: null,
-    period: null, totalWorkDays: 0, totalLeaveDays: 0, days: [], leaveDays: [],
+    period: null, documentNo: null, approvalStatus: null,
+    totalWorkDays: 0, totalLeaveDays: 0, totalHours: null, days: [], leaveDays: [],
     signedByEmployee: false, employeeSignatureName: null,
     signedByProjectManager: false, projectManagerSignatureName: null, notes: [],
     ...overrides,

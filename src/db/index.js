@@ -110,6 +110,13 @@ const ADDED_COLUMNS = [
   ['employees', 'line_user_id', 'TEXT'],
   ['employees', 'line_link_code', 'TEXT'],
   ['employees', 'line_link_code_expires_at', 'TEXT'],
+  // โดเมนอีเมลของลูกค้า (เช่น thailife.com) — ตั้งที่ "จัดการระบบ → โดเมนอีเมล" (admin เท่านั้น)
+  // ใช้กรองกล่อง Gmail ตอนดึง Timesheet ให้เห็นแค่เมลของบริษัทที่ active อยู่ (3 ก.ย. 69 ตามที่ขอ)
+  ['customers', 'email_domain', 'TEXT'],
+  // พนักงานกำลังแจ้งปัญหาอยู่ รอพิมพ์รายละเอียดข้อความถัดไป (7 ก.ย. 69 ตามที่ขอ) — เก็บ "หมวด" ที่เลือก
+  // ไว้ชั่วคราว เคลียร์ทิ้งทันทีที่สร้างตั๋วสำเร็จ (ดู startSupportTicket/submitSupportTicket ใน
+  // service.js) แนวคิดเดียวกับ line_link_code ด้านบน — ค่าที่ไม่ถาวร ใช้แค่คั่นระหว่างสองข้อความ
+  ['employees', 'line_pending_ticket_category', 'TEXT'],
 ];
 
 function addMissingColumns(database) {

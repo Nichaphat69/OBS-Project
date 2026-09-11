@@ -103,8 +103,9 @@ const TIMESHEET_SCHEMA = {
           },
           jobDescription: { type: ['string', 'null'] },
         },
-        // type / remark เป็นของเสริมที่มีเฉพาะบางฟอร์ม ไม่บังคับให้โมเดลตอบ
-        required: ['date', 'timeIn', 'timeOut', 'label', 'jobDescription'],
+        // type / remark เป็นของเสริมที่มีเฉพาะบางฟอร์ม — ค่ายังเป็น null ได้ตามปกติ แค่ต้องมีคีย์นี้
+        // เสมอ (ข้อบังคับของ response_format แบบ json_schema strict mode: ทุก property ต้องอยู่ใน required)
+        required: ['date', 'timeIn', 'timeOut', 'label', 'type', 'remark', 'jobDescription'],
         additionalProperties: false,
       },
     },
@@ -152,11 +153,13 @@ const TIMESHEET_SCHEMA = {
       items: { type: 'string' },
     },
   },
-  /* documentNo · approvalStatus · totalHours ไม่ใส่ในนี้ตั้งใจ — มีเฉพาะบางฟอร์ม
-     ถ้าบังคับ โมเดลที่ไม่ตอบคีย์พวกนี้จะทำให้อ่านทั้งไฟล์ล้มทั้งที่ข้อมูลหลักครบแล้ว */
+  /* documentNo · approvalStatus · totalHours มีเฉพาะบางฟอร์ม — ค่ายังเป็น null ได้ตามปกติถ้าไม่เห็น
+     แค่ต้องมีคีย์นี้เสมอ (ข้อบังคับของ response_format แบบ json_schema strict mode: ทุก property
+     ต้องอยู่ใน required ไม่งั้นเซิร์ฟเวอร์ปฏิเสธ schema ทั้งก้อนตั้งแต่ก่อนเรียกโมเดลด้วยซ้ำ —
+     ไม่กระทบความยืดหยุ่นเดิม เพราะ type ยังเป็น ['string','null'] อยู่) */
   required: [
     'vendor', 'clientName', 'projectName', 'employeeName', 'position', 'period',
-    'totalWorkDays', 'totalLeaveDays', 'days', 'leaveDays',
+    'documentNo', 'approvalStatus', 'totalWorkDays', 'totalLeaveDays', 'totalHours', 'days', 'leaveDays',
     'signedByEmployee', 'employeeSignatureName', 'signedByProjectManager', 'projectManagerSignatureName', 'notes',
   ],
   additionalProperties: false,

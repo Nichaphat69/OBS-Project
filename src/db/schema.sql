@@ -126,6 +126,21 @@ CREATE TABLE IF NOT EXISTS gmail_dismissed (
   dismissed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
+-- ── ตั๋วแจ้งปัญหาที่พนักงานส่งเข้ามาผ่านคำสั่ง "แจ้งปัญหา" ใน LINE ──
+-- (7 ก.ย. 69 ตามที่ขอ) category เป็นคีย์สั้นๆ (bug/manday/timesheet/suggestion) ไม่ใช่ label ภาษาไทย
+-- เต็ม — แปลเป็น label ตอนแสดงผลเท่านั้น กันเปลี่ยนคำแปลทีหลังแล้วข้อมูลเก่าไม่ตรงกัน
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id  TEXT NOT NULL REFERENCES employees(id),
+  category     TEXT NOT NULL,
+  description  TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'open',      -- open → resolved
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  resolved_at  TEXT,
+  resolved_by  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+
 -- ── ประวัติที่ AI เคยอ่านแล้ว (ทั้งอัปโหลดไฟล์เองและดึงจาก Gmail) ──
 -- คนละตารางจาก timesheets เพราะฉบับที่ AI อ่านแล้วแต่ยังไม่กดยืนยันก็ต้องโชว์ในนี้ได้
 -- (เป็นด่านแรกก่อนเข้าระบบวางบิลจริง — เห็นได้ว่าเคยอ่านอะไรไปแล้วบ้างก่อนตัดสินใจ)

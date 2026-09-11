@@ -79,8 +79,8 @@ async function makeCycleReady(period, docNoA, docNoB, { holidayDates = [] } = {}
     expectedPeriod: period,
     extractor: stubExtractor(fakeTimesheet(period, { employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager', holidayDates })),
   });
-  svc.markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ' });
-  svc.markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ' });
+  await svc.markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ' });
+  await svc.markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ' });
 }
 
 class FakeGmailClient {

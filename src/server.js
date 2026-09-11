@@ -45,6 +45,7 @@ const PUBLIC_API_PATTERNS = [
   /^\/api\/timesheets\/ingest$/,
   /^\/api\/cycles\/ready$/,
   /^\/api\/cycles\/[^/]+\/[0-9]{4}-[0-9]{2}\/request-approval$/,
+  /^\/api\/timesheets\/send-overdue-reminders$/,
   /^\/api\/line\/webhook$/,
 ];
 
@@ -115,14 +116,18 @@ const routes = [
     return { ok: true };
   }],
 
-  /* ── จัดการระบบ → ผู้ใช้ — เฉพาะ admin (เดิมทำได้แค่ผ่าน scripts/create-user.js/SQL) ── */
+  /* ── จัดการระบบ → ผู้ใช้/บันทึกระบบ/ผู้รับแจ้งเตือน — เฉพาะ admin จริงๆเท่านั้น ไม่รวม accounting
+     (1 ก.ย. 69 ตามที่ขอ — เดิม requireAdmin ยอมทั้ง admin/accounting เหมือนหน้าอื่นส่วนใหญ่ แต่หน้านี้
+     คุมสิทธิ์บัญชีคนอื่น/ดู audit log ดิบทั้งระบบ จึงเข้มกว่าปกติ ใช้ requireSuperAdmin ตัวเดียวกับที่
+     กันหน้า Skill ABBYY ไว้อยู่แล้ว — ส่วน "ภาพรวม" tab ของหน้านี้ยังใช้ /api/settings ตัวเดิมที่ไม่กัน
+     เพราะหน้าอื่น (เช่นเช็คว่าต่อ Gmail หรือยัง) ก็ต้องเรียกร่วมกันอยู่ — กันแค่ฝั่งหน้าเว็บไม่ให้เห็นเมนูพอ) */
   ['GET', /^\/api\/users$/, (_m, _url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return listUsers();
   }],
 
   ['POST', /^\/api\/users$/, (_m, _url, body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return createUser({
       username: body?.username, nameTh: body?.nameTh, password: body?.password, role: body?.role,
       employeeId: body?.employeeId || null, actor: session.nameTh,
@@ -130,10 +135,15 @@ const routes = [
   }],
 
   ['PATCH', /^\/api\/users\/([^/]+)$/, (m, _url, body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     const username = decodeURIComponent(m[1]);
     if (username === session.username && body?.active === false) {
       throw httpError(400, 'ปิดใช้งานบัญชีของตัวเองไม่ได้');
+    }
+    /* กันแก้ role ของตัวเองผ่าน API ตรงๆ (ข้ามช่องเลือกที่หน้าเว็บ disable ไว้แล้ว) — เดิมกันแค่ฝั่งหน้าเว็บ
+       ฝั่งเซิร์ฟเวอร์ไม่เคยเช็คเลย พบจาก UAT (TC-SC09-006/007-ADM, 4 ก.ย. 69) */
+    if (username === session.username && body?.role !== undefined) {
+      throw httpError(400, 'แก้ role ของตัวเองไม่ได้');
     }
     let result;
     if (body?.role !== undefined) result = updateUserRole(username, body.role, { actor: session.nameTh });
@@ -146,7 +156,7 @@ const routes = [
   }],
 
   ['DELETE', /^\/api\/users\/([^/]+)$/, (m, _url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     const username = decodeURIComponent(m[1]);
     if (username === session.username) throw httpError(400, 'ลบบัญชีของตัวเองไม่ได้');
     return deleteUser(username, { actor: session.nameTh });
@@ -154,32 +164,62 @@ const routes = [
 
   /** จัดการระบบ → บันทึกระบบ — log ของ audit_log ดิบ ไม่ผ่านการกรอง/แต่งข้อความแบบกระดิ่ง */
   ['GET', /^\/api\/audit-log$/, (_m, url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.auditLog({ limit: Number(url.searchParams.get('limit') ?? 200) });
   }],
 
   /** จัดการระบบ → ผู้รับแจ้งเตือน — ปลายทาง LINE ตัวแรกคือคนที่จะได้รับคำขออนุมัติวางบิลจริง */
   ['GET', /^\/api\/notification-recipients$/, (_m, _url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.listNotificationRecipients();
   }],
 
   ['POST', /^\/api\/notification-recipients$/, (_m, _url, body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.addNotificationRecipient({
       channel: body?.channel, label: body?.label, target: body?.target, actor: session.nameTh,
     });
   }],
 
   ['DELETE', /^\/api\/notification-recipients\/([^/]+)$/, (m, _url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.removeNotificationRecipient(m[1], { actor: session.nameTh });
   }],
 
   /** คนที่เคยทักบอท LINE มาแล้ว — ให้เลือกตอนเพิ่มผู้รับแจ้งเตือนแทนก็อป userId มาวางเอง */
   ['GET', /^\/api\/line\/known-users$/, (_m, _url, _body, session) => {
-    requireAdmin(session);
+    requireSuperAdmin(session);
     return svc.listKnownLineUsers();
+  }],
+
+  /** หน้า "แจ้งปัญหา" — ตั๋วที่พนักงานแจ้งเข้ามาผ่าน LINE (7 ก.ย. 69 ตามที่ขอ) admin/accounting ดูและ
+   *  กดแก้ได้เหมือนกัน (ไม่ใช่ requireSuperAdmin เพราะไม่ใช่เรื่องคุมสิทธิ์บัญชีคนอื่น) */
+  ['GET', /^\/api\/support-tickets$/, (_m, url, _body, session) => {
+    requireAdmin(session);
+    return svc.listSupportTickets({ status: url.searchParams.get('status') });
+  }],
+
+  ['POST', /^\/api\/support-tickets\/([^/]+)\/resolve$/, (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.resolveSupportTicket(Number(m[1]), { actor: session.nameTh });
+  }],
+
+  /** จัดการระบบ → โดเมนอีเมล — ใช้กรองกล่อง Gmail ให้เห็นแค่เมลของบริษัทที่ active อยู่ (3 ก.ย. 69 ตามที่ขอ) */
+  ['GET', /^\/api\/customers\/domains$/, (_m, _url, _body, session) => {
+    requireSuperAdmin(session);
+    return svc.listCustomerDomains();
+  }],
+
+  ['PATCH', /^\/api\/customers\/([^/]+)\/email-domain$/, (m, _url, body, session) => {
+    requireSuperAdmin(session);
+    return svc.setCustomerEmailDomain(decodeURIComponent(m[1]), body?.domain ?? null, { actor: session.nameTh });
+  }],
+
+  /** accounting เองผูกโดเมนให้บริษัทใหม่ที่ยังไม่มีโดเมนได้ทันที (ไม่ต้องรอ admon) — ผูกได้ครั้งแรก
+   * ครั้งเดียวเท่านั้น (ดู claimCustomerEmailDomain) หน้า "ดึงจาก Gmail" เป็นคนเรียก */
+  ['POST', /^\/api\/customers\/([^/]+)\/email-domain\/claim$/, (m, _url, body, session) => {
+    requireAdmin(session);
+    return svc.claimCustomerEmailDomain(decodeURIComponent(m[1]), body?.domain, { actor: session.nameTh });
   }],
 
   /** ภาพรวม — หน้ารายงาน ไม่ใช่ขั้นตอนงาน แต่ใช้ดูข้อมูลรวมของทั้งระบบได้
@@ -282,6 +322,7 @@ const routes = [
     svc.gmailInbox({
       query: url.searchParams.get('q') || undefined,
       max: Number(url.searchParams.get('max') ?? 15),
+      allCompanies: url.searchParams.get('all') === '1',
     })],
 
   /** ดึงอีเมล 1 ฉบับ → AI อ่านทั้งเนื้อเมลและไฟล์แนบ → คืนให้คนตรวจ (ยังไม่บันทึก) */
@@ -302,6 +343,18 @@ const routes = [
     requireAdmin(session);
     if (!body?.messageId) throw httpError(400, 'ต้องระบุอีเมลที่จะซ่อน');
     return svc.dismissGmailMessage(body.messageId, { actor: session.nameTh });
+  }],
+
+  /** รายการอีเมลที่เคยกด "ซ่อน" ไว้ — ให้กดเลิกซ่อนคืนได้ (แก้ตามที่ UAT พบว่ากดซ่อนแล้วไม่มีทางกลับมา) */
+  ['GET', /^\/api\/gmail\/dismissed$/, (_m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.listDismissedGmailMessages();
+  }],
+
+  ['POST', /^\/api\/gmail\/undismiss$/, (_m, _url, body, session) => {
+    requireAdmin(session);
+    if (!body?.messageId) throw httpError(400, 'ต้องระบุอีเมลที่จะเลิกซ่อน');
+    return svc.undismissGmailMessage(body.messageId, { actor: session.nameTh });
   }],
 
   /**
@@ -382,8 +435,19 @@ const routes = [
     return svc.markInvoiceEmailSent({ invoiceId: decodeURIComponent(m[1]), actor: session.nameTh });
   }],
 
+  /** ลบใบแจ้งหนี้ทิ้ง (ทั้งเอกสารจริงใน FlowAccount และแถวในระบบเรา) — ใช้ตอนวางบิลผิดรอบ/ผิดคน
+   * แล้วต้องเปิดทางให้ส่ง Timesheet รอบนั้นเข้ามาใหม่ได้ (1 ก.ย. 69 ตามที่ขอ) */
+  ['DELETE', /^\/api\/invoices\/([^/]+)$/, async (m, _url, _body, session) => {
+    requireAdmin(session);
+    return svc.deleteInvoice(decodeURIComponent(m[1]), { actor: session.nameTh });
+  }],
+
   /** ให้ n8n ตัวตั้งเวลาถามว่า "วันนี้ต้องวางบิลอะไร" */
   ['GET', /^\/api\/cycles\/ready$/, () => svc.readyCycles()],
+
+  /** ให้ n8n cron รายวันเรียก — เตือน Timesheet ยังไม่ส่งเข้าไลน์ส่วนตัวของพนักงานที่เลยกำหนดแล้ว
+   *  (3 วันหลังสิ้นเดือน) เช็ค+ส่งในตัวเดียวกัน เรียกซ้ำได้ทุกวันจนกว่าจะส่งจริง (7 ก.ย. 69 ตามที่ขอ) */
+  ['POST', /^\/api\/timesheets\/send-overdue-reminders$/, () => svc.sendOverdueTimesheetReminders({})],
 
   ['GET', /^\/api\/contracts$/, () => svc.listContracts()],
   /** สัญญาที่กำลังดำเนินการอยู่ตอนนี้ — แถบบนใช้ตั้งค่าเริ่มต้นของตัวเลือกบริษัทตอนเปิดหน้าเว็บ */
@@ -581,11 +645,12 @@ function requireNotExecutive(session) {
   }
 }
 
-/** จัดการ Skill ABBYY (เพิ่ม/ลบ) — เข้มกว่า requireAdmin ปกติ ยอมเฉพาะ role 'admin' จริงๆเท่านั้น
-   แผนกบัญชีเลือกใช้ Skill ที่มีอยู่แล้วได้ แต่กำหนด/เพิ่ม Skill ใหม่ไม่ได้ */
+/** เข้มกว่า requireAdmin ปกติ ยอมเฉพาะ role 'admin' จริงๆเท่านั้น ไม่รวม accounting — ใช้กับ 2 จุดที่
+   แผนกบัญชีทำได้ไม่เท่า admin: จัดการ Skill ABBYY (เลือกใช้ Skill ที่มีอยู่แล้วได้ แต่เพิ่ม/ลบไม่ได้)
+   และหน้า "จัดการระบบ" ทั้งหมด (ผู้ใช้/บันทึกระบบ/ผู้รับแจ้งเตือน — คุมสิทธิ์บัญชีคนอื่น 1 ก.ย. 69 ตามที่ขอ) */
 function requireSuperAdmin(session) {
   if (session.role !== 'admin') {
-    throw httpError(403, 'ต้องเป็น admin เท่านั้นถึงจะจัดการ Skill ABBYY ได้');
+    throw httpError(403, 'ต้องเป็น admin เท่านั้นถึงจะทำรายการนี้ได้');
   }
 }
 
@@ -741,7 +806,12 @@ const server = createServer(async (req, res) => {
   const session = resolveSession(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
   const isPublic = PUBLIC_API_PATTERNS.some((re) => re.test(url.pathname));
   if (!session && !isPublic) {
-    sendJson(res, 401, { error: 'ยังไม่ได้เข้าสู่ระบบ — กรุณา login ก่อนใช้งาน' });
+    /* sessionExpired: true คือตัวบอกฝั่งหน้าเว็บว่า "หลุด session ของ OBS เอง" ต้องเด้งไป login จริงๆ
+       (ดู public/app.js's api()) — ต่างจาก error 401 ที่มาจาก Gmail API ล้มเหลว (เช่น GMAIL_REFRESH_TOKEN
+       หมดอายุ, ดู src/integrations/gmail.js's GmailError) ซึ่งก็คืน status 401 เหมือนกันแต่ไม่เกี่ยวกับ
+       session ของ OBS เลย — เดิมหน้าเว็บเช็คแค่ response.status === 401 เจอบั๊กจริงที่กดแท็บ "ดึงจาก Gmail"
+       แล้วเด้งออกจากระบบทั้งที่ session ยังปกติดี (8 ก.ย. 69 ตามที่ขอ) */
+    sendJson(res, 401, { error: 'ยังไม่ได้เข้าสู่ระบบ — กรุณา login ก่อนใช้งาน', sessionExpired: true });
     return;
   }
 

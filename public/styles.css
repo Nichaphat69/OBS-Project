@@ -227,8 +227,9 @@ svg.i.solid { stroke: none; fill: currentColor; }
 .mtab.on .bdg { box-shadow: 0 0 0 2px var(--brand); }
 /* ป้าย "ตรวจ Manday" กับ "วางบิล & ร่างอีเมล" ไม่ใช่ตัวนับรวม แต่บอกว่ามีงานใหม่ค้างรอ
    (เข้ามารออนุมัติ/รอตรวจใหม่ล่าสุด) — ไม่มีงานค้างก็ไม่ต้องโชว์เลข 0 เลย ต่างจากตัวเลขสรุปอื่นๆ
-   ในหน้าเนื้อหา (เช่นแท็บ "ยืนยันแล้ว/วางบิลแล้ว/ตีกลับ") ที่ยังโชว์ 0 ตามปกติ */
-#queueBadge.zero, #cycleBadge.zero { display: none; }
+   ในหน้าเนื้อหา (เช่นแท็บ "ยืนยันแล้ว/วางบิลแล้ว/ตีกลับ") ที่ยังโชว์ 0 ตามปกติ
+   ticketBadge เป็นแบบเดียวกัน (นับตั๋วแจ้งปัญหาที่ยังไม่แก้ — แก้ครบแล้วไม่ต้องโชว์ 0, 9 ก.ย. 69 ตามที่ขอ) */
+#queueBadge.zero, #cycleBadge.zero, #ticketBadge.zero { display: none; }
 
 
 /* เลขขั้นมุมไอคอนถูกตัดออกตามที่ขอ ("ลบเลข 1 2 3 ออก ให้เหลือแค่ไอคอน") — เหลือแค่ไอคอนเปล่าๆ
@@ -448,29 +449,32 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
    FlowAccount ชัดเจนกว่า: live = สวิตติด (สีเขียว เลื่อนขวา), sandbox/dry-run = สวิตดับ (เทา เลื่อนซ้าย) */
 .env[hidden] { display: none; }
 .env {
-  display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px;
-  font-weight: 600; padding: 5px 12px 5px 6px; border-radius: var(--r-pill);
-  letter-spacing: .01em; background: var(--paper);
-  /* เดิมเป็น <span> อ่านอย่างเดียว ตอนนี้เป็น <button> กดเปิด/ปิดการเชื่อมต่อได้ (28 ส.ค. 69)
-     รีเซ็ตสไตล์ default ของปุ่มที่ไม่ได้มาจาก .env เอง */
-  font-family: inherit; cursor: pointer; transition: box-shadow .15s var(--ease);
+  display: inline-flex; align-items: center; gap: 9px; font-size: 12px;
+  font-weight: 600; padding: 7px 14px 7px 8px; border-radius: var(--r-pill);
+  letter-spacing: .01em;
+  /* เดิมเป็น <span> อ่านอย่างเดียว ตอนนี้เป็น <button> กดเปิด/ปิดการเชื่อมต่อได้ (28 ส.ค. 69) —
+     เดิมแค่กรอบเปล่าพื้นขาว ดูจืดกว่าป้ายสถานะอื่นในระบบ (.tg) เปลี่ยนเป็นพื้นสีอ่อนตามสถานะเข้าชุดกัน
+     (4 ก.ย. 69 ตามที่ขอ "ทำให้สวยกว่านี้") รีเซ็ตสไตล์ default ของปุ่มที่ไม่ได้มาจาก .env เอง */
+  font-family: inherit; cursor: pointer; transition: box-shadow .15s var(--ease), transform .15s var(--ease);
 }
-.env:hover:not(:disabled) { box-shadow: var(--sh1); }
+.env:hover:not(:disabled) { box-shadow: var(--sh1); transform: translateY(-1px); }
 .env:disabled { cursor: default; opacity: .55; }
+.env:disabled:hover { transform: none; }
 .env .sw {
-  position: relative; width: 26px; height: 15px; border-radius: 999px; flex: none;
+  position: relative; width: 30px; height: 17px; border-radius: 999px; flex: none;
   transition: background .15s var(--ease);
+  box-shadow: inset 0 1px 2px rgba(16,24,40,.12);
 }
 .env .sw::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+  content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
   border-radius: 50%; background: #fff; transition: left .15s var(--ease);
-  box-shadow: 0 1px 2px rgba(16,24,40,.25);
+  box-shadow: 0 1px 3px rgba(16,24,40,.3);
 }
-.env.dry { color: var(--wn); border: 1.5px solid var(--wnl); }
-.env.dry .sw { background: var(--rule); }
-.env.live { color: var(--ok); border: 1.5px solid var(--okl); }
+.env.dry { color: var(--wn); background: var(--wnb); border: 1.5px solid var(--wnl); }
+.env.dry .sw { background: rgba(20,32,47,.14); }
+.env.live { color: var(--ok); background: var(--okb); border: 1.5px solid var(--okl); }
 .env.live .sw { background: var(--ok); }
-.env.live .sw::after { left: 13px; }
+.env.live .sw::after { left: 15px; }
 
 /* ── หน้า ───────────────────────────────────────────────── */
 .page { padding: 32px 36px 100px; max-width: var(--wrap); }
@@ -1157,6 +1161,18 @@ dl.kv dd { margin: 0; font-weight: 600; }
 .note.cr { background: var(--crb); }
 .note.cr svg.i { color: var(--cr); }
 
+/* บริษัทใหม่ที่ยังไม่มีโดเมน — accounting พิมพ์โดเมนเองแล้วผูกได้ทันทีจากแท็บ "ดึงจาก Gmail"
+   (3 ก.ย. 69 ตามที่ขอ) วางในกรอบเตือนสีเหลืองเดิม ไม่ต้องมีการ์ดแยก */
+.gmail-claim { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.gmail-claim .dinput { flex: 1 1 260px; background: var(--paper); }
+.gmail-claim .btn { flex: none; }
+
+/* ลิงก์ดูรายการอีเมลที่เคยกด "ซ่อน" ไว้ — วางท้ายรายการอีเมลหลัก กดขยายดูเฉพาะตอนต้องการ */
+.gmail-dismissed { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.gmail-dismissed > a { font-size: 12.5px; color: var(--brand); }
+#gmailDismissedWrap { margin-top: 12px; }
+#gmailDismissedWrap .maillist .mq { font-style: normal; color: var(--mut); }
+
 /* ── ปฏิทิน ─────────────────────────────────────────────── */
 /* เดิม gap ระหว่างเซลล์ทำให้ดูเป็นการ์ดลอยแยกกัน (โบราณ) — เปลี่ยนมาใช้เทคนิค "gap 1px + สีพื้นหลัง
    คอนเทนเนอร์เป็นสีเส้น" แทน ได้เส้นตารางบางๆคั่นระหว่างเซลล์แบบตารางปกติ เรียบง่าย ทันสมัย ตรงตาม
@@ -1737,6 +1753,7 @@ td.n, .docid { white-space: nowrap; }
 
 /* ═══ ฟอร์มป้อน Timesheet ด้วยมือ ═══ */
 .frm{ display:grid; grid-template-columns:1fr 1fr; gap:13px 16px; }
+.frm > label[hidden]{ display:none; }
 .frm > label{ display:flex; flex-direction:column; gap:5px; font-size:12.5px;
   font-weight:600; color:var(--ink2); min-width:0; }
 .frm > label b{ color:var(--ink); }
@@ -1746,6 +1763,31 @@ td.n, .docid { white-space: nowrap; }
 .frm input:focus{ outline:2px solid var(--brand); outline-offset:-1px; border-color:var(--brand); }
 .frm input[readonly]{ background:var(--sunk); color:var(--mut); cursor:default; }
 .frm small{ font-weight:400; color:var(--mut); font-size:11.5px; line-height:1.45; }
+
+/* จัดการระบบ → โดเมนอีเมล — รายชื่อลูกค้าเป็นแถวการ์ด แทนตารางเปล่าๆ ให้เข้าชุดกับการ์ดอื่นในระบบ
+   (3 ก.ย. 69 ตามที่ขอ "ทำให้สวยกว่านี้") ป้ายสถานะซ้ายมือบอกทันทีว่าตั้งค่าแล้วหรือยัง ไม่ต้องเพ่งดูว่า
+   ช่องกรอกว่างอยู่หรือเปล่า ปุ่มบันทึกกดไม่ได้จนกว่าจะแก้ค่า กันกดซ้ำเปล่าๆทั้งที่ไม่มีอะไรเปลี่ยน */
+.domain-list { display: flex; flex-direction: column; }
+.domain-row {
+  display: flex; align-items: center; gap: 16px; padding: 16px 24px;
+  border-bottom: 1px solid var(--hair);
+}
+.domain-row:last-child { border-bottom: none; }
+.domain-row .dname { flex: 1 1 220px; min-width: 0; font-weight: 600; color: var(--ink); }
+.domain-row .dname small { display: block; margin-top: 2px; font-weight: 400; }
+.domain-row .dfield { position: relative; flex: 1 1 260px; min-width: 0; }
+.domain-row .dfield::before {
+  content: '@'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--fnt); font-size: 13px; font-weight: 700; pointer-events: none;
+}
+.dinput {
+  font: inherit; font-size: 13.5px; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); height: var(--h-ctl);
+  padding: 0 12px 0 26px; width: 100%;
+}
+.dinput:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: var(--brand); }
+.domain-row [data-save-domain] { flex: none; }
+.domain-row [data-save-domain][disabled] { opacity: .4; cursor: default; }
 /* ตัวเลือกอยู่ในช่องแคบ (ครึ่งหนึ่งของการ์ด) — ต้องยอมให้ตัดลงบรรทัดใหม่
    ไม่งั้นปุ่มจะทับดรอปดาวน์เมื่อชื่อพนักงานยาว ซึ่งเกิดขึ้นจริงกับรายการที่มีชื่อ+ตำแหน่ง+ลูกค้า */
 .fixa-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; align-items: stretch; }
@@ -2075,6 +2117,3 @@ td.n, .docid { white-space: nowrap; }
 }
 
 /* แถบบอกว่ากำลังไล่อ่านอัตโนมัติ + ปุ่มหยุด — วางไว้บนสุดของรายการเมล */
-.note.autoread { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.note.autoread span { flex: 1; }
-.note.autoread button { flex: none; }

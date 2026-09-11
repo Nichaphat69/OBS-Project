@@ -24,15 +24,16 @@ const THAI_MONTHS_SHORT = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
 
-/** '2026-01-31' → '31 มกราคม 2569' */
+/** '2026-01-31' → '31 มกราคม 2569' — รับ timestamp เต็มรูปแบบ ('...T10:30:00Z') ได้ด้วย ตัดเอาแค่วันที่
+ *  (เจอบั๊กจริงที่ทำให้ขึ้น "NaN" ตอนส่ง receivedAt/checkedAt/billedAt ซึ่งเป็น timestamp เต็มเข้ามาตรงๆ) */
 export function thaiDate(iso) {
-  const [y, m, d] = iso.split('-').map(Number);
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
   return `${d} ${THAI_MONTHS[m - 1]} ${y + 543}`;
 }
 
-/** '2026-01-29' → '29 ม.ค. 69' — รูปแบบที่ใช้ใน Remark ของใบแจ้งหนี้ */
+/** '2026-01-29' → '29 ม.ค. 69' — รูปแบบที่ใช้ใน Remark ของใบแจ้งหนี้ (รับ timestamp เต็มได้เหมือน thaiDate) */
 export function thaiDateShort(iso) {
-  const [y, m, d] = iso.split('-').map(Number);
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
   return `${d} ${THAI_MONTHS_SHORT[m - 1]} ${String(y + 543).slice(-2)}`;
 }
 

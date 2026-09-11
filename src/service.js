@@ -10,7 +10,7 @@ import { calculateManday, SEVERITY } from './domain/manday.js';
 import { buildInvoice, toFlowAccountPayload } from './domain/invoice.js';
 import { matchEmployee, checkPosition, MATCH } from './domain/matching.js';
 import { FlowAccountClient } from './integrations/flowaccount.js';
-import { thaiMonth, thaiDate, money, round2 } from './util/money.js';
+import { thaiMonth, thaiDate, thaiDateShort, money, round2, addDays } from './util/money.js';
 import { nextPeriod } from './domain/calendar.js';
 import { buildManualSheet, manualExtractor } from './domain/manual-sheet.js';
 import { extractTimesheet, mergeDocumentsByEmployee } from './extract/timesheet.js';
@@ -22,7 +22,10 @@ import { HrddClient, hasHrddCredentials, HrddError } from './integrations/hrdd.j
 import { compareLeaves, summarizeLeaveComparison } from './domain/leaveCompare.js';
 import {
   LineClient, isAuthorizedApprover, verifyLineSignature, parseApprovalPostback, buildNeedsCheckFlex,
-  hasLineCredentials,
+  buildEmployeeStatusFlex, buildRejectedFlex, buildOverdueReminderFlex, buildBillingCycleFlex, hasLineCredentials,
+  parseTicketPostback, buildTicketCategoryFlex, buildTicketNotifyFlex, TICKET_CATEGORIES, EMPLOYEE_QUICK_REPLY,
+  parseTimesheetMethodPostback, buildTimesheetObsRedirectFlex, buildTimesheetEmailConfirmFlex,
+  buildTimesheetProxyConfirmFlex,
 } from './integrations/line.js';
 
 // ── master data ────────────────────────────────────────────
@@ -46,7 +49,7 @@ export function listContracts() {
 export function getActiveContract() {
   return get(`
     SELECT c.*, cu.name_th AS customer_name, cu.tax_id, cu.billing_place,
-           cu.contact_name, cu.contact_phone
+           cu.contact_name, cu.contact_phone, cu.email_domain
       FROM contracts c
       JOIN customers cu ON cu.id = c.customer_id
      WHERE c.status = 'active'
@@ -95,6 +98,55 @@ export function createCustomer({
   );
   logAudit({ actor, action: 'create_customer', entityType: 'customer', entityId: id, detail: { nameTh, taxId } });
   return get('SELECT * FROM customers WHERE id = $id', { id });
+}
+
+/**
+ * รายชื่อลูกค้าทั้งหมด + โดเมนอีเมลที่ตั้งไว้ (ถ้ามี) — ใช้ที่หน้า "จัดการระบบ → โดเมนอีเมล"
+ * (admin เท่านั้น, 3 ก.ย. 69 ตามที่ขอ) เอาไว้กรองกล่อง Gmail ให้เห็นแค่เมลของบริษัทที่ active อยู่
+ */
+export function listCustomerDomains() {
+  return all(`SELECT id, name_th AS name, email_domain FROM customers ORDER BY name_th`);
+}
+
+/**
+ * ตั้ง/แก้/ลบโดเมนอีเมลของลูกค้ารายหนึ่ง — ตั้งครั้งเดียวตอนเพิ่มลูกค้าใหม่แล้วแทบไม่ต้องแก้อีก
+ * ส่ง domain เป็นค่าว่าง/null ได้ = เคลียร์กลับไปไม่กรอง (โชว์ทุกฉบับเหมือนเดิม) ที่หน้า "ดึงจาก Gmail"
+ */
+export function setCustomerEmailDomain(customerId, domain, { actor }) {
+  const customer = get('SELECT id FROM customers WHERE id = $id', { id: customerId });
+  if (!customer) throw Object.assign(new Error('ไม่พบลูกค้ารายนี้'), { status: 404 });
+  const cleaned = (domain ?? '').trim().toLowerCase() || null;
+  run('UPDATE customers SET email_domain = $domain WHERE id = $id', { id: customerId, domain: cleaned });
+  logAudit({
+    actor, action: 'set_customer_email_domain', entityType: 'customer', entityId: customerId,
+    detail: { domain: cleaned },
+  });
+  return get('SELECT id, name_th AS name, email_domain FROM customers WHERE id = $id', { id: customerId });
+}
+
+/**
+ * ให้ accounting เองผูกโดเมนได้ทันทีตอนเจอบริษัทใหม่ที่ admin ยังไม่ทันมาตั้งโดเมนให้ (3 ก.ย. 69 ตามที่ขอ)
+ * — ต่างจาก setCustomerEmailDomain ตรงที่ "ผูกได้ครั้งแรกครั้งเดียว" เท่านั้น ถ้าลูกค้ารายนี้มีโดเมนตั้ง
+ * ไว้แล้ว (ไม่ว่าใครตั้ง) ห้ามเขียนทับ ต้องให้ admin เป็นคนแก้ที่ "จัดการระบบ → โดเมนอีเมล" แทน — กันบัญชี
+ * accounting เผลอเปลี่ยนโดเมนของบริษัทที่มีอยู่แล้วโดยไม่ตั้งใจ (เช่น พิมพ์ผิด/เลือกอีเมลผิดฉบับ)
+ */
+export function claimCustomerEmailDomain(customerId, domain, { actor }) {
+  const customer = get('SELECT id, email_domain FROM customers WHERE id = $id', { id: customerId });
+  if (!customer) throw Object.assign(new Error('ไม่พบลูกค้ารายนี้'), { status: 404 });
+  if (customer.email_domain) {
+    throw Object.assign(
+      new Error('บริษัทนี้มีโดเมนตั้งไว้แล้ว — ให้ admin เป็นคนแก้ที่ "จัดการระบบ → โดเมนอีเมล" แทน'),
+      { status: 409 },
+    );
+  }
+  const cleaned = (domain ?? '').trim().toLowerCase();
+  if (!cleaned) throw Object.assign(new Error('ต้องระบุโดเมนอีเมล'), { status: 400 });
+  run('UPDATE customers SET email_domain = $domain WHERE id = $id', { id: customerId, domain: cleaned });
+  logAudit({
+    actor, action: 'claim_customer_email_domain', entityType: 'customer', entityId: customerId,
+    detail: { domain: cleaned },
+  });
+  return get('SELECT id, name_th AS name, email_domain FROM customers WHERE id = $id', { id: customerId });
 }
 
 /**
@@ -750,12 +802,14 @@ export function getTimesheetFile(id) {
  * ตรงๆ จึงจะบอกว่า sandbox ทั้งที่จริงยิงแบบ dry-run อยู่ — ตัวเลขเอกสารที่ได้จะเป็นค่าเสมือน
  * ไม่มีเอกสารจริงเกิดขึ้นใน FlowAccount เลย)
  */
-function newFlowAccountClient() {
+function newFlowAccountClient({ documentType } = {}) {
   const settings = getSetting('flowaccount', {
     mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
     documentType: 'billing-note',
   });
-  return new FlowAccountClient({ mode: settings.mode, documentType: settings.documentType });
+  // ลบใบแจ้งหนี้เก่าต้องใช้ชนิดเอกสารตอนสร้างจริง (เก็บไว้ใน invoices.response) ไม่ใช่ค่าที่ตั้งอยู่
+  // ตอนนี้ เผื่อมีคนสลับ billing-note/tax-invoice ใน settings หลังจากใบนั้นสร้างไปแล้ว (3 ก.ย. 69)
+  return new FlowAccountClient({ mode: settings.mode, documentType: documentType ?? settings.documentType });
 }
 
 /** โหมด FlowAccount ที่ใช้งานจริงตอนนี้ — settings ใน DB ถ้าเคยตั้งไว้ ไม่งั้นตาม .env (ดู newFlowAccountClient) */
@@ -1647,13 +1701,52 @@ export async function sendPasswordResetCodeEmail(email, code, { client } = {}) {
   });
 }
 
-export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client } = {}) {
+/** เอาโดเมนจากช่อง From ของอีเมล ("ชื่อ <user@domain.com>" หรือ "user@domain.com" เปล่าๆ) —
+ * ตัดพิมพ์เล็ก/ใหญ่ให้เทียบกันได้เสมอ ไม่ใช่ที่อยู่ (เช่นไม่มี "@") ให้เป็น null
+ * export ไว้ให้เทสต์ตรงๆได้ (ดู test/gmailInboxDomain.test.js) — จุดนี้เป็นเกราะป้องกันจริง
+ * ไม่ใช่แค่รายละเอียดภายใน */
+export function senderDomain(from) {
+  const angle = /<([^>]+)>/.exec(from ?? '');
+  const address = (angle ? angle[1] : from ?? '').trim();
+  const at = address.lastIndexOf('@');
+  return at === -1 ? null : address.slice(at + 1).toLowerCase();
+}
+
+/**
+ * กรองกล่อง Gmail ให้เหลือแค่อีเมลของบริษัทที่ active อยู่ตอนนี้ (ตัวเดียวกับที่เลือกไว้บนแถบบน) — สองชั้น:
+ * (1) ต่อท้ายคำค้นด้วยโดเมนบริษัท ให้ Gmail ช่วยกรองเบื้องต้นฝั่งเซิร์ฟเวอร์เอง (3 ก.ย. 69 ตามที่ขอ)
+ * (2) กรองซ้ำด้วย senderDomain() ให้เหลือเฉพาะที่ "ผู้ส่งจริง" ตรงโดเมนเป๊ะๆ — ชั้น (1) เป็น full-text
+ * search เจอคำว่าโดเมนที่ไหนในอีเมลก็ตรง (เช่น ใน CC/ลายเซ็น/หัวอีเมลที่ถูก forward มา) พบจริงว่ามีอีเมล
+ * คนละโดเมนเล็ดลอดผ่านมาได้ (4 ก.ย. 69) ต้องมีชั้น (2) กันไว้ถึงจะแม่นจริง
+ * ถ้าบริษัทนั้นยังไม่ได้ตั้งโดเมนไว้ → ไม่กรองทั้งสองชั้น (โชว์ทุกฉบับเหมือนเดิม) พร้อมบอกฝั่งเรียกว่า
+ * ไม่มีโดเมนให้กรอง จะได้ขึ้นข้อความเตือนให้ไปตั้งค่าที่หน้าเว็บ
+ */
+export async function gmailInbox({ query, max = 15, client, allCompanies = false } = {}) {
+  // ถ้ามีคนส่งคำค้นมาเอง (เช่น debug ผ่าน ?q=) ใช้ตามนั้นเป๊ะๆ ไม่ไปต่อโดเมนทับให้ —
+  // การกรองตามบริษัท active ใช้เฉพาะตอนไม่ได้ระบุคำค้นเอง หรือกดปุ่ม "แสดงทุกบริษัท" (allCompanies)
+  const explicit = Boolean(query);
+  const base = query || DEFAULT_GMAIL_QUERY;
+  const active = getActiveContract();
+  const activeDomain = (active?.email_domain ?? '').trim().toLowerCase() || null;
+  const applyFilter = !explicit && !allCompanies && active;
+  const effectiveQuery = applyFilter && activeDomain ? `${base} ${activeDomain}` : base;
+  const domain = applyFilter ? activeDomain : null;
+  const domainMissing = applyFilter && !activeDomain;
+
   const gmail = client ?? new GmailClient();
   const [profile, found] = await Promise.all([
     gmail.profile(),
-    gmail.searchMessages({ query, max }),
+    gmail.searchMessages({ query: effectiveQuery, max }),
   ]);
-  const { messages, skipped } = found;
+  const { skipped } = found;
+
+  /* คำค้นของ Gmail เป็น full-text search — เจอคำว่าโดเมนที่ไหนในอีเมลก็ตรง ไม่ใช่แค่ผู้ส่งจริง
+     (เช่น อยู่ใน CC/ลายเซ็นอ้างอิง/ส่วนหัวที่ถูก forward มา) พบจริงว่ามีอีเมลจากคนละโดเมนเล็ดลอดผ่านคำค้น
+     มาได้ (4 ก.ย. 69) ต้องกรองซ้ำอีกชั้นด้วยโดเมนของ "ผู้ส่งจริง" (From) เท่านั้นถึงจะแม่น — ไม่กรอง
+     ถ้าไม่ได้เปิดโหมดกรอง (applyFilter=false) หรือบริษัทนี้ยังไม่ได้ตั้งโดเมนไว้ */
+  const messages = applyFilter && activeDomain
+    ? found.messages.filter((m) => senderDomain(m.from) === activeDomain)
+    : found.messages;
 
   /* ฉบับที่ดึงรายละเอียดไม่สำเร็จ — บอกไว้ในผลลัพธ์ให้หน้าเว็บขึ้นเตือน แต่ไม่ล้มทั้งกล่อง
      คนจะได้รู้ว่ารายการที่เห็นอาจยังไม่ครบ แทนที่จะเข้าใจว่ากล่องมีแค่นี้จริงๆ */
@@ -1664,13 +1757,16 @@ export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client
     });
   }
 
-  /* เคยดึงไฟล์แนบไหนเข้าระบบไปแล้วบ้าง (key ด้วย source_email_id + source_file คู่กัน ไม่ใช่แค่ตัวอีเมล)
+  /* เคยให้ AI อ่านไฟล์แนบไหนไปแล้วบ้าง (key ด้วย source_email_id + file_name คู่กัน ไม่ใช่แค่ตัวอีเมล)
      เพราะ 1 อีเมลอาจมีไฟล์แนบของหลายคน — คนละไฟล์กันต้องแยกสถานะกันคนละอัน ไม่งั้นแค่คนแรกที่
-     ยืนยันเข้าระบบไปแล้ว จะพาให้อีเมลทั้งฉบับ (รวมไฟล์ของคนที่ยังไม่ได้อ่านเลย) หายไปจากรายการที่ต้องทำ */
+     ยืนยันเข้าระบบไปแล้ว จะพาให้อีเมลทั้งฉบับ (รวมไฟล์ของคนที่ยังไม่ได้อ่านเลย) หายไปจากรายการที่ต้องทำ
+     ดูจาก ai_reads ไม่ใช่ timesheets — กันไม่ให้ไฟล์ที่เพิ่งอ่านแล้วยังไม่ทันกดยืนยัน ยังค้างโผล่ในกล่อง
+     ให้กดอ่านซ้ำได้อีก (ต้องไปกดยืนยันที่แท็บ "ประวัติ" แทน) status != 'discarded' เพราะกดลบทิ้งแล้ว
+     ต้องอ่านใหม่ได้ตามปกติ (1 ก.ย. 69 ตามที่ขอ) */
   const known = new Map(
-    all(`SELECT source_email_id, source_file, period, id AS document_no
-           FROM timesheets WHERE source_email_id IS NOT NULL`)
-      .map((r) => [`${r.source_email_id}::${r.source_file}`, { period: r.period, documentNo: r.document_no }]),
+    all(`SELECT source_email_id, file_name, period, document_no
+           FROM ai_reads WHERE source_email_id IS NOT NULL AND status != 'discarded'`)
+      .map((r) => [`${r.source_email_id}::${r.file_name}`, { period: r.period, documentNo: r.document_no }]),
   );
   // ฉบับที่กด "ซ่อน" ทิ้งไว้ — ไม่ให้โผล่ในรายการที่ต้องอ่านอีก (อีเมลจริงใน Gmail ไม่ถูกแตะ)
   const dismissed = new Set(all('SELECT message_id FROM gmail_dismissed').map((r) => r.message_id));
@@ -1691,7 +1787,11 @@ export async function gmailInbox({ query = DEFAULT_GMAIL_QUERY, max = 15, client
 
   return {
     account: profile.email,
-    query,
+    query: effectiveQuery,
+    domain,
+    activeCompanyName: active?.customer_name ?? null,
+    activeCustomerId: active?.customer_id ?? null,
+    domainMissing,
     skipped: skipped.length,
     // ยังต้องโผล่ในรายการที่ต้องทำถ้า "มีไฟล์แนบไหนสักไฟล์" ที่ยังไม่ได้อ่าน+ยืนยัน แม้ไฟล์อื่นในฉบับ
     // เดียวกันจะเข้าระบบไปแล้วก็ตาม — ปุ่ม "ให้ AI อ่าน" แยกทีละไฟล์แนบอยู่แล้ว (ดูฝั่งหน้าเว็บ)
@@ -1743,6 +1843,41 @@ export function dismissGmailMessage(messageId, { actor = 'cli' } = {}) {
   );
   logAudit({ actor, action: 'dismiss_gmail_message', entityType: 'gmail_message', entityId: messageId, detail: {} });
   return { dismissed: true };
+}
+
+/**
+ * รายการอีเมลที่เคยกด "ซ่อน" ทิ้งไว้ — ใช้ที่หน้า "ดึงจาก Gmail" ให้กดเลิกซ่อนคืนได้ (comment เดิมของ
+ * dismissGmailMessage อ้างว่า "กดยกเลิกได้" แต่ไม่เคยมีทางกดจริงมาก่อน พบจาก UAT TC-SC04-019-ADM,
+ * 4 ก.ย. 69) ตาราง gmail_dismissed เก็บแค่ message_id เอง เลยต้องดึงหัวเรื่อง/ผู้ส่งสดจาก Gmail อีกที
+ * — ฉบับไหนดึงไม่สำเร็จ (เช่นถูกลบไปจริงใน Gmail แล้ว) ให้ข้ามไปเงียบๆ ไม่ล้มทั้งรายการ
+ */
+export async function listDismissedGmailMessages({ client } = {}) {
+  const rows = all('SELECT message_id, dismissed_by, dismissed_at FROM gmail_dismissed ORDER BY dismissed_at DESC');
+  if (!rows.length) return [];
+  const gmail = client ?? new GmailClient();
+  const messages = await Promise.all(rows.map(async (row) => {
+    try {
+      const m = await gmail.getMessage(row.message_id);
+      return {
+        id: row.message_id, subject: m.subject, from: m.from, receivedAt: m.receivedAt,
+        dismissedBy: row.dismissed_by, dismissedAt: row.dismissed_at,
+      };
+    } catch {
+      return {
+        id: row.message_id, subject: null, from: null, receivedAt: null,
+        dismissedBy: row.dismissed_by, dismissedAt: row.dismissed_at,
+      };
+    }
+  }));
+  return messages;
+}
+
+/** เลิกซ่อนอีเมลฉบับนี้ — กลับไปโผล่ในรายการ "ดึงจาก Gmail" ตามปกติถ้ายังไม่เคยเข้าระบบ */
+export function undismissGmailMessage(messageId, { actor = 'cli' } = {}) {
+  if (!messageId) throw Object.assign(new Error('ต้องระบุอีเมลที่จะเลิกซ่อน'), { status: 400 });
+  run('DELETE FROM gmail_dismissed WHERE message_id = $id', { id: messageId });
+  logAudit({ actor, action: 'undismiss_gmail_message', entityType: 'gmail_message', entityId: messageId, detail: {} });
+  return { dismissed: false };
 }
 
 /**
@@ -2132,6 +2267,143 @@ function buildEmployeeStatusText(employee) {
 }
 
 /**
+ * แปลง employeeProgress() เป็น input สำเร็จรูปให้ buildEmployeeStatusFlex() (บับเบิลตอบคำสั่ง "สถานะ")
+ * ทำ date-formatting ที่นี่เพราะ src/integrations/line.js ไม่รู้จัก thaiDate/thaiMonth เอง (รับแค่
+ * label สำเร็จรูปเหมือน buildApprovalFlex/buildNeedsCheckFlex ที่มีอยู่แล้ว)
+ *
+ * ⚠️ ห้ามใส่ paymentAmount/ยอดเงินใดๆ ลงในนี้เด็ดขาด (7 ก.ย. 69 ตามที่ขอ) — การ์ดนี้พนักงานเห็นเอง
+ * เรื่องเงินเป็นข้อมูลของฝ่ายบัญชีเท่านั้น แม้ employeeProgress() จะมีติดมาด้วยก็ไม่ pluck ออกมาใช้ที่นี่
+ */
+function buildEmployeeStatusFlexInput(progress) {
+  const contracts = progress.contracts.map((c) => {
+    const current = c.periods.find((p) => p.period === progress.currentPeriod);
+    const currentStatusLabel = current?.timesheetStatusLabel ?? 'ยังไม่ได้ส่ง Timesheet';
+
+    let currentStatusDetail = null;
+    if (current?.billed) {
+      currentStatusDetail = `วางบิลแล้ว (เลขที่ ${current.invoiceNo}) เมื่อ ${thaiDate(current.billedAt)}`;
+    } else if (current?.emailSentAt) {
+      currentStatusDetail = `ส่งเอกสารให้ลูกค้าแล้วเมื่อ ${thaiDate(current.emailSentAt)}`;
+    } else if (current?.checkedAt) {
+      currentStatusDetail = `ตรวจ Manday แล้วเมื่อ ${thaiDate(current.checkedAt)}${current.checkedBy ? ` โดย ${current.checkedBy}` : ''}`;
+    } else if (current?.receivedAt) {
+      currentStatusDetail = `ส่ง Timesheet แล้วเมื่อ ${thaiDate(current.receivedAt)}`;
+    }
+
+    const recentPeriods = c.periods.slice(0, 5).map((p) => ({
+      periodLabel: p.periodLabel,
+      badge: p.billed ? 'วางบิลแล้ว' : (p.timesheetStatus === 'not_submitted' ? 'ยังไม่ส่ง' : 'รอดำเนินการ'),
+    }));
+
+    return {
+      customerName: c.customerName,
+      projectName: c.projectName,
+      currentPeriodLabel: progress.currentPeriodLabel,
+      currentStatusLabel,
+      currentStatusDetail,
+      recentPeriods,
+    };
+  });
+
+  return { contracts, progressUrl: myProgressLink() };
+}
+
+/**
+ * แปลง employeeProgress() เป็น input ให้ buildBillingCycleFlex() (บับเบิลตอบคำสั่ง "สถานะการวางบิล" —
+ * แยกจาก "สถานะ"/"สรุปรอบวางบิล" ปกติ, 8 ก.ย. 69 ตามที่ขอ แบบ mockup) โชว์ 5 ขั้นของรอบบิลปัจจุบัน:
+ * Timesheet → ตรวจ Manday → ออกใบแจ้งหนี้ (FlowAccount) → วางบิลส่งลูกค้า → รับชำระเงิน
+ *
+ * ⚠️ ห้ามใส่ยอดเงินเช่นเดียวกับ buildEmployeeStatusFlexInput — ขั้น "รับชำระเงิน" ใช้แค่ due_date เป็น
+ * วันที่คาดการณ์ ไม่มีช่องใดในระบบยืนยันว่าลูกค้าโอนเงินจริงหรือยัง จึงไม่มีทาง mark ขั้นนี้ว่า "เสร็จ" ได้เลย
+ * (ต่างจาก 4 ขั้นแรกที่มีข้อมูลจริงยืนยัน) — progressPercent จึงคิดจาก 4 ขั้นแรกเท่านั้น
+ */
+function buildBillingCycleFlexInput(progress) {
+  const contracts = progress.contracts.map((c) => {
+    const current = c.periods.find((p) => p.period === progress.currentPeriod) ?? c.periods[0] ?? null;
+
+    const submitted = Boolean(current?.receivedAt);
+    const checked = Boolean(current?.checkedAt);
+    const hasInvoice = Boolean(current?.invoiceNo || current?.invoiceCreatedAt);
+    const sentToCustomer = Boolean(current?.emailSentAt);
+
+    const steps = [
+      {
+        label: 'Timesheet ประจำเดือน',
+        sub: submitted ? (SUBMISSION_METHOD_LABEL[current.submissionMethod] ?? 'ส่งเข้าระบบแล้ว') : 'ยังไม่ได้ส่ง',
+        dateLabel: submitted ? thaiDateShort(current.receivedAt) : null,
+        done: submitted,
+      },
+      {
+        label: 'ตรวจ Manday',
+        sub: checked ? 'ตรวจแล้ว' : 'รอตรวจสอบ',
+        dateLabel: checked ? thaiDateShort(current.checkedAt) : null,
+        done: checked,
+      },
+      {
+        label: 'ออกใบแจ้งหนี้ (FlowAccount)',
+        sub: hasInvoice ? (current.billed ? 'ส่งเข้า FlowAccount แล้ว' : 'Drafted') : 'รอออกใบแจ้งหนี้',
+        dateLabel: hasInvoice ? thaiDateShort(current.invoiceCreatedAt) : null,
+        done: hasInvoice,
+      },
+      {
+        label: 'วางบิลส่งลูกค้า',
+        sub: sentToCustomer ? 'ส่งลูกค้าแล้ว' : 'รอส่งลูกค้า (ร่างอีเมลและเอกสารแนบ)',
+        dateLabel: sentToCustomer
+          ? thaiDateShort(current.emailSentAt)
+          : (current?.dueDate ? `กำหนดส่ง: ${thaiDate(current.dueDate)}` : null),
+        done: sentToCustomer,
+      },
+      {
+        label: 'การรับชำระเงิน',
+        sub: current?.dueDate ? `รอรับชำระ (คาดการณ์รับเงิน ${thaiDate(current.dueDate)})` : 'รอรับชำระ',
+        dateLabel: c.creditDays ? `Term ${c.creditDays} วัน` : null,
+        done: false,
+      },
+    ];
+
+    const doneCount = steps.filter((s) => s.done).length;
+    let currentIndex = steps.findIndex((s) => !s.done);
+    if (currentIndex === -1) currentIndex = steps.length - 1;
+
+    return {
+      customerName: c.customerName,
+      projectName: c.projectName,
+      periodLabel: current?.periodLabel ?? progress.currentPeriodLabel,
+      progressPercent: Math.round((doneCount / (steps.length - 1)) * 100),
+      steps: steps.map((s, i) => ({ ...s, state: s.done ? 'done' : (i === currentIndex ? 'current' : 'future') })),
+    };
+  });
+
+  return { contracts };
+}
+
+/**
+ * รอบบิลถัดไปที่พนักงานคนนี้ยังไม่ได้ส่ง Timesheet — ใช้ตอบปุ่มลัด "ส่ง Timesheet" ที่พนักงานกดเรียกเอง
+ * (8 ก.ย. 69 ตามที่ขอ) ต่างจาก overdueTimesheets() ที่ใช้กับ cron รายวันตรงที่ไม่สนใจว่าเลยกำหนดส่งแล้ว
+ * หรือยัง — พนักงานอยากส่งก่อนถึงกำหนดก็เรียกดูการ์ดเลือกวิธีส่งได้ตลอด ไม่ต้องรอให้ระบบเตือนก่อน
+ * เลือกรอบที่ "เก่าที่สุด" ที่ยังไม่ส่งก่อน (ไล่ตามลำดับเวลาจริง ไม่ใช่รอบล่าสุด) ให้พนักงานส่งไล่ตามลำดับ
+ */
+function pendingSubmissionFor(employeeId) {
+  const progress = employeeProgress(employeeId);
+  if (!progress?.contracts.length) return null;
+
+  for (const c of progress.contracts) {
+    const pending = [...c.periods].reverse().find((p) => p.timesheetStatus === 'not_submitted');
+    if (pending) {
+      return {
+        contractId: c.contractId,
+        customerName: c.customerName,
+        projectName: c.projectName,
+        period: pending.period,
+        periodLabel: pending.periodLabel,
+        dueDate: thaiDate(timesheetDueDate(pending.period)),
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * แจ้งพนักงานเจ้าของ Timesheet ใบนี้ทางไลน์ส่วนตัว (ถ้าผูกบัญชีไว้แล้ว) ตอนส่งสำเร็จ/ตรวจผ่าน/ตีกลับ
  * เงียบเสมอถ้ายังไม่ได้ผูกบัญชี ไม่มี LINE_CHANNEL_ACCESS_TOKEN หรือยิงพลาด — เป็นแค่การแจ้งเตือนเสริม
  * ไม่ควรทำให้ขั้นตอนหลัก (อัปโหลด/ตรวจ/ตีกลับ) พังไปด้วย
@@ -2143,15 +2415,34 @@ async function pushEmployeeStatusUpdate(timesheetId, { kind, reason = null, clie
   if (!employee?.line_user_id) return;
 
   const upload = uploadLink();
+  const line = client ?? new LineClient({ approverTarget: null });
+
+  /* rejected อัปเกรดเป็น Flex การ์ดพร้อมปุ่ม (7 ก.ย. 69 ตามที่ขอ) — เป็นเคสเดียวที่ต้องให้คนทำอะไรต่อ
+     จริง (ส่งฉบับแก้ไข) received/verified เป็นแค่แจ้งเฉยๆ คงเป็น text ธรรมดาไปก่อน */
+  if (kind === 'rejected') {
+    try {
+      const flex = buildRejectedFlex({
+        customerName: sheet.contract.customerName,
+        projectName: sheet.contract.projectName,
+        periodLabel: sheet.periodLabel,
+        reason,
+        uploadUrl: upload,
+      });
+      await line.pushFlexToUser(
+        employee.line_user_id,
+        `Timesheet รอบ ${sheet.periodLabel} ถูกตีกลับให้แก้ไข`,
+        flex,
+      );
+    } catch { /* แจ้งเสริม พลาดได้ ไม่ต้อง throw ต่อ */ }
+    return;
+  }
+
   const text = {
     received: `📥 ระบบได้รับ Timesheet ของคุณแล้ว\n${sheet.contract.customerName} · รอบ ${sheet.periodLabel}\nกำลังรอตรวจ Manday`,
     verified: `✅ Timesheet รอบ ${sheet.periodLabel} ผ่านการตรวจ Manday แล้ว\n${sheet.contract.customerName}`,
-    rejected: `⚠️ Timesheet รอบ ${sheet.periodLabel} ถูกตีกลับให้แก้ไข\n${sheet.contract.customerName}` +
-      `${reason ? `\nเหตุผล: ${reason}` : ''}${upload ? `\n\nส่งฉบับแก้ไขได้ที่:\n${upload}` : ''}`,
   }[kind];
   if (!text) return;
 
-  const line = client ?? new LineClient({ approverTarget: null });
   try {
     await line.pushToUser(employee.line_user_id, text);
   } catch { /* แจ้งเสริม พลาดได้ ไม่ต้อง throw ต่อ */ }
@@ -2188,28 +2479,353 @@ async function handleEmployeeLineMessage({ userId, text, replyToken, client }) {
         await line.reply(
           replyToken,
           `เชื่อมต่อไลน์กับคุณ${pending.name_th} สำเร็จ ✅\nพิมพ์ "สถานะ" เพื่อดูความคืบหน้า Timesheet ได้ทุกเมื่อ`,
+          EMPLOYEE_QUICK_REPLY,
         );
       } catch { /* ตอบไม่ได้ก็แล้วไป ผูกบัญชีสำเร็จไปแล้ว */ }
     }
     return { userId, outcome: 'linked', employeeId: pending.id };
   }
 
-  const linked = get('SELECT id, name_th FROM employees WHERE line_user_id = $userId', { userId });
-  if (linked && /^(สถานะ|status)$/i.test(trimmed)) {
+  const linked = get(
+    'SELECT id, name_th, line_pending_ticket_category FROM employees WHERE line_user_id = $userId',
+    { userId },
+  );
+
+  /* กำลังแจ้งปัญหาค้างอยู่ (เพิ่งกดเลือกหมวดจากการ์ด "แจ้งปัญหา") — ข้อความถัดไปไม่ว่าจะพิมพ์อะไรมา
+     ถือเป็นรายละเอียดปัญหาเสมอ ต้องเช็คจุดนี้ก่อนคำสั่งอื่นทั้งหมด (7 ก.ย. 69 ตามที่ขอ) */
+  if (linked && linked.line_pending_ticket_category) {
+    const ticket = await submitSupportTicket({
+      employeeId: linked.id, employeeName: linked.name_th,
+      category: linked.line_pending_ticket_category, description: trimmed, client: line,
+    });
     if (replyToken) {
-      try { await line.reply(replyToken, buildEmployeeStatusText(linked)); } catch { /* เงียบไว้ */ }
+      try {
+        await line.reply(
+          replyToken,
+          `แจ้งปัญหาเรียบร้อย เลขที่ #${ticket.id} ✅\nฝ่ายดูแลจะรีบตรวจสอบให้ครับ`,
+          EMPLOYEE_QUICK_REPLY,
+        );
+      } catch { /* เงียบไว้ */ }
+    }
+    return { userId, outcome: 'ticket_created', employeeId: linked.id, ticketId: ticket.id };
+  }
+
+  /* ปุ่มลัด "ส่ง Timesheet" — เรียกดูการ์ดเลือกวิธีส่ง (OBS/Email/ให้ผู้ดูแลส่งแทน) ได้เองตลอด ไม่ต้องรอ
+     ให้ระบบเตือนก่อน (8 ก.ย. 69 ตามที่ขอ แทนที่ปุ่มลัด "สถานะ" เดิมในแถวปุ่มลัด — พิมพ์ "สถานะ" ตรงๆ ก็ยัง
+     ใช้ได้ตามปกติ แค่ไม่มีปุ่มลัดชี้ไปแล้ว) ใช้การ์ดเดียวกับที่ sendOverdueTimesheetReminders() ส่งอัตโนมัติ */
+  if (linked && /^ส่ง ?Timesheet$/i.test(trimmed)) {
+    if (replyToken) {
+      try {
+        const pending = pendingSubmissionFor(linked.id);
+        if (pending) {
+          const flex = buildOverdueReminderFlex(pending);
+          await line.replyFlex(replyToken, `ส่ง Timesheet รอบ ${pending.periodLabel}`, flex, EMPLOYEE_QUICK_REPLY);
+        } else {
+          await line.reply(replyToken, 'ตอนนี้ไม่มี Timesheet ที่ต้องส่งครับ ระบบจะแจ้งเตือนอัตโนมัติเมื่อถึงกำหนดรอบถัดไป', EMPLOYEE_QUICK_REPLY);
+        }
+      } catch {
+        try {
+          await line.reply(replyToken, 'ขอโทษครับ ระบบมีปัญหาชั่วคราว ลองพิมพ์ "ส่ง Timesheet" อีกครั้ง', EMPLOYEE_QUICK_REPLY);
+        } catch { /* เงียบไว้ */ }
+      }
+    }
+    return { userId, outcome: 'submission_prompt', employeeId: linked.id };
+  }
+
+  /* ปุ่มลัด "สถานะ"/"สรุปรอบวางบิล" เป็นคำพ้องความหมายเดียวกัน (8 ก.ย. 69 ตามที่ขอ, แบบ mockup "1. Main
+     Chat & Dashboard") ต้องเช็คก่อน "แจ้งปัญหา"/"help" — ไม่งั้น "แจ้งปัญหา"/"help" ชนกับปุ่มลัด "Help"
+     ด้านล่างไม่ได้เพราะคนละ branch อยู่แล้ว แค่จัดลำดับให้ชัดเจน
+     "สถานะการวางบิล" แยกออกไปเป็นคนละการ์ด (flow 5 ขั้นของรอบบิล) ดูบล็อกถัดไป ไม่ใช่คำพ้องอีกต่อไป */
+  if (linked && /^(สถานะ|status|สรุปรอบวางบิล)$/i.test(trimmed)) {
+    if (replyToken) {
+      /* ลอง Flex การ์ดสวยๆก่อน (7 ก.ย. 69 ตามที่ขอ) พังได้ก็แค่ตกกลับไปใช้ข้อความ text ธรรมดาแบบเดิม
+         ไม่ควรทำให้คำสั่ง "สถานะ" เงียบไปเฉยๆถ้าการ์ดใหม่มี bug */
+      try {
+        const progress = employeeProgress(linked.id);
+        if (progress?.contracts.length) {
+          const flex = buildEmployeeStatusFlex(buildEmployeeStatusFlexInput(progress));
+          await line.replyFlex(replyToken, `สถานะ Timesheet ของคุณ${linked.name_th}`, flex, EMPLOYEE_QUICK_REPLY);
+        } else {
+          await line.reply(replyToken, buildEmployeeStatusText(linked), EMPLOYEE_QUICK_REPLY);
+        }
+      } catch {
+        try { await line.reply(replyToken, buildEmployeeStatusText(linked), EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+      }
     }
     return { userId, outcome: 'status', employeeId: linked.id };
   }
 
+  /* "สถานะการวางบิล" — การ์ด flow 5 ขั้นของรอบบิลปัจจุบัน (8 ก.ย. 69 ตามที่ขอ แบบ mockup) ไม่มียอดเงิน
+     เช่นเดียวกับ "สถานะ" ข้างบน (ดู buildBillingCycleFlexInput) */
+  if (linked && /^สถานะการวางบิล$/i.test(trimmed)) {
+    if (replyToken) {
+      try {
+        const progress = employeeProgress(linked.id);
+        if (progress?.contracts.length) {
+          const flex = buildBillingCycleFlex(buildBillingCycleFlexInput(progress));
+          await line.replyFlex(replyToken, `สถานะการวางบิลของคุณ${linked.name_th}`, flex, EMPLOYEE_QUICK_REPLY);
+        } else {
+          await line.reply(replyToken, buildEmployeeStatusText(linked), EMPLOYEE_QUICK_REPLY);
+        }
+      } catch {
+        try { await line.reply(replyToken, buildEmployeeStatusText(linked), EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+      }
+    }
+    return { userId, outcome: 'billing_cycle_status', employeeId: linked.id };
+  }
+
+  if (linked && /^(แจ้งปัญหา|help)$/i.test(trimmed)) {
+    if (replyToken) {
+      try { await line.replyFlex(replyToken, 'แจ้งปัญหา', buildTicketCategoryFlex(), EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+    }
+    return { userId, outcome: 'ticket_category_prompt', employeeId: linked.id };
+  }
+
+  if (linked && /^(ตั๋วของฉัน|tickets)$/i.test(trimmed)) {
+    if (replyToken) {
+      try { await line.reply(replyToken, buildMyTicketsText(linked), EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+    }
+    return { userId, outcome: 'my_tickets', employeeId: linked.id };
+  }
+
   if (linked && replyToken) {
     try {
-      await line.reply(replyToken, 'พิมพ์ "สถานะ" เพื่อดูความคืบหน้า Timesheet ของคุณได้ทุกเมื่อ');
+      await line.reply(
+        replyToken,
+        'พิมพ์ "สถานะ" เพื่อดูความคืบหน้า Timesheet\nพิมพ์ "แจ้งปัญหา" ถ้าเจอปัญหาหรือมีข้อเสนอแนะ\nพิมพ์ "ตั๋วของฉัน" เพื่อดูสถานะเรื่องที่เคยแจ้งไว้',
+        EMPLOYEE_QUICK_REPLY,
+      );
     } catch { /* เงียบไว้ */ }
     return { userId, outcome: 'help', employeeId: linked.id };
   }
 
   return null;
+}
+
+/** เรียกตอนกดปุ่มหมวดปัญหาในการ์ด "แจ้งปัญหา" — แค่จำหมวดไว้รอข้อความรายละเอียดถัดไป ยังไม่สร้างตั๋วจริง */
+function startSupportTicket(employeeId, category) {
+  run(
+    'UPDATE employees SET line_pending_ticket_category = $category WHERE id = $id',
+    { category, id: employeeId },
+  );
+}
+
+/**
+ * สร้างตั๋วจริงจากข้อความรายละเอียดที่พิมพ์ตามหลังการเลือกหมวด — เคลียร์ pending category ทิ้งทันที
+ * (กันพิมพ์ข้อความถัดไปแล้วถูกเข้าใจผิดว่าเป็นตั๋วใหม่อีกใบ) แล้วแจ้งฝ่ายบัญชี/admin ผ่าน LINE
+ * (ห่อ try/catch เพราะเป็นงานเสริม พังได้ก็แค่ log ไม่ควรทำให้บันทึกตั๋วไม่สำเร็จ)
+ */
+async function submitSupportTicket({ employeeId, employeeName, category, description, client }) {
+  run(
+    `INSERT INTO support_tickets (employee_id, category, description) VALUES ($employeeId, $category, $description)`,
+    { employeeId, category, description },
+  );
+  const ticket = get(
+    `SELECT * FROM support_tickets WHERE employee_id = $employeeId ORDER BY id DESC LIMIT 1`,
+    { employeeId },
+  );
+  run('UPDATE employees SET line_pending_ticket_category = NULL WHERE id = $id', { id: employeeId });
+  logAudit({
+    actor: `line:${employeeId}`, action: 'create_support_ticket',
+    entityType: 'support_ticket', entityId: String(ticket.id), detail: { category },
+  });
+
+  const line = client ?? new LineClient({ approverTarget: null });
+  try {
+    const flex = buildTicketNotifyFlex({
+      employeeName, categoryLabel: TICKET_CATEGORIES[category] ?? category, description, ticketId: ticket.id,
+    });
+    await line.pushToAll(lineApproverTargets(), [{ type: 'flex', altText: `แจ้งปัญหาใหม่จาก${employeeName}`, contents: flex }]);
+  } catch (error) {
+    logAudit({
+      actor: 'system', action: 'notify_support_ticket_error',
+      entityType: 'support_ticket', entityId: String(ticket.id), detail: { message: error.message },
+    });
+  }
+  return ticket;
+}
+
+/** ข้อความสรุปตั๋วของพนักงานคนนี้ — ใช้ตอบคำสั่ง "ตั๋วของฉัน" */
+function buildMyTicketsText(employee) {
+  const tickets = all(
+    'SELECT id, category, status, created_at FROM support_tickets WHERE employee_id = $id ORDER BY id DESC LIMIT 10',
+    { id: employee.id },
+  );
+  if (!tickets.length) return `คุณ${employee.name_th} ยังไม่เคยแจ้งปัญหาไว้เลยครับ`;
+  const lines = tickets.map((t) =>
+    `#${t.id} ${TICKET_CATEGORIES[t.category] ?? t.category} — ${t.status === 'resolved' ? 'แก้แล้ว ✅' : 'รอดำเนินการ'}`);
+  return `📋 ตั๋วของคุณ${employee.name_th}\n\n${lines.join('\n')}`;
+}
+
+/** รายการตั๋วทั้งหมด — ใช้แสดงในหน้าเว็บ "แจ้งปัญหา" ของ admin/accounting */
+export function listSupportTickets({ status } = {}) {
+  const rows = all(
+    `SELECT t.id, t.category, t.description, t.status, t.created_at, t.resolved_at, t.resolved_by,
+            e.name_th AS employee_name
+       FROM support_tickets t JOIN employees e ON e.id = t.employee_id
+      WHERE $status IS NULL OR t.status = $status
+      ORDER BY t.id DESC`,
+    { status: status ?? null },
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    employeeName: r.employee_name,
+    category: r.category,
+    categoryLabel: TICKET_CATEGORIES[r.category] ?? r.category,
+    description: r.description,
+    status: r.status,
+    createdAt: r.created_at,
+    resolvedAt: r.resolved_at,
+    resolvedBy: r.resolved_by,
+  }));
+}
+
+/** กดจากปุ่มในการ์ดแจ้งเตือน LINE หรือจากหน้าเว็บ — ทั้งสองทางเรียกฟังก์ชันเดียวกันนี้ */
+export function resolveSupportTicket(id, { actor }) {
+  const ticket = get('SELECT id FROM support_tickets WHERE id = $id', { id });
+  if (!ticket) throw Object.assign(new Error(`ไม่พบตั๋วเลขที่ ${id}`), { status: 404 });
+  run(
+    `UPDATE support_tickets SET status = 'resolved',
+            resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), resolved_by = $actor
+      WHERE id = $id`,
+    { id, actor },
+  );
+  logAudit({ actor, action: 'resolve_support_ticket', entityType: 'support_ticket', entityId: String(id), detail: {} });
+  return get('SELECT * FROM support_tickets WHERE id = $id', { id });
+}
+
+/**
+ * รับ postback ของขั้น "แจ้งปัญหา" (คนละ prefix กับ postback อนุมัติวางบิล — ดู parseTicketPostback)
+ * เรียกจาก processLineWebhook เท่านั้น
+ */
+async function handleTicketPostback({ action, value, userId, replyToken, client }) {
+  const line = client ?? new LineClient({ approverTarget: null });
+
+  if (action === 'start') {
+    const linked = get('SELECT id FROM employees WHERE line_user_id = $userId', { userId });
+    if (!linked) return { outcome: 'not_linked' };
+    startSupportTicket(linked.id, value);
+    if (replyToken) {
+      try {
+        await line.reply(replyToken, `หมวด: ${TICKET_CATEGORIES[value] ?? value}\nพิมพ์รายละเอียดปัญหาที่พบมาได้เลยครับ`);
+      } catch { /* เงียบไว้ */ }
+    }
+    return { outcome: 'category_selected', employeeId: linked.id, category: value };
+  }
+
+  /* resolve — เฉพาะคนในรายชื่อผู้อนุมัติเดียวกับที่กดอนุมัติวางบิลได้เท่านั้น (กันพนักงานกดแก้ตั๋วตัวเอง) */
+  if (!isAuthorizedApprover(userId)) {
+    logAudit({
+      actor: `line:${userId ?? 'unknown'}`, action: 'ticket_resolve_denied',
+      entityType: 'support_ticket', entityId: value, detail: {},
+    });
+    return { outcome: 'denied' };
+  }
+  try {
+    const ticket = resolveSupportTicket(Number(value), { actor: `line:${userId}` });
+    if (replyToken) {
+      try { await line.reply(replyToken, `ทำเครื่องหมายตั๋ว #${ticket.id} ว่าแก้แล้ว ✅`); } catch { /* เงียบไว้ */ }
+    }
+    return { outcome: 'resolved', ticket };
+  } catch (error) {
+    return { outcome: { error: error.message } };
+  }
+}
+
+/**
+ * ตอบปุ่มเลือกวิธีส่ง Timesheet จากการ์ดเตือน "Timesheet ยังไม่ส่ง" (8 ก.ย. 69 ตามที่ขอ, M3 แบบ mockup
+ * "2. Timesheet Submission Flow") — ทุกทางเลือกเป็นแค่การ "แจ้ง" ไม่ได้บันทึก Timesheet จริงเข้าระบบ
+ * ดังนั้น overdueTimesheets() ยังเห็นรอบนี้ค้างอยู่เหมือนเดิมจนกว่าจะมีแถวจริงในตาราง timesheets — การ์ด
+ * เตือนจะถูกส่งซ้ำทุกวันต่อไปแม้จะกดเลือกไปแล้วก็ตาม ตรงตามกติกา M2 ที่ขอไว้ทุกคำ ไม่ต้องมี state ปิดการเตือน
+ */
+async function handleTimesheetMethodPostback({ method, contractId, period, userId, replyToken, client }) {
+  const line = client ?? new LineClient({ approverTarget: null });
+  const employee = get('SELECT id, name_th FROM employees WHERE line_user_id = $userId', { userId });
+  if (!employee) return { outcome: 'not_linked' };
+
+  const contract = get(
+    `SELECT c.project_name, cu.name_th AS customer_name
+       FROM contracts c JOIN customers cu ON cu.id = c.customer_id WHERE c.id = $contractId`,
+    { contractId },
+  );
+  const periodLabel = thaiMonth(period);
+
+  if (method === 'snooze') {
+    if (replyToken) {
+      try { await line.reply(replyToken, 'รับทราบครับ ระบบจะเตือนอีกครั้งพรุ่งนี้', EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+    }
+    logAudit({
+      actor: `line:${userId}`, action: 'timesheet_method_snooze',
+      entityType: 'employee', entityId: employee.id, detail: { contractId, period },
+    });
+    return { outcome: 'snoozed' };
+  }
+
+  if (method === 'self_obs') {
+    if (replyToken) {
+      const flex = buildTimesheetObsRedirectFlex({
+        employeeName: employee.name_th, customerName: contract?.customer_name,
+        projectName: contract?.project_name, periodLabel, uploadUrl: uploadLink(),
+      });
+      try { await line.replyFlex(replyToken, 'ส่ง Timesheet ผ่านระบบ OBS', flex, EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+    }
+    logAudit({
+      actor: `line:${userId}`, action: 'timesheet_method_self_obs',
+      entityType: 'employee', entityId: employee.id, detail: { contractId, period },
+    });
+    return { outcome: 'self_obs' };
+  }
+
+  if (method === 'self_email') {
+    const emailTargets = notificationEmailTargets();
+    if (replyToken) {
+      const flex = buildTimesheetEmailConfirmFlex({
+        customerName: contract?.customer_name, projectName: contract?.project_name, periodLabel, emailTargets,
+      });
+      try { await line.replyFlex(replyToken, 'บันทึกการส่งผ่าน Email เรียบร้อย', flex, EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+    }
+    try {
+      await line.pushToAll(lineApproverTargets(), [{
+        type: 'text',
+        text: `${employee.name_th} แจ้งว่าจะส่ง Timesheet รอบ ${periodLabel} ทางอีเมล — เตรียมรับและกรอกเข้าระบบเมื่อได้รับครับ`,
+      }]);
+    } catch (error) {
+      logAudit({
+        actor: 'system', action: 'notify_timesheet_self_email_error',
+        entityType: 'employee', entityId: employee.id, detail: { message: error.message },
+      });
+    }
+    logAudit({
+      actor: `line:${userId}`, action: 'timesheet_method_self_email',
+      entityType: 'employee', entityId: employee.id, detail: { contractId, period },
+    });
+    return { outcome: 'self_email' };
+  }
+
+  // proxy_email — ไม่มีแนวคิด "ผู้ดูแลโครงการ/Supervisor" แยกในฐานข้อมูล จึงแจ้งชุดเดียวกับฝ่ายบัญชี/แอดมิน
+  if (replyToken) {
+    const flex = buildTimesheetProxyConfirmFlex({
+      employeeName: employee.name_th, customerName: contract?.customer_name,
+      projectName: contract?.project_name, periodLabel,
+    });
+    try { await line.replyFlex(replyToken, 'มอบหมายผู้ดูแลระบบเรียบร้อย', flex, EMPLOYEE_QUICK_REPLY); } catch { /* เงียบไว้ */ }
+  }
+  try {
+    await line.pushToAll(lineApproverTargets(), [{
+      type: 'text',
+      text: `${employee.name_th} ขอมอบหมายให้ผู้ดูแลส่ง Timesheet รอบ ${periodLabel} แทน — กรอกเองในระบบได้เลยครับ (เมนู "กรอกเอง")`,
+    }]);
+  } catch (error) {
+    logAudit({
+      actor: 'system', action: 'notify_timesheet_proxy_error',
+      entityType: 'employee', entityId: employee.id, detail: { message: error.message },
+    });
+  }
+  logAudit({
+    actor: `line:${userId}`, action: 'timesheet_method_proxy_email',
+    entityType: 'employee', entityId: employee.id, detail: { contractId, period },
+  });
+  return { outcome: 'proxy_email' };
 }
 
 /**
@@ -2347,6 +2963,36 @@ export async function ingestTimesheet({
     };
   }
 
+  /* กันซ้ำ: รอบเดือนที่วางบิล (billed) ไปแล้ว ห้ามรับ Timesheet ใหม่เข้ามาอีกไม่ว่าเลขที่เอกสารจะเป็น
+     อะไรก็ตาม (1 ก.ย. 69 ตามที่ขอ) — เดิมเช็คแค่กรณี "documentNo เดิม" ถ้าเป็นเลขใหม่ (เช่น n8n ยิงซ้ำ
+     ด้วยเลขที่ต่างออกไป) ก็หลุดผ่านไปสร้างแถวใหม่ทับซ้อนกับที่วางบิลไปแล้วได้เรื่อยๆ (เจอจริงบน
+     production — บริษัท ปตท. รอบมิถุนายน 2569 ขึ้น "ได้รับ 6/1 คน" เพราะมีใบที่ตีกลับ/รอตรวจซ้อนกัน
+     หลังวางบิลไปแล้ว) ไม่บล็อกกรณี "ยิงซ้ำ documentNo เดิม" (id เดียวกัน) เพราะเช็คไว้แล้วด้านบน และ
+     ไม่บล็อกใบใหม่ที่ยังไม่วางบิล (สถานะอื่นที่ไม่ใช่ billed) เพราะเป็น flow ปกติที่ทดสอบไว้อยู่แล้วว่า
+     ต้องยอมรับได้ (เช่น ส่งฉบับแก้ไขด้วยเลขที่เอกสารใหม่หลังตรวจไม่ผ่าน) */
+  const billedOther = get(
+    `SELECT id FROM timesheets
+      WHERE contract_id = $contractId AND employee_id = $employeeId AND period = $period
+        AND id != $documentNo AND status = 'billed'`,
+    { contractId: assignment.contract_id, employeeId: employee.id, period, documentNo },
+  );
+  if (billedOther) {
+    logAudit({
+      actor, action: 'ingest_failed_already_billed',
+      entityType: 'timesheet', entityId: documentNo,
+      detail: { employeeId: employee.id, period, existingId: billedOther.id },
+    });
+    return {
+      timesheetId: null,
+      created: false,
+      nextAction: NEXT_ACTION.ALREADY_BILLED,
+      reason: `${employee.nameTh} รอบ ${period} วางบิลไปแล้ว (เลขที่ ${billedOther.id}) — ` +
+        'ต้องลบใบแจ้งหนี้เดิมที่หน้า "ใบแจ้งหนี้" ก่อน ถึงจะส่ง Timesheet รอบนี้เข้ามาใหม่ได้',
+      extraction: data,
+      verification,
+    };
+  }
+
   const positionCheck = checkPosition(data.position, employee);
 
   // ── บันทึกลงฐานข้อมูล (upsert ตาม documentNo) ──
@@ -2455,6 +3101,22 @@ export async function ingestTimesheet({
     await notifyNeedsCheck({ documentNo, contractId: assignment.contract_id, period, client: lineClient });
   }
 
+  /* รอบนี้ครบและตรวจผ่านแล้ว (approve_cycle) → ส่ง "ขออนุมัติวางบิล" เข้า LINE ทันที ไม่ต้องรอ n8n
+     มาเรียก /request-approval แยกต่างหากอีกเส้น (เดิมมีแค่ n8n เรียกเอง — ทางเว็บที่คนอัปโหลด/กรอกเอง
+     ไม่เคยส่งขั้นนี้เลยแม้รอบจะครบแล้วก็ตาม พบจาก UAT, 7 ก.ย. 69 ตามที่ขอ) requestCycleApproval() กัน
+     ส่งซ้ำเองอยู่แล้วถ้ามีคำขอค้าง (status='pending') จึงเรียกซ้ำได้โดยไม่สแปม LINE — ห่อ try/catch
+     เพราะเป็นงานเสริมหลังบันทึก Timesheet สำเร็จแล้ว พังได้ก็แค่ log ไม่ควรทำให้ทั้งคำขอ ingest ล้มไปด้วย */
+  if (nextAction === NEXT_ACTION.APPROVE_CYCLE) {
+    try {
+      await requestCycleApproval(assignment.contract_id, period, { actor, client: lineClient });
+    } catch (error) {
+      logAudit({
+        actor: 'system', action: 'request_line_approval_error',
+        entityType: 'cycle', entityId: `${assignment.contract_id}-${period}`, detail: { message: error.message },
+      });
+    }
+  }
+
   return {
     timesheetId: documentNo,
     created: !existing,
@@ -2513,6 +3175,104 @@ export function readyCycles() {
   return { today, count: out.length, cycles: out };
 }
 
+/**
+ * วันครบกำหนดส่ง Timesheet ของรอบเดือนนี้ — ภายใน 3 วันหลังวันสิ้นเดือน กติกาเดียวกันทุกคน
+ * ไม่แยกตามสัญญา (7 ก.ย. 69 ตามที่ขอ) เช่น รอบ ก.ย. 2569 (สิ้นเดือน 30 ก.ย.) ครบกำหนด 3 ต.ค. 2569
+ */
+function timesheetDueDate(period) {
+  const lastDayOfMonth = addDays(`${nextPeriod(period)}-01`, -1);
+  return addDays(lastDayOfMonth, 3);
+}
+
+/**
+ * พนักงานที่ยังไม่ส่ง Timesheet ทั้งที่เลยกำหนด (3 วันหลังสิ้นเดือน) แล้ว — ใช้เป็นฐานให้ทั้งหน้าเว็บ
+ * ดูรายชื่อและตัวส่งแจ้งเตือนซ้ำทุกวัน (sendOverdueTimesheetReminders ด้านล่าง)
+ *
+ * กวาดทุกรอบเดือนนับตั้งแต่สัญญาเริ่มที่ครบกำหนดแล้ว ไม่ใช่แค่เดือนก่อนหน้าเดือนเดียว เผื่อพลาดไปหลาย
+ * เดือนติดต่อกันจะได้ยังเห็นครบ (ปกติควรมีแค่รอบล่าสุดรอบเดียวถ้าเตือนทุกวันจริงตามที่ออกแบบไว้)
+ * ใบที่ถูกตีกลับ (rejected) ยังนับว่า "ยังไม่ส่ง" อยู่ — ต้องรอฉบับแก้ไขที่ระบบยอมรับจริงเท่านั้น
+ */
+export function overdueTimesheets({ today = isoToday() } = {}) {
+  const out = [];
+  const assignments = all(
+    `SELECT a.employee_id, a.contract_id, a.start_date, a.end_date,
+            e.name_th AS employee_name, e.line_user_id,
+            c.project_name, cu.name_th AS customer_name
+       FROM assignments a
+       JOIN employees e  ON e.id = a.employee_id
+       JOIN contracts c  ON c.id = a.contract_id
+       JOIN customers cu ON cu.id = c.customer_id
+      WHERE a.status = 'active'`,
+  );
+
+  for (const a of assignments) {
+    for (const period of enumeratePeriods(a.start_date, a.end_date)) {
+      const dueDate = timesheetDueDate(period);
+      if (dueDate > today) break; // เรียงตามลำดับเวลา — รอบถัดไปยิ่งไม่ครบกำหนด หยุดได้เลย
+
+      const existing = get(
+        `SELECT 1 FROM timesheets
+          WHERE employee_id = $e AND contract_id = $c AND period = $p AND status != 'rejected'`,
+        { e: a.employee_id, c: a.contract_id, p: period },
+      );
+      if (existing) continue;
+
+      out.push({
+        employeeId: a.employee_id,
+        employeeName: a.employee_name,
+        lineUserId: a.line_user_id,
+        contractId: a.contract_id,
+        customerName: a.customer_name,
+        projectName: a.project_name,
+        period,
+        periodLabel: thaiMonth(period),
+        dueDate,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * ส่งเตือน "Timesheet ยังไม่ส่ง" เข้าไลน์ส่วนตัวของพนักงานที่เลยกำหนดแล้วยังไม่ส่ง — เรียกจาก n8n cron
+ * รายวัน (ทำนอง requestCycleApproval/readyCycles) เช็คสถานะสดใหม่ทุกครั้งที่เรียก ไม่มี state ค้างให้
+ * ดูแลเอง จึงส่งซ้ำได้ทุกวันจนกว่าจะส่งจริงตามที่ขอ — ไม่มีบัญชีไลน์ก็แค่ข้ามคนนั้นไป (skipped)
+ * พังรายคนได้ก็แค่ log ไม่ควรทำให้คนอื่นในลิสต์เดียวกันไม่ได้รับแจ้งเตือนไปด้วย (7 ก.ย. 69 ตามที่ขอ)
+ */
+export async function sendOverdueTimesheetReminders({ today = isoToday(), client } = {}) {
+  const overdue = overdueTimesheets({ today });
+  const line = client ?? new LineClient({ approverTarget: null });
+
+  let sent = 0;
+  const skipped = [];
+  for (const item of overdue) {
+    if (!item.lineUserId) { skipped.push({ ...item, reason: 'ยังไม่ได้ผูกบัญชีไลน์' }); continue; }
+    try {
+      const flex = buildOverdueReminderFlex({
+        customerName: item.customerName,
+        projectName: item.projectName,
+        periodLabel: item.periodLabel,
+        dueDate: thaiDate(item.dueDate),
+        contractId: item.contractId,
+        period: item.period,
+      });
+      await line.pushFlexToUser(item.lineUserId, `Timesheet รอบ ${item.periodLabel} ยังไม่ส่ง`, flex, EMPLOYEE_QUICK_REPLY);
+      sent += 1;
+      logAudit({
+        actor: 'system', action: 'notify_overdue_timesheet',
+        entityType: 'employee', entityId: item.employeeId, detail: { period: item.period, dueDate: item.dueDate },
+      });
+    } catch (error) {
+      skipped.push({ ...item, reason: error.message });
+      logAudit({
+        actor: 'system', action: 'notify_overdue_timesheet_error',
+        entityType: 'employee', entityId: item.employeeId, detail: { message: error.message },
+      });
+    }
+  }
+  return { today, checked: overdue.length, sent, skipped };
+}
+
 export function getCycleStatus(contractId, period) {
   const expected = all(
     `SELECT a.employee_id, e.name_th FROM assignments a
@@ -2520,8 +3280,12 @@ export function getCycleStatus(contractId, period) {
       WHERE a.contract_id = $contractId AND a.status = 'active'`,
     { contractId },
   );
+  /* นับคนไม่ใช่นับแถว + ไม่นับใบที่ตีกลับไปแล้ว (1 ก.ย. 69 ตามที่ขอ) — เดิมนับทุกแถวรวมใบตีกลับด้วย
+     ทำให้พนักงานที่เคยส่งผิดแล้วแก้ใหม่หลายรอบ (หรือใบซ้ำจากบั๊กเดิมก่อนแก้ที่ ingestTimesheet)
+     ทำให้ "ได้รับ X/Y คน" นับเกินจำนวนพนักงานจริงในสัญญาไปได้ (เจอจริงบน production — ขึ้น 6/1) */
   const received = all(
-    `SELECT employee_id FROM timesheets WHERE contract_id = $contractId AND period = $period`,
+    `SELECT DISTINCT employee_id FROM timesheets
+      WHERE contract_id = $contractId AND period = $period AND status != 'rejected'`,
     { contractId, period },
   );
   const receivedIds = new Set(received.map((r) => r.employee_id));
@@ -2536,7 +3300,7 @@ export function getCycleStatus(contractId, period) {
   };
 }
 
-export function rejectTimesheet(id, { actor, reason }) {
+export function rejectTimesheet(id, { actor, reason, client } = {}) {
   run(
     `UPDATE timesheets SET status = 'rejected', status_reason = $reason,
             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = $id`,
@@ -2544,8 +3308,8 @@ export function rejectTimesheet(id, { actor, reason }) {
   );
   logAudit({ actor, action: 'reject_timesheet', entityType: 'timesheet', entityId: id, detail: { reason } });
   // แจ้งพนักงานเจ้าของใบทางไลน์ส่วนตัวทันที (ถ้าผูกบัญชีไว้แล้ว) — ไม่รอผล ไม่ทำให้ตีกลับพัง
-  // ถ้าไลน์ส่งไม่สำเร็จ (1 ก.ย. 69 ตามที่ขอ)
-  pushEmployeeStatusUpdate(id, { kind: 'rejected', reason }).catch(() => {});
+  // ถ้าไลน์ส่งไม่สำเร็จ (1 ก.ย. 69 ตามที่ขอ) — client ส่งต่อได้เพื่อให้เทสต์ฉีด FakeLineClient แทนได้
+  pushEmployeeStatusUpdate(id, { kind: 'rejected', reason, client }).catch(() => {});
   return getTimesheet(id);
 }
 
@@ -2556,7 +3320,7 @@ export function rejectTimesheet(id, { actor, reason }) {
  * เช่นลาแล้วไม่ได้เขียนในใบ ระบบก็มองว่าผ่าน คนที่เห็นปฏิทินเท่านั้นที่รู้
  * ตราที่ประทับผูกกับยอดชุดนั้น ถ้ายอดเปลี่ยนทีหลังตราหมดอายุเอง (ดู checkStamp)
  */
-export function markTimesheetChecked(id, { actor }) {
+export async function markTimesheetChecked(id, { actor, client: lineClient } = {}) {
   const sheet = getTimesheet(id);
   if (!sheet) throw Object.assign(new Error(`ไม่พบ Timesheet ${id}`), { status: 404 });
 
@@ -2587,6 +3351,27 @@ export function markTimesheetChecked(id, { actor }) {
       warnings: (sheet.manday.checks ?? []).filter((c) => c.severity === SEVERITY.WARN).length,
     },
   });
+
+  /* นี่มักเป็นจุดที่รอบบิลครบพอดี — ตอน ingestTimesheet() ครบคน (approve_cycle) ใบล่าสุดที่เพิ่งเข้ามา
+     ยังไม่มีใครกดยืนยันเลย เลยติด blocker "ยังไม่มีคนกดยืนยัน" เสมอ ส่งขออนุมัติตอนนั้นจึงไม่มีทางสำเร็จ
+     จริง — ต้องรอจนกว่าคนตรวจกด "ยืนยันแล้ว" ครบทุกใบก่อน ซึ่งก็คือตรงนี้ ไม่ต้องรอ n8n cron 09:00
+     พรุ่งนี้มาเจอเอง (เดิมทางเว็บที่คนอัปโหลด/ยืนยันเองไม่เคยส่งขั้น "ขออนุมัติวางบิล" เข้า LINE เลย
+     พบจาก UAT, 7 ก.ย. 69 ตามที่ขอ) ห่อ try/catch เพราะเป็นงานเสริมหลังยืนยันสำเร็จแล้ว พังได้ก็แค่ log
+     ไม่ควรทำให้การกดยืนยันใบนี้ล้มไปด้วย — requestCycleApproval() กันส่งซ้ำเองอยู่แล้วถ้ามีคำขอค้าง */
+  try {
+    const preview = previewCycleInvoice(sheet.contract.id, sheet.period);
+    if (preview.invoice && preview.blockers.length === 0) {
+      await requestCycleApproval(sheet.contract.id, sheet.period, { actor, client: lineClient });
+    }
+  } catch (error) {
+    /* previewCycleInvoice() เองก็พังได้ (เช่น buildInvoice หาอัตราคิดเงินไม่เจอ) — เดิมเรียกไว้นอก
+       try/catch มีสิทธิ์ทำให้การกดยืนยันใบนี้ทั้งคำขอล้มไปด้วยทั้งที่ตรวจผ่านแล้วจริง ต้องครอบทั้งก้อน
+       (ไม่ใช่แค่ requestCycleApproval) เพราะเป็นงานเสริมทั้งหมด พังได้ก็แค่ log (7 ก.ย. 69 ตามที่ขอ) */
+    logAudit({
+      actor: 'system', action: 'request_line_approval_error',
+      entityType: 'cycle', entityId: `${sheet.contract.id}-${sheet.period}`, detail: { message: error.message },
+    });
+  }
 
   pushEmployeeStatusUpdate(id, { kind: 'verified' }).catch(() => {});
   return getTimesheet(id);
@@ -2944,12 +3729,19 @@ export function getCycleApproval(contractId, period) {
 /**
  * ขั้น 4.2 — ประตูมนุษย์จริงก่อนสร้างร่างใน FlowAccount
  *
- * n8n (01-ingest ตอน nextAction = approve_cycle · 02-daily-billing-check ตอน canApprove)
- * ต้องเรียกที่นี่ ไม่ใช่ /approve ตรงๆ — ที่นี่แค่ส่งสรุปเข้า LINE ให้คนกด ไม่สร้างเอกสารใดๆ
- * ร่างใน FlowAccount จะเกิดขึ้นต่อเมื่อ decideCycleApproval() ได้รับ "approved" กลับมาเท่านั้น
+ * เรียกได้จาก 3 ทาง — ที่นี่แค่ส่งสรุปเข้า LINE ให้คนกด ไม่สร้างเอกสารใดๆ ร่างใน FlowAccount
+ * จะเกิดขึ้นต่อเมื่อ decideCycleApproval() ได้รับ "approved" กลับมาเท่านั้น:
+ *   1. n8n (01-ingest ตอน nextAction = approve_cycle · 02-daily-billing-check ตอน canApprove) เรียก
+ *      endpoint /request-approval ตรงๆ ไม่ใช่ /approve
+ *   2. ingestTimesheet() เรียกเองอัตโนมัติทันทีที่รอบครบและตรวจผ่าน (approve_cycle) ไม่ว่าจะเข้ามา
+ *      ทาง n8n หรือทางเว็บ (อัปโหลดไฟล์/กรอกเอง) ก็ตาม — เดิมทางเว็บไม่เคยส่งขั้นนี้เลยแม้รอบจะครบแล้ว
+ *      ต้องรอ n8n cron 09:00 มาเจอเองพรุ่งนี้ ถือว่าช้าเกินไปสำหรับคนที่กำลังทดสอบ/ทำงานอยู่ตรงหน้า
+ *      (พบจาก UAT, 7 ก.ย. 69 ตามที่ขอ)
+ *   3. กันส่งซ้ำเองอยู่แล้วถ้ามีคำขอค้าง (status='pending') เรียกซ้ำจากทั้ง 2 ทางข้างบนพร้อมกันได้
+ *      โดยไม่สแปม LINE
  *
  * ปุ่มบนหน้าเว็บ "อนุมัติและสร้างร่างใน FlowAccount" ยังเรียก approveCycle() ตรงๆ ได้ตามเดิม —
- * คนนั่งกดจากเบราว์เซอร์เองก็เป็นประตูมนุษย์อยู่แล้ว ประตู LINE นี้ปิดเฉพาะทางที่ n8n วิ่งเองโดยไม่มีคนคั่น
+ * คนนั่งกดจากเบราว์เซอร์เองก็เป็นประตูมนุษย์อยู่แล้ว ไม่ต้องรอกด LINE ก็ได้ถ้าสะดวกกดจากหน้าเว็บเลย
  */
 export async function requestCycleApproval(contractId, period, { actor, client } = {}) {
   const preview = previewCycleInvoice(contractId, period);
@@ -3092,6 +3884,24 @@ export async function processLineWebhook(rawBody, signature, { channelSecret, cl
           detail: { eventType: event.type },
         });
       }
+      continue;
+    }
+
+    /* postback ของขั้น "แจ้งปัญหา" ใช้คนละ prefix ("ticket:") กับปุ่มอนุมัติวางบิลด้านล่าง — เช็คแยก
+       ก่อนเลย ไม่ชนกัน (7 ก.ย. 69 ตามที่ขอ) */
+    const ticketPostback = parseTicketPostback(event.postback?.data ?? '');
+    if (ticketPostback) {
+      const outcome = await handleTicketPostback({ ...ticketPostback, userId, replyToken: event.replyToken, client });
+      results.push({ ...ticketPostback, userId, outcome });
+      continue;
+    }
+
+    /* postback เลือกวิธีส่ง Timesheet ("tsmethod:") จากการ์ดเตือน Timesheet ยังไม่ส่ง — คนละ prefix
+       เช่นเดียวกับ ticket: ด้านบน (8 ก.ย. 69 ตามที่ขอ) */
+    const tsMethodPostback = parseTimesheetMethodPostback(event.postback?.data ?? '');
+    if (tsMethodPostback) {
+      const outcome = await handleTimesheetMethodPostback({ ...tsMethodPostback, userId, replyToken: event.replyToken, client });
+      results.push({ ...tsMethodPostback, userId, outcome });
       continue;
     }
 
@@ -3645,6 +4455,55 @@ export function listInvoices({ contractId } = {}) {
     }));
 }
 
+/**
+ * ลบใบแจ้งหนี้ทิ้ง — ทั้งเอกสารจริงใน FlowAccount และแถวในระบบเรา (1 ก.ย. 69 ตามที่ขอ)
+ * ใช้ตอนวางบิลผิดรอบ/ผิดคน แล้วต้องเปิดทางให้ส่ง Timesheet รอบเดือนนั้นเข้าระบบใหม่ได้อีกครั้ง
+ * (ingestTimesheet บล็อกไว้ถ้ารอบนั้นมีใบแจ้งหนี้ค้างอยู่แล้ว — ดูคอมเมนต์ที่นั่น)
+ * Timesheet ทุกใบที่เคยผูกกับใบนี้ถูกดึงกลับไปสถานะ "ตรวจผ่านแล้ว" (verified) เหมือนก่อนวางบิล
+ * ไม่ใช่ลบ Timesheet ทิ้งไปด้วย — ข้อมูลที่เคยตรวจไว้ยังใช้ต่อได้ ไม่ต้องอัปโหลด/ตรวจใหม่ทั้งหมด
+ */
+export async function deleteInvoice(invoiceId, { actor, client } = {}) {
+  const invoice = get('SELECT * FROM invoices WHERE id = $id', { id: invoiceId });
+  if (!invoice) throw Object.assign(new Error('ไม่พบใบแจ้งหนี้นี้'), { status: 404 });
+
+  const response = invoice.response ? JSON.parse(invoice.response) : null;
+  const documentId = response?.documentId ?? null;
+
+  // มีเอกสารจริงใน FlowAccount ให้ลบด้วย — โหมด dry-run ไม่มีเอกสารจริงตั้งแต่แรก documentId
+  // จะเป็น null เสมอ (ดู createDraftDocument ใน flowaccount.js) จึงข้ามขั้นนี้ไปเองโดยธรรมชาติ
+  if (documentId) {
+    const fa = client ?? newFlowAccountClient({ documentType: response?.documentType });
+    await fa.deleteDocument(documentId);
+  }
+
+  const timesheetIds = all(
+    'SELECT timesheet_id FROM invoice_items WHERE invoice_id = $id AND timesheet_id IS NOT NULL',
+    { id: invoiceId },
+  ).map((r) => r.timesheet_id);
+
+  tx(() => {
+    for (const tsId of timesheetIds) {
+      run(
+        `UPDATE timesheets SET status = 'verified', updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+           WHERE id = $id AND status = 'billed'`,
+        { id: tsId },
+      );
+    }
+    run('DELETE FROM invoice_items WHERE invoice_id = $id', { id: invoiceId });
+    run('DELETE FROM invoices WHERE id = $id', { id: invoiceId });
+  });
+
+  logAudit({
+    actor, action: 'delete_invoice', entityType: 'invoice', entityId: invoiceId,
+    detail: {
+      documentNo: invoice.document_no, period: invoice.period, contractId: invoice.contract_id,
+      timesheetCount: timesheetIds.length,
+    },
+  });
+
+  return { deleted: true, invoiceId, timesheetIds };
+}
+
 /* ── ผู้รับแจ้งเตือน — จัดการระบบ → ผู้รับแจ้งเตือน ────────────────
    เก็บใน settings เป็น JSON list เพราะเป็นรายชื่อเล็กๆ ที่ไม่ต้อง query ซับซ้อน
    ช่องทาง LINE ตัวแรกในรายชื่อจะกลายเป็นปลายทางจริงที่ requestCycleApproval() ยิงคำขออนุมัติไปให้
@@ -3708,6 +4567,21 @@ export function lineApproverTargets() {
   const list = listNotificationRecipients().filter((r) => r.channel === 'line').map((r) => r.target);
   if (list.length) return list;
   return process.env.LINE_APPROVER_TARGET ? [process.env.LINE_APPROVER_TARGET] : [];
+}
+
+/**
+ * อีเมลปลายทางที่บอกพนักงานให้ส่ง Timesheet ไปเมื่อเลือก "ส่งผ่าน Email" (8 ก.ย. 69 ตามที่ขอ) — เอาคนแรก
+ * ในรายชื่อผู้รับแจ้งเตือนช่องทาง email (หน้า "จัดการระบบ") ไม่มี env แยกต่างหาก เพราะแก้ที่หน้าเว็บได้อยู่
+ * แล้วโดยไม่ต้องแตะโค้ด — คืน null ถ้ายังไม่มีใครตั้งไว้เลย (ดู buildTimesheetEmailConfirmFlex สำหรับ fallback)
+ */
+export function notificationEmailTarget() {
+  return listNotificationRecipients().find((r) => r.channel === 'email')?.target ?? null;
+}
+
+/** เหมือน notificationEmailTarget() แต่คืนทุกคน ไม่ใช่แค่คนแรก (9 ก.ย. 69 ตามที่ขอ "email ขอ accounting
+ *  ทุกคนในระบบ") ใช้ตอนโชว์การ์ดยืนยัน "ส่งผ่าน Email" ให้พนักงานเห็นครบทุกอีเมลที่ส่งไปได้ ไม่ใช่แค่ตัวเดียว */
+export function notificationEmailTargets() {
+  return listNotificationRecipients().filter((r) => r.channel === 'email').map((r) => r.target);
 }
 
 /**
@@ -4203,8 +5077,11 @@ export function contractPeriodEmployees(contractId, period) {
     { contractId },
   );
   return assigned.map((a) => {
+    // เผื่อมีข้อมูลซ้ำเก่าค้างอยู่ (ก่อนกันซ้ำที่ ingestTimesheet) เลือกใบที่ยัง active ก่อนใบตีกลับเสมอ
+    // ไม่งั้น SQLite อาจสุ่มคืนใบที่ตีกลับไปแล้วมาแทนใบจริงที่ยังอยู่ระหว่างดำเนินการ
     const sheet = get(
-      `SELECT id, status FROM timesheets WHERE contract_id = $c AND period = $p AND employee_id = $e`,
+      `SELECT id, status FROM timesheets WHERE contract_id = $c AND period = $p AND employee_id = $e
+        ORDER BY (status = 'rejected'), id DESC LIMIT 1`,
       { c: contractId, p: period, e: a.employee_id },
     );
     return {
@@ -4234,7 +5111,7 @@ export function employeeProgress(employeeId) {
 
   const currentPeriod = isoToday().slice(0, 7);
   const assignments = all(
-    `SELECT a.contract_id, c.po_no, c.project_name, c.start_date, c.end_date,
+    `SELECT a.contract_id, c.po_no, c.project_name, c.start_date, c.end_date, c.credit_days,
             cu.name_th AS customer_name
        FROM assignments a
        JOIN contracts c  ON c.id = a.contract_id
@@ -4246,12 +5123,13 @@ export function employeeProgress(employeeId) {
   const contracts = assignments.map((a) => {
     const periods = enumeratePeriods(a.start_date, a.end_date).map((period) => {
       const sheet = get(
-        `SELECT t.id, t.status, t.received_at, ${CHECK_COLUMNS}
+        `SELECT t.id, t.status, t.received_at, t.submission_method, ${CHECK_COLUMNS}
            FROM timesheets t WHERE t.contract_id = $c AND t.period = $p AND t.employee_id = $e`,
         { c: a.contract_id, p: period, e: employeeId },
       );
       const invoice = get(
-        `SELECT document_no, status, approved_by, approved_at, document_date, due_date, payment_amount
+        `SELECT document_no, status, approved_by, approved_at, document_date, due_date, payment_amount,
+                email_sent_at, created_at
            FROM invoices WHERE contract_id = $c AND period = $p`,
         { c: a.contract_id, p: period },
       );
@@ -4264,12 +5142,16 @@ export function employeeProgress(employeeId) {
         timesheetStatus: sheet?.status ?? 'not_submitted',
         timesheetStatusLabel: sheet ? (STATUS_LABEL[sheet.status] ?? sheet.status) : 'ยังไม่ได้ส่ง Timesheet',
         receivedAt: sheet?.received_at ?? null,
+        submissionMethod: sheet?.submission_method ?? null,
         checkedBy: sheet?.check_by ?? null,
         checkedAt: sheet?.check_at ?? null,
         billed,
+        invoiceStatus: invoice?.status ?? null,
         invoiceNo: invoice?.document_no ?? null,
+        invoiceCreatedAt: invoice?.created_at ?? null,
         documentDate: invoice?.document_date ?? null,
         dueDate: invoice?.due_date ?? null,
+        emailSentAt: invoice?.email_sent_at ?? null,
         paymentAmount: billed ? invoice.payment_amount : null,
         billedBy: billed ? invoice.approved_by : null,
         billedAt: billed ? invoice.approved_at : null,
@@ -4279,6 +5161,7 @@ export function employeeProgress(employeeId) {
     return {
       contractId: a.contract_id,
       poNo: a.po_no,
+      creditDays: a.credit_days,
       projectName: a.project_name,
       customerName: a.customer_name,
       periods,
@@ -4338,6 +5221,8 @@ export function pulse({ actor = 'ยังไม่ได้ระบุผู�
        ติดมากับ pulse เพราะถามอยู่แล้ว ไม่ต้องมี endpoint หรือหน้าตั้งค่าเพิ่ม */
     flowAccountMode: currentFlowAccountMode(),
     manualMode: getSetting('billing_rules', {})?.requireHumanCheck !== false,
+    // ตั๋วแจ้งปัญหาที่ยังไม่แก้ — ไม่ผูกกับสัญญา จึงไม่ต้องกรองตาม contract ที่ active อยู่เหมือนป้ายอื่น
+    openTicketCount: get("SELECT COUNT(*) AS n FROM support_tickets WHERE status = 'open'")?.n ?? 0,
     /* ชื่อที่จะถูกบันทึกว่าเป็นคนกด — ต้องโชว์บนหน้าจอให้ตรงกับที่บันทึกจริง
        ไม่งั้นหน้าจอขึ้นชื่อหนึ่ง แต่ audit log เก็บอีกชื่อหนึ่ง
        มาจาก session ที่ login เข้ามา ไม่ใช่ env ค่าเดียวของทั้งเซิร์ฟเวอร์แบบเดิม */

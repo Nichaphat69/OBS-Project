@@ -203,7 +203,7 @@
           title="เปิด/ปิดการเชื่อมต่อกับ FlowAccount"><span class="sw"></span> …</button>
   <!-- สลับภาษา ไทย/อังกฤษ — แทนที่ตำแหน่งวันที่เดิม (27 ส.ค. 69) ดู applyLang()/langSwitch ใน app.js -->
   <div class="langswitch" id="langSwitch" title="สลับภาษา">
-    <span class="opt on" data-set="th">ไทย</span>
+    <span class="opt on" data-set="th">TH</span>
     <span class="opt" data-set="en">EN</span>
   </div>
   <div class="who">
@@ -256,6 +256,10 @@
       <span class="sgrp" data-th="อ้างอิง" data-en="Reference" id="refGroupLabel">อ้างอิง</span>
       <button class="mtab" data-view="invoices" title="ใบแจ้งหนี้" id="invoicesNavBtn">
         <svg class="i"><use href="#i-doc"/></svg> <span data-th="ใบแจ้งหนี้" data-en="Invoices">ใบแจ้งหนี้</span></button>
+      <!-- ตั๋วที่พนักงานแจ้งเข้ามาผ่านคำสั่ง "แจ้งปัญหา" ใน LINE (7 ก.ย. 69 ตามที่ขอ) -->
+      <button class="mtab" data-view="tickets" title="แจ้งปัญหา" id="ticketsNavBtn" hidden>
+        <svg class="i"><use href="#i-info"/></svg> <span data-th="แจ้งปัญหา" data-en="Support Tickets">แจ้งปัญหา</span>
+        <span class="bdg" id="ticketBadge">–</span></button>
       <button class="mtab" data-view="master" title="ข้อมูลหลัก" id="masterNavBtn" hidden>
         <svg class="i"><use href="#i-users"/></svg> <span data-th="ข้อมูลหลัก" data-en="Master Data">ข้อมูลหลัก</span></button>
       <button class="mtab" data-view="abbyySkills" title="Skill ABBYY" id="abbyySkillsNavBtn" hidden>

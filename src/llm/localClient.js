@@ -1,13 +1,11 @@
 /**
- * เรียกโมเดลภาษาที่รันในเครื่องผ่าน endpoint แบบ OpenAI-compatible
- * (LM Studio และ Ollama ต่างก็เปิด endpoint รูปแบบนี้ที่ POST {base}/chat/completions
- * จึงใช้โค้ดชุดเดียวกันได้กับทั้งคู่ แค่เปลี่ยน LOCAL_LLM_BASE_URL)
+ * เรียกโมเดลภาษาที่รันในเครื่อง (LM Studio/Ollama) ผ่าน endpoint แบบ OpenAI-compatible
  *
- * ใช้ร่วมกันระหว่าง src/extract/timesheet.js (งาน vision — อ่าน PDF)
+ * ใช้ร่วมกันระหว่าง src/extract/timesheet.js (งาน vision — อ่าน PDF ผ่าน ABBYY เป็นหลัก)
  * และ src/llm/email.js (งานข้อความล้วน — ร่าง/อ่านอีเมล)
  *
  * ใช้ response_format แบบ json_schema (มาตรฐานเดียวกับ OpenAI structured outputs) ให้
- * เซิร์ฟเวอร์บังคับโครงสร้างให้ตรง schema เป๊ะ — ทดสอบกับ LM Studio จริงแล้วว่ารองรับ
+ * เซิร์ฟเวอร์บังคับโครงสร้างให้ตรง schema เป๊ะ — ทดสอบกับ LM Studio และ Ollama จริงแล้วว่ารองรับ
  * (⚠️ ต่างจาก response_format แบบ json_object เฉยๆ ที่ LM Studio "ไม่รองรับ" ปฏิเสธด้วย 400 ทันที)
  * ยังตรวจคีย์ที่จำเป็นซ้ำด้วยโค้ดอีกชั้นเป็นเกราะสำรอง เผื่อรันกับ backend อื่นที่ไม่บังคับ schema จริง
  */
@@ -112,8 +110,7 @@ async function callOnce({
         },
         /* โมเดลบางตัว (เช่น Gemma 3n) มีขั้น "คิดก่อนตอบ" ในตัว ซึ่งกับอินพุตยาวๆ
            มีโอกาสวนซ้ำคำเดิมไม่เลิกจนโควตาคำตอบหมดก่อนได้ตอบ JSON จริง (วัดแล้วว่าเกิดขึ้นจริง)
-           ปิดขั้นนี้ตัดปัญหาทั้งสองอย่าง — เร็วขึ้น ~2-3 เท่า และไม่มีทางวนซ้ำ
-           ฟิลด์นี้ไม่มีผลกับโมเดลที่ไม่รองรับ (เซิร์ฟเวอร์ปกติจะข้าม flag ที่ไม่รู้จักไปเฉยๆ) */
+           ปิดขั้นนี้ตัดปัญหาทั้งสองอย่าง — เร็วขึ้น ~2-3 เท่า และไม่มีทางวนซ้ำ */
         reasoning_effort: 'none',
         messages: [
           { role: 'system', content: system },
@@ -125,16 +122,14 @@ async function callOnce({
     if (error.name === 'AbortError') {
       throw Object.assign(
         new Error(
-          `โมเดลในเครื่องไม่ตอบภายใน ${REQUEST_TIMEOUT_MS / 1000} วินาที ที่ ${baseUrl} — ` +
-          `เครื่องอาจกำลังทำงานหนัก (เช่นมีระบบอื่นแย่งใช้อยู่) หรือค้าง ลองใหม่อีกครั้ง`,
+          `โมเดล AI ไม่ตอบภายใน ${REQUEST_TIMEOUT_MS / 1000} วินาที ที่ ${baseUrl} — ลองใหม่อีกครั้ง`,
         ),
         { status: 504, retryable: true },
       );
     }
     throw Object.assign(
       new Error(
-        `เชื่อมต่อโมเดลในเครื่องไม่ได้ที่ ${baseUrl} — ` +
-        `เปิด Local Server ใน LM Studio (หรือ Ollama) แล้วหรือยัง? (${error.message})`,
+        `เชื่อมต่อโมเดลในเครื่องไม่ได้ที่ ${baseUrl} — เปิด Local Server ใน LM Studio (หรือ Ollama) แล้วหรือยัง? (${error.message})`,
       ),
       { status: 502, retryable: true },
     );
@@ -150,7 +145,7 @@ async function callOnce({
        จบไปแล้วมักผ่าน ต้อง retryable ด้วยเหมือน 5xx ไม่งั้นพลาดครั้งเดียวจบเลยทั้งที่แก้ได้ด้วยการรอ */
     const transientOverload = /context size has been exceeded/i.test(text);
     throw Object.assign(
-      new Error(`โมเดลในเครื่องตอบผิดพลาด (${res.status}): ${text.slice(0, 300)}`),
+      new Error(`โมเดล AI ตอบผิดพลาด (${res.status}): ${text.slice(0, 300)}`),
       { status: 502, retryable: res.status >= 500 || transientOverload },
     );
   }
@@ -162,7 +157,7 @@ async function callOnce({
      ถูกแย่งคิวจากคำขอพร้อมกันอื่น) ลองใหม่มักผ่าน — retryable เหมือน 5xx/context exceeded
      ไม่งั้นพลาดครั้งเดียวหน้านั้นก็ต้องให้คนกดอ่านใหม่เองทั้งที่รอไม่ถึงวินาทีก็หายเอง */
   if (!content) {
-    throw Object.assign(new Error('โมเดลในเครื่องไม่คืนข้อความกลับมา'), { retryable: true });
+    throw Object.assign(new Error('โมเดล AI ไม่คืนข้อความกลับมา'), { retryable: true });
   }
 
   if (choice?.finish_reason === 'length') {
@@ -173,12 +168,12 @@ async function callOnce({
   try {
     data = JSON.parse(content);
   } catch {
-    throw new Error(`โมเดลในเครื่องตอบไม่เป็น JSON ที่ถูกต้อง: ${String(content).slice(0, 300)}`);
+    throw new Error(`โมเดล AI ตอบไม่เป็น JSON ที่ถูกต้อง: ${String(content).slice(0, 300)}`);
   }
 
   const missing = (schema.required ?? []).filter((key) => !(key in (data ?? {})));
   if (missing.length) {
-    throw new Error(`โมเดลในเครื่องตอบไม่ครบ ขาดคีย์: ${missing.join(', ')}`);
+    throw new Error(`โมเดล AI ตอบไม่ครบ ขาดคีย์: ${missing.join(', ')}`);
   }
 
   return { data, model: `local:${model}`, usage: body.usage ?? null };
