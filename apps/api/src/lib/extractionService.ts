@@ -16,7 +16,6 @@
  * localExtractionService.ts) since that path genuinely needs the multi-page consistency checks.
  */
 import { AbbyyClient, hasAbbyyCredentials, mapAbbyyResult } from './abbyyClient.js';
-import { extractTimesheetViaLocalLlm } from './localExtractionService.js';
 import { getFieldMapForSkill } from './abbyySkillsService.js';
 import type { Extractor, ExtractorResult } from './ingestService.js';
 
@@ -34,6 +33,9 @@ export const extractTimesheet: Extractor = async (source, { expectedPeriod, abby
   }
 
   if (!hasAbbyyCredentials()) {
+    // โหลดตอนใช้จริงเท่านั้น — localExtractionService ลาก pdf-to-img/pdfjs-dist (หลายสิบ MB) มาด้วย
+    // ทั้งสาย ทั้งที่เส้นนี้เป็น fallback ที่วิ่งเฉพาะตอนไม่มี ABBYY credentials
+    const { extractTimesheetViaLocalLlm } = await import('./localExtractionService.js');
     const { data, verification, usage, model } = await extractTimesheetViaLocalLlm(source, { expectedPeriod });
     return { data: data as any, verification, usage, model } satisfies ExtractorResult;
   }

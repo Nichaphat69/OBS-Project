@@ -1,0 +1,234 @@
+/**
+ * ทดสอบ Milestone 4 — ระบบแจ้งปัญหา (Support Tickets) ผ่าน LINE + หน้าเว็บ (7 ก.ย. 69 ตามที่ขอ)
+ *
+ * โครงเดียวกับ line-approval.test.js — ใส่ LineClient ปลอมแทนของจริง รันได้โดยไม่ต้องมี
+ * LINE_CHANNEL_ACCESS_TOKEN และไม่ยิงออกเน็ตจริง
+ *
+ * Ported from test/support-tickets.test.js (assertions preserved exactly) — ต่างจากต้นฉบับตรงที่
+ * ใช้ฐานข้อมูล Postgres ตัวเทสต์ + fixture จาก helpers/testDb.ts แทน SQLite ชั่วคราว + src/db/seed.js
+ * และ listSupportTickets/resolveSupportTicket เป็น async แล้ว (Prisma)
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
+import { prisma } from '@obs/db';
+
+import { seedFixtures } from './helpers/testDb.js';
+import { processLineWebhook } from '../src/lib/lineWebhookService.js';
+import { listSupportTickets, resolveSupportTicket } from '../src/lib/supportTicketsService.js';
+import { buildTicketPostback, parseTicketPostback, buildTicketCategoryFlex } from '../src/lib/lineClient.js';
+
+process.env.LINE_APPROVER_USER_IDS = 'Uapprover1';
+process.env.LINE_CHANNEL_ACCESS_TOKEN = '';
+process.env.LINE_CHANNEL_SECRET = '';
+process.env.LINE_APPROVER_TARGET = '';
+
+await seedFixtures();
+
+test.after(async () => {
+  await prisma.$disconnect();
+});
+
+class FakeLineClient {
+  replies: any[] = [];
+  flexReplies: any[] = [];
+  pushes: any[] = [];
+  flexPushes: any[] = [];
+  broadcasts: any[] = [];
+  async reply(replyToken: string, text: string, quickReply?: unknown) { this.replies.push({ replyToken, text, quickReply }); return {}; }
+  async replyFlex(replyToken: string, altText: string, contents: any, quickReply?: unknown) {
+    this.flexReplies.push({ replyToken, altText, contents, quickReply });
+    return {};
+  }
+  async pushToUser(userId: string, text: string, quickReply?: unknown) { this.pushes.push({ userId, text, quickReply }); return {}; }
+  async pushFlexToUser(userId: string, altText: string, contents: unknown, quickReply?: unknown) {
+    this.flexPushes.push({ userId, altText, contents, quickReply });
+    return {};
+  }
+  async pushToAll(list: unknown, messages: unknown) { this.broadcasts.push({ list, messages }); return {}; }
+}
+
+function signedWebhookBody(events: unknown[], secret = 'test-secret') {
+  const raw = Buffer.from(JSON.stringify({ events }), 'utf8');
+  const signature = createHmac('sha256', secret).update(raw).digest('base64');
+  return { raw, signature };
+}
+
+test('buildTicketPostback / parseTicketPostback ย้อนกลับกันได้ตรง', () => {
+  assert.deepEqual(parseTicketPostback(buildTicketPostback('start', 'bug')), { action: 'start', value: 'bug' });
+  assert.deepEqual(parseTicketPostback(buildTicketPostback('resolve', '7')), { action: 'resolve', value: '7' });
+  assert.equal(parseTicketPostback('garbage'), null);
+  assert.equal(parseTicketPostback(''), null);
+});
+
+test('buildTicketCategoryFlex มีปุ่มครบ 4 หมวด เป็น postback ไม่ใช่ URL', () => {
+  const flex: any = buildTicketCategoryFlex();
+  const actions = flex.footer.contents.map((b: any) => b.action);
+  assert.equal(actions.length, 4);
+  for (const action of actions) {
+    assert.equal(action.type, 'postback');
+    assert.match(action.data, /^ticket:start:/);
+  }
+});
+
+test('flow เต็ม: พิมพ์ "แจ้งปัญหา" → เลือกหมวด → พิมพ์รายละเอียด → สร้างตั๋ว + แจ้งฝ่ายบัญชี', async () => {
+  await prisma.employee.update({ where: { id: 'EMP-0042' }, data: { lineUserId: 'Uemployee-ticket-test' } });
+  try {
+    const line = new FakeLineClient();
+
+    const step1 = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'แจ้งปัญหา' },
+        replyToken: 'reply-1', source: { userId: 'Uemployee-ticket-test' },
+      },
+    ]);
+    const result1: any = await processLineWebhook(step1.raw, step1.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+    assert.equal(result1.results[0].outcome, 'ticket_category_prompt');
+    assert.equal(line.flexReplies.length, 1, 'ต้องตอบด้วย Flex การ์ดเลือกหมวด');
+    assert.equal(line.flexReplies[0].contents.footer.contents.length, 4);
+    assert.ok(line.flexReplies[0].quickReply, 'ตอนนี้ยังไม่ได้เลือกหมวด แตะปุ่มลัดได้ตามปกติ');
+
+    const step2 = signedWebhookBody([
+      {
+        type: 'postback', replyToken: 'reply-2', source: { userId: 'Uemployee-ticket-test' },
+        postback: { data: buildTicketPostback('start', 'bug') },
+      },
+    ]);
+    const result2: any = await processLineWebhook(step2.raw, step2.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+    assert.equal(result2.results[0].outcome.outcome, 'category_selected');
+    assert.equal(line.replies.length, 1, 'ต้องตอบข้อความชวนพิมพ์รายละเอียดต่อ');
+    assert.match(line.replies[0].text, /รายละเอียด/);
+    assert.equal(
+      line.replies[0].quickReply, undefined,
+      'ห้ามแนบปุ่มลัดตรงนี้ — แตะปุ่มไหนก็จะถูกเก็บเป็นคำอธิบายปัญหาแทนโดยไม่ตั้งใจ',
+    );
+
+    const pending = await listSupportTickets({ status: 'open' });
+    assert.equal(pending.length, 0, 'ยังไม่สร้างตั๋วจนกว่าจะพิมพ์รายละเอียด');
+
+    const step3 = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'ระบบขึ้น error ตอนกดยืนยัน Timesheet' },
+        replyToken: 'reply-3', source: { userId: 'Uemployee-ticket-test' },
+      },
+    ]);
+    const result3: any = await processLineWebhook(step3.raw, step3.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+    assert.equal(result3.results[0].outcome, 'ticket_created');
+    assert.ok(result3.results[0].ticketId, 'ต้องได้เลขที่ตั๋วกลับมา');
+    assert.equal(line.replies.length, 2);
+    assert.match(line.replies[1].text, /แจ้งปัญหาเรียบร้อย/);
+    assert.ok(line.replies[1].quickReply, 'ตั๋วถูกสร้างแล้ว กลับมาแตะปุ่มลัดได้ตามปกติ');
+
+    assert.equal(line.broadcasts.length, 1, 'ต้องแจ้งฝ่ายบัญชีผ่าน pushToAll หนึ่งครั้ง');
+    const notifyText = JSON.stringify(line.broadcasts[0].messages);
+    assert.ok(notifyText.includes('ระบบขึ้น error ตอนกดยืนยัน Timesheet'));
+    assert.ok(notifyText.includes('พงศ์พันธ์ มามาก'));
+
+    const tickets = await listSupportTickets();
+    const created = tickets.find((t) => t.id === result3.results[0].ticketId);
+    assert.ok(created, 'listSupportTickets ต้องเห็นตั๋วที่เพิ่งสร้าง');
+    assert.equal(created.employeeName, 'พงศ์พันธ์ มามาก');
+    assert.equal(created.category, 'bug');
+    assert.equal(created.status, 'open');
+
+    // ── ปฏิเสธ resolve จาก userId ที่ไม่อยู่ในรายชื่อผู้อนุมัติ ──
+    const denyAttempt = signedWebhookBody([
+      {
+        type: 'postback', replyToken: 'reply-deny', source: { userId: 'Uintruder' },
+        postback: { data: buildTicketPostback('resolve', String(created.id)) },
+      },
+    ]);
+    const denyResult: any = await processLineWebhook(denyAttempt.raw, denyAttempt.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+    assert.equal(denyResult.results[0].outcome.outcome, 'denied');
+    assert.equal((await listSupportTickets({ status: 'open' })).some((t) => t.id === created.id), true, 'ยังต้องเปิดอยู่');
+
+    // ── resolve จากผู้อนุมัติที่ถูกต้อง ──
+    const resolveAttempt = signedWebhookBody([
+      {
+        type: 'postback', replyToken: 'reply-resolve', source: { userId: 'Uapprover1' },
+        postback: { data: buildTicketPostback('resolve', String(created.id)) },
+      },
+    ]);
+    const resolveResult: any = await processLineWebhook(resolveAttempt.raw, resolveAttempt.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+    assert.equal(resolveResult.results[0].outcome.outcome, 'resolved');
+
+    const afterResolve = (await listSupportTickets()).find((t) => t.id === created.id)!;
+    assert.equal(afterResolve.status, 'resolved');
+    assert.equal(afterResolve.resolvedBy, 'line:Uapprover1');
+    assert.ok(afterResolve.resolvedAt);
+  } finally {
+    await prisma.employee.update({
+      where: { id: 'EMP-0042' },
+      data: { lineUserId: null, linePendingTicketCategory: null },
+    });
+  }
+});
+
+test('resolveSupportTicket กับ id ที่ไม่มีอยู่ → error 404', async () => {
+  await assert.rejects(
+    () => resolveSupportTicket(999999, { actor: 'ทดสอบ' }),
+    (error: any) => error.status === 404,
+  );
+});
+
+test('พิมพ์ "ตั๋วของฉัน" → เห็นสถานะตั๋วของตัวเองเท่านั้น', async () => {
+  await prisma.employee.update({ where: { id: 'EMP-0042' }, data: { lineUserId: 'Uemployee-mytickets-test' } });
+  try {
+    const line = new FakeLineClient();
+    const categoryPrompt = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'แจ้งปัญหา' },
+        replyToken: 'r1', source: { userId: 'Uemployee-mytickets-test' },
+      },
+    ]);
+    await processLineWebhook(categoryPrompt.raw, categoryPrompt.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+
+    const start = signedWebhookBody([
+      {
+        type: 'postback', replyToken: 'r2', source: { userId: 'Uemployee-mytickets-test' },
+        postback: { data: buildTicketPostback('start', 'suggestion') },
+      },
+    ]);
+    await processLineWebhook(start.raw, start.signature, { channelSecret: 'test-secret', client: line as any });
+
+    const submit = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'อยากให้เพิ่มปุ่มดาวน์โหลด PDF' },
+        replyToken: 'r3', source: { userId: 'Uemployee-mytickets-test' },
+      },
+    ]);
+    await processLineWebhook(submit.raw, submit.signature, { channelSecret: 'test-secret', client: line as any });
+
+    const myTickets = signedWebhookBody([
+      {
+        type: 'message', message: { type: 'text', text: 'ตั๋วของฉัน' },
+        replyToken: 'r4', source: { userId: 'Uemployee-mytickets-test' },
+      },
+    ]);
+    const result: any = await processLineWebhook(myTickets.raw, myTickets.signature, {
+      channelSecret: 'test-secret', client: line as any,
+    });
+    assert.equal(result.results[0].outcome, 'my_tickets');
+    const lastReply = line.replies.at(-1);
+    assert.match(lastReply.text, /ข้อเสนอแนะ/);
+    assert.match(lastReply.text, /รอดำเนินการ/);
+  } finally {
+    await prisma.employee.update({
+      where: { id: 'EMP-0042' },
+      data: { lineUserId: null, linePendingTicketCategory: null },
+    });
+  }
+});
