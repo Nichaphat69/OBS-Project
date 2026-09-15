@@ -94,8 +94,15 @@ async function ingestAndCheckBothEmployees(
     expectedPeriod: period,
     extractor: stubExtractor(fakeTimesheet(period, { employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager', holidayDates })),
   });
-  await markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ' });
-  await markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ' });
+  await markTimesheetChecked(docNoA, { actor: 'ผู้ตรวจทดสอบ', client: new FakeLineClient() as any });
+  await markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ', client: new FakeLineClient() as any });
+
+  /* กดยืนยันใบสุดท้ายจะยิงขออนุมัติให้เองแล้ว (ดูเทสต์แรกของไฟล์นี้) — ตัวช่วยนี้มีไว้ "เตรียมรอบให้
+     พร้อมขออนุมัติ" เฉยๆ เทสต์ที่เรียกใช้ต่อจากนี้ต้องการทดสอบ requestCycleApproval() ตรงๆ จึงต้อง
+     ล้างคำขอที่เกิดอัตโนมัติทิ้งก่อน ไม่งั้นจะไปเจอ dedupe "มี pending ค้างอยู่แล้ว" แล้วไม่ยิงซ้ำ
+     (ต้นฉบับไม่ต้องทำขั้นนี้ เพราะ requestCycleApproval ของเดิม throw ตั้งแต่ push LINE ไม่สำเร็จ
+     จึงไม่เคยบันทึก pending ไว้เลย — พอร์ตนี้จงใจบันทึกไว้แม้ LINE ล่ม ดูคอมเมนต์ใน cyclesService.ts) */
+  await prisma.cycleApproval.deleteMany({ where: { contractId: 'CT-26B0113', period } });
 }
 
 class FakeLineClient {
@@ -123,19 +130,7 @@ function signedWebhookBody(events: unknown[], secret = 'test-secret') {
   return { raw, signature };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   ⚠️ ช่องว่างของพอร์ต #1 — กดยืนยันใบสุดท้ายแล้วไม่ได้ยิงขออนุมัติเข้า LINE
-
-   ต้นฉบับ `markTimesheetChecked()` (service.js:3323) รับ `client` แล้วเช็คต่อหลังกดยืนยัน:
-       if (preview.invoice && preview.blockers.length === 0)
-         await requestCycleApproval(sheet.contract.id, sheet.period, { actor, client });
-   สแต็กใหม่ (timesheetsService.ts:267) รับแค่ `{ actor }` และไม่เรียก requestCycleApproval เลย
-
-   ผลกับผู้ใช้จริง: คนที่อัปโหลด/กรอก Timesheet เองแล้วกดยืนยันครบทุกใบบนเว็บ จะไม่มีคำขออนุมัติ
-   วางบิลเข้า LINE เลย ต้องรอ n8n cron รอบ 09:00 วันถัดไปมาเจอเอง — ซึ่งเป็นพฤติกรรมเดิมก่อนที่
-   ต้นฉบับจะแก้ไว้เมื่อ 7 ก.ย. 69 พอดี (ดูคอมเมนต์ในไฟล์ต้นฉบับ)
-   ───────────────────────────────────────────────────────────────────────────── */
-test.skip('กดยืนยันใบสุดท้ายที่ทำให้รอบครบ → ยิงขออนุมัติวางบิลเข้า LINE ทันทีในตัว ไม่ต้องรอ n8n', async () => {
+test('กดยืนยันใบสุดท้ายที่ทำให้รอบครบ → ยิงขออนุมัติวางบิลเข้า LINE ทันทีในตัว ไม่ต้องรอ n8n', async () => {
   const period = '2026-05';
   const docNoA = '2026050201';
   const docNoB = '2026050200';
@@ -572,19 +567,7 @@ test('พนักงานที่ผูกบัญชีแล้วพิ�
   });
 });
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   ⚠️ ช่องว่างของพอร์ต #2 — ตีกลับ Timesheet แล้วพนักงานไม่ได้รับแจ้งอะไรเลย
-
-   ต้นฉบับ `rejectTimesheet()` (service.js:3303) รับ `client` แล้วเรียก
-       pushEmployeeStatusUpdate(id, { kind: 'rejected', reason, client })
-   ซึ่งส่ง Flex การ์ด (`buildRejectedFlex`) เข้าไลน์ส่วนตัวของพนักงาน พร้อมเหตุผลที่ตีกลับและปุ่ม
-   "ส่ง Timesheet ฉบับแก้ไข" — สแต็กใหม่ (timesheetsService.ts:253) รับแค่ `{ actor, reason }`
-   และทั้ง `pushEmployeeStatusUpdate` กับ `buildRejectedFlex` ยังไม่ถูกพอร์ตมาเลยสักตัว
-
-   ผลกับผู้ใช้จริง: พนักงานที่ Timesheet ถูกตีกลับจะไม่รู้เรื่องเลย จนกว่าจะเปิดเว็บดูเอง —
-   ทั้งที่เป็นเคสเดียวที่พนักงาน "ต้องลงมือทำอะไรต่อ" จริงๆ
-   ───────────────────────────────────────────────────────────────────────────── */
-test.skip('ตีกลับ Timesheet ของพนักงานที่ผูกบัญชีไว้ → ส่ง Flex การ์ดพร้อมปุ่ม "ส่งฉบับแก้ไข" เข้าไลน์ส่วนตัว', async () => {
+test('ตีกลับ Timesheet ของพนักงานที่ผูกบัญชีไว้ → ส่ง Flex การ์ดพร้อมปุ่ม "ส่งฉบับแก้ไข" เข้าไลน์ส่วนตัว', async () => {
   await ingestTimesheet({
     documentNo: '2026050201',
     fileBytes: Buffer.from('x'),

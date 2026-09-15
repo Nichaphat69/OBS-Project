@@ -6,14 +6,14 @@
  * - the matching report (name/position/rate cross-check against employee aliases) and the HRDD
  *   leave comparison — both stay out of scope for the review UI itself (matching is used inside
  *   the ingest pipeline in `ingestService.ts`, just not surfaced as its own report here).
- * - the LINE/FlowAccount side effects `markTimesheetChecked` triggers in the original (requesting
- *   cycle approval) — that belongs to the billing-cycle phase, not the review step itself.
  */
 import { prisma } from '@obs/db';
 import { SEVERITY, calculateManday, thaiMonth, thaiDate } from '@obs/domain';
 import { checkStamp, getCycleStatus, type CheckStamp } from './dashboardService.js';
 import { logAudit } from './audit.js';
 import { holidayMap } from './masterData.js';
+import { LineClient, buildRejectedFlex } from './lineClient.js';
+import { uploadLink } from './timesheetSubmissionService.js';
 
 const STATUS_LABEL: Record<string, string> = {
   received: 'รับเข้าระบบ',
@@ -249,8 +249,11 @@ export class TimesheetActionError extends Error {
   }
 }
 
-/** ported from service.js rejectTimesheet() — LINE push to the employee is deferred (Phase 4). */
-export async function rejectTimesheet(id: string, { actor, reason }: { actor: string; reason?: string }) {
+/** ported from service.js rejectTimesheet() */
+export async function rejectTimesheet(
+  id: string,
+  { actor, reason, client }: { actor: string; reason?: string; client?: LineClient },
+) {
   const existing = await prisma.timesheet.findUnique({ where: { id } });
   if (!existing) throw new TimesheetActionError(`ไม่พบ Timesheet ${id}`, 404);
 
@@ -259,12 +262,46 @@ export async function rejectTimesheet(id: string, { actor, reason }: { actor: st
     data: { status: 'rejected', statusReason: reason ?? null, updatedAt: new Date().toISOString() },
   });
   await logAudit({ actor, action: 'reject_timesheet', entityType: 'timesheet', entityId: id, detail: { reason: reason ?? null } });
+  // แจ้งพนักงานเจ้าของใบทางไลน์ส่วนตัวทันที (ถ้าผูกบัญชีไว้แล้ว) — ไม่รอผล ไม่ทำให้ตีกลับพัง
+  // ถ้าไลน์ส่งไม่สำเร็จ · client ส่งต่อได้เพื่อให้เทสต์ฉีด FakeLineClient แทนได้
+  await pushRejectedToEmployee(id, { reason: reason ?? null, client });
   return getTimesheet(id);
 }
 
-/** ported from service.js markTimesheetChecked() — the cycle-approval-request/LINE cascade after a
- * successful check is deferred to the billing-cycle phase (Phase 2 of MIGRATION_PLAN.md). */
-export async function markTimesheetChecked(id: string, { actor }: { actor: string }) {
+/** ported from service.js pushEmployeeStatusUpdate() — เฉพาะ kind 'rejected' ซึ่งเป็นเคสเดียวที่
+ * ต้นฉบับอัปเกรดเป็น Flex การ์ดพร้อมปุ่ม เพราะเป็นเคสเดียวที่พนักงานต้องลงมือทำอะไรต่อจริง
+ * (received/verified ของต้นฉบับเป็นแค่ข้อความแจ้งเฉยๆ และไม่มีจุดไหนในสแต็กนี้เรียกใช้) */
+async function pushRejectedToEmployee(
+  timesheetId: string,
+  { reason, client }: { reason: string | null; client?: LineClient },
+): Promise<void> {
+  try {
+    const sheet = await getTimesheet(timesheetId);
+    if (!sheet?.employee?.id) return;
+    const employee = await prisma.employee.findUnique({ where: { id: sheet.employee.id } });
+    if (!employee?.lineUserId) return;
+
+    const line = client ?? new LineClient();
+    const flex = buildRejectedFlex({
+      customerName: sheet.contract.customerName,
+      projectName: sheet.contract.projectName,
+      periodLabel: sheet.periodLabel,
+      reason,
+      uploadUrl: uploadLink(),
+    });
+    await line.pushFlexToUser(
+      employee.lineUserId,
+      `Timesheet รอบ ${sheet.periodLabel} ถูกตีกลับให้แก้ไข`,
+      flex,
+    );
+  } catch { /* แจ้งเสริม พลาดได้ ไม่ต้อง throw ต่อ — ตรงกับต้นฉบับ */ }
+}
+
+/** ported from service.js markTimesheetChecked() */
+export async function markTimesheetChecked(
+  id: string,
+  { actor, client }: { actor: string; client?: LineClient },
+) {
   const sheet = await getTimesheet(id);
   if (!sheet) throw new TimesheetActionError(`ไม่พบ Timesheet ${id}`, 404);
 
@@ -296,6 +333,27 @@ export async function markTimesheetChecked(id: string, { actor }: { actor: strin
       warnings: (sheet.manday.checks ?? []).filter((c: any) => c.severity === SEVERITY.WARN).length,
     },
   });
+
+  /* นี่มักเป็นจุดที่รอบบิลครบพอดี — ตอน ingestTimesheet() ครบคน (approve_cycle) ใบล่าสุดที่เพิ่งเข้ามา
+     ยังไม่มีใครกดยืนยันเลย เลยติด blocker "ยังไม่มีคนกดยืนยัน" เสมอ ส่งขออนุมัติตอนนั้นจึงไม่มีทางสำเร็จ
+     จริง — ต้องรอจนกว่าคนตรวจกด "ยืนยันแล้ว" ครบทุกใบก่อน ซึ่งก็คือตรงนี้ ไม่ต้องรอ n8n cron 09:00
+     พรุ่งนี้มาเจอเอง ห่อ try/catch ครอบทั้งก้อน (ไม่ใช่แค่ requestCycleApproval) เพราะ previewCycleInvoice()
+     เองก็พังได้ เช่น buildInvoice หาอัตราคิดเงินไม่เจอ — เป็นงานเสริมหลังยืนยันสำเร็จแล้ว พังได้ก็แค่ log
+     ไม่ควรทำให้การกดยืนยันใบนี้ล้มไปด้วย · requestCycleApproval() กันส่งซ้ำเองอยู่แล้วถ้ามีคำขอค้าง */
+  try {
+    // import แบบ dynamic เพราะ cyclesService.ts import getTimesheet จากไฟล์นี้อยู่แล้ว — static import
+    // จะกลายเป็นวงกลม
+    const { previewCycleInvoice, requestCycleApproval } = await import('./cyclesService.js');
+    const preview = await previewCycleInvoice(sheet.contract.id, sheet.period);
+    if (preview.invoice && preview.blockers.length === 0) {
+      await requestCycleApproval(sheet.contract.id, sheet.period, { actor, client });
+    }
+  } catch (error: any) {
+    await logAudit({
+      actor: 'system', action: 'request_line_approval_error',
+      entityType: 'cycle', entityId: `${sheet.contract.id}-${sheet.period}`, detail: { message: error.message },
+    });
+  }
 
   return getTimesheet(id);
 }

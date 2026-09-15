@@ -485,6 +485,35 @@ export function buildCheckFailedFlex({
   });
 }
 
+/** การ์ดแจ้งพนักงานเจ้าของใบว่า Timesheet ถูกตีกลับ — ส่งเข้าไลน์ส่วนตัว ไม่ใช่กลุ่มผู้อนุมัติ
+ * ported from line.js buildRejectedFlex() (หัวการ์ดเป็นไล่สีแดงแบบเดียวกับการ์ดอื่นในพอร์ตนี้
+ * แทนสีทึบ RED ของต้นฉบับ ตรงกับที่ buildCheckFailedFlex ทำไว้แล้ว) */
+export function buildRejectedFlex({
+  customerName,
+  projectName,
+  periodLabel,
+  reason,
+  uploadUrl,
+}: {
+  customerName: string;
+  projectName?: string | null;
+  periodLabel: string;
+  reason?: string | null;
+  uploadUrl?: string | null;
+}) {
+  return bubble({
+    title: 'ตรวจ Manday ไม่ผ่าน • ตีกลับให้แก้ไข',
+    customerName,
+    projectName,
+    headerGradient: GRADIENT.red,
+    rows: [
+      summaryRow('รอบที่ตีกลับ', periodLabel),
+      ...(reason ? [summaryRow('เหตุผล', reason)] : []),
+    ],
+    buttons: uploadUrl ? [gradientLinkButton('ส่ง Timesheet ฉบับแก้ไข', uploadUrl, GRADIENT.red)] : [],
+  });
+}
+
 /** แถวตัวเลือกแบบไอคอน+ป้ายกำกับ แนวนอน — ใช้แทนปุ่ม native หลายปุ่มเรียงแนวนอน เพราะพื้นที่ไม่พอ
  * label จะถูกบีบจนตัดคำ (เจอจริงบน production) */
 function choiceRow({ icon, label, iconBg, action }: { icon: string; label: string; iconBg: string; action: unknown }) {
