@@ -11,7 +11,9 @@
     "test": "node --env-file-if-exists=../../.env --import tsx --import ./test/helpers/useTestDb.ts --test --test-concurrency=1 \"test/**/*.test.ts\"",
     "test:db:setup": "node --env-file-if-exists=../../.env --import tsx ./test/helpers/createTestDb.ts",
     "typecheck": "tsc --noEmit",
-    "typecheck:test": "tsc -p tsconfig.test.json"
+    "typecheck:test": "tsc -p tsconfig.test.json",
+    "user:create": "node --env-file-if-exists=../../.env --import tsx ./scripts/create-user.ts",
+    "user:reset-password": "node --env-file-if-exists=../../.env --import tsx ./scripts/reset-password.ts"
   },
   "dependencies": {
     "@obs/db": "*",

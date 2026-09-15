@@ -655,11 +655,17 @@ Phase 5.1-5.4 — โดยเฉพาะใบแจ้งหนี้จร�
    วางไว้หลัง reverse proxy เดียวกัน) — ทดสอบยิง n8n จริงหลัง repoint ก่อนประกาศ cutover เสร็จ
 7. ตัดขาด: ลบ `src/`, `public/` (~27,500 บรรทัดรวม) ออกจาก repo, แก้ root `package.json`:
    ลบ `start`/`dev`/`seed`/`reset` script และ `pdf-to-img`/`pdfjs-dist` deps (ลบเฉพาะถ้าไม่เอา
-   local-LLM path แล้วจริงๆ ตาม Phase 5.7), **ตรวจสอบ `scripts/create-user.js` /
-   `scripts/reset-password.js` ก่อนลบ** — สองตัวนี้ import จาก `src/auth.js`/`src/db/index.js`
-   โดยตรง จะพังทันทีถ้าลบ `src/` ก่อน (ของใหม่มีปุ่ม "รีเซ็ตรหัสผ่าน" ใน admin แล้ว แต่ยังไม่มี
-   bootstrap สร้าง user แรกสุดจากศูนย์ — เช็คให้แน่ใจก่อนว่าจะไม่ล็อกตัวเองออกจากระบบใหม่ทั้งหมด)
-   เก็บ/พอร์ต `scripts/gmail-auth.js` ถ้ายังต้องขอ refresh token ใหม่ในอนาคต
+   local-LLM path แล้วจริงๆ ตาม Phase 5.7)
+   - ✅ **ความเสี่ยง "ล็อกตัวเองออกจากระบบ" ปิดแล้ว (2026-09-15)** — เดิม `scripts/create-user.js`
+     และ `scripts/reset-password.js` import จาก `src/auth.js`/`src/db/index.js` โดยตรง จะพังทันที
+     ที่ลบ `src/` และสแตกใหม่ไม่มี bootstrap สร้างผู้ใช้คนแรกจากศูนย์เลย (หน้า admin สร้างได้ก็จริง
+     แต่ต้องล็อกอินอยู่แล้วถึงจะเข้าถึง) — พอร์ตมาเป็น `apps/api/scripts/{create-user,reset-password}.ts`
+     ใช้ `createUser()`/`resetPassword()` จาก `usersService.ts` เรียกด้วย
+     `npm run user:create -w @obs/api` / `npm run user:reset-password -w @obs/api`
+     (ทดสอบจริงกับฐานข้อมูลเทสต์แล้วครบวงจร: สร้างบัญชี → ตั้งรหัสใหม่ → รหัสเดิมใช้ไม่ได้ →
+     รหัสใหม่ล็อกอินได้) **จงใจไม่แตะ script เดิมที่ราก** เพราะยังต้องใช้กับระบบเก่าจนถึงวัน cutover
+     — ลบพร้อม `scripts/` เดิมตอนนั้นได้เลย
+   - เก็บ/พอร์ต `scripts/gmail-auth.js` ถ้ายังต้องขอ refresh token ใหม่ในอนาคต
 8. ล้างขยะใน `data/`: `app.db` (0 byte), `data/backups/` (ย้ายไป archive แล้วจากข้อ 2), ไฟล์
    `billing N.sqlite-shm/-wal` ที่ค้างไม่มี `.sqlite` คู่ (8 คู่จากช่วง ส.ค. 69)
 9. ลบ `scripts/migrate-sqlite-to-postgres.ts` หลังจากรันรอบสุดท้าย (ข้อ 3) เสร็จและยืนยันถูกต้องแล้ว
@@ -675,24 +681,54 @@ Phase 5.1-5.4 — โดยเฉพาะใบแจ้งหนี้จร�
 **หมายเหตุแก้ไข:** แผนเดิมพูดถึง `test/gmail.test.js` ซึ่ง**ไม่มีไฟล์นี้อยู่จริง** — ไฟล์ Gmail จริง
 คือ `test/gmail-draft.test.js` (445 บรรทัด) กับ `test/gmailInboxDomain.test.js` (42 บรรทัด)
 
+**อัปเดต (2026-09-15): พอร์ตครบทั้งสองกลุ่มแรกแล้ว — 12 จาก 16 ไฟล์** เหลือเฉพาะกลุ่มที่เลื่อนไว้
+ด้านล่าง รวมเทสต์ที่ผ่านทั้งหมดตอนนี้ **128 ใน `apps/api` + 40 ใน `packages/domain` = 168 เทสต์**
+ไม่มี skip เหลือ · `tsc` ผ่านสะอาดทั้ง src/test/scripts
+
+Test infra ของ `apps/api` ที่ตั้งใหม่ในรอบนี้: `npm test -w @obs/api` (node --test ผ่าน tsx,
+`--test-concurrency=1` เพราะทุกไฟล์ใช้ฐานข้อมูลเดียวกัน), ฐานข้อมูลเทสต์แยกตัวเอง (`<db>_test`
+ตั้งผ่าน `test/helpers/useTestDb.ts` ซึ่งโหลดก่อน import ใดๆ เพราะ PrismaClient อ่าน DATABASE_URL
+ตอนสร้าง instance ครั้งเดียว) พร้อม guard ที่ throw ถ้า DATABASE_URL ไม่ได้ลงท้ายด้วย `_test`,
+`npm run test:db:setup -w @obs/api` สร้าง+migrate ให้, fixture ใน `test/helpers/testDb.ts`
+พอร์ตตรงจาก `src/db/seed.js`
+
 ### กลุ่มพอร์ตได้เลย (โค้ดที่ทดสอบพอร์ตและยืนยันด้วยข้อมูลจริงแล้วทั้งหมด) — รวม 1,056 บรรทัด
-- [ ] `test/abbyy.test.js` (352 บรรทัด) → `abbyyClient.ts`
-- [ ] `test/flowaccount.test.js` (155 บรรทัด) → `flowaccountClient.ts`
-- [ ] `test/overdue-timesheet.test.js` (141 บรรทัด) → `timesheetRemindersRouter`/`timesheetSubmissionService.ts`
-- [ ] `test/normalize.test.js` (137 บรรทัด) → `packages/domain/src/normalize.ts`
-- [ ] `test/gmailInboxDomain.test.js` (42 บรรทัด) → `senderDomain()` ใน `gmailService.ts`
-- [ ] `test/support-tickets.test.js` (229 บรรทัด) → `supportTicketsService.ts`/`lineWebhookService.ts`
+- [x] `test/abbyy.test.js` (352 บรรทัด) → `apps/api/test/abbyyClient.test.ts` — ต่างจากต้นฉบับจุดเดียว:
+      พอร์ต TS ไม่รับ `fetchImpl` เข้า constructor จึงสลับ global fetch แทน (`test/helpers/fakeFetch.ts`)
+      และโน้ตฟิลด์ที่ขาดไม่ระบุชื่อฟิลด์ตายตัวแล้วเพราะตั้งค่าได้ต่อ Skill ผ่าน fieldMap
+- [x] `test/flowaccount.test.js` (155 บรรทัด) → `apps/api/test/flowaccountClient.test.ts` —
+      **เจอบั๊กจริง**: พอร์ตตกการ์ด 3 จุดที่ต้นฉบับมี (`getShareLink`/`deleteDocument` ไม่เช็ค
+      `documentId` จึงยิงออกเน็ตทั้งที่ยังไม่มี id · ทั้ง 3 เมธอดไม่เช็คชนิดเอกสารที่ไม่รู้จัก ซึ่ง
+      `documentType` มาจาก settings ผ่าน `as any` เป็นค่าอะไรก็ได้ตอนรันจริง) — แก้คืนแล้ว
+- [x] `test/overdue-timesheet.test.js` (141 บรรทัด) → `apps/api/test/overdueTimesheet.test.ts`
+- [x] `test/normalize.test.js` (137 บรรทัด) → `packages/domain/test/normalize.test.ts`
+- [x] `test/gmailInboxDomain.test.js` (42 บรรทัด) → `apps/api/test/gmailSenderDomain.test.ts` —
+      ระหว่างพอร์ตพบว่า import `gmailService.ts` ลาก `pdf-to-img`/`pdfjs-dist` มาทั้งสายผ่าน
+      `uploadService → extractionService → localExtractionService` ทำให้โหลดค้างจนเทสต์รันไม่จบ
+      แก้โดยเปลี่ยน `localExtractionService` เป็น dynamic import (เป็น fallback ที่วิ่งเฉพาะตอนไม่มี
+      ABBYY credentials อยู่แล้ว) — ชุดเทสต์กลับมาจบใน 15 วินาที และ API ก็ไม่ต้องโหลดตอนบูตด้วย
+- [x] `test/support-tickets.test.js` (229 บรรทัด) → `apps/api/test/supportTickets.test.ts`
 
 ### กลุ่มพอร์ตได้ แต่ต้องตัด/แยกเคสที่พึ่งของยังไม่พอร์ต
-- [ ] `test/ingest.test.js` (463 บรรทัด) → `ingestService.ts` — พอร์ตตรงได้เกือบทั้งหมด
-- [ ] `test/timesheet-submission-method.test.js` (282 บรรทัด) → `timesheetSubmissionService.ts` —
-      ปิดช่องว่าง "โค้ดเสร็จแล้วแต่ยังไม่มีเทสต์" ของ Phase 5.4
-- [ ] `test/auth.test.js` (271 บรรทัด) → พอร์ตเฉพาะครึ่ง login/logout/me ก่อน ส่วน
-      register/reset/Google ผูกกับ Phase 5.5.7
-- [ ] `test/line-approval.test.js` (573 บรรทัด, 26 เคส) → เป็นสเปกของ Phase 5.6's ประตูอนุมัติ LINE
-      โดยตรง — **ยกเว้น 5 เคส** ที่เทสต์การ์ด employee-status/billing-cycle/reject-notification flex
-      (บรรทัด 446, 482, 504, 529, 554 ในไฟล์เดิม) ซึ่งพึ่ง `employeeProgress()`/`pendingSubmissionFor()`
-      ที่ตัดสโคปไว้จนกว่าจะพอร์ต Phase 5.5.4
+- [x] `test/ingest.test.js` (463 บรรทัด) → `apps/api/test/ingest.test.ts` (17 เทสต์)
+- [x] `test/timesheet-submission-method.test.js` (282 บรรทัด) →
+      `apps/api/test/timesheetSubmissionMethod.test.ts` (11 เทสต์) ปิดช่องว่าง "โค้ดเสร็จแล้วแต่ยัง
+      ไม่มีเทสต์" ของ Phase 5.4 — พอร์ตนี้เรียก `pushFlexToAll` แทน `pushToAll` ตรงๆ ของต้นฉบับ
+- [x] `test/auth.test.js` (271 บรรทัด) → `apps/api/test/auth.test.ts` (29 เทสต์) พอร์ตครบทั้งไฟล์
+      รวม register/reset (Phase 5.5.7 เสร็จแล้ว) — **ไม่พอร์ต 2 เทสต์**: `parseCookies` (สแตกใหม่ใช้
+      middleware `cookie-parser`) และ `hasAnyUser` (ของเดิมมีไว้ให้ CLI bootstrap — ดูด้านล่าง)
+- [x] `test/line-approval.test.js` (573 บรรทัด, 26 เคส) → `apps/api/test/lineApproval.test.ts`
+      พอร์ตครบ 26 เคส (5 เคสที่แผนเดิมยกเว้นไว้ทำได้แล้วเพราะ Phase 5.5.4 เสร็จ) —
+      **เจอช่องว่างจริง 2 จุดที่เทสต์จับได้ และแก้แล้วทั้งคู่**:
+      1. `markTimesheetChecked()` ไม่ยิงขออนุมัติวางบิลเข้า LINE — ต้นฉบับ (service.js:3363) เช็ค
+         `preview.invoice && preview.blockers.length === 0` แล้วเรียก `requestCycleApproval()` ต่อในตัว
+         ผลคือกดยืนยันครบทุกใบบนเว็บแล้วไม่มีคำขออนุมัติเข้า LINE ต้องรอ n8n cron 09:00 วันถัดไป
+         (= พฤติกรรมก่อนที่ต้นฉบับจะแก้ไว้เมื่อ 7 ก.ย. 69 พอดี) — พอร์ตเพิ่มแล้ว ใช้ dynamic import
+         เพราะ `cyclesService.ts` import `getTimesheet` จากไฟล์นี้อยู่แล้ว
+      2. `rejectTimesheet()` ไม่แจ้งพนักงานเลย — ต้นฉบับเรียก `pushEmployeeStatusUpdate()` ส่ง Flex
+         การ์ดพร้อมเหตุผลและปุ่ม "ส่งฉบับแก้ไข" เข้าไลน์ส่วนตัว ทั้งฟังก์ชันนั้นและ `buildRejectedFlex()`
+         ไม่เคยถูกพอร์ตมาเลย — เพิ่มทั้งคู่แล้ว (`buildRejectedFlex` ใน `lineClient.ts` ใช้หัวการ์ด
+         ไล่สีแดงแบบเดียวกับการ์ดอื่นในพอร์ตนี้ แทนสีทึบของต้นฉบับ)
 
 ### เลื่อนไว้ก่อน (พึ่งของที่ยังไม่พอร์ตและอยู่ใน Phase 5.7 ที่ deferred)
 - [ ] `test/timesheet.test.js` (742 บรรทัด, ไฟล์ใหญ่สุด) — ส่วนใหญ่ทดสอบ local-LLM path, แยกเฉพาะ

@@ -10,7 +10,7 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { prisma } from '@obs/db';
 import { logAudit } from './audit.js';
 
-const ROLES = ['admin', 'accounting', 'user', 'executive'];
+export const ROLES = ['admin', 'accounting', 'user', 'executive'];
 const SCRYPT_KEYLEN = 64;
 
 export class UserActionError extends Error {
