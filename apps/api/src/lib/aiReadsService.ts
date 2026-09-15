@@ -1,0 +1,120 @@
+/**
+ * ประวัติ AI อ่านไฟล์ ("ที่มาของข้อมูล") — ported from src/service.js's `listAiReads`, `getAiRead`,
+ * `dismissAiRead`, `nextDocumentNo`/`logAiRead`/`markAiReadConfirmed` (the latter three live in
+ * ingestService.ts alongside the pipeline they support).
+ */
+import { prisma } from '@obs/db';
+import { matchEmployee, thaiMonth } from '@obs/domain';
+import { employeesForMatching } from './masterData.js';
+import { logAudit } from './audit.js';
+
+export interface AiReadListItem {
+  id: number;
+  source: string;
+  sourceEmailId: string | null;
+  fileName: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  period: string | null;
+  periodLabel: string | null;
+  documentNo: string | null;
+  status: string;
+  model: string | null;
+  readAt: string;
+  readBy: string | null;
+}
+
+/** ported from service.js listAiReads() — no contractId = every read; contractId = only reads
+ * whose matched employee has an assignment on that contract (unmatched names are excluded when
+ * filtering, since there's no way to tell which company they belong to). เพิ่ม `restrictToEmployeeId`
+ * (15 ก.ย. 69 ตาม policy ที่ user ยืนยัน) — role "user" ต้องเห็นแค่ของตัวเอง ผูก path นี้ต่างจาก
+ * contractId ตรงที่กรองด้วย employeeId ที่บันทึกไว้ตอน ingest ตรงๆ (แม่นกว่า heuristic ชื่อของ
+ * contractId ด้านล่างที่ยังคงไว้ให้ admin/accounting ใช้กรองตามบริษัทเหมือนเดิม) */
+export async function listAiReads(contractId?: string, restrictToEmployeeId?: string | null): Promise<AiReadListItem[]> {
+  const rows = await prisma.aiRead.findMany({
+    where: {
+      status: { not: 'discarded' },
+      ...(restrictToEmployeeId !== undefined ? { employeeId: restrictToEmployeeId } : {}),
+    },
+    orderBy: { readAt: 'desc' },
+    take: 200,
+  });
+
+  let filtered = rows;
+  if (contractId) {
+    const employees = await employeesForMatching();
+    const belongs = new Map<string, boolean>();
+    const out: typeof rows = [];
+    for (const r of rows) {
+      if (!r.employeeName) continue;
+      let ok = belongs.get(r.employeeName);
+      if (ok === undefined) {
+        const { employee } = matchEmployee(r.employeeName, employees);
+        ok = employee
+          ? Boolean(await prisma.assignment.findFirst({ where: { employeeId: employee.id, contractId } }))
+          : false;
+        belongs.set(r.employeeName, ok);
+      }
+      if (ok) out.push(r);
+    }
+    filtered = out;
+  }
+
+  return filtered.map((r) => ({
+    id: r.id,
+    source: r.source,
+    sourceEmailId: r.sourceEmailId,
+    fileName: r.fileName,
+    employeeId: r.employeeId,
+    employeeName: r.employeeName,
+    period: r.period,
+    periodLabel: r.period ? thaiMonth(r.period) : null,
+    documentNo: r.documentNo,
+    status: r.status,
+    model: r.model,
+    readAt: r.readAt,
+    readBy: r.readBy,
+  }));
+}
+
+/** ported from service.js getAiRead() — deliberately excludes file_bytes (full PDF blob, not
+ * useful to the review-card UI which just needs the extraction JSON). */
+export async function getAiRead(id: number) {
+  const row = await prisma.aiRead.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      source: true,
+      sourceEmailId: true,
+      fileName: true,
+      employeeId: true,
+      employeeName: true,
+      period: true,
+      documentNo: true,
+      status: true,
+      model: true,
+      extraction: true,
+      readAt: true,
+      readBy: true,
+    },
+  });
+  if (!row) return null;
+  return row;
+}
+
+export class AiReadError extends Error {
+  status: number;
+  constructor(message: string, status = 404) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** ported from service.js dismissAiRead() — soft delete (status='discarded'), row stays for
+ * later SQL-level inspection but drops out of listAiReads(). */
+export async function dismissAiRead(id: number, { actor }: { actor: string }) {
+  const row = await prisma.aiRead.findUnique({ where: { id } });
+  if (!row) throw new AiReadError('ไม่พบรายการนี้ในประวัติ');
+  await prisma.aiRead.update({ where: { id }, data: { status: 'discarded' } });
+  await logAudit({ actor, action: 'discard_ai_read', entityType: 'ai_read', entityId: String(id), detail: {} });
+}

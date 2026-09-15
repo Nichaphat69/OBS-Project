@@ -1,0 +1,447 @@
+// Prisma schema — 1:1 mapping of src/db/schema.sql plus the full ADDED_COLUMNS migration
+// history from src/db/index.js (lines ~51-129). The live SQLite schema today is
+// "schema.sql + every ALTER in ADDED_COLUMNS applied" — this file models that end state
+// directly in one pass rather than replaying each ALTER as a separate Prisma migration.
+//
+// Mapping decisions (see /Users/cutemark/.claude/plans/woolly-yawning-stream.md Phase 1):
+//   - IDs stay String @id (e.g. "EMP-0042", "QT2025120005") — no autoincrement/UUID switch.
+//   - Timestamp columns (created_at, received_at, ...) stay String (ISO-8601 text), matching
+//     the app's existing strftime-based string handling in service.js/domain/*.js.
+//   - `extraction` / `computed` JSON-text columns become Prisma Json (Postgres jsonb) — a safe
+//     upgrade applied now since these two are read by the ported dashboard/timesheet logic.
+//     Other JSON-text columns not yet touched by this phase (payload, response, email_draft,
+//     audit_log.detail, settings.value) stay String for now — upgraded when that module is
+//     ported, per the plan's "minimize simultaneous changes" principle.
+//   - BLOB columns (source_file_bytes, file_bytes, document_pdf) map to Prisma Bytes (bytea).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── ลูกค้า ────────────────────────────────────────────────
+model Customer {
+  id                    String   @id
+  nameTh                String   @map("name_th")
+  nameEn                String?  @map("name_en")
+  taxId                 String   @map("tax_id")
+  branch                String?  @default("สำนักงานใหญ่")
+  address               String?
+  creditDays            Int      @default(30) @map("credit_days")
+  billingPlace          String?  @map("billing_place")
+  contactName           String?  @map("contact_name")
+  contactPhone          String?  @map("contact_phone")
+  contactEmail          String?  @map("contact_email")
+  flowaccountContactId  String?  @map("flowaccount_contact_id")
+  createdAt             String   @map("created_at")
+  // เพิ่มทีหลัง (ADDED_COLUMNS) — โดเมนอีเมลของลูกค้า ใช้กรองกล่อง Gmail
+  emailDomain           String?  @map("email_domain")
+
+  contracts Contract[]
+  holidays  Holiday[]
+
+  @@map("customers")
+}
+
+// ── สัญญา / ใบว่าจ้าง ──────────────────────────────────────
+model Contract {
+  id           String   @id
+  customerId   String   @map("customer_id")
+  poNo         String   @map("po_no")
+  contractNo   String?  @map("contract_no")
+  projectName  String   @map("project_name")
+  poDate       String?  @map("po_date")
+  startDate    String   @map("start_date")
+  endDate      String   @map("end_date")
+  creditDays   Int      @default(30) @map("credit_days")
+  divisorMode  String   @default("fixed") @map("divisor_mode")
+  divisorValue Int      @default(20) @map("divisor_value")
+  vatRate      Float    @default(0.07) @map("vat_rate")
+  whtRate      Float    @default(0.03) @map("wht_rate")
+  status       String   @default("active")
+  abbyySkillId String?  @map("abbyy_skill_id")
+  createdAt    String   @map("created_at")
+
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  assignments Assignment[]
+  timesheets  Timesheet[]
+  invoices    Invoice[]
+  cycleApprovals CycleApproval[]
+
+  @@map("contracts")
+}
+
+// ── พนักงาน Outsource ─────────────────────────────────────
+model Employee {
+  id                          String   @id
+  nameTh                      String   @map("name_th")
+  nameEn                      String?  @map("name_en")
+  invoicePosition             String   @map("invoice_position")
+  hrddEmployeeCode            String?  @map("hrdd_employee_code")
+  createdAt                   String   @map("created_at")
+  // เพิ่มทีหลัง (ADDED_COLUMNS) — ผูกบัญชีไลน์ส่วนตัว + แจ้งปัญหา
+  lineUserId                  String?  @map("line_user_id")
+  lineLinkCode                String?  @map("line_link_code")
+  lineLinkCodeExpiresAt       String?  @map("line_link_code_expires_at")
+  linePendingTicketCategory   String?  @map("line_pending_ticket_category")
+
+  aliases        EmployeeAlias[]
+  assignments    Assignment[]
+  timesheets     Timesheet[]
+  invoiceItems   InvoiceItem[]
+  supportTickets SupportTicket[]
+  users          User[]
+  aiReads        AiRead[]
+
+  @@map("employees")
+}
+
+// ชื่อพ้องที่ยอมรับ — แก้ปัญหาเอกสารแต่ละใบเขียนชื่อไม่เหมือนกัน
+model EmployeeAlias {
+  employeeId String @map("employee_id")
+  kind       String // 'name' | 'position'
+  alias      String
+  source     String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, kind, alias])
+  @@map("employee_aliases")
+}
+
+// ── การมอบหมายงานตามสัญญา (เรทต่อคนต่อสัญญา) ────────────────
+model Assignment {
+  id           String   @id
+  contractId   String   @map("contract_id")
+  employeeId   String   @map("employee_id")
+  quotationNo  String?  @map("quotation_no")
+  monthlyRate  Float    @map("monthly_rate")
+  startDate    String   @map("start_date")
+  endDate      String   @map("end_date")
+  status       String   @default("active")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([contractId, employeeId])
+  @@map("assignments")
+}
+
+// ── ปฏิทินวันหยุด ─────────────────────────────────────────
+// หมายเหตุการพอร์ต: schema.sql เดิมใช้ PRIMARY KEY (date, customer_id) ซึ่ง customer_id เป็น NULL ได้
+// (NULL = ใช้กับทุกลูกค้า) — Prisma ไม่ยอมให้ฟิลด์ที่ nullable เป็นส่วนหนึ่งของ @@id จึงเพิ่ม id
+// surrogate (autoincrement) เป็นคีย์หลักแทน แล้วคง (date, customer_id) ไว้เป็น @@unique ที่ความหมาย
+// เดิมทุกประการ (Postgres ก็ถือว่า NULL แต่ละแถวไม่ซ้ำกันเหมือน SQLite เดิมอยู่แล้ว)
+model Holiday {
+  id         Int     @id @default(autoincrement())
+  date       String
+  name       String
+  customerId String? @map("customer_id")
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@unique([date, customerId])
+  @@map("holidays")
+}
+
+// ── Timesheet ที่รับเข้ามา ─────────────────────────────────
+model Timesheet {
+  id                  String   @id
+  contractId          String   @map("contract_id")
+  employeeId          String?  @map("employee_id")
+  period              String
+  sourceEmailId       String?  @map("source_email_id")
+  sourceEmailSubject  String?  @map("source_email_subject")
+  sourceFile          String?  @map("source_file")
+  sourceFileBytes     Bytes?   @map("source_file_bytes")
+  receivedAt          String   @map("received_at")
+  approvedBy          String?  @map("approved_by")
+  approvedAt          String?  @map("approved_at")
+  rawEmployeeName     String?  @map("raw_employee_name")
+  rawPosition         String?  @map("raw_position")
+  reportedWorkdays    Int?     @map("reported_workdays")
+  reportedLeave       Int?     @map("reported_leave")
+  extraction          Json?
+  status              String   @default("received")
+  statusReason        String?  @map("status_reason")
+  computed            Json?
+  createdAt           String   @map("created_at")
+  updatedAt           String   @map("updated_at")
+  // เพิ่มทีหลัง (ADDED_COLUMNS) — ช่องทางที่ Timesheet เข้าระบบมา
+  submissionMethod    String?  @map("submission_method")
+
+  contract      Contract       @relation(fields: [contractId], references: [id])
+  employee      Employee?      @relation(fields: [employeeId], references: [id])
+  timesheetDays TimesheetDay[]
+  leaveDays     LeaveDay[]
+  overtimeDays  OvertimeDay[]
+  invoiceItems  InvoiceItem[]
+
+  @@index([period, status])
+  @@map("timesheets")
+}
+
+// ── อีเมล Gmail ที่กด "ซ่อน" ทิ้งจากรายการ ──
+model GmailDismissed {
+  messageId    String @id @map("message_id")
+  dismissedBy  String? @map("dismissed_by")
+  dismissedAt  String @map("dismissed_at")
+
+  @@map("gmail_dismissed")
+}
+
+// ── ตั๋วแจ้งปัญหาที่พนักงานส่งเข้ามาผ่านคำสั่ง "แจ้งปัญหา" ใน LINE ──
+model SupportTicket {
+  id          Int     @id @default(autoincrement())
+  employeeId  String  @map("employee_id")
+  category    String
+  description String
+  status      String  @default("open")
+  createdAt   String  @map("created_at")
+  resolvedAt  String? @map("resolved_at")
+  resolvedBy  String? @map("resolved_by")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([status])
+  @@map("support_tickets")
+}
+
+// ── ประวัติที่ AI เคยอ่านแล้ว (ทั้งอัปโหลดไฟล์เองและดึงจาก Gmail) ──
+model AiRead {
+  id            Int     @id @default(autoincrement())
+  source        String // 'upload' | 'gmail'
+  sourceEmailId String? @map("source_email_id")
+  fileName      String? @map("file_name")
+  // เพิ่มทีหลัง (15 ก.ย. 69) — ผูกกับพนักงานที่จับคู่ได้ตอนอ่าน (employeeName เดิมเป็น free-text เทียบ
+  // ไม่แม่นเมื่อพนักงานเปลี่ยนชื่อภายหลัง) ใช้จำกัดสิทธิ์ role "user" ให้เห็นแค่ของตัวเอง (ตาม policy ที่
+  // ยืนยันแล้ว — เดิม endpoint นี้ไม่มีทางกรองตามคนได้เลยเพราะไม่มีคอลัมน์นี้มาก่อน) NULL ได้ถ้าอ่านไม่
+  // เจอคนที่ตรงกันเลย (เอกสารยังไม่ได้ NEEDS_MATCH)
+  employeeId    String? @map("employee_id")
+  employeeName  String? @map("employee_name")
+  period        String?
+  documentNo    String? @map("document_no")
+  status        String  @default("pending")
+  model         String?
+  extraction    Json?
+  fileBytes     Bytes?  @map("file_bytes")
+  readAt        String  @map("read_at")
+  readBy        String? @map("read_by")
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([period, status])
+  @@index([employeeId])
+  @@map("ai_reads")
+}
+
+// ตารางรายละเอียดรายวัน — คอลัมน์ตรงกับ "New Table" ของ ABBYY
+model TimesheetDay {
+  timesheetId String  @map("timesheet_id")
+  date        String
+  dayOfWeek   String? @map("day_of_week")
+  project     String?
+  timeIn      String? @map("time_in")
+  timeOut     String? @map("time_out")
+  otTimeIn    String? @map("ot_time_in")
+  otTimeOut   String? @map("ot_time_out")
+  type        String?
+  label       String? // Holiday / Weekend / Sick leave / ว่าง
+  jobDesc     String? @map("job_desc")
+  remark      String?
+  normalHours Float?  @map("normal_hours")
+  otHours     Float?  @map("ot_hours")
+  totalHours  Float?  @map("total_hours")
+
+  timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@id([timesheetId, date])
+  @@map("timesheet_days")
+}
+
+model LeaveDay {
+  timesheetId String @map("timesheet_id")
+  date        String
+  leaveType   String @map("leave_type") // sick | personal | vacation | unpaid
+
+  timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@id([timesheetId, date])
+  @@map("leave_days")
+}
+
+// OT รายวัน — ดึงจากตาราง Timesheet อัตโนมัติ
+model OvertimeDay {
+  timesheetId String @map("timesheet_id")
+  date        String
+  hours       Float
+
+  timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@id([timesheetId, date])
+  @@map("overtime_days")
+}
+
+// ── ใบแจ้งหนี้ ────────────────────────────────────────────
+model Invoice {
+  id                  String  @id
+  contractId          String  @map("contract_id")
+  period              String
+  documentNo          String? @map("document_no")
+  shareLink           String? @map("share_link")
+  documentPdf         Bytes?  @map("document_pdf")
+  documentDate        String  @map("document_date")
+  dueDate             String? @map("due_date")
+  total               Float
+  discountTotal       Float   @map("discount_total")
+  totalAfterDiscount  Float   @map("total_after_discount")
+  vat                 Float
+  grandTotal          Float   @map("grand_total")
+  withholdingTax      Float   @map("withholding_tax")
+  paymentAmount       Float   @map("payment_amount")
+  remark              String?
+  payload             String? // JSON ที่ส่งเข้า FlowAccount — ยังเป็น String จนกว่าจะพอร์ตโมดูลนี้
+  response            String? // JSON ที่ FlowAccount ตอบกลับ
+  status              String  @default("draft")
+  approvedBy          String? @map("approved_by")
+  approvedAt          String? @map("approved_at")
+  emailDraft          String? @map("email_draft") // JSON ร่างอีเมล
+  gmailDraftId        String? @map("gmail_draft_id")
+  gmailThreadId       String? @map("gmail_thread_id")
+  emailSentAt         String? @map("email_sent_at")
+  emailSentBy         String? @map("email_sent_by")
+  createdAt           String  @map("created_at")
+
+  contract     Contract      @relation(fields: [contractId], references: [id])
+  invoiceItems InvoiceItem[]
+
+  @@unique([contractId, period])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  invoiceId    String  @map("invoice_id")
+  seq          Int
+  employeeId   String? @map("employee_id")
+  timesheetId  String? @map("timesheet_id")
+  name         String
+  description  String?
+  quantity     Float
+  unitName     String  @map("unit_name")
+  pricePerUnit Float   @map("price_per_unit")
+  discount     Float   @default(0)
+  amount       Float
+
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  employee  Employee?  @relation(fields: [employeeId], references: [id])
+  timesheet Timesheet? @relation(fields: [timesheetId], references: [id])
+
+  @@id([invoiceId, seq])
+  @@map("invoice_items")
+}
+
+// ── ประตูมนุษย์ก่อนสร้างร่างใน FlowAccount ─────────
+model CycleApproval {
+  contractId    String  @map("contract_id")
+  period        String
+  status        String  @default("pending")
+  requestedAt   String  @map("requested_at")
+  requestedBy   String? @map("requested_by")
+  decidedAt     String? @map("decided_at")
+  decidedBy     String? @map("decided_by") // LINE userId ของคนกด
+  lineMessageId String? @map("line_message_id")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@id([contractId, period])
+  @@map("cycle_approvals")
+}
+
+// ── ผู้ใช้งานระบบ (login) ────────────────────────────────────
+// role: 'admin' | 'accounting' | 'user' | 'executive' — ดู src/auth.js ROLES
+model User {
+  username      String  @id
+  nameTh        String  @map("name_th")
+  // เพิ่มทีหลัง (15 ก.ย. 69, ตามที่ user ขอ) — พนักงานบางคนกรอกชื่อใน Timesheet เป็นอังกฤษ บางคนไทย
+  // ต่างจาก Employee ที่มี nameTh/nameEn ครบอยู่แล้ว (ใช้ตอนจับคู่ชื่อจาก OCR — matchEmployee() ใน
+  // packages/domain/src/matching.ts เทียบทั้งสองภาษาอยู่แล้ว ไม่ต้องแก้จุดนั้น) User (บัญชีล็อกอิน/ชื่อที่
+  // ใช้แสดงในบันทึกอนุมัติ) ยังไม่มี nameEn เลยเป็นคนละเรื่องกัน — เพิ่มเข้ามาให้ครบเหมือน Employee
+  nameEn        String? @map("name_en")
+  role          String  @default("user")
+  active        Boolean @default(true)
+  passwordSalt  String  @map("password_salt")
+  passwordHash  String  @map("password_hash")
+  createdAt     String  @map("created_at")
+  // เพิ่มทีหลัง (ADDED_COLUMNS) — ผูกพนักงาน + สมัครเอง/ลืมรหัสผ่าน/Google login
+  employeeId           String?  @map("employee_id")
+  email                String?
+  selfRegistered       Boolean  @default(false) @map("self_registered")
+  googleSub            String?  @map("google_sub")
+  resetCodeHash        String?  @map("reset_code_hash")
+  resetCodeSalt        String?  @map("reset_code_salt")
+  resetCodeExpiresAt   String?  @map("reset_code_expires_at")
+  resetCodeAttempts    Int      @default(0) @map("reset_code_attempts")
+  resetTokenHash       String?  @map("reset_token_hash")
+  resetTokenSalt       String?  @map("reset_token_salt")
+  resetTokenExpiresAt  String?  @map("reset_token_expires_at")
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Session {
+  token     String @id
+  username  String
+  createdAt String @map("created_at")
+  expiresAt String @map("expires_at")
+
+  user User @relation(fields: [username], references: [username], onDelete: Cascade)
+
+  @@index([username])
+  @@map("sessions")
+}
+
+// ── บันทึกการทำงาน (Audit trail) ───────────────────────────
+model AuditLog {
+  id         Int     @id @default(autoincrement())
+  at         String
+  actor      String
+  action     String
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+  detail     String? // JSON — ยังเป็น String จนกว่าจะพอร์ตโมดูลที่ใช้
+
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+// ── ค่าตั้งค่าระบบ ────────────────────────────────────────
+model Setting {
+  key   String @id
+  value String // JSON-encoded — ยังเป็น String จนกว่าจะพอร์ตโมดูลที่ใช้
+
+  @@map("settings")
+}
+
+// ── สารบัญ Skill ABBYY ที่เทรนไว้แล้ว ──────────
+model AbbyySkill {
+  id        String @id
+  name      String
+  skillId   String @unique @map("skill_id")
+  createdAt String @map("created_at")
+  // เพิ่มทีหลัง (15 ก.ย. 69) — mapping ชื่อฟิลด์จริงของ Skill นี้ใน ABBYY Vantage → ชื่อ canonical ที่
+  // โค้ดใช้ (employeeName/position/monthYear หรือ month+year แยก/tableName/totalWorkDays) — แต่ละ Skill
+  // ตั้งชื่อฟิลด์เองอิสระ ไม่ตรงกันข้าม Skill เลย (ยืนยันจริงจาก ABBYY Vantage API — "Employee Name" vs
+  // "Name", "Month Year" vs "Month_Year" vs "Month"+"Year" แยกกัน, "New Table" vs "New Table 2" ฯลฯ)
+  // null = ใช้ค่า default ของ Skill "OBS Timesheet2"/iPassion ทั้งหมด (ตรงกับพฤติกรรมเดิมก่อนมีคอลัมน์
+  // นี้ทุกประการ — ไม่กระทบ Skill ที่ผูกไว้อยู่แล้วและยังไม่ได้ตั้ง mapping เอง)
+  fieldMap  Json?  @map("field_map")
+
+  @@map("abbyy_skills")
+}

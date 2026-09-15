@@ -1,0 +1,151 @@
+/**
+ * ประกอบข้อมูล Timesheet จากที่คนกรอกด้วยมือ
+ *
+ * คนกรอกแค่ 4 อย่าง: เลขเอกสาร · ชื่อกับตำแหน่งตามที่เขียนในใบ · รอบเดือน · วันที่ลา
+ * ตารางรายวันทั้งเดือนระบบสร้างเองจากปฏิทิน ไม่ต้องนั่งกรอก 31 แถว — คืนโครงข้อมูลหน้าตาเดียวกับ
+ * ที่โมเดล vision/ABBYY อ่านจาก PDF ออกมา เพื่อให้ไหลผ่านเส้น ingest เดิมได้ทั้งเส้น
+ *
+ * Ported from src/domain/manual-sheet.js — logic preserved exactly, types added.
+ */
+import { buildMonth, DAY_KIND } from './calendar.js';
+
+export const LEAVE_TYPES = ['sick', 'personal', 'vacation', 'other'] as const;
+export type ManualLeaveType = (typeof LEAVE_TYPES)[number];
+
+const LEAVE_LABEL: Record<ManualLeaveType, string> = {
+  sick: 'Sick leave',
+  personal: 'Personal leave',
+  vacation: 'Annual leave',
+  other: 'Leave',
+};
+
+const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export interface ManualLeaveDayInput {
+  date: string;
+  type?: string;
+}
+
+export interface BuildManualSheetInput {
+  employeeName: string;
+  position: string;
+  period: string;
+  leaveDays?: Array<ManualLeaveDayInput | string>;
+  holidays?: Map<string, string>;
+  signedByEmployee?: boolean;
+  signedByProjectManager?: boolean;
+  clientName?: string | null;
+  projectName?: string | null;
+}
+
+export class ManualSheetError extends Error {
+  status = 400;
+  errors: string[];
+  constructor(errors: string[]) {
+    super(errors[0]);
+    this.errors = errors;
+  }
+}
+
+export function buildManualSheet({
+  employeeName,
+  position,
+  period,
+  leaveDays = [],
+  holidays = new Map(),
+  signedByEmployee = true,
+  signedByProjectManager = true,
+  clientName = null,
+  projectName = null,
+}: BuildManualSheetInput) {
+  const errors: string[] = [];
+
+  if (!employeeName?.trim()) errors.push('ต้องกรอกชื่อพนักงานตามที่เขียนในใบ Timesheet');
+  if (!position?.trim()) errors.push('ต้องกรอกตำแหน่งตามที่เขียนในใบ Timesheet');
+  if (!PERIOD_RE.test(period ?? '')) errors.push('รอบเดือนต้องเป็นรูปแบบ YYYY-MM เช่น 2026-01');
+
+  const seen = new Set<string>();
+  const normalised: Array<{ date: string; type: ManualLeaveType }> = [];
+  for (const raw of leaveDays) {
+    const date = typeof raw === 'string' ? raw : raw?.date;
+    const type = ((typeof raw === 'string' ? 'other' : raw?.type) ?? 'other') as ManualLeaveType;
+
+    if (!DATE_RE.test(date ?? '')) {
+      errors.push(`วันที่ลา "${date ?? ''}" ไม่ใช่รูปแบบ YYYY-MM-DD`);
+      continue;
+    }
+    if (!date!.startsWith(`${period}-`)) {
+      errors.push(`วันที่ลา ${date} ไม่ได้อยู่ในรอบ ${period}`);
+      continue;
+    }
+    if (!LEAVE_TYPES.includes(type)) {
+      errors.push(`ประเภทการลา "${type}" ไม่รู้จัก — ใช้ได้: ${LEAVE_TYPES.join(', ')}`);
+      continue;
+    }
+    if (seen.has(date!)) {
+      errors.push(`วันที่ลา ${date} ถูกกรอกซ้ำ`);
+      continue;
+    }
+    seen.add(date!);
+    normalised.push({ date: date!, type });
+  }
+
+  if (errors.length) throw new ManualSheetError(errors);
+
+  const month = buildMonth(period, holidays, seen);
+
+  const days = month.days.map((d) => {
+    if (d.kind === DAY_KIND.WORKDAY) {
+      return {
+        date: d.date,
+        timeIn: '8:30',
+        timeOut: '17:00',
+        label: null as string | null,
+        jobDescription: 'งานตามที่ได้รับมอบหมาย' as string | null,
+      };
+    }
+    const leave = normalised.find((l) => l.date === d.date);
+    return {
+      date: d.date,
+      timeIn: null as string | null,
+      timeOut: null as string | null,
+      label:
+        d.kind === DAY_KIND.WEEKEND
+          ? 'Weekend'
+          : d.kind === DAY_KIND.HOLIDAY
+            ? (d.label ?? 'Holiday')
+            : LEAVE_LABEL[leave?.type ?? 'other'],
+      jobDescription: null as string | null,
+    };
+  });
+
+  return {
+    vendor: 'iPassion Co.,Ltd.',
+    clientName,
+    projectName,
+    employeeName: employeeName.trim(),
+    position: position.trim(),
+    period,
+    totalWorkDays: month.counts.workday,
+    totalLeaveDays: normalised.length,
+    days,
+    leaveDays: normalised.map((l) => ({ date: l.date, type: l.type, rawLabel: LEAVE_LABEL[l.type] })),
+    otDays: [] as Array<{ date: string; hours: number }>,
+    signedByEmployee,
+    signedByProjectManager,
+    notes: [] as string[],
+  };
+}
+
+export type ManualSheetData = ReturnType<typeof buildManualSheet>;
+
+/** ตัวอ่านไฟล์ปลอมสำหรับงานป้อนมือ — เสียบแทน extractTimesheet() ใน ingestTimesheet() */
+export function manualExtractor(data: ManualSheetData) {
+  return async () => ({
+    data,
+    verification: { ok: true, issues: [] as Array<{ severity: string; message: string }> },
+    usage: { input_tokens: 0, output_tokens: 0 },
+    model: 'manual',
+  });
+}

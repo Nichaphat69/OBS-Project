@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/.next
+**/dist
+data
+docs
+n8n
+slides
+stitch_obs_line_billing_assistant
+*.pem
+*.log
+.git
+.DS_Store

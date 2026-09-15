@@ -1,0 +1,644 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { Card, PageHeader, StatusPill, Tag } from '../../../../../components/ui';
+import { Icon } from '../../../../../components/Icon';
+import { useToast } from '../../../../../components/Overlays';
+import { useLang } from '../../../../../lib/language';
+
+interface InvoiceItem {
+  seq: number;
+  name: string;
+  employeeId: string;
+  employeeName: string;
+  quantity: number;
+  unitName: string;
+  pricePerUnit: number;
+  discount: number;
+  amount: number;
+}
+
+interface MandayCalc {
+  standardWorkingDays: number;
+  leaveCount: number;
+  payableDays: number;
+  monthlyRate: number;
+  dailyRate: number;
+  discount: number;
+  lineAmount: number;
+}
+
+interface CycleEntry {
+  timesheetId: string;
+  employee: { id: string; nameTh: string; invoicePosition: string; quotationNo: string | null };
+  manday: MandayCalc;
+}
+
+interface Attachment {
+  label: string;
+  invoiceId: string | null;
+  timesheetId: string | null;
+}
+
+interface CyclePreview {
+  contract: { id: string; poNo: string; projectName: string; customerName: string };
+  period: string;
+  periodLabel: string;
+  cycle: { expected: number; received: number; missing: string[] };
+  invoice: {
+    documentDate: string;
+    dueDate: string;
+    creditDays: number;
+    customer: { name: string; taxId: string; branch?: string | null };
+    items: InvoiceItem[];
+    totals: {
+      total: number;
+      discountTotal: number;
+      totalAfterDiscount: number;
+      vatRate: number;
+      vat: number;
+      grandTotal: number;
+      whtRate: number;
+      withholdingTax: number;
+      paymentAmount: number;
+    };
+    remark: string;
+    payload: unknown;
+  } | null;
+  entries: CycleEntry[];
+  blockers: string[];
+  warnings: Array<{ employee: string; title: string; detail: string }>;
+  emailDraft: {
+    to: string;
+    cc: string;
+    subject: string;
+    body: string;
+    highlights?: string[];
+    source?: string;
+    note?: string;
+    attachments: Attachment[];
+  } | null;
+  existing: { id: string; documentNo: string | null; shareLink: string | null; status: string } | null;
+}
+
+interface PeriodEmployee {
+  employeeId: string;
+  nameTh: string;
+  position: string;
+  status: string;
+  statusLabel: string;
+}
+
+interface ApprovalGate {
+  status: string;
+  requestedAt: string | null;
+  requestedBy: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+}
+
+const APPROVAL_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu'> = {
+  approved: 'ok',
+  rejected: 'cr',
+  pending: 'wn',
+  requested: 'wn',
+};
+
+function money(n: number | null | undefined) {
+  if (n === null || n === undefined) return '—';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function initials(name: string) {
+  const parts = String(name ?? '').trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] ?? '') + (parts[1][0] ?? '');
+  return (parts[0] ?? '?').slice(0, 2);
+}
+
+export default function CycleDetailPage() {
+  const { tx } = useLang();
+  const toast = useToast();
+  const params = useParams<{ contractId: string; period: string }>();
+  const [data, setData] = useState<CyclePreview | null>(null);
+  const [employees, setEmployees] = useState<PeriodEmployee[] | null>(null);
+  const [approval, setApproval] = useState<ApprovalGate | null | undefined>(undefined);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approveResult, setApproveResult] = useState<{ documentNo: string | null; shareLink: string | null; mode: string; note: string | null } | null>(
+    null,
+  );
+  const [draftingAi, setDraftingAi] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [tab, setTab] = useState<1 | 2>(1);
+
+  function load() {
+    fetch(`/api/cycles/${params.contractId}/${params.period}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then(setData);
+    fetch(`/api/cycles/${params.contractId}/${params.period}/employees`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then(setEmployees);
+    fetch(`/api/cycles/${params.contractId}/${params.period}/approval`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then(setApproval);
+  }
+
+  useEffect(load, [params.contractId, params.period]);
+
+  async function doApprove() {
+    setApproving(true);
+    setApproveError(null);
+    try {
+      const res = await fetch(`/api/cycles/${params.contractId}/${params.period}/approve`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) {
+        setApproveError(result.blockers ? `${result.error}: ${result.blockers.join(' · ')}` : result.error ?? tx('อนุมัติไม่สำเร็จ'));
+        return;
+      }
+      setApproveResult(result);
+      load();
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function doDraftWithAi() {
+    setDraftingAi(true);
+    setAiError(null);
+    try {
+      const res = await fetch(`/api/cycles/${params.contractId}/${params.period}/email-draft`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) {
+        setAiError(result.error ?? tx('ให้ AI เรียบเรียงอีเมลไม่สำเร็จ'));
+        return;
+      }
+      setData((d) => (d ? { ...d, emailDraft: result } : d));
+    } finally {
+      setDraftingAi(false);
+    }
+  }
+
+  async function copyDraft() {
+    if (!data?.emailDraft) return;
+    const text = `${tx('ถึง')}: ${data.emailDraft.to}\n${tx('สำเนา')}: ${data.emailDraft.cc}\n${tx('เรื่อง')}: ${data.emailDraft.subject}\n\n${data.emailDraft.body}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(tx('คัดลอกร่างอีเมลแล้ว'));
+    } catch {
+      toast(tx('คัดลอกไม่สำเร็จ'), true);
+    }
+  }
+
+  if (!data) {
+    return (
+      <>
+        <PageHeader eyebrow={tx('วางบิล & ร่างอีเมล')} title={tx('กำลังโหลด…')} />
+      </>
+    );
+  }
+
+  const billed = data.existing?.status === 'sent_to_flowaccount';
+  const inv = data.invoice;
+
+  return (
+    <>
+      <PageHeader
+        eyebrow={`${data.contract.poNo} · ${data.periodLabel}`}
+        title={data.contract.customerName}
+        subtitle={data.contract.projectName}
+        actions={
+          <Link href="/billing" className="btn ghost">
+            ← {tx('กลับ')}
+          </Link>
+        }
+      />
+
+      {approveError && (
+        <div className="card">
+          <div className="bd" style={{ color: 'var(--cr)' }}>
+            {approveError}
+          </div>
+        </div>
+      )}
+
+      {approveResult && (
+        <div className="card">
+          <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <StatusPill tone="ok">{tx('สร้างเอกสารสำเร็จ')}</StatusPill>
+            <div>
+              {tx('เลขที่เอกสาร')}: <b>{approveResult.documentNo}</b> ({approveResult.mode})
+            </div>
+            {approveResult.shareLink && (
+              <a href={approveResult.shareLink} target="_blank" rel="noreferrer" className="sub">
+                {tx('ดูเอกสาร')} →
+              </a>
+            )}
+            {approveResult.note && <div className="sub">{approveResult.note}</div>}
+          </div>
+        </div>
+      )}
+
+      {approval !== undefined && (
+        <div className="card">
+          <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="ey">{tx('การอนุมัติผ่าน LINE')}</div>
+            {approval === null ? (
+              <span className="sub">{tx('ยังไม่มีการขออนุมัติผ่าน LINE')}</span>
+            ) : (
+              <>
+                <StatusPill tone={APPROVAL_TONE[approval.status] ?? 'mu'}>{approval.status}</StatusPill>
+                {approval.requestedAt && (
+                  <span className="sub">
+                    {tx('ขออนุมัติเมื่อ')} {approval.requestedAt.slice(0, 19).replace('T', ' ')}
+                    {approval.requestedBy ? ` · ${approval.requestedBy}` : ''}
+                  </span>
+                )}
+                {approval.decidedAt && (
+                  <span className="sub">
+                    {tx('ตัดสินใจเมื่อ')} {approval.decidedAt.slice(0, 19).replace('T', ' ')}
+                    {approval.decidedBy ? ` · ${approval.decidedBy}` : ''}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {data.blockers.length > 0 && (
+        <div className="card">
+          <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.blockers.map((b, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10 }}>
+                <StatusPill tone="cr">{tx('ติดปัญหา')}</StatusPill>
+                <span className="sub" style={{ marginTop: 4 }}>
+                  {b}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.warnings.length > 0 && (
+        <div className="card">
+          <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.warnings.map((w, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10 }}>
+                <StatusPill tone="wn">{w.employee}</StatusPill>
+                <span className="sub" style={{ marginTop: 4 }}>
+                  {w.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {employees && (
+        <Card title={tx('พนักงานในรอบนี้')} flush>
+          <div className="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th>{tx('พนักงาน')}</th>
+                  <th>{tx('ตำแหน่ง')}</th>
+                  <th>{tx('สถานะ Timesheet')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map((e) => (
+                  <tr key={e.employeeId}>
+                    <td className="nm">{e.nameTh}</td>
+                    <td>{e.position}</td>
+                    <td>
+                      <Tag tone={e.status === 'not_submitted' ? 'mu' : e.status === 'billed' ? 'ok' : 'wn'}>
+                        {tx(e.statusLabel)}
+                      </Tag>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {!inv ? (
+        <div className="card">
+          <div className="empty">{tx('ยังไม่มีรายการที่วางบิลได้ในรอบนี้')}</div>
+        </div>
+      ) : (
+        <>
+          <div className="split2">
+            {/* ซ้าย: รายการในรอบบิล — แยกตามพนักงาน + tabs FlowAccount payload / ร่างอีเมล */}
+            <div>
+              <Card title={tx('รายการในรอบบิล')} flush>
+                <div className="cardgrid" style={{ gridTemplateColumns: '1fr' }}>
+                  {data.entries.map((entry) => {
+                    const m = entry.manday;
+                    return (
+                      <div className="rec" key={entry.timesheetId}>
+                        <div className="rec-hd">
+                          <span className="ava">{initials(entry.employee.nameTh)}</span>
+                          <span>
+                            <span className="nm2">{entry.employee.invoicePosition}</span>
+                            <span className="mt2">
+                              {entry.employee.nameTh} · {entry.employee.quotationNo ?? ''}
+                            </span>
+                          </span>
+                          <span className="rt2">
+                            <StatusPill tone={m.discount ? 'wn' : 'ok'}>
+                              {m.payableDays} / {m.standardWorkingDays} {tx('วัน')}
+                            </StatusPill>
+                          </span>
+                        </div>
+                        <div className="minitab">
+                          <div className="mh2">
+                            <span>{tx('รายการคำนวณ')}</span>
+                            <span className="q">{tx('จำนวน')}</span>
+                            <span className="p">{tx('บาท')}</span>
+                          </div>
+                          <div className="mr">
+                            <span className="lb2">{tx('เรทค่าบริการต่อเดือน')}</span>
+                            <span className="q">
+                              1 {tx('เดือน')}
+                            </span>
+                            <span className="p">{money(m.monthlyRate)}</span>
+                          </div>
+                          {m.leaveCount ? (
+                            <div className="mr neg">
+                              <span className="lb2">
+                                {tx('ส่วนลดวันลา')}
+                                <small>
+                                  {money(m.dailyRate)} × {m.leaveCount} {tx('วัน')}
+                                </small>
+                              </span>
+                              <span className="q">
+                                {m.leaveCount} {tx('วัน')}
+                              </span>
+                              <span className="p">−{money(m.discount)}</span>
+                            </div>
+                          ) : (
+                            <div className="mr">
+                              <span className="lb2">
+                                {tx('ส่วนลดวันลา')}
+                                <small>{tx('ไม่มีวันลา')}</small>
+                              </span>
+                              <span className="q">0 {tx('วัน')}</span>
+                              <span className="p">—</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="rec-total">
+                          <span className="tl">{tx('ยอดของรายการนี้')}</span>
+                          <span className="tv">{money(m.lineAmount)}</span>
+                        </div>
+                        <div className="rec-acts one">
+                          <Link href={`/manday/${entry.timesheetId}`} className="btn">
+                            <Icon name="file" className="sm" /> {tx('ดู Timesheet')}
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+
+              <div className="tabs" role="tablist">
+                <button className={`tab ${tab === 1 ? 'on' : ''}`} onClick={() => setTab(1)}>
+                  {tx('ข้อมูลที่ส่งเข้า FlowAccount')}
+                </button>
+                <button className={`tab ${tab === 2 ? 'on' : ''}`} onClick={() => setTab(2)}>
+                  {tx('ร่างอีเมล')}
+                </button>
+              </div>
+
+              <div className={`tp ${tab === 1 ? 'on' : ''}`}>
+                <Card title={tx('Payload ที่จะยิงเข้า API')} right={tx('ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง')}>
+                  <pre className="code">{JSON.stringify(inv.payload, null, 2)}</pre>
+                </Card>
+              </div>
+
+              <div className={`tp ${tab === 2 ? 'on' : ''}`}>
+                {data.emailDraft && (
+                  <Card title={tx('ร่างอีเมลวางบิล')}>
+                    <div className="mailacts">
+                      <button className="btn sm" disabled={draftingAi} onClick={doDraftWithAi}>
+                        <Icon name="rf" className="sm" /> {draftingAi ? tx('กำลังเรียบเรียง…') : tx('ให้ AI เรียบเรียง')}
+                      </button>
+                      <button className="btn sm" onClick={copyDraft}>
+                        <Icon name="doc" className="sm" /> {tx('คัดลอกร่าง')}
+                      </button>
+                    </div>
+                    {aiError && <div style={{ color: 'var(--cr)', marginBottom: 10 }}>{aiError}</div>}
+                    {data.emailDraft.highlights && data.emailDraft.highlights.length > 0 && (
+                      <div className="note info" style={{ marginBottom: 14 }}>
+                        <Icon name="info" />
+                        <span>
+                          <strong>{tx('ข้อสังเกตจากระบบ')}</strong>
+                          <br />
+                          {data.emailDraft.highlights.join(' · ')}
+                        </span>
+                      </div>
+                    )}
+                    <div className="cmp">
+                      <div className="f">
+                        <span className="l">{tx('ถึง')}</span>
+                        <span>{data.emailDraft.to}</span>
+                      </div>
+                      <div className="f">
+                        <span className="l">{tx('สำเนา')}</span>
+                        <span>{data.emailDraft.cc}</span>
+                      </div>
+                      <div className="f sj">
+                        <span className="l">{tx('เรื่อง')}</span>
+                        <span>{data.emailDraft.subject}</span>
+                      </div>
+                      <div className="lt">{data.emailDraft.body}</div>
+                      <div className="en">
+                        <div className="files">
+                          {data.emailDraft.attachments.map((a, i) => {
+                            const href = a.invoiceId
+                              ? `/api/invoices/${encodeURIComponent(a.invoiceId)}/file`
+                              : a.timesheetId
+                                ? `/api/timesheets/${encodeURIComponent(a.timesheetId)}/file`
+                                : null;
+                            return href ? (
+                              <a key={i} className="file" href={href} target="_blank" rel="noreferrer" title={tx('เปิดดูไฟล์นี้')}>
+                                <span className="pd">PDF</span> {a.label}
+                              </a>
+                            ) : (
+                              <span key={i} className="file">
+                                <span className="pd">PDF</span> {a.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                    {data.emailDraft.note && (
+                      <div className="sub" style={{ marginTop: 10 }}>
+                        {data.emailDraft.note}
+                      </div>
+                    )}
+                  </Card>
+                )}
+              </div>
+            </div>
+
+            {/* ขวา: ใบแจ้งหนี้ที่จะสร้าง */}
+            <div className="sticky">
+              <Card
+                title={tx('ใบแจ้งหนี้ที่จะสร้าง')}
+                right={
+                  billed ? (
+                    <>
+                      {tx('สร้างแล้ว')} — {data.existing?.documentNo}
+                      {data.existing?.shareLink && (
+                        <>
+                          {' '}
+                          ·{' '}
+                          <a href={data.existing.shareLink} target="_blank" rel="noreferrer">
+                            {tx('เปิดดูเอกสาร')}
+                          </a>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    tx('เลขเอกสารจะได้จาก FlowAccount')
+                  )
+                }
+              >
+                <div className="doc">
+                  <div className="dh">
+                    <div>
+                      <Tag tone={billed ? 'ok' : 'wn'}>{billed ? tx('สร้างร่างแล้ว') : `${tx('ร่าง')} · Draft`}</Tag>
+                      <div className="cs">{inv.customer.name}</div>
+                      <div className="ti">
+                        {tx('เลขประจำตัวผู้เสียภาษี')} {inv.customer.taxId} · {inv.customer.branch ?? ''}
+                      </div>
+                    </div>
+                    <dl className="kv">
+                      <dt>{tx('วันที่เอกสาร')}</dt>
+                      <dd>{inv.documentDate.slice(0, 10)}</dd>
+                      <dt>{tx('เครดิต')}</dt>
+                      <dd>
+                        {inv.creditDays} {tx('วัน')} · {tx('ครบ')} {inv.dueDate.slice(0, 10)}
+                      </dd>
+                    </dl>
+                  </div>
+                  <div className="tw">
+                    <table style={{ minWidth: 0 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 34 }}>#</th>
+                          <th>{tx('รายการ')}</th>
+                          <th className="r" style={{ width: 96 }}>
+                            {tx('ส่วนลด')}
+                          </th>
+                          <th className="r" style={{ width: 112 }}>
+                            {tx('จำนวนเงิน')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inv.items.map((i) => (
+                          <tr key={i.seq}>
+                            <td className="n">{i.seq}</td>
+                            <td>
+                              <span className="nm">{i.name}</span>
+                              <span className="sub">{i.employeeName}</span>
+                              <span className="sub">
+                                {i.quantity} {i.unitName} × {money(i.pricePerUnit)}
+                              </span>
+                            </td>
+                            <td className="r n" style={{ color: i.discount ? 'var(--cr)' : 'var(--fnt)' }}>
+                              {i.discount ? `−${money(i.discount)}` : '—'}
+                            </td>
+                            <td className="r n">{money(i.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="dfoot">
+                    <div className="tot">
+                      <div className="t">
+                        <span>{tx('รวมเป็นเงิน')}</span>
+                        <span className="v">{money(inv.totals.total)}</span>
+                      </div>
+                      <div className="t mi">
+                        <span>{tx('ส่วนลด')}</span>
+                        <span className="v">−{money(inv.totals.discountTotal)}</span>
+                      </div>
+                      <div className="t rl">
+                        <span>{tx('รวมหลังหักส่วนลด')}</span>
+                        <span className="v">{money(inv.totals.totalAfterDiscount)}</span>
+                      </div>
+                      <div className="t">
+                        <span>
+                          {tx('ภาษีมูลค่าเพิ่ม')} {Math.round(inv.totals.vatRate * 100)}%
+                        </span>
+                        <span className="v">{money(inv.totals.vat)}</span>
+                      </div>
+                      <div className="t gr">
+                        <span>{tx('รวมทั้งสิ้น')}</span>
+                        <span className="v">{money(inv.totals.grandTotal)}</span>
+                      </div>
+                      <div className="t mi">
+                        <span>
+                          {tx('หักภาษี ณ ที่จ่าย')} {Math.round(inv.totals.whtRate * 100)}%
+                        </span>
+                        <span className="v">−{money(inv.totals.withholdingTax)}</span>
+                      </div>
+                      <div className="t py">
+                        <span>{tx('ยอดรับชำระ')}</span>
+                        <span className="v">{money(inv.totals.paymentAmount)}</span>
+                      </div>
+                    </div>
+                    {inv.remark && (
+                      <div className="rmk">
+                        <span className="ey">{tx('หมายเหตุ')}</span>
+                        {inv.remark}
+                      </div>
+                    )}
+                    <div className="note">
+                      <Icon name="info" />
+                      <span>
+                        {tx('ภาษีหัก ณ ที่จ่ายคิดจากยอดหลังหักส่วนลดก่อน VAT')} ({money(inv.totals.totalAfterDiscount)} ×{' '}
+                        {Math.round(inv.totals.whtRate * 100)}% = {money(inv.totals.withholdingTax)}) {tx('ตามที่ใบแจ้งหนี้ตัวอย่างทำ ไม่ใช่คิดจากยอดรวมทั้งสิ้น')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          <div className="fbar">
+            <span className="sx">
+              {billed ? (
+                <>
+                  <b>{tx('สร้างร่างใน FlowAccount แล้ว')}</b> — {data.existing?.documentNo}
+                </>
+              ) : (
+                data.blockers.length > 0 && (
+                  <>
+                    <b>{tx('ยังอนุมัติไม่ได้')}</b> — {data.blockers.length} {tx('ข้อ')}
+                  </>
+                )
+              )}
+            </span>
+            <div className="gap" />
+            <button className="btn pri" disabled={billed || data.blockers.length > 0 || approving} onClick={doApprove}>
+              <Icon name="send" className="sm" /> {approving ? tx('กำลังสร้างเอกสาร…') : tx('อนุมัติและสร้างร่างใน FlowAccount')}
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}

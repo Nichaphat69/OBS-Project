@@ -1,0 +1,446 @@
+<!DOCTYPE html><html lang="th"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iPassion OBS — System UX/UI Specification &amp; Claude AI Master Prompt</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Noto+Sans+Thai:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '"Noto Sans Thai"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              line: '#06C755',
+              dark: '#00B900',
+              deep: '#043b22',
+              light: '#E8F9EE'
+            },
+            obs: {
+              primary: '#0F62FE',
+              surface: '#F8F9FA',
+              dark: '#161616',
+              border: '#E2E8F0',
+              card: '#FFFFFF'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .badge-btn {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .badge-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(6, 199, 85, 0.2);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-emerald-100 selection:text-emerald-900 pb-20">
+
+  <!-- Header Banner -->
+  <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50 backdrop-blur-md bg-opacity-90">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0a78d4] to-[#06C755] flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-900/40">OBS</div>
+        <div>
+          <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2">
+            iPassion OBS Assistant
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium border border-emerald-500/30">Claude AI Ready</span>
+          </h1>
+          <p class="text-xs text-slate-400">Master Prompt &amp; Interactive Button Action Specifications for Claude Artifacts</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="copyClaudePrompt()" class="px-4 py-2 bg-[#0a78d4] hover:bg-[#0867b7] text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 active:scale-95"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg><span id="copyBtnText" class="">คัดลอก Master Prompt</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 pt-8 space-y-10">
+
+    <!-- Hero Card & Instructions -->
+    <div class="bg-gradient-to-br from-white to-emerald-50/40 p-8 rounded-2xl border border-emerald-100 shadow-sm relative overflow-hidden">
+      <div class="absolute -right-12 -bottom-12 w-64 h-64 bg-emerald-100/50 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="max-w-3xl space-y-3">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
+          🚀 วิธีการใช้งานกับ Claude AI
+        </div>
+        <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900 leading-snug">
+          เอกสารสรุปสเปกปุ่ม &amp; โครงสร้าง UX/UI ทั้งหมดสำหรับส่งให้ Claude AI พัฒนาระบบต่อทันที
+        </h2>
+        <p class="text-sm md:text-base text-slate-600 leading-relaxed">
+          นำเนื้อหาในกล่อง <strong>Claude AI Master Prompt</strong> ด้านล่างนี้ไปวางในกล่องแชทของ Claude (Claude 3.5 Sonnet หรือ Claude 3 Opus) ระบบจะเข้าใจ flow การทำงาน หน้าจอ การกดปุ่ม และเงื่อนไข Business Logic ของระบบวางบิล Outsource (OBS) ได้อย่างแม่นยำ พร้อมสร้างโค้ดและ Prototype ให้ได้ทันที
+        </p>
+      </div>
+    </div>
+
+    <!-- Section 1: Master Prompt to Copy to Claude -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <span class="flex items-center justify-center w-6 h-6 rounded-md bg-emerald-600 text-white text-xs">1</span>
+          Claude AI Master Prompt (คัดลอกส่วนนี้ไปใส่ใน Claude)
+        </h3>
+        <span class="text-xs text-slate-500 font-mono">Format: Markdown Prompt with XML Tags</span>
+      </div>
+
+      <div class="relative">
+        <pre id="claudeMasterPrompt" class="code-block p-6 text-xs md:text-sm leading-relaxed overflow-x-auto max-h-[460px] border border-slate-800 selection:bg-emerald-500 selection:text-white"><code># ROLE &amp; MISSION
+คุณคือ Senior Full-Stack UX/UI Architect และ Technical Product Lead ของบริษัท iPassion Co., Ltd.
+ภารกิจของคุณคือพัฒนาและต่อยอดระบบ "iPassion OBS Assistant" (ระบบวางบิล Outsource อัตโนมัติ ผสาน LINE Chatbot &amp; Web Portal)
+โดยสร้างตาม Interaction Flow, Business Logic และ Button Actions ดังต่อไปนี้อย่างเคร่งครัด
+
+---
+
+## 📌 1. BUSINESS DOMAIN &amp; CONTEXT
+- ระบบ: OBS (Outsource Billing System) สำหรับพนักงาน Outsource, PM/Supervisor, Admin และ บัญชี
+- ลูกค้านำร่อง: บริษัท ไทยประกันชีวิต จำกัด (มหาชน) — สัญญา 26/B0113 (BAU Project)
+- ตัวละครหลัก:
+  - พนักงาน Outsource (เช่น คุณพงศ์พันธ์ มามาก - Dev / Java Programmer)
+  - PM / Supervisor (เช่น คุณปิติกร ชุมภูชนะภัย)
+  - ผู้ตรวจระบบ / บัญชี (Admin iPassion)
+- กฎคิดเงิน Manday: เรทรายเดือนเต็มจำนวน (50,000 บาท) หักส่วนลดวันลา (เรท/วันทำงานมาตรฐาน 20 วัน = 2,500 บ./วัน)
+
+---
+
+## ⚡ CRITICAL ARCHITECTURE: PUSH NOTIFICATIONS VS USER ACTIONS
+⚠️ ข้อกำหนดสำคัญที่ห้ามสับสน:
+1. "การแจ้งเตือนรอบบิลส่ง Timesheet (3 ปุ่มตัวเลือก)" และ "การแจ้งเตือน Timesheet ยังไม่ส่ง":
+   - ทั้ง 2 รายการนี้เป็น **Automated Trigger / Push Notification (Cron Scheduler หลังบ้าน OBS)**
+   - ส่งตรงเข้า LINE Chatbot อัตโนมัติทุกวันที่ 1 ของทุกเดือน ตามเงื่อนไขสัญญาของบริษัทลูกค้านั้นๆ (เช่น สัญญา บมจ.ไทยประกันชีวิต)
+   - บอทส่งข้อความเปิดอัตโนมัติ: "สิ้นเดือนแล้วคุณส่ง Timesheet หรือยังน้าา"
+   - **ไม่ได้เกิดจากการกดปุ่ม Quick Menu / Rich Menu ด้านล่างเด็ดขาด**
+2. "การแจ้งเตือน Timesheet ยังไม่ส่ง":
+   - เป็น Automated Daily/Deadline Reminder จาก Cron Job ของระบบ OBS ยิงเตือนผู้ใช้ที่ยังไม่ส่งเอกสาร
+3. Quick Action Menu ด้านล่างหน้าจอแชท (User Triggers):
+   - มีเพียง 3 เมนู ได้แก่ `[สรุปยอดวางบิล]`, `[Help]`, และ `[สถานะการวางบิล]` เท่านั้น
+
+---
+
+## 📱 2. SCREEN ARCHITECTURE &amp; USER JOURNEY
+
+### หน้าจอที่ 1: Main Chat &amp; Dashboard (หน้าจอหลัก LINE OA)
+- **Quick Action Menu (ด้านล่างแชท 3 เมนู)**:
+  1. `[สรุปยอดวางบิล]`: แสดงการ์ดสรุปยอดเงินทั้งสัญญา 300,000 บาท, ชำระแล้ว 2/6 รอบ (100,000 บ.), งวดปัจจุบันรอตรวจ 50,000 บ.
+  2. `[Help]`: เปิด Interactive Form กล่องรับเรื่องร้องเรียน/แจ้งปัญหา
+  3. `[สถานะการวางบิล]`: เปิด Stepper สรุปกระบวนการ 5 ขั้นตอน
+- **ฟีเจอร์ปุ่ม Help Action**:
+  - เมื่อคลิก `[Help]` -&gt; แสดงการ์ด "ศูนย์ช่วยเหลือ &amp; แจ้งปัญหา"
+  - Category Chips: `[ระบบขัดข้อง (Bug)]`, `[Manday ไม่ถูกต้อง]`, `[Timesheet มีปัญหา]`, `[ข้อเสนอแนะ]`
+  - Textarea สำหรับพิมพ์รายละเอียด
+  - ปุ่ม `[Submit Report]` (ส่งเรื่อง) &amp; `[ยกเลิก]` (Cancel)
+
+---
+
+### หน้าจอที่ 2: Timesheet Submission Flow (⚡ Push Notification อัตโนมัติ ทุกวันที่ 1 ของเดือน)
+- **Trigger**: Cron System หลังบ้าน OBS ยิง Push Notification อัตโนมัติทุกวันที่ 1 ตามสัญญา บมจ.ไทยประกันชีวิต
+- **ข้อความทักทาย**: "สิ้นเดือนแล้วคุณส่ง Timesheet หรือยังน้าา"
+- **การ์ดแจ้งเตือนหลัก**: "แจ้งเตือน Timesheet ประจำเดือน ก.ย. 2569" พร้อม 3 ปุ่มตัวเลือก Action:
+  1. **ปุ่ม `[💻 ส่งผ่านระบบ OBS]`** (Primary Flow):
+     - Action: ส่งข้อความ `💻 ส่งผ่านระบบ OBS`
+     - LINE Bot Response: แสดงการ์ด "ระบบส่ง Timesheet (OBS Portal) [LINE Verified]" พร้อมปุ่ม `[Send Timesheet]`
+     - Interaction: นำทางไปยัง Web Portal `1 · อัปโหลด Timesheet` ของระบบ OBS ให้ลากวางไฟล์ PDF
+  2. **ปุ่ม `[✉️ ส่งผ่าน Email ด้วยตนเอง]`** (Manual Email):
+     - Action: ส่งข้อความ `✉️ ส่งผ่าน Email ด้วยตนเอง`
+     - LINE Bot Response: แสดงการ์ด "บันทึกการส่งผ่าน Email เรียบร้อย (แจ้งฝ่ายบัญชีแล้ว)" อีเมล: billing-account@company.com
+  3. **ปุ่ม `[👥 ให้ผู้ดูแลเป็นคนส่ง]`** (Delegate):
+     - Action: ส่งข้อความ `👥 ให้ผู้ดูแลเป็นคนส่ง`
+     - LINE Bot Response: แสดงการ์ด "มอบหมายผู้ดูแลระบบเรียบร้อย (แจ้ง Admin แล้ว)" ระบบส่ง Event แจ้งเตือนไปยัง PM / Supervisor (คุณปิติกร)
+
+---
+
+### หน้าจอที่ 3: Manday Inspection &amp; Rejection (กรณีตรวจไม่ผ่าน / ตีกลับ)
+- **Trigger**: เมื่อ Admin กดยืนยัน "ตีกลับ (Reject)" ในระบบ OBS
+- **Bot Alert**: แสดงการ์ด `⚠️ ตรวจ Manday ไม่ผ่าน • ตีกลับให้แก้ไข`
+- **Rejection Reason Box**: แสดงข้อความจาก Admin เช่น *"เหตุผลของการลาไม่ถูกต้อง โปรดแก้ไข และส่งTimesheet เข้าสู่ระบบอีกครั้ง"* ระบุชื่อผู้ตรวจและ Timestamp
+- **ปุ่ม Action**: `[ส่ง Timesheet / แก้ไขและส่งใหม่]` เพื่ออัปโหลดไฟล์แก้งวดเดิม (เอกสาร 2026060001)
+
+---
+
+### หน้าจอที่ 4: Timesheet Pending Reminder (⚡ Push Notification แจ้งเตือน Timesheet ยังไม่ส่ง)
+- **Trigger**: ระบบ OBS Cron Scheduler ตรวจพบผู้ใช้ยังไม่อัปโหลด Timesheet ใกล้กำหนดเส้นตาย (Deadline Push Alert)
+- **Bot Push Message**: แจ้งเตือนสถานะ "Timesheet ยังไม่ส่ง" แสดง Countdown กำหนดส่ง และปุ่ม Quick CTA สำหรับอัปโหลดทันที
+
+---
+
+### หน้าจอที่ 5: Billing Status &amp; Invoice Tracker
+- **Stepper 5 ขั้นตอน**:
+  1. Timesheet ประจำเดือน (สำเร็จ)
+  2. ตรวจ Manday (สำเร็จ)
+  3. ออกใบแจ้งหนี้ FlowAccount (Drafted สำเร็จ)
+  4. วางบิลส่งลูกค้า (ขั้นตอนปัจจุบัน - ร่างอีเมลและเอกสารแนบ)
+  5. การรับชำระเงิน (Term 30 วัน - รอรับชำระ)
+
+---
+
+## 🎨 3. DESIGN GUIDELINES &amp; SPECIFICATION
+- **Font**: 'Plus Jakarta Sans', 'Noto Sans Thai', sans-serif
+- **Primary OBS Corporate Blue**: #0a78d4 (Corporate Branding, Buttons, Status Headers)
+- **Secondary LINE Green**: #06C755 (LINE Integrations, Active Badges, CTA Success)
+- **Warning / Danger**: #DC2626 (Alert / Manday ไม่ผ่าน / Deadline Overdue)
+- **Surface**: #F8F9FA, High-contrast Card #FFFFFF with soft border #E2E8F0
+- **Device Support**: Mobile First (LINE OA Responsive 390px - 430px)
+
+---
+
+## 🎯 4. PROMPT INSTRUCTIONS FOR CLAUDE
+เมื่อผู้ใช้สอบถามหรือสั่งเขียนโค้ด ให้สร้าง Mockup State แยกชัดเจนระหว่าง User Interaction จาก Rich Menu และ Automated Push Notifications จาก Cron Contract Schedule พร้อมรองรับ Interactive Event Handlers ทั้งหมด</code></pre>
+        <button onclick="copyClaudePrompt()" class="absolute top-4 right-4 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono rounded border border-slate-700 shadow flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          Copy Prompt
+        </button>
+      </div>
+    </section>
+
+    <!-- Section 2: Interactive Visual Button Directory -->
+    <section class="space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-200 pb-4">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span class="flex items-center justify-center w-6 h-6 rounded-md bg-emerald-600 text-white text-xs">2</span>
+            พจนานุกรมปุ่ม &amp; สเปกการแสดงผลแต่ละหน้า (Button Action Directory)
+          </h3>
+          <p class="text-xs text-slate-500">อธิบายละเอียดว่าคลิกแต่ละปุ่มแล้วระบบจะตอบสนองและแสดงผลอะไรให้ Claude และทีม Dev นำไปเขียนโค้ดได้ทันที</p>
+        </div>
+        <div class="flex items-center gap-2"><span class="text-xs font-bold px-3 py-1 bg-blue-50 text-[#0a78d4] border border-blue-200 rounded-lg flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>Push Noti อัตโนมัติ + User Action</span><span class="text-xs font-semibold px-3 py-1 bg-slate-100 text-slate-700 rounded-lg">4 โฟลว์หลัก • 13 ปุ่มฟังก์ชัน</span></div>
+      </div>
+
+      <!-- Flow 1: 3 ปุ่มส่ง Timesheet -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3"><div class="flex flex-wrap items-center gap-2"><span class="px-2.5 py-1 rounded bg-blue-50 text-[#0a78d4] font-bold text-xs border border-blue-200">Flow 1 · Push Notification</span><h4 class="font-bold text-slate-900 text-sm md:text-base">โฟลว์แจ้งเตือนส่ง Timesheet ประจำเดือน (Automated Trigger ทุกวันที่ 1)</h4><span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium border border-amber-200">⚡ Cron Push Noti อัตโนมัติ (ไม่ใช่ปุ่มกดเมนูด้านล่าง)</span></div><span class="text-xs text-slate-400">สัญญา บมจ.ไทยประกันชีวิต</span></div>
+
+        <div class="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-3"><div class="space-y-1"><div class="flex items-center gap-2 font-bold text-[#0a78d4]"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>เงื่อนไข Trigger อัตโนมัติจากสัญญา (Automated Contract Schedule):</div><p class="text-slate-600">ระบบ Cron หลังบ้าน OBS ส่ง Push Notification อัตโนมัติทุกวันที่ 1 ของทุกเดือนตามสัญญา บมจ.ไทยประกันชีวิต ส่งข้อความเปิด: <span class="font-semibold text-slate-900 bg-white px-2 py-0.5 rounded border border-blue-200">"สิ้นเดือนแล้วคุณส่ง Timesheet หรือยังน้าา"</span> พร้อมแนบการ์ด 3 ทางเลือกด้านล่างให้พนักงานคลิกส่งได้ทันที</p></div><span class="px-2.5 py-1 bg-white rounded-lg border border-blue-200 font-mono text-[11px] text-[#0a78d4] whitespace-nowrap font-semibold">Cron: 0 9 1 * *</span></div><div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Button 1.1 -->
+          <div class="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition group">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono font-bold text-emerald-600">Button 1.1</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">Primary Flow</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-xs font-bold text-emerald-900">
+              <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              💻 ส่งผ่านระบบ OBS
+            </div>
+            <div class="space-y-1.5 text-xs text-slate-600">
+              <p class="font-semibold text-slate-800">เมื่อผู้ใช้คลิก:</p>
+              <ul class="list-disc list-inside space-y-1 text-slate-600 pl-1">
+                <li class="">ส่งข้อความแชท: <code class="bg-slate-200 px-1 rounded">💻 ส่งผ่านระบบ OBS</code></li>
+                <li class="">LINE Bot ตอบกลับด้วยการ์ด <strong class="text-slate-900">"ระบบส่ง Timesheet (OBS Portal)"</strong></li>
+                <li class="">แสดงปุ่ม <strong class="text-emerald-600">[Send Timesheet]</strong> ให้กดเพื่อเปิดหน้าเว็บ Web App ของ OBS สำหรับลากวางไฟล์ PDF ทันที</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Button 1.2 -->
+          <div class="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50/50 hover:bg-white hover:border-blue-300 transition group">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono font-bold text-blue-600">Button 1.2</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">Manual Email</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-2 text-xs font-bold text-blue-900">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              ✉️ ส่งผ่าน Email ด้วยตนเอง
+            </div>
+            <div class="space-y-1.5 text-xs text-slate-600">
+              <p class="font-semibold text-slate-800">เมื่อผู้ใช้คลิก:</p>
+              <ul class="list-disc list-inside space-y-1 text-slate-600 pl-1">
+                <li class="">ส่งข้อความแชท: <code class="bg-slate-200 px-1 rounded">✉️ ส่งผ่าน Email ด้วยตนเอง</code></li>
+                <li class="">LINE Bot ตอบกลับด้วยการ์ด <strong class="text-slate-900">"บันทึกการส่งผ่าน Email เรียบร้อย"</strong></li>
+                <li class="">แสดงแท็ก <span class="text-emerald-700 bg-emerald-100 px-1 rounded">แจ้งฝ่ายบัญชีแล้ว</span> พร้อมระบุอีเมลบัญชีปลายทาง <code class="text-slate-800">billing-account@company.com</code></li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Button 1.3 -->
+          <div class="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50/50 hover:bg-white hover:border-purple-300 transition group">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono font-bold text-purple-600">Button 1.3</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-medium">Delegate</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-purple-50 border border-purple-200 flex items-center gap-2 text-xs font-bold text-purple-900">
+              <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+              👥 ให้ผู้ดูแลเป็นคนส่ง
+            </div>
+            <div class="space-y-1.5 text-xs text-slate-600">
+              <p class="font-semibold text-slate-800">เมื่อผู้ใช้คลิก:</p>
+              <ul class="list-disc list-inside space-y-1 text-slate-600 pl-1">
+                <li class="">ส่งข้อความแชท: <code class="bg-slate-200 px-1 rounded">ให้ผู้ดูแลเป็นคนส่ง</code></li>
+                <li class="">LINE Bot ตอบกลับด้วยการ์ด <strong class="text-slate-900">"มอบหมายผู้ดูแลระบบเรียบร้อย"</strong></li>
+                <li class="">ระบบยิง Event แจ้งเตือนไปยัง PM / Supervisor (คุณปิติกร) เพื่อจัดทำและอัปโหลดแทนพนักงาน</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flow 2: ปุ่ม Help & ฟอร์มร้องเรียน -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 rounded bg-amber-50 text-amber-700 font-bold text-xs border border-amber-200">Flow 2</span>
+            <h4 class="font-bold text-slate-900 text-sm md:text-base">ปุ่ม Help / ศูนย์ช่วยเหลือ &amp; ร้องเรียนปัญหา</h4>
+          </div>
+          <span class="text-xs text-slate-400">อ้างอิงหน้า: 1. Main Chat &amp; Dashboard</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">
+            <div class="font-bold text-xs text-slate-800 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-[#06C755]"></span>
+              Trigger Action: คลิกปุ่ม [Help] ที่ Rich Menu ด้านล่าง
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              เมื่อคลิกคำสั่งลัด <code class="bg-white px-1.5 py-0.5 border rounded font-semibold text-slate-800">Help</code> จะเปิดการ์ดโต้ตอบ <strong>"ศูนย์ช่วยเหลือ &amp; แจ้งปัญหา"</strong> บนหน้าต่างแชททันที
+            </p>
+            <div class="bg-white p-3 rounded-lg border border-slate-200 space-y-2 text-xs">
+              <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sub-features ในฟอร์ม Help:</div>
+              <div class="flex flex-wrap gap-1.5">
+                <span class="px-2 py-0.5 rounded bg-emerald-600 text-white font-medium text-[11px]">✓ ระบบขัดข้อง (Bug)</span>
+                <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">Manday ไม่ถูกต้อง</span>
+                <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">Timesheet มีปัญหา</span>
+                <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">ข้อเสนอแนะ</span>
+              </div>
+              <div class="text-[11px] text-slate-600 italic">
+                ผู้ใช้เลือก Category จากชิปปุ่มด้านบน จากนั้นพิมพ์รายละเอียดใน Textarea Box
+              </div>
+            </div>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">
+            <div class="font-bold text-xs text-slate-800 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+              Submission Actions: ปุ่มส่งและยกเลิก
+            </div>
+            <div class="space-y-3 text-xs">
+              <div class="p-2.5 rounded bg-white border border-slate-200 space-y-1">
+                <div class="font-bold text-emerald-600 flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                  ปุ่ม [Submit Report] (ส่งข้อความ)
+                </div>
+                <p class="text-slate-600">
+                  ส่งข้อความปัญหาไปยังทีม Support ทันที พร้อมบันทึก Ticket เข้าระบบ OBS และตอบกลับว่า <em>"รับเรื่องเรียบร้อย ทีมงานจะติดต่อกลับภายใน 24 ชม."</em>
+                </p>
+              </div>
+
+              <div class="p-2.5 rounded bg-white border border-slate-200 space-y-1">
+                <div class="font-bold text-slate-500 flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  ปุ่ม [ยกเลิก] (Cancel)
+                </div>
+                <p class="text-slate-600">
+                  ปิดแบบฟอร์มการร้องเรียน และคืนค่าหน้าจอแชทกลับสู่สถานะปกติ ไม่บันทึกข้อมูลใดๆ
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flow 3: ตรวจ Manday ไม่ผ่าน & ส่ง Timesheet ใหม่ -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 rounded bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200">Flow 3</span>
+            <h4 class="font-bold text-slate-900 text-sm md:text-base">ตรวจ Manday ไม่ผ่าน &amp; ตีกลับให้ส่ง Timesheet ใหม่</h4>
+          </div>
+          <span class="text-xs text-slate-400">อ้างอิงหน้า: แจ้งเตือน ตรวจ Manday ไม่ผ่าน &amp; ส่ง Timesheet ใหม่</span>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="p-3.5 rounded-lg bg-rose-50/70 border border-rose-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <span class="font-bold text-rose-800 flex items-center gap-1.5 text-xs md:text-sm">
+                <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                เงื่อนไขการ Trigger จากระบบ OBS สู่ LINE Chatbot
+              </span>
+              <p class="text-rose-700">
+                เมื่อ Admin ในระบบกด <strong>[ตีกลับ]</strong> ในหน้าตรวจ Manday (เอกสาร 2026060001) พร้อมกรอกเหตุผล: <em>"เหตุผลของการลาไม่ถูกต้อง โปรดแก้ไข และส่งTimesheet เข้าสู่ระบบอีกครั้ง"</em>
+              </p>
+            </div>
+            <div class="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-700 font-semibold text-center whitespace-nowrap">
+              Action Status: ตีกลับ 1 ฉบับ
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1.5">
+              <span class="font-bold text-emerald-600 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                ปุ่ม [ส่ง Timesheet] (สีเขียว Full Width):
+              </span>
+              <p class="text-slate-600">
+                เมื่อคลิก จะนำทางผู้ใช้ไปยังระบบอัปโหลด Timesheet แก้ไขรอบเดิมทันที พร้อมใส่ parameter หมายเลขเอกสารเดิมเพื่อเทียบ version การแก้ไข
+              </p>
+            </div>
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1.5">
+              <span class="font-bold text-slate-700 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                กล่องแสดงเหตุผล (Rejection Reason Card):
+              </span>
+              <p class="text-slate-600">
+                แสดงชื่อผู้ตรวจ <code class="text-slate-800">Admin ผู้ดูแลระบบ</code> พร้อมระบุวันเวลา <code class="text-slate-800">7 ก.ย. 69, 23:49 น.</code> ช่วยลดการโต้แย้งและสื่อสารได้ตรงจุด
+              </p>
+            </div>
+          </div>
+        </div>
+      </div><div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4"><div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2"><div class="flex flex-wrap items-center gap-2"><span class="px-2.5 py-1 rounded bg-amber-50 text-amber-700 font-bold text-xs border border-amber-200">Flow 4 · Push Notification</span><h4 class="font-bold text-slate-900 text-sm md:text-base">แจ้งเตือนอัตโนมัติ: Timesheet ยังไม่ส่ง (System Scheduled Push Alert)</h4><span class="text-[11px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-medium border border-rose-200">⚡ Cron Deadline Reminder (ไม่ใช่ปุ่มกดเมนูด้านล่าง)</span></div><span class="text-xs text-slate-400">Automated Daily Reminder</span></div><div class="space-y-3 text-xs"><div class="p-3.5 rounded-lg bg-amber-50/70 border border-amber-200 flex flex-col md:flex-row md:items-center justify-between gap-3"><div class="space-y-1"><span class="font-bold text-amber-900 flex items-center gap-1.5 text-xs md:text-sm"><svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>เงื่อนไข Trigger: ตรวจพบสถานะค้างส่งก่อนถึงกำหนดเส้นตาย (Deadline)</span><p class="text-amber-800">ระบบ OBS หลังบ้านเช็กสถานะทุกวันเวลา 09:00 น. หากพนักงานยังไม่ได้อัปโหลด Timesheet จะ Push การ์ดแจ้งเตือน <strong class="text-slate-900">"ใกล้ครบกำหนดส่ง Timesheet แล้วน้าา"</strong> พร้อมตัวนับถอยหลัง (Countdown)</p></div><div class="px-3 py-1.5 rounded-lg bg-white border border-amber-200 text-amber-800 font-semibold text-center whitespace-nowrap">Status: Pending / Reminder</div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2"><div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1.5"><span class="font-bold text-[#0a78d4] flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#0a78d4]"></span>ปุ่ม [อัปโหลดทันที (Direct Upload)]:</span><p class="text-slate-600">นำทางเข้าสู่ OBS Portal หน้าอัปโหลดไฟล์ Timesheet งวดปัจจุบันทันทีผ่าน Direct Webview Token</p></div><div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1.5"><span class="font-bold text-slate-700 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-500"></span>ปุ่ม [ขอส่งผ่านอีเมล / ปรึกษา PM]:</span><p class="text-slate-600">สลับเข้าโฟลว์ส่ง Email หรือแจ้งเตือนไปยังคุณปิติกร (PM) ในกรณีติดปัญหาเอกสารหน้างาน</p></div></div></div></div>
+
+    </section>
+
+    <!-- Section 3: Summary of Technical Stack for Claude Artifact -->
+    <section class="bg-slate-900 text-white p-6 rounded-2xl border border-slate-800 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold flex items-center gap-2 text-emerald-400">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+          Technical Specification สำหรับสั่งให้ Claude Build Frontend Code
+        </h3>
+        <span class="text-xs px-2.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">HTML / Tailwind CSS</span>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        เมื่อนำ Master Prompt ข้างต้นไปใส่ใน Claude ท่านสามารถพิมพ์คำสั่งต่อไปนี้ต่อได้เลยเพื่อสร้างชิ้นงาน:
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+        <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-slate-300">
+          <span class="text-emerald-400 font-bold block mb-1">คำสั่ง 1: สั่งเขียนโค้ดทั้งหน้าจอ</span>
+          "ช่วยเขียนหน้าจอ Interactive LINE Chatbot OBS ด้วย Tailwind CSS โดยมีปุ่มคลิกสลับดูผลลัพธ์ของ 3 ตัวเลือกส่ง Timesheet ได้จริง"
+        </div>
+        <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-slate-300">
+          <span class="text-emerald-400 font-bold block mb-1">คำสั่ง 2: สั่งทำ Popup Help</span>
+          "ช่วยสร้างกล่อง Popup Modal แบบฟอร์มร้องเรียน Help ตาม Spec ที่กำหนด เมื่อกดส่งให้มี Toast Notification เด้งเตือน"
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    function copyClaudePrompt() {
+      const promptText = document.getElementById('claudeMasterPrompt').innerText;
+      navigator.clipboard.writeText(promptText).then(() => {
+        const btnText = document.getElementById('copyBtnText');
+        const originalText = btnText.innerText;
+        btnText.innerText = 'คัดลอกสำเร็จแล้ว!';
+        setTimeout(() => {
+          btnText.innerText = originalText;
+        }, 2500);
+      }).catch(err => {
+        alert('กรุณาคัดลอกข้อความในกล่องโค้ดด้วยตนเอง');
+      });
+    }
+  </script>
+
+
+
+
+</body></html>

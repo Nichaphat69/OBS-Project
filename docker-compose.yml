@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - obs_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # ต่อผ่านชื่อ service ในเครือข่าย Docker ภายใน — คนละค่ากับ DATABASE_URL ที่ .env ตั้งไว้สำหรับ
+      # เครื่องมือฝั่ง host (prisma generate/migrate dev, scripts/migrate-sqlite-to-postgres.ts)
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      PORT: ${API_PORT:-4301}
+      NODE_ENV: production
+    ports:
+      - '${API_PORT:-4301}:4301'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4301/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      # server-side proxy (Next.js route handlers) ต่อไปที่ api ผ่านชื่อ service ภายในเครือข่าย Docker
+      API_BASE_URL: http://api:4301
+      PORT: ${WEB_PORT:-3000}
+      NODE_ENV: production
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      - api
+
+volumes:
+  obs_postgres_data:

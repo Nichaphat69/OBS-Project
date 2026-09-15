@@ -4,6 +4,10 @@
   "private": true,
   "description": "ระบบวางบิล Outsource อัตโนมัติ — อ่าน Timesheet, ตรวจ Manday, สร้าง Draft Invoice ใน FlowAccount",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22.5.0"
   },

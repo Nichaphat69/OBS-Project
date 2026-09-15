@@ -14,6 +14,12 @@ data/
 *.log
 .DS_Store
 
+# cookie jar ของ curl ตอนทดสอบ — มี session token จริง ห้ามขึ้น repo
+cookies.txt
+
+# ไฟล์ล็อกชั่วคราวของ Word/Excel
+~$*
+
 # เอกสารต้นฉบับของลูกค้า — ห้ามขึ้น repo
 docs/*.pdf
 # ยกเว้นเอกสารที่เราสร้างเอง (ขึ้นต้นด้วย OBS_) ซึ่งเป็นของส่งมอบ ไม่ใช่ของลูกค้า
@@ -28,3 +34,9 @@ docs/*.docx
 
 # เอกสารโครงสร้างเซิร์ฟเวอร์ — มี IP · Security Group · พอร์ตภายใน
 BSCP-server-port-reference.pdf
+
+# ── stack ใหม่ (Next.js/Express/Prisma) — ผลลัพธ์จาก build ไม่ใช่ซอร์ส ────
+apps/web/.next/
+apps/web/next-env.d.ts
+apps/api/dist/
+packages/domain/dist/

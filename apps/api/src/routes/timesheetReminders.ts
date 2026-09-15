@@ -1,0 +1,47 @@
+import { Router } from 'express';
+import { requireN8nSecret } from '../lib/n8nAuth.js';
+import { sendOverdueTimesheetReminders } from '../lib/timesheetSubmissionService.js';
+import { ingestTimesheet, IngestError } from '../lib/ingestService.js';
+import { extractTimesheet, ExtractionError } from '../lib/extractionService.js';
+import { AbbyyError } from '../lib/abbyyClient.js';
+
+/** เส้นทางที่ n8n เรียกตรงเข้ามาโดยไม่มี session ใดๆ — เดิม (`src/server.js`'s `PUBLIC_API_PATTERNS`)
+ * ไม่มี auth เลย ตอนพอร์ตมาสแต็กใหม่ปิดช่องนั้นด้วย shared secret (`requireN8nSecret`, ดู
+ * n8nAuth.ts) ซึ่งเป็นการปรับปรุงเรื่องความปลอดภัยที่ตั้งใจทำเพิ่ม ไม่ใช่ 1:1 port ของต้นฉบับ
+ *
+ * ต้อง mount ก่อน timesheetsRouter ที่ requireAuth ทั้งหมด (ดู server.ts) — เส้นทางในไฟล์นี้ทับกับ
+ * `/api/timesheets/*` แต่ต้องไม่ผ่าน requireAuth เลย */
+export const timesheetRemindersRouter = Router();
+
+timesheetRemindersRouter.post('/send-overdue-reminders', requireN8nSecret, async (_req, res) => {
+  res.json(await sendOverdueTimesheetReminders({}));
+});
+
+// ported from service.js's n8n entrypoint for ingestTimesheet() — ดู n8n/README.md's
+// `POST /api/timesheets/ingest`. รับเฉพาะ fileBase64 (ไม่รับ filePath เหมือนต้นฉบับ — n8n กับสแต็ก
+// Docker นี้ไม่ได้แชร์ filesystem เดียวกัน)
+timesheetRemindersRouter.post('/ingest', requireN8nSecret, async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const result = await ingestTimesheet({
+      documentNo: body.documentNo,
+      fileBytes: typeof body.fileBase64 === 'string' ? Buffer.from(body.fileBase64, 'base64') : null,
+      fileName: body.fileName ?? null,
+      sourceEmailId: body.sourceEmailId ?? null,
+      sourceEmailSubject: body.sourceEmailSubject ?? null,
+      receivedAt: body.receivedAt ?? new Date().toISOString(),
+      approvedBy: body.approvedBy ?? null,
+      approvedAt: body.approvedAt ?? null,
+      expectedPeriod: body.expectedPeriod,
+      actor: 'n8n',
+      submissionMethod: 'auto_gmail',
+      extractor: extractTimesheet,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof IngestError || error instanceof ExtractionError || error instanceof AbbyyError) {
+      return res.status((error as any).status ?? 502).json({ error: error.message });
+    }
+    throw error;
+  }
+});

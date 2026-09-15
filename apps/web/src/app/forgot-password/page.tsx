@@ -1,0 +1,211 @@
+'use client';
+
+import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { Icon } from '../../components/Icon';
+
+type Step = 1 | 2 | 3 | 'done';
+
+/** ported from public/app.js's showForgotScreen()/#forgotStep1-3 — ลืมรหัสผ่านสามขั้นตอน (ขอรหัส →
+ * ยืนยันรหัส → ตั้งรหัสผ่านใหม่) ต้นฉบับสลับการ์ดด้วย hidden ในหน้าเดียว สแต็กใหม่ทำเป็นหน้า
+ * /forgot-password หน้าเดียวเก็บ step เป็น local state แทน (email/resetToken ต้องจำข้ามขั้นไว้เอง
+ * เพราะฟอร์มขั้น 2/3 ไม่มีช่องกรอกอีเมลซ้ำ — ตรงกับต้นฉบับ) */
+export default function ForgotPasswordPage() {
+  const [step, setStep] = useState<Step>(1);
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submitStep1(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const trimmed = email.trim();
+      setEmail(trimmed);
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error ?? 'ส่งคำขอไม่สำเร็จ');
+        return;
+      }
+      setStep(2);
+    } catch {
+      setError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitStep2(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-reset-code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, code: code.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error ?? 'ยืนยันรหัสไม่สำเร็จ');
+        return;
+      }
+      setResetToken(data.resetToken);
+      setStep(3);
+    } catch {
+      setError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitStep3(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, resetToken, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error ?? 'ตั้งรหัสผ่านใหม่ไม่สำเร็จ');
+        return;
+      }
+      setStep('done');
+    } catch {
+      setError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (step === 'done') {
+    return (
+      <main className="login-wrap">
+        <div className="login-card">
+          <h1>ตั้งรหัสผ่านใหม่สำเร็จ</h1>
+          <p>เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย</p>
+          <Link href="/login" className="btn pri" style={{ justifyContent: 'center', marginTop: 20 }}>
+            ไปเข้าสู่ระบบ
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (step === 1) {
+    return (
+      <main className="login-wrap">
+        <form onSubmit={submitStep1} className="login-card">
+          <h1>ลืมรหัสผ่าน</h1>
+          <p>กรอกอีเมลที่ใช้เข้าสู่ระบบ จะส่งรหัสยืนยัน 6 หลักไปให้ทางอีเมล</p>
+          <label>
+            อีเมล
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" autoFocus required />
+          </label>
+          {error && <p className="err">{error}</p>}
+          <button type="submit" disabled={loading} className="btn pri">
+            {loading ? 'กำลังส่ง…' : 'ส่งรหัสยืนยัน'}
+          </button>
+          <p className="lc-sw">
+            <Link href="/login" className="lc-link">
+              กลับไปเข้าสู่ระบบ
+            </Link>
+          </p>
+        </form>
+      </main>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <main className="login-wrap">
+        <form onSubmit={submitStep2} className="login-card">
+          <h1>กรอกรหัสยืนยัน</h1>
+          <p>ส่งรหัสยืนยัน 6 หลักไปที่ {email} แล้ว — รหัสใช้ได้ภายใน 10 นาที</p>
+          <label>
+            รหัสยืนยัน 6 หลัก
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              autoComplete="one-time-code"
+              autoFocus
+              required
+            />
+          </label>
+          {error && <p className="err">{error}</p>}
+          <button type="submit" disabled={loading} className="btn pri">
+            {loading ? 'กำลังยืนยัน…' : 'ยืนยันรหัส'}
+          </button>
+          <p className="lc-sw">
+            <Link href="/login" className="lc-link">
+              กลับไปเข้าสู่ระบบ
+            </Link>
+          </p>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <main className="login-wrap">
+      <form onSubmit={submitStep3} className="login-card">
+        <h1>ตั้งรหัสผ่านใหม่</h1>
+        <label>
+          รหัสผ่านใหม่
+          <div style={{ position: 'relative' }}>
+            <input
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              minLength={8}
+              autoFocus
+              required
+              style={{ paddingRight: 42 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                border: 'none',
+                background: 'none',
+                color: 'var(--mut)',
+                cursor: 'pointer',
+                display: 'flex',
+              }}
+            >
+              <Icon name={showPassword ? 'eye-off' : 'eye'} className="sm" />
+            </button>
+          </div>
+        </label>
+        {error && <p className="err">{error}</p>}
+        <button type="submit" disabled={loading} className="btn pri">
+          {loading ? 'กำลังบันทึก…' : 'ตั้งรหัสผ่านใหม่'}
+        </button>
+      </form>
+    </main>
+  );
+}
