@@ -16,6 +16,7 @@
  */
 import { toInternalDetailKey, type TimesheetFieldMap } from '@obs/domain';
 import { AbbyyClient, hasAbbyyCredentials, mapAbbyyResult } from './abbyyClient.js';
+import { ClearReadClient, hasClearReadCredentials, mapClearReadResult } from './clearReadClient.js';
 import { getFieldMapForSkill } from './abbyySkillsService.js';
 import type { Extractor, ExtractorResult } from './ingestService.js';
 
@@ -78,6 +79,29 @@ const abbyyReader: TimesheetReader = {
   },
 };
 
+const clearReadReader: TimesheetReader = {
+  id: 'clear-read',
+  label: 'Clear Read',
+  isConfigured: hasClearReadCredentials,
+  async read(source, { expectedPeriod, templateId }) {
+    const client = new ClearReadClient();
+    // templateId ของสัญญาเป็นของ ABBYY (Skill) คนละระบบกับ Clear Read — ส่งต่อให้เฉพาะตอนที่หน้าตา
+    // เป็น UUID ของ Clear Read จริงๆ ไม่งั้นปล่อยให้ client ใช้ CLEAR_READ_TEMPLATE_ID จาก .env แทน
+    const detail = await client.readDocument(source, {
+      templateId: templateId && /^[0-9a-f-]{36}$/i.test(templateId) ? templateId : null,
+    });
+    const data: any = mapClearReadResult(detail, { expectedPeriod });
+
+    return {
+      data,
+      verification: { ok: true, issues: (data.notes ?? []).map((message: string) => ({ severity: 'warn', message })) },
+      usage: null,
+      model: 'clear-read',
+      rawResponse: detail,
+    } satisfies ExtractorResult;
+  },
+};
+
 const localLlmReader: TimesheetReader = {
   id: 'local-llm',
   label: 'โมเดลในเครื่อง (LM Studio/Ollama)',
@@ -91,8 +115,10 @@ const localLlmReader: TimesheetReader = {
   },
 };
 
-/** เรียงตามลำดับที่อยากให้ลอง — ตัวแรกที่ตั้งค่าครบได้ใช้งาน เพิ่ม Clear Read ที่นี่เมื่อพร้อม */
-export const READERS: TimesheetReader[] = [abbyyReader, localLlmReader];
+/** เรียงตามลำดับที่อยากให้ลอง — ตัวแรกที่ตั้งค่าครบได้ใช้งาน
+ * ABBYY มาก่อนเพราะเป็นเส้นที่ตั้งค่าไว้จริงและพิสูจน์กับของจริงมานานแล้ว, Clear Read ถัดมา,
+ * local-LLM ต้องอยู่ท้ายสุดเสมอเพราะ isConfigured() เป็น true ตลอด (เป็น fallback ตัวสุดท้าย) */
+export const READERS: TimesheetReader[] = [abbyyReader, clearReadReader, localLlmReader];
 
 export function pickReader(): TimesheetReader {
   const reader = READERS.find((r) => r.isConfigured());
