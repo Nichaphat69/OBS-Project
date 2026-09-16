@@ -3186,3 +3186,60 @@ button.file:hover {
   font-weight: 700;
   font-size: 14.5px;
 }
+
+/* ═══ เลือกตัวอ่านเฉพาะครั้งนี้ (หน้าอัปโหลด) ═══
+   ต่างจากสวิตช์ในหน้า "ตัวอ่าน Timesheet" ตรงที่อันนั้นเปลี่ยนทั้งระบบ อันนี้มีผลเฉพาะไฟล์ที่กำลังจะอ่าน
+   จึงจงใจทำให้เล็กและอยู่ติดปุ่มอ่าน ไม่ใช่การ์ดใหญ่ที่ดูเหมือนการตั้งค่าถาวร */
+.readerpick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.readerpick .lbl {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+.readerpick .rp {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.readerpick .rp:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand-d);
+}
+.readerpick .rp.on {
+  border-color: var(--brand);
+  background: var(--tint);
+  color: var(--brand-d);
+}
+.readerpick .rp:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.readerpick .rp-now {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--mut);
+  background: var(--hov);
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+}
+.readerpick .rp-note {
+  font-size: 11.5px;
+  color: var(--wn);
+  flex-basis: 100%;
+}

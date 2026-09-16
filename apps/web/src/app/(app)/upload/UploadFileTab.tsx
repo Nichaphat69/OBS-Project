@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
@@ -25,6 +25,16 @@ export default function UploadFileTab() {
   const [readingFileName, setReadingFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReadResultShape | null>(null);
+  const [readers, setReaders] = useState<Array<{ id: string; label: string; configured: boolean; active: boolean }>>([]);
+  // null = ใช้ตัวที่เปิดอยู่ทั้งระบบ (พฤติกรรมเดิม) — ตั้งค่าเมื่อผู้ใช้เลือกเองเฉพาะรอบนี้เท่านั้น
+  const [readerId, setReaderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings/readers', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { readers: [] }))
+      .then((d) => setReaders(d.readers ?? []))
+      .catch(() => setReaders([]));
+  }, []);
 
   function pickFile(f: File | null | undefined) {
     if (!f) return;
@@ -52,7 +62,7 @@ export default function UploadFileTab() {
       const res = await fetch('/api/timesheets/read', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ fileBase64, fileName: file.name }),
+        body: JSON.stringify({ fileBase64, fileName: file.name, readerId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -94,6 +104,31 @@ export default function UploadFileTab() {
             <span className="dz-hint">{tx('ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์')}</span>
           )}
         </div>
+
+        {readers.length > 0 && (
+          <div className="readerpick">
+            <span className="lbl">{tx('อ่านด้วย')}</span>
+            {readers.map((r) => {
+              const chosen = readerId ? readerId === r.id : r.active;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  className={`rp${chosen ? ' on' : ''}`}
+                  disabled={!r.configured || reading}
+                  title={r.configured ? undefined : tx('ยังตั้งค่าไม่ครบ')}
+                  onClick={() => setReaderId(r.id)}
+                >
+                  {r.label}
+                  {r.active && <span className="rp-now">{tx('ค่าปกติ')}</span>}
+                </button>
+              );
+            })}
+            {readerId && readerId !== readers.find((r) => r.active)?.id && (
+              <span className="rp-note">{tx('เฉพาะการอ่านครั้งนี้ ไม่เปลี่ยนค่าของทั้งระบบ')}</span>
+            )}
+          </div>
+        )}
 
         <button className="btn pri lg full" style={{ marginTop: 14 }} disabled={reading || !file} onClick={doRead}>
           <Icon name="eye" /> {reading ? tx('กำลังอ่านไฟล์…') : tx('อ่านไฟล์นี้')}

@@ -20,6 +20,7 @@ export default function ManualEntryTab() {
   const [approvedAt, setApprovedAt] = useState('');
   const [submissionMethod, setSubmissionMethod] = useState('self_email');
   const [leaveDays, setLeaveDays] = useState<Array<{ date: string; type: string }>>([]);
+  const [otDays, setOtDays] = useState<Array<{ date: string; hours: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
@@ -34,6 +35,20 @@ export default function ManualEntryTab() {
     setLeaveDays((d) => d.filter((_, idx) => idx !== i));
   }
 
+  function addOtDay() {
+    setOtDays((d) => [...d, { date: '', hours: '' }]);
+  }
+  function updateOtDay(i: number, patch: Partial<{ date: string; hours: string }>) {
+    setOtDays((d) => d.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
+  }
+  function removeOtDay(i: number) {
+    setOtDays((d) => d.filter((_, idx) => idx !== i));
+  }
+
+  /** วันเดียวกันเป็นทั้งวันลาและวัน OT ไม่ได้ — ฝั่ง API ก็ตีกลับ แต่เตือนตั้งแต่ตอนเลือกวันจะได้ไม่ต้อง
+   *  กดบันทึกแล้วค่อยรู้ว่าพิมพ์ผิด */
+  const leaveDateSet = new Set(leaveDays.map((l) => l.date).filter(Boolean));
+
   async function submit() {
     setBusy(true);
     setError(null);
@@ -42,7 +57,7 @@ export default function ManualEntryTab() {
       const res = await fetch('/api/timesheets/manual', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ employeeName, position, period, approvedBy, approvedAt, leaveDays, submissionMethod }),
+        body: JSON.stringify({ employeeName, position, period, approvedBy, approvedAt, leaveDays, otDays, submissionMethod }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -107,6 +122,52 @@ export default function ManualEntryTab() {
           ))}
           <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={addLeaveDay}>
             + {tx('เพิ่มวันลา')}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div className="ey" style={{ marginBottom: 8 }}>
+          {tx('วันที่ทำ OT')}
+        </div>
+        <div className="sub" style={{ marginBottom: 8 }}>
+          {tx('ทำ OT วันไหนก็ได้ รวมเสาร์-อาทิตย์และวันหยุดนักขัตฤกษ์ คิดสูตรเดียวกันหมด')}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {otDays.map((o, i) => {
+            const clash = !!o.date && leaveDateSet.has(o.date);
+            return (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="date"
+                  value={o.date}
+                  onChange={(e) => updateOtDay(i, { date: e.target.value })}
+                  style={{
+                    height: 36,
+                    borderRadius: 'var(--r-ctl)',
+                    border: `1px solid ${clash ? 'var(--cr)' : 'var(--rule)'}`,
+                    padding: '0 10px',
+                  }}
+                />
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="24"
+                  value={o.hours}
+                  placeholder={tx('ชั่วโมง')}
+                  onChange={(e) => updateOtDay(i, { hours: e.target.value })}
+                  style={{ height: 36, width: 110, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 10px' }}
+                />
+                <button className="btn ghost sm" onClick={() => removeOtDay(i)}>
+                  {tx('ลบ')}
+                </button>
+                {clash && <span className="sub" style={{ color: 'var(--cr)' }}>{tx('วันนี้ถูกกรอกเป็นวันลาไว้แล้ว')}</span>}
+              </div>
+            );
+          })}
+          <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={addOtDay}>
+            + {tx('เพิ่มวัน OT')}
           </button>
         </div>
       </div>

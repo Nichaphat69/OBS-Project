@@ -210,6 +210,19 @@ const TX: Record<string, string> = {
   'ระบบยังอ่านค่าเดิมได้ตามปกติ แต่แก้ผ่านหน้านี้ยังไม่ได้จนกว่าฝั่ง API จะแปลงรูปให้ตอนอ่าน — ถ้าแก้ตอนนี้ค่าที่ตั้งไว้เดิมจะหายทั้งหมด':
     'It still reads correctly as-is, but cannot be edited here until the API converts the format on read — editing now would wipe every value already configured.',
 
+  // ── upload/ManualEntryTab.tsx — วัน OT ──
+  'วันที่ทำ OT': 'Overtime days',
+  'เพิ่มวัน OT': 'Add an overtime day',
+  ชั่วโมง: 'Hours',
+  วันนี้ถูกกรอกเป็นวันลาไว้แล้ว: 'This date is already entered as a leave day',
+  'ทำ OT วันไหนก็ได้ รวมเสาร์-อาทิตย์และวันหยุดนักขัตฤกษ์ คิดสูตรเดียวกันหมด':
+    'Overtime can be on any day, including weekends and public holidays — the same formula applies to all of them.',
+
+  // ── upload/UploadFileTab.tsx — เลือกตัวอ่านเฉพาะครั้งนี้ ──
+  อ่านด้วย: 'Read with',
+  ค่าปกติ: 'default',
+  'เฉพาะการอ่านครั้งนี้ ไม่เปลี่ยนค่าของทั้งระบบ': 'This read only — the system-wide setting is unchanged',
+
   // ── readers/ReadersClient.tsx ──
   'ตัวอ่าน Timesheet': 'Timesheet reader',
   'เลือกว่าจะให้ระบบใช้เครื่องมือไหนอ่านไฟล์ Timesheet ที่อัปโหลดเข้ามา เปลี่ยนได้ตลอด มีผลกับไฟล์ที่อ่านหลังจากนี้ ไม่กระทบใบที่อ่านไปแล้ว':
