@@ -85,11 +85,9 @@ const clearReadReader: TimesheetReader = {
   isConfigured: hasClearReadCredentials,
   async read(source, { expectedPeriod, templateId }) {
     const client = new ClearReadClient();
-    // templateId ของสัญญาเป็นของ ABBYY (Skill) คนละระบบกับ Clear Read — ส่งต่อให้เฉพาะตอนที่หน้าตา
-    // เป็น UUID ของ Clear Read จริงๆ ไม่งั้นปล่อยให้ client ใช้ CLEAR_READ_TEMPLATE_ID จาก .env แทน
-    const detail = await client.readDocument(source, {
-      templateId: templateId && /^[0-9a-f-]{36}$/i.test(templateId) ? templateId : null,
-    });
+    // ไม่ได้ตั้งแม่แบบไว้กับสัญญา → client ตกไปใช้ CLEAR_READ_TEMPLATE_ID จาก .env เอง
+    // (แบบเดียวกับที่ ABBYY ตกไปใช้ ABBYY_SKILL_ID)
+    const detail = await client.readDocument(source, { templateId: templateId ?? null });
     const data: any = mapClearReadResult(detail, { expectedPeriod });
 
     return {
@@ -120,7 +118,32 @@ const localLlmReader: TimesheetReader = {
  * local-LLM ต้องอยู่ท้ายสุดเสมอเพราะ isConfigured() เป็น true ตลอด (เป็น fallback ตัวสุดท้าย) */
 export const READERS: TimesheetReader[] = [abbyyReader, clearReadReader, localLlmReader];
 
-export function pickReader(): TimesheetReader {
+/** คีย์ใน settings ที่เก็บว่าเลือกเครื่องอ่านตัวไหนไว้ทั้งระบบ */
+export const ACTIVE_READER_SETTING = 'active_reader';
+
+export function readerById(id: string | null | undefined): TimesheetReader | null {
+  return READERS.find((r) => r.id === id) ?? null;
+}
+
+/**
+ * เลือกเครื่องอ่านที่จะใช้ — ยึดตัวที่ผู้ใช้เลือกไว้ในหน้า "ตัวอ่าน Timesheet" ก่อนเสมอ
+ *
+ * ตกไปใช้การไล่ตามลำดับ `READERS` เฉพาะตอนที่ยังไม่เคยเลือก หรือเลือกตัวที่ตั้งค่าไม่ครบ/ไม่รู้จักแล้ว
+ * (เช่นถอน credential ออกทีหลัง) — จงใจให้ fallback เงียบๆ แทนที่จะ throw เพราะการอ่าน Timesheet
+ * ไม่ควรหยุดทั้งระบบเพราะค่าตั้งค่าค้างอยู่ แต่ผู้เรียกเห็นได้ว่าใช้ตัวไหนจริงจาก `model` ในผลลัพธ์
+ */
+export async function pickReader(preferredId?: string | null): Promise<TimesheetReader> {
+  let id = preferredId ?? null;
+  if (id === undefined || id === null) {
+    // import แบบ dynamic — dashboardService ลาก Prisma มาทั้งสาย ส่วนไฟล์นี้ถูก import โดยเส้นที่ไม่ต้องใช้ DB ด้วย
+    const { getSetting } = await import('./dashboardService.js');
+    const saved = await getSetting<{ id?: string }>(ACTIVE_READER_SETTING, {});
+    id = saved.id ?? null;
+  }
+
+  const chosen = readerById(id);
+  if (chosen?.isConfigured()) return chosen;
+
   const reader = READERS.find((r) => r.isConfigured());
   if (!reader) throw new ExtractionError('ยังไม่ได้ตั้งค่าเครื่องอ่านเอกสารสักตัว');
   return reader;
@@ -148,12 +171,15 @@ function normalizeDetailKeys(data: any): any {
   return data;
 }
 
-export const extractTimesheet: Extractor = async (source, { expectedPeriod, abbyySkillId } = {}) => {
+export const extractTimesheet: Extractor = async (source, { expectedPeriod, abbyySkillId, clearReadTemplateId } = {}) => {
   if (!Buffer.isBuffer(source)) {
     throw new ExtractionError('ต้องมีไฟล์ PDF ให้อ่าน', 400);
   }
 
-  const reader = pickReader();
-  const result = await reader.read(source, { expectedPeriod, templateId: abbyySkillId });
+  const reader = await pickReader();
+  // ส่งเฉพาะแม่แบบของเครื่องอ่านที่ถูกเลือกจริง — Skill ของ ABBYY กับแม่แบบของ Clear Read เป็นคนละ
+  // ระบบ ส่งข้ามกันไม่ได้ ตัวอ่านที่ไม่มีแม่แบบผูกไว้จะตกไปใช้ค่าจาก .env ของตัวเองต่อ
+  const templateId = reader.id === 'clear-read' ? clearReadTemplateId : reader.id === 'abbyy' ? abbyySkillId : null;
+  const result = await reader.read(source, { expectedPeriod, templateId });
   return { ...result, data: normalizeDetailKeys(result.data) };
 };

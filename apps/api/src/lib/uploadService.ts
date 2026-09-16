@@ -23,13 +23,24 @@ import { ingestTimesheet, nextDocumentNo, type ExtractedData } from './ingestSer
  * ใช้สัญญาที่ "กำลังดำเนินการอยู่" (ตัวสลับบริษัทบนแถบบน) เพราะตอนอ่านไฟล์ preview ยังไม่รู้ว่าเป็น
  * ของพนักงานสัญญาไหน (จับคู่ชื่อพนักงาน→สัญญาเกิดขึ้น "หลัง" ขั้นตอนนี้) — คืน null ถ้าไม่มีทั้งคู่หรือ
  * สัญญานั้นยังไม่ได้ตั้ง Skill ไว้ ให้ extractTimesheet() ปล่อยไปใช้ ABBYY_SKILL_ID เดิมจาก .env ต่อ */
-async function resolveAbbyySkillId(contractId: string | null): Promise<string | null> {
+async function resolveReaderTemplates(
+  contractId: string | null,
+): Promise<{ abbyySkillId: string | null; clearReadTemplateId: string | null }> {
   if (contractId) {
-    const contract = await prisma.contract.findUnique({ where: { id: contractId }, select: { abbyySkillId: true } });
-    return contract?.abbyySkillId ?? null;
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { abbyySkillId: true, clearReadTemplateId: true },
+    });
+    return {
+      abbyySkillId: contract?.abbyySkillId ?? null,
+      clearReadTemplateId: contract?.clearReadTemplateId ?? null,
+    };
   }
   const active = await getActiveContract();
-  return active?.abbyySkillId ?? null;
+  return {
+    abbyySkillId: active?.abbyySkillId ?? null,
+    clearReadTemplateId: (active as { clearReadTemplateId?: string | null } | null)?.clearReadTemplateId ?? null,
+  };
 }
 
 export class UploadError extends Error {
@@ -90,7 +101,7 @@ export async function readTimesheetFile({
   // เดาต่อเอง (zip = xlsx, ไม่งั้นถือเป็นข้อความ CSV)
   const isPdf = source.subarray(0, 4).toString('latin1') === '%PDF';
   const extracted = isPdf
-    ? await extractTimesheet(source, { expectedPeriod, abbyySkillId: await resolveAbbyySkillId(contractId) })
+    ? await extractTimesheet(source, { expectedPeriod, ...(await resolveReaderTemplates(contractId)) })
     : await extractTimesheetFromSpreadsheet(source, { expectedPeriod });
   const { usage, model, verification } = extracted;
   const data = extracted.data;

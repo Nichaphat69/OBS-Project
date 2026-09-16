@@ -71,6 +71,47 @@ export async function settingsSnapshot(): Promise<SettingsSnapshot> {
   };
 }
 
+export interface ReaderChoice {
+  id: string;
+  label: string;
+  /** ตั้งค่า credential ครบพร้อมใช้จริงไหม — ตัวที่ยังไม่พร้อมเลือกไม่ได้ */
+  configured: boolean;
+  /** ตัวที่ระบบกำลังใช้อยู่จริง (ตัวเดียวเท่านั้นที่เป็น true) */
+  active: boolean;
+}
+
+/**
+ * รายชื่อเครื่องอ่านทั้งหมดพร้อมสถานะ — หน้า "ตัวอ่าน Timesheet" วาดสองแท็บจากรายการนี้
+ *
+ * `active` คำนวณจาก `pickReader()` ตัวเดียวกับที่ ingest ใช้จริง ไม่ใช่อ่านค่า setting ตรงๆ
+ * เพื่อให้หน้าจอบอก "ตัวที่ใช้อยู่จริง" ไม่ใช่ "ตัวที่เคยเลือกไว้" — สองอย่างนี้ต่างกันได้เมื่อ
+ * ตัวที่เลือกไว้ถูกถอน credential ออกทีหลัง แล้วระบบ fallback ไปใช้ตัวอื่นเงียบๆ
+ */
+export async function listReaders(): Promise<ReaderChoice[]> {
+  const { READERS, pickReader } = await import('./extractionService.js');
+  const activeId = (await pickReader()).id;
+  return READERS.map((r) => ({
+    id: r.id,
+    label: r.label,
+    configured: r.isConfigured(),
+    active: r.id === activeId,
+  }));
+}
+
+/** เลือกเครื่องอ่านที่จะใช้ทั้งระบบ — มีผลกับไฟล์ที่อ่านหลังจากนี้ ไม่ย้อนไปแตะใบที่อ่านไปแล้ว */
+export async function setActiveReader(id: string, { actor }: { actor: string }): Promise<ReaderChoice[]> {
+  const { readerById, ACTIVE_READER_SETTING } = await import('./extractionService.js');
+  const reader = readerById(id);
+  if (!reader) throw new SettingsError(`ไม่รู้จักเครื่องอ่าน "${id}"`);
+  if (!reader.isConfigured()) {
+    throw new SettingsError(`${reader.label} ยังตั้งค่าไม่ครบ — ใส่ค่าที่ต้องใช้ใน .env ก่อนจึงจะเลือกได้`);
+  }
+
+  await setSetting(ACTIVE_READER_SETTING, { id });
+  await logAudit({ actor, action: 'set_active_reader', entityType: 'settings', entityId: ACTIVE_READER_SETTING, detail: { id, label: reader.label } });
+  return listReaders();
+}
+
 /**
  * เปิด/ปิดสวิตช์เชื่อมต่อ FlowAccount จากแถบบนของเว็บ — ปิด = dry-run (ไม่ยิงออกไปหา FlowAccount จริง
  * เลยสักคำขอ) เปิด = ใช้โหมดจริงตามที่ตั้งไว้ใน .env (FLOWACCOUNT_MODE เช่น sandbox/live) ตัวแปรเดียวกับ
