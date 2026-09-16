@@ -206,6 +206,34 @@ const TX: Record<string, string> = {
   'บันทึก field map แล้ว': 'Field map saved',
   ล้างกลับเป็นค่าเริ่มต้น: 'Reset to default',
 
+  'Skill นี้ยังเก็บค่าด้วยรูปแบบเดิม': 'This skill still stores the old format',
+  'ระบบยังอ่านค่าเดิมได้ตามปกติ แต่แก้ผ่านหน้านี้ยังไม่ได้จนกว่าฝั่ง API จะแปลงรูปให้ตอนอ่าน — ถ้าแก้ตอนนี้ค่าที่ตั้งไว้เดิมจะหายทั้งหมด':
+    'It still reads correctly as-is, but cannot be edited here until the API converts the format on read — editing now would wipe every value already configured.',
+
+  // ── components/TimesheetFieldMapEditor.tsx ──
+  จับคู่ชื่อฟิลด์กับเอกสารของลูกค้า: "Match field names to the customer's document",
+  'กรอกว่าเอกสารของลูกค้ารายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ':
+    "Enter what this customer's document calls each field. Leave blank to keep the reader's own default; tick \"not on this form\" and the system won't warn that the field is missing.",
+  'ค้นหาฟิลด์ (ชื่อไทย ชื่อสเปก หรือตัวอย่าง)': 'Search fields (Thai label, spec name, or example)',
+  ไม่พบฟิลด์ที่ค้นหา: 'No matching fields',
+  ฟิลด์หัวเอกสาร: 'Document header fields',
+  ช่องสรุปท้ายเอกสาร: 'Document summary box',
+  'ไม่ได้อยู่ในแม่แบบที่ลูกค้าให้มา — เพิ่มเองสำหรับฟอร์มที่พิมพ์ยอดรวมไว้ท้ายเอกสาร อ่านจากช่องสรุปเท่านั้น ไม่นับจากตารางให้':
+    'Not part of the template the customer supplied — added for forms that print totals in a summary box. Read from that box only; never counted from the daily rows.',
+  ฟิลด์ในตารางรายวัน: 'Daily table columns',
+  ชื่อตารางรายวัน: 'Daily table name',
+  'ชื่อตาราง/line item ที่ตัวอ่านใช้เรียกตารางรายวัน': 'The table / line-item name the reader uses for the daily table',
+  ฟอร์มนี้ไม่มีฟิลด์นี้: 'Not on this form',
+  ฟอร์มนี้แยกเดือนกับปีเป็นสองช่อง: 'This form splits month and year into two boxes',
+  'ตั้งไว้ทั้งช่องรวมและช่องแยก — ระบบอ่านช่องรวมก่อน ถ้าเอกสารฉบับไหนไม่มีช่องรวมหรืออ่านค่าไม่ได้ จะใช้ช่องแยกที่เก็บไว้':
+    'Both a combined field and a split pair are set — the reader tries the combined one first, and falls back to the stored split pair',
+  'แทน — เก็บไว้ทั้งคู่ได้ ไม่ใช่ค่าที่ต้องลบทิ้ง':
+    'for any document where the combined field is missing or unreadable. Keeping both is correct — this is not leftover config to delete.',
+  ช่องเดือน: 'Month box',
+  ช่องปี: 'Year box',
+  ระบุว่าไม่มี: 'marked absent',
+  ตัวอย่าง: 'e.g.',
+
   // ── admin/AdminTabs.tsx ──
   ภาพรวม: 'Overview',
   ผู้รับแจ้งเตือน: 'Notification recipients',

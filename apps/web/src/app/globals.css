@@ -43,6 +43,8 @@
   --bline: #a9d2f1;
   --sky: #7cc4f5;
   --grad-brand: linear-gradient(135deg, var(--brand-l) 0%, var(--brand) 55%, var(--brand-h) 100%);
+  /* แถบความคืบหน้าสัญญา — ไล่จากฟ้าอ่อน → น้ำเงินแบรนด์ → ม่วง ให้เห็นความคืบหน้าเด่นกว่าเส้นสีเดียว */
+  --grad-progress: linear-gradient(90deg, var(--sky) 0%, var(--brand) 50%, var(--pr) 100%);
 
   --ok: #16a34a;
   --okb: #ecfdf3;
@@ -1028,8 +1030,19 @@ td.r.n,
   gap: var(--sp-2);
 }
 .progress-cell .bar {
-  width: 90px;
+  width: 104px;
   flex: none;
+  height: 10px;
+  background: var(--sunk);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.progress-cell .bar span {
+  background: var(--grad-progress);
+  /* ผูก background-size กับความกว้างของรางเต็ม (104px ด้านบน) ไม่ใช่ความกว้างของ span เอง — ไม่งั้นรอบที่
+     คืบหน้าน้อยจะบีบไล่สีทั้งชุดลงในแถบสั้นๆ ทำให้สีไม่สื่อความคืบหน้า แบบนี้ยิ่งคืบหน้ามากยิ่งไล่ไปทางม่วง */
+  background-size: 104px 100%;
+  background-repeat: no-repeat;
+  box-shadow: 0 1px 5px -1px rgba(10, 120, 212, 0.55);
 }
 .progress-cell .frac {
   margin: 0;
@@ -2253,7 +2266,8 @@ td .nm {
   outline-offset: -1px;
   border-color: var(--brand);
 }
-.frm input[readonly] {
+.frm input[readonly],
+.frm input:disabled {
   background: var(--sunk);
   color: var(--mut);
   cursor: default;

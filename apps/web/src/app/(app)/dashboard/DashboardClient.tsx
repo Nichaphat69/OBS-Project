@@ -66,13 +66,6 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         }
       />
 
-      <div className="mosaic c2" style={{ marginBottom: 26 }}>
-        <ContractProgressCard contracts={data.contracts} />
-        <Card title={tx('งานที่ต้องทำ')}>
-          <TaskList tasks={data.tasks} />
-        </Card>
-      </div>
-
       <Card title={tx('สัญญา')} flush>
         <div className="tw">
           <table>
@@ -113,7 +106,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         </div>
       </Card>
 
-      <div className="kpis" style={{ marginTop: 26 }}>
+      <div className="kpis">
         <Kpi
           icon="list-chk"
           label={tx('รอตรวจสอบ')}
@@ -136,6 +129,10 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
           tone="a"
         />
       </div>
+
+      <Card title={tx('งานที่ต้องทำ')}>
+        <TaskList tasks={data.tasks} />
+      </Card>
 
       <Card title={tx('สรุปสถานะ Timesheet')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -190,85 +187,6 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         </Card>
       </div>
     </>
-  );
-}
-
-/** การ์ดสรุปความคืบหน้าสัญญา — อยู่บนสุดของแดชบอร์ด กรอบสีฟ้าเด่น + วงกลมไล่สีแสดง % รวม (weighted by
- * จำนวนเดือนของแต่ละสัญญา) เผื่อกรณีมีหลายสัญญาพร้อมกันในมุมมองนี้ */
-function ContractProgressCard({
-  contracts,
-}: {
-  contracts: DashboardData['contracts'];
-}) {
-  const { tx } = useLang();
-  const monthsTotal = contracts.reduce((s, c) => s + c.monthsTotal, 0);
-  const monthsBilled = contracts.reduce((s, c) => s + c.monthsBilled, 0);
-  const percent = monthsTotal ? Math.round((monthsBilled / monthsTotal) * 100) : 0;
-  const single = contracts.length === 1 ? contracts[0] : null;
-  // ปกติหน้านี้กรองตามบริษัทที่เลือกอยู่แล้ว (ดู dashboard/page.tsx) เหลือสัญญาบริษัทเดียวเสมอ — แต่ถ้า
-  // ไม่มีบริษัทไหน active เลย (เช่นเพิ่งปิดบริษัทเดิมไปแต่ยังไม่ได้เลือกใหม่) contracts จะเป็นของ
-  // "ทุกบริษัท" รวมกัน ต้องไม่เอาชื่อบริษัทแรกในลิสต์มาตั้งเป็นหัวข้อ ไม่งั้น % ที่โชว์ (ซึ่งรวมทุกบริษัท)
-  // จะดูเหมือนเป็นของบริษัทเดียวนั้นทั้งที่ไม่ใช่
-  const title = single ? `${single.customerName} — ${single.projectName}` : contracts.length > 1 ? tx('ทุกบริษัท') : tx('ไม่มีสัญญา');
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 20,
-        background: 'var(--tint)',
-        border: '1px solid var(--bline)',
-        borderRadius: 'var(--r-card)',
-        padding: '22px 26px',
-      }}
-    >
-      <div>
-        <div className="ey">{tx('ความคืบหน้าสัญญา')}</div>
-        <h3 style={{ margin: '6px 0 0', fontSize: 20, fontWeight: 700, color: 'var(--ink)' }}>{title}</h3>
-        {contracts.length > 0 && (
-          <div className="sub" style={{ marginTop: 6 }}>
-            {monthsBilled}/{monthsTotal} {tx('เดือน')}
-            {contracts.length > 1 ? ` · ${contracts.length} ${tx('สัญญา')}` : ''}
-          </div>
-        )}
-      </div>
-      {contracts.length > 0 && <DonutChart percent={percent} />}
-    </div>
-  );
-}
-
-function DonutChart({ percent, size = 96 }: { percent: number; size?: number }) {
-  const stroke = 10;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const offset = c * (1 - Math.min(100, Math.max(0, percent)) / 100);
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flex: 'none' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--tint2)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke="url(#dashDonutGrad)"
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={offset}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-      <defs>
-        <linearGradient id="dashDonutGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="var(--brand-l)" />
-          <stop offset="100%" stopColor="var(--brand-h)" />
-        </linearGradient>
-      </defs>
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize={size * 0.22} fontWeight={700} fill="var(--brand-d)">
-        {percent}%
-      </text>
-    </svg>
   );
 }
 

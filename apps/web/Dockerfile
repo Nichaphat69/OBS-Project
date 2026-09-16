@@ -15,6 +15,9 @@ RUN npm install --workspaces --include-workspace-root
 FROM deps AS build
 COPY packages/domain packages/domain
 COPY apps/web apps/web
+# @obs/domain resolves to its dist/ build output, and .dockerignore strips **/dist from the build
+# context — so it has to be compiled inside the image before Next can resolve it, same as apps/api.
+RUN npm run build --workspace @obs/domain
 RUN npm run build --workspace @obs/web
 
 # ── runtime: Next.js standalone output ──

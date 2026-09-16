@@ -1,37 +1,42 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import type { TimesheetFieldMap } from '@obs/domain';
 import { Card, ErrorState, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
+import { TimesheetFieldMapEditor } from '../../../components/TimesheetFieldMapEditor';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
-
-/** ตรงกับ AbbyyFieldMap ใน apps/api/src/lib/abbyyClient.ts — ชื่อฟิลด์จริงใน ABBYY Vantage ของ Skill
- * นี้ ไม่ตรงกันข้าม Skill เลย (เช่น "Employee Name" vs "Name" vs "Mounth" สะกดผิด) ต้องตั้งต่อ Skill */
-interface AbbyyFieldMap {
-  employeeName?: string;
-  position?: string;
-  monthYear?: string | null;
-  month?: string | null;
-  year?: string | null;
-  tableName?: string;
-  totalWorkDays?: string | null;
-}
 
 interface AbbyySkillRow {
   id: string;
   name: string;
   skillId: string;
   createdAt: string;
-  fieldMap: AbbyyFieldMap | null;
+  fieldMap: TimesheetFieldMap | null;
 }
 
-const FIELD_MAP_KEYS: Array<keyof AbbyyFieldMap> = ['employeeName', 'position', 'monthYear', 'month', 'year', 'tableName', 'totalWorkDays'];
+/** คีย์ของรูปเก่า (AbbyyFieldMap แบบแบนใน abbyyClient.ts) ที่วางอยู่ระดับบนสุด — รูปกลางไม่มีคีย์พวกนี้
+ * เลย เพราะย้ายไปอยู่ใต้ header/monthYearSplit หมดแล้ว */
+const LEGACY_KEYS = ['employeeName', 'position', 'monthYear', 'month', 'year', 'totalWorkDays'];
 
-function emptyDraft(map: AbbyyFieldMap | null): Record<keyof AbbyyFieldMap, string> {
-  const draft = {} as Record<keyof AbbyyFieldMap, string>;
-  for (const k of FIELD_MAP_KEYS) draft[k] = map?.[k] ?? '';
-  return draft;
+/** ฝั่ง API normalize รูปเก่าให้เป็นรูปกลางตั้งแต่ตอนอ่านแล้ว แต่ web กับ api คนละ image กัน จึงมีจังหวะ
+ * ที่ web ใหม่คุยกับ api เก่าได้ ถ้าปล่อยให้รูปเก่าหลุดเข้าฟอร์มนี้ ฟอร์มจะวาดเป็นช่องว่างทั้งหมดทั้งที่
+ * ของจริงมีค่าอยู่ พอกดบันทึกจะทับค่าที่ใช้งานอยู่หายทั้งชุด (Big-C มี 7 คีย์ รวม totalWorkDays ที่เป็น
+ * ตัวตั้งจำนวนวันทำงานสำหรับวางบิล) — กันไว้ดีกว่าเขียนทับเงียบๆ */
+function isLegacyShape(map: TimesheetFieldMap | null): boolean {
+  if (!map || typeof map !== 'object') return false;
+  return LEGACY_KEYS.some((k) => k in map);
+}
+
+/** Skill ที่ยังไม่เคยตั้งค่าเลยได้ `{ header: {} }` กลับมาจาก API (ไม่ใช่ null) — เช็คแค่ว่า section
+ * มีอยู่ไหมจะกลายเป็นจริงเสมอ เพราะ object เปล่าก็ truthy ต้องนับคีย์ข้างในจริงๆ */
+function hasAnyMapping(map: TimesheetFieldMap | null): boolean {
+  if (!map) return false;
+  if (map.header && Object.keys(map.header).length > 0) return true;
+  if (map.detail && Object.keys(map.detail).length > 0) return true;
+  if (map.tableName) return true;
+  return !!map.monthYearSplit && !!(map.monthYearSplit.month || map.monthYearSplit.year);
 }
 
 export default function AbbyySkillsClient() {
@@ -45,7 +50,7 @@ export default function AbbyySkillsClient() {
   const [error, setError] = useState<string | null>(null);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Record<keyof AbbyyFieldMap, string>>(emptyDraft(null));
+  const [draft, setDraft] = useState<TimesheetFieldMap>({});
   const [savingMap, setSavingMap] = useState(false);
 
   function load() {
@@ -123,24 +128,15 @@ export default function AbbyySkillsClient() {
       return;
     }
     setExpandedId(row.id);
-    setDraft(emptyDraft(row.fieldMap));
+    setDraft(row.fieldMap ?? {});
   }
 
   async function saveFieldMap(id: string) {
     setSavingMap(true);
     try {
-      const hasAny = FIELD_MAP_KEYS.some((k) => draft[k].trim());
-      const fieldMap: AbbyyFieldMap | null = hasAny
-        ? {
-            employeeName: draft.employeeName.trim() || undefined,
-            position: draft.position.trim() || undefined,
-            monthYear: draft.monthYear.trim() || null,
-            month: draft.month.trim() || null,
-            year: draft.year.trim() || null,
-            tableName: draft.tableName.trim() || undefined,
-            totalWorkDays: draft.totalWorkDays.trim() || null,
-          }
-        : null;
+      // ล้างทุกช่องแล้วบันทึก = ตั้งใจกลับไปใช้ค่า default ของตัวอ่าน ซึ่งฝั่ง API รับเป็น null — ไม่ใช่
+      // เก็บ { header: {} } ไว้เป็นเปลือกเปล่า (ผลเหมือนกันก็จริง แต่ null บอกเจตนาได้ตรงกว่า)
+      const fieldMap: TimesheetFieldMap | null = hasAnyMapping(draft) ? draft : null;
       const res = await fetch(`/api/abbyy-skills/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
@@ -202,7 +198,7 @@ export default function AbbyySkillsClient() {
           </thead>
           <tbody>
             {skills?.map((s) => {
-              const hasCustomMap = !!s.fieldMap && Object.values(s.fieldMap).some((v) => v);
+              const hasCustomMap = hasAnyMapping(s.fieldMap);
               const expanded = expandedId === s.id;
               return (
                 <Fragment key={s.id}>
@@ -234,57 +230,33 @@ export default function AbbyySkillsClient() {
                   {expanded && (
                     <tr>
                       <td colSpan={4} style={{ background: 'var(--sunk)', padding: 18 }}>
-                        <div className="ey" style={{ marginBottom: 8 }}>{tx('การจับคู่ฟิลด์ (Field map)')}</div>
-                        <div className="sub" style={{ marginBottom: 14 }}>
-                          {tx('ชื่อฟิลด์จริงใน ABBYY Vantage ของ Skill นี้ — เว้นว่างช่องไหนไว้เพื่อใช้ค่าเริ่มต้น (Employee Name/Position/Month Year/New Table) รอบเดือนเลือกได้ระหว่าง "ฟิลด์รวม" หรือ "แยกเดือน+ปี" ถ้ากรอกฟิลด์รวมไว้ ระบบจะใช้ตัวนั้นก่อนเสมอ')}
-                        </div>
-                        <div className="frm auto" style={{ gap: 14 }}>
-                          <label>
-                            {tx('ชื่อพนักงาน (Employee Name)')}
-                            <input value={draft.employeeName} onChange={(e) => setDraft((d) => ({ ...d, employeeName: e.target.value }))} placeholder="Employee Name" />
-                          </label>
-                          <label>
-                            {tx('ตำแหน่ง (Position)')}
-                            <input value={draft.position} onChange={(e) => setDraft((d) => ({ ...d, position: e.target.value }))} placeholder="Position" />
-                          </label>
-                          <label>
-                            {tx('รอบเดือน — ฟิลด์รวม (Month Year)')}
-                            <input value={draft.monthYear} onChange={(e) => setDraft((d) => ({ ...d, monthYear: e.target.value }))} placeholder="Month Year" />
-                          </label>
-                          <label>
-                            {tx('รอบเดือน — เดือน (แยก)')}
-                            <input value={draft.month} onChange={(e) => setDraft((d) => ({ ...d, month: e.target.value }))} placeholder="Month" />
-                          </label>
-                          <label>
-                            {tx('รอบเดือน — ปี (แยก)')}
-                            <input value={draft.year} onChange={(e) => setDraft((d) => ({ ...d, year: e.target.value }))} placeholder="Year" />
-                          </label>
-                          <label>
-                            {tx('ตารางรายวัน (Table)')}
-                            <input value={draft.tableName} onChange={(e) => setDraft((d) => ({ ...d, tableName: e.target.value }))} placeholder="New Table" />
-                          </label>
-                          <label>
-                            {tx('จำนวนวันทำงานรวม (ถ้ามี)')}
-                            <input value={draft.totalWorkDays} onChange={(e) => setDraft((d) => ({ ...d, totalWorkDays: e.target.value }))} placeholder="Total Work days" />
-                          </label>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                          <button className="btn pri sm" disabled={savingMap} onClick={() => saveFieldMap(s.id)}>
-                            {tx('บันทึก')}
-                          </button>
-                          <button className="btn ghost sm" disabled={savingMap} onClick={() => setExpandedId(null)}>
-                            {tx('ยกเลิก')}
-                          </button>
-                          {hasCustomMap && (
-                            <button
-                              className="btn ghost sm"
-                              disabled={savingMap}
-                              onClick={() => setDraft(emptyDraft(null))}
-                            >
-                              {tx('ล้างกลับเป็นค่าเริ่มต้น')}
-                            </button>
-                          )}
-                        </div>
+                        {isLegacyShape(s.fieldMap) ? (
+                          <div className="note wn">
+                            <Icon name="alt" />
+                            <span>
+                              <strong>{tx('Skill นี้ยังเก็บค่าด้วยรูปแบบเดิม')}</strong>
+                              <br />
+                              {tx('ระบบยังอ่านค่าเดิมได้ตามปกติ แต่แก้ผ่านหน้านี้ยังไม่ได้จนกว่าฝั่ง API จะแปลงรูปให้ตอนอ่าน — ถ้าแก้ตอนนี้ค่าที่ตั้งไว้เดิมจะหายทั้งหมด')}
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <TimesheetFieldMapEditor value={draft} onChange={setDraft} disabled={savingMap} />
+                            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+                              <button className="btn pri sm" disabled={savingMap} onClick={() => saveFieldMap(s.id)}>
+                                {tx('บันทึก')}
+                              </button>
+                              <button className="btn ghost sm" disabled={savingMap} onClick={() => setExpandedId(null)}>
+                                {tx('ยกเลิก')}
+                              </button>
+                              {hasCustomMap && (
+                                <button className="btn ghost sm" disabled={savingMap} onClick={() => setDraft({})}>
+                                  {tx('ล้างกลับเป็นค่าเริ่มต้น')}
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </td>
                     </tr>
                   )}
