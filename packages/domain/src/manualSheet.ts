@@ -1,7 +1,7 @@
 /**
  * ประกอบข้อมูล Timesheet จากที่คนกรอกด้วยมือ
  *
- * คนกรอกแค่ 4 อย่าง: เลขเอกสาร · ชื่อกับตำแหน่งตามที่เขียนในใบ · รอบเดือน · วันที่ลา
+ * คนกรอกแค่ 5 อย่าง: เลขเอกสาร · ชื่อกับตำแหน่งตามที่เขียนในใบ · รอบเดือน · วันที่ลา · วันที่ทำ OT
  * ตารางรายวันทั้งเดือนระบบสร้างเองจากปฏิทิน ไม่ต้องนั่งกรอก 31 แถว — คืนโครงข้อมูลหน้าตาเดียวกับ
  * ที่โมเดล vision/ABBYY อ่านจาก PDF ออกมา เพื่อให้ไหลผ่านเส้น ingest เดิมได้ทั้งเส้น
  *
@@ -27,11 +27,21 @@ export interface ManualLeaveDayInput {
   type?: string;
 }
 
+/** hours รับ string ด้วย เพราะช่องกรอกในฟอร์มส่งค่ามาเป็น string เสมอ */
+export interface ManualOtDayInput {
+  date: string;
+  hours: number | string;
+}
+
+/** ชั่วโมงสูงสุดที่เป็นไปได้ใน 1 วัน — ใช้กันพิมพ์ผิดแบบ 8 เป็น 80 ซึ่งจะบวกเงินเกินเป็นสิบเท่า */
+const MAX_OT_HOURS_PER_DAY = 24;
+
 export interface BuildManualSheetInput {
   employeeName: string;
   position: string;
   period: string;
   leaveDays?: Array<ManualLeaveDayInput | string>;
+  otDays?: ManualOtDayInput[];
   holidays?: Map<string, string>;
   signedByEmployee?: boolean;
   signedByProjectManager?: boolean;
@@ -53,6 +63,7 @@ export function buildManualSheet({
   position,
   period,
   leaveDays = [],
+  otDays = [],
   holidays = new Map(),
   signedByEmployee = true,
   signedByProjectManager = true,
@@ -91,16 +102,59 @@ export function buildManualSheet({
     normalised.push({ date: date!, type });
   }
 
+  // OT กรอกได้ทุกวันในรอบ — วันธรรมดา เสาร์-อาทิตย์ หรือวันหยุดนักขัตฤกษ์ ไม่แยกเงื่อนไข เพราะสูตรคิดเงิน
+  // OT เป็นสูตรเดียวกันหมด (ชั่วโมง ÷ 8 × เรทต่อวัน) ไม่ได้คิดตัวคูณตามชนิดของวัน
+  const otSeen = new Set<string>();
+  const normalisedOt: Array<{ date: string; hours: number }> = [];
+  for (const raw of otDays) {
+    const date = raw?.date;
+    const hours = typeof raw?.hours === 'string' ? Number(raw.hours.trim()) : raw?.hours;
+
+    if (!DATE_RE.test(date ?? '')) {
+      errors.push(`วันที่ทำ OT "${date ?? ''}" ไม่ใช่รูปแบบ YYYY-MM-DD`);
+      continue;
+    }
+    if (!date!.startsWith(`${period}-`)) {
+      errors.push(`วันที่ทำ OT ${date} ไม่ได้อยู่ในรอบ ${period}`);
+      continue;
+    }
+    if (otSeen.has(date!)) {
+      errors.push(`วันที่ทำ OT ${date} ถูกกรอกซ้ำ — รวมชั่วโมงของวันเดียวกันไว้บรรทัดเดียว`);
+      continue;
+    }
+    if (!Number.isFinite(hours) || (hours as number) <= 0) {
+      errors.push(`ชั่วโมง OT ของวันที่ ${date} ต้องเป็นตัวเลขมากกว่า 0`);
+      continue;
+    }
+    if ((hours as number) > MAX_OT_HOURS_PER_DAY) {
+      errors.push(`ชั่วโมง OT ของวันที่ ${date} กรอกไว้ ${hours} ชั่วโมง ซึ่งเกิน ${MAX_OT_HOURS_PER_DAY} ชั่วโมงใน 1 วัน`);
+      continue;
+    }
+    // วันลาแล้วมี OT วันเดียวกันขัดกันเอง และขยับเงินสองทาง (หักค่าจ้าง 1 วัน + บวก OT) โดยไม่มีอะไรมาดักต่อ
+    // จึงตีกลับให้คนกรอกตัดสินใจ แทนที่จะปล่อยผ่านแล้วได้ยอดที่ไม่มีใครอธิบายได้
+    if (seen.has(date!)) {
+      errors.push(`วันที่ ${date} ถูกกรอกเป็นวันลาไว้แล้ว จะมี OT วันเดียวกันไม่ได้ — ถ้าวันนั้นมาทำงาน ให้เอาออกจากรายการวันลาก่อน`);
+      continue;
+    }
+    otSeen.add(date!);
+    normalisedOt.push({ date: date!, hours: Number(hours) });
+  }
+
   if (errors.length) throw new ManualSheetError(errors);
 
   const month = buildMonth(period, holidays, seen);
+  const otByDate = new Map(normalisedOt.map((o) => [o.date, o.hours]));
 
   const days = month.days.map((d) => {
+    // ชั่วโมง OT ติดไปกับแถวรายวันด้วย ไม่ใช่แค่ใน otDays เพื่อให้ตารางรายวันในหน้าตรวจ Manday
+    // แสดงให้เห็นว่าวันไหนมี OT กี่ชั่วโมง ตรวจทานกับใบต้นฉบับได้
+    const otHours = otByDate.get(d.date) ?? null;
     if (d.kind === DAY_KIND.WORKDAY) {
       return {
         date: d.date,
         timeIn: '8:30',
         timeOut: '17:00',
+        otHours,
         label: null as string | null,
         jobDescription: 'งานตามที่ได้รับมอบหมาย' as string | null,
       };
@@ -110,6 +164,7 @@ export function buildManualSheet({
       date: d.date,
       timeIn: null as string | null,
       timeOut: null as string | null,
+      otHours,
       label:
         d.kind === DAY_KIND.WEEKEND
           ? 'Weekend'
@@ -131,7 +186,7 @@ export function buildManualSheet({
     totalLeaveDays: normalised.length,
     days,
     leaveDays: normalised.map((l) => ({ date: l.date, type: l.type, rawLabel: LEAVE_LABEL[l.type] })),
-    otDays: [] as Array<{ date: string; hours: number }>,
+    otDays: normalisedOt,
     signedByEmployee,
     signedByProjectManager,
     notes: [] as string[],

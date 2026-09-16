@@ -136,6 +136,8 @@ timesheetsRouter.post('/manual', async (req, res) => {
       position: body.position,
       period: body.period,
       leaveDays: Array.isArray(body.leaveDays) ? body.leaveDays : [],
+      // OT กรอกมือได้แล้ว — ก่อนหน้านี้ป้อนมือบันทึก OT ไม่ได้เลย ต้องรอไฟล์ที่อ่านด้วย OCR อย่างเดียว
+      otDays: Array.isArray(body.otDays) ? body.otDays : [],
       approvedBy: body.approvedBy ?? req.user!.nameTh,
       approvedAt: body.approvedAt ?? new Date().toISOString().slice(0, 10),
       customerId: body.customerId ?? null,

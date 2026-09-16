@@ -655,6 +655,7 @@ export async function enterTimesheetManually({
   position,
   period,
   leaveDays = [],
+  otDays = [],
   approvedBy,
   approvedAt,
   customerId = null,
@@ -667,6 +668,7 @@ export async function enterTimesheetManually({
   position: string;
   period: string;
   leaveDays?: Array<{ date: string; type?: string }>;
+  otDays?: Array<{ date: string; hours: number | string }>;
   approvedBy: string;
   approvedAt: string;
   customerId?: string | null;
@@ -675,7 +677,7 @@ export async function enterTimesheetManually({
   restrictToEmployeeId?: string | null;
 }): Promise<IngestResult> {
   const holidays = await holidayMap(customerId);
-  const data = buildManualSheet({ employeeName, position, period, leaveDays, holidays });
+  const data = buildManualSheet({ employeeName, position, period, leaveDays, otDays, holidays });
   const docNo = documentNo ?? (await nextDocumentNo());
 
   return ingestTimesheet({
