@@ -62,6 +62,44 @@ export interface ClearReadField {
   value: unknown;
 }
 
+/** เทมเพลตหนึ่งตัวในรูปที่หน้าเลือกเทมเพลตใช้ได้เลย — ตัดส่วนที่ไม่ได้ใช้ (bbox/validations/timestamps)
+ * ออกตั้งแต่ชั้นนี้ เพราะ schema_json ดิบมีคำอธิบายฟิลด์ยาวมากต่อช่อง (ส่งให้เครื่องอ่านใช้ตัดสินใจ) */
+export interface ClearReadTemplate {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  description: string | null;
+  version: number | null;
+  /** ชื่อฟิลด์ระดับหัวเอกสารที่เทมเพลตนี้อ่าน */
+  fields: string[];
+  /** คอลัมน์ในตารางรายวัน (ว่างถ้าเทมเพลตนั้นไม่มี line item) */
+  detailColumns: string[];
+}
+
+function toTemplateSummary(tpl: any, isDefault: boolean): ClearReadTemplate {
+  let schema: any = tpl.schema_json;
+  if (typeof schema === 'string') {
+    try {
+      schema = JSON.parse(schema);
+    } catch {
+      schema = null;
+    }
+  }
+  const specs: any[] = Array.isArray(schema?.fields) ? schema.fields : [];
+  const lineItem = specs.find((f) => f?.type === 'object_list');
+  const columns: any[] = lineItem?.item_list?.[0]?.columns ?? [];
+
+  return {
+    id: String(tpl.template_id),
+    name: String(tpl.template_name ?? tpl.template_id),
+    isDefault,
+    description: tpl.description ? String(tpl.description) : null,
+    version: typeof tpl.version === 'number' ? tpl.version : null,
+    fields: specs.filter((f) => f?.type !== 'object_list').map((f) => String(f?.name)),
+    detailColumns: columns.map((c) => String(c?.name)),
+  };
+}
+
 export class ClearReadClient {
   email?: string;
   password?: string;
@@ -194,6 +232,40 @@ export class ClearReadClient {
       }
       await sleep(POLL_INTERVAL_MS);
     }
+  }
+
+  /** รายการเทมเพลตทั้งหมดในโปรเจกต์ — ใช้กับหน้าเลือกเทมเพลตต่อสัญญา คืนชื่อฟิลด์มาด้วยเลย
+   * (มากับ response อยู่แล้วใน schema_json ไม่ต้องเรียกเพิ่มรายตัว) ผู้ใช้จะได้เห็นว่าเทมเพลตนั้นอ่าน
+   * อะไรบ้างก่อนเลือก
+   *
+   * ⚠️ endpoint นี้ "ครึ่งๆ กลางๆ" ถ้าส่ง project_id ผิด: ตอนไล่แกะ API เคยเผลอส่ง user_id ไปแทน
+   * แล้วมันตอบ 200 พร้อมเทมเพลตกลาง 6 ตัวเหมือนใช้ได้ปกติ แต่ custom เป็น 0 ทั้งหมด — ที่นี่จึงยึด
+   * projectId ที่ตั้งค่าไว้เสมอ และเช็คว่าเทมเพลตฝั่ง custom เป็นของโปรเจกต์เราจริง ถ้าไม่ตรงแปลว่า
+   * ตั้ง CLEAR_READ_PROJECT_ID ผิด ซึ่งควรรู้ตั้งแต่ตอนเปิดหน้าเลือก ไม่ใช่ไปพังตอนอ่านเอกสารจริง */
+  async listTemplates(): Promise<ClearReadTemplate[]> {
+    this.assertConfigured();
+    const body = await this.post('/inquiry/templates', {
+      json: { project_id: this.projectId, page: 1, page_limit: 200 },
+    });
+    const data = body?.data ?? {};
+
+    const out: ClearReadTemplate[] = [];
+    for (const [list, isDefault] of [
+      [data.custom_templates, false],
+      [data.default_templates, true],
+    ] as const) {
+      for (const entry of Array.isArray(list) ? list : []) {
+        const tpl = entry?.template ?? entry;
+        if (!tpl?.template_id) continue;
+        if (!isDefault && tpl.project_id && tpl.project_id !== this.projectId) {
+          throw new ClearReadError(
+            'Clear Read คืนเทมเพลตของโปรเจกต์อื่นมา — น่าจะตั้ง CLEAR_READ_PROJECT_ID ผิด (ดู POST /list/project)',
+          );
+        }
+        out.push(toTemplateSummary(tpl, isDefault));
+      }
+    }
+    return out;
   }
 
   async fetchDetail(documentId: string): Promise<any> {

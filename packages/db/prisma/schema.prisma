@@ -64,6 +64,10 @@ model Contract {
   whtRate      Float    @default(0.03) @map("wht_rate")
   status       String   @default("active")
   abbyySkillId String?  @map("abbyy_skill_id")
+  // แม่แบบของ Clear Read ที่ใช้กับสัญญานี้ — คู่ขนานกับ abbyySkillId ด้านบน (ฟอร์มของลูกค้าแต่ละเจ้า
+  // ไม่เหมือนกัน เครื่องอ่านทั้งสองเจ้าจึงต้องเลือกแม่แบบต่อสัญญาเหมือนกัน) ว่างไว้ = ใช้ค่า
+  // CLEAR_READ_TEMPLATE_ID จาก .env แทน เหมือนที่ ABBYY_SKILL_ID ทำอยู่ (16 ก.ย. 69)
+  clearReadTemplateId String? @map("clear_read_template_id")
   createdAt    String   @map("created_at")
 
   customer    Customer     @relation(fields: [customerId], references: [id])
