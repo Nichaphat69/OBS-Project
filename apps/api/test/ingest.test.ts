@@ -78,6 +78,13 @@ function stubExtractor(data: unknown) {
   })) as any;
 }
 
+/**
+ * `IngestResult` ประกาศ `manday`/`matching`/`cycle` เป็น `unknown` (มีมาตั้งแต่พอร์ตรอบแรก) เทสต์นี้
+ * เข้าถึงฟิลด์ข้างในตรงๆ เหมือนต้นฉบับ จึงต้อง cast ที่จุดใช้งาน — ทางแก้ที่ถูกจริงคือประกาศชนิดให้
+ * ครบใน ingestService.ts แต่นั่นกระทบผู้เรียกหลายที่ ไม่ควรทำพ่วงมากับการพอร์ตเทสต์
+ */
+const f = (v: unknown): any => v;
+
 /** จำนวน Timesheet ทั้งหมด — ต้นฉบับ listTimesheets() คืนอาร์เรย์ตรงๆ พอร์ตนี้คืน { items, counts } */
 async function timesheetCount(): Promise<number> {
   return (await listTimesheets()).items.length;
@@ -104,14 +111,14 @@ test('รับ Timesheet คนแรกของรอบ → บันทึ�
   assert.equal(result.timesheetId, '2026020101');
   assert.equal(result.created, true);
   assert.equal(result.employee!.id, 'EMP-0042', 'จับคู่ "Pongpun Mamak" ได้');
-  assert.equal(result.matching!.name.kind, 'exact');
-  assert.ok(result.matching!.position.ok, '"Java Programmer" อยู่ในชื่อพ้องของตำแหน่ง');
+  assert.equal(f(result.matching).name.kind, 'exact');
+  assert.ok(f(result.matching).position.ok, '"Java Programmer" อยู่ในชื่อพ้องของตำแหน่ง');
 
-  assert.equal(result.manday!.standardWorkingDays, 20, 'ก.พ. 2026 มีวันทำงาน 20 วัน');
-  assert.equal(result.manday!.payableDays, 19);
-  assert.equal(result.manday!.dailyRate, 2647.2);
-  assert.equal(result.manday!.discount, 2647.2);
-  assert.equal(result.manday!.lineAmount, 50296.73);
+  assert.equal(f(result.manday).standardWorkingDays, 20, 'ก.พ. 2026 มีวันทำงาน 20 วัน');
+  assert.equal(f(result.manday).payableDays, 19);
+  assert.equal(f(result.manday).dailyRate, 2647.2);
+  assert.equal(f(result.manday).discount, 2647.2);
+  assert.equal(f(result.manday).lineAmount, 50296.73);
 
   assert.equal(result.status, 'verified');
   assert.deepEqual(result.failures, []);
@@ -120,8 +127,8 @@ test('รับ Timesheet คนแรกของรอบ → บันทึ�
     NEXT_ACTION.WAIT_FOR_OTHERS,
     'ยังได้แค่ 1 จาก 2 คน จึงยังวางบิลไม่ได้',
   );
-  assert.equal(result.cycle!.received, 1);
-  assert.equal(result.cycle!.expected, 2);
+  assert.equal(f(result.cycle).received, 1);
+  assert.equal(f(result.cycle).expected, 2);
 });
 
 test('รับคนที่สองครบรอบ → บอกให้ n8n วางบิลได้', async () => {
@@ -137,11 +144,11 @@ test('รับคนที่สองครบรอบ → บอกให้
     extractor: stubExtractor(data),
   });
 
-  assert.equal(result.manday!.payableDays, 20);
-  assert.equal(result.manday!.discount, 0);
-  assert.equal(result.manday!.lineAmount, 123420);
+  assert.equal(f(result.manday).payableDays, 20);
+  assert.equal(f(result.manday).discount, 0);
+  assert.equal(f(result.manday).lineAmount, 123420);
   assert.equal(result.nextAction, NEXT_ACTION.APPROVE_CYCLE);
-  assert.equal(result.cycle!.complete, true);
+  assert.equal(f(result.cycle).complete, true);
 });
 
 /**
@@ -171,7 +178,7 @@ test('ครบทุกคนแต่ยังไม่มีคนกดย�
 
 test('คนกดยืนยันครบทุกใบ → รอบบิลพร้อมวางบิล', async () => {
   for (const id of ['2026020101', '2026020100']) {
-    const result = await markTimesheetChecked(id, { actor: 'ผู้ตรวจทดสอบ' });
+    const result = (await markTimesheetChecked(id, { actor: 'ผู้ตรวจทดสอบ' }))!;
     assert.equal(result.check.checked, true);
     assert.equal(result.check.by, 'ผู้ตรวจทดสอบ');
   }
@@ -205,9 +212,9 @@ test('ยิงซ้ำ documentNo เดิม → เขียนทับ �
   assert.equal(result.created, false);
   assert.equal(result.replaced, true);
   assert.equal(await timesheetCount(), before, 'จำนวนรายการต้องไม่เพิ่ม');
-  assert.equal(result.manday!.leaveCount, 2);
-  assert.equal(result.manday!.discount, 5294.4, '2,647.20 × 2 วัน');
-  assert.equal(result.manday!.payableDays, 18);
+  assert.equal(f(result.manday).leaveCount, 2);
+  assert.equal(f(result.manday).discount, 5294.4, '2,647.20 × 2 วัน');
+  assert.equal(f(result.manday).payableDays, 18);
 
   /* ใบนี้เคยมีคนกดยืนยันไปแล้วในเทสต์ก่อนหน้า พอส่งฉบับแก้มาทับจนยอดเปลี่ยน
      ตราที่ประทับไว้ต้องหมดอายุเอง ไม่งั้นจะมีคนอนุมัติยอดที่ไม่มีใครเคยดู */
@@ -233,8 +240,8 @@ test('ชื่อที่สะกดต่างเล็กน้อย → 
   });
 
   assert.equal(result.employee!.id, 'EMP-0042');
-  assert.equal(result.matching!.name.kind, 'fuzzy');
-  assert.match(result.matching!.name.reason, /ยืนยัน/);
+  assert.equal(f(result.matching).name.kind, 'fuzzy');
+  assert.match(f(result.matching).name.reason, /ยืนยัน/);
 });
 
 test('ชื่อที่ไม่มีในระบบ → ไม่บันทึก และบอกให้ไปเพิ่มชื่อพ้อง', async () => {
@@ -324,10 +331,10 @@ test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE เฉ�
   const texts = message.bubbles.flatMap(bubbleTexts);
   assert.ok(texts.includes('ตรวจ Manday'), 'หัวบับเบิลต้องเป็น "ตรวจ Manday"');
   assert.ok(texts.includes('2026020103'), 'ต้องมีเลขเอกสารของใบที่เพิ่งเข้ามา');
-  assert.ok(texts.some((t) => t.includes('บริษัท ไทยประกันชีวิต')), 'ต้องบอกด้วยว่าเป็นของลูกค้าราย');
-  assert.ok(texts.some((t) => t.includes('กุมภาพันธ์ 2569')), 'ต้องบอกรอบเดือน');
+  assert.ok(texts.some((t: string) => t.includes('บริษัท ไทยประกันชีวิต')), 'ต้องบอกด้วยว่าเป็นของลูกค้าราย');
+  assert.ok(texts.some((t: string) => t.includes('กุมภาพันธ์ 2569')), 'ต้องบอกรอบเดือน');
   assert.ok(
-    !texts.some((t) => t.includes('ไม่ผ่าน')),
+    !texts.some((t: string) => t.includes('ไม่ผ่าน')),
     'ต้องเป็นบับเบิล "รอตรวจ" ไม่ใช่ข้อความตรวจไม่ผ่านของ notifyCheckFailed',
   );
 });

@@ -303,6 +303,28 @@ export const TIMESHEET_SUMMARY_FIELDS: TimesheetFieldSpec[] = [
 /** ชื่อ line item ของตารางรายวันตามสเปกกลาง — ตัวอ่านที่รองรับ line item ต้องใช้ชื่อนี้ */
 export const TIMESHEET_DETAIL_LINE_ITEM = 'TimesheetDetails';
 
+/**
+ * คีย์รายวันสามตัวที่ชื่อภายในระบบไม่ตรงกับสเปกกลาง — มีมาก่อนสเปกและยังเปลี่ยนชื่อไม่ได้
+ *
+ * `ExtractedDay`/`timesheet_days` ใช้ `dayOfWeek`/`remark`/`type` มาตั้งแต่ Phase 5.1 ซึ่งตรงกับ
+ * `day`/`remarks`/`workType` ของสเปกทุกประการในความหมาย ต่างแค่ชื่อ — การเปลี่ยนชื่อไม่ใช่การเพิ่ม
+ * (additive) และกระทบทั้ง abbyyClient.ts กับ apps/web พร้อมกัน จึงเลื่อนไปทำเป็นงานแยกทีหลัง
+ *
+ * ระหว่างนี้ตารางนี้คือแหล่งความจริงแหล่งเดียวของความต่างนั้น — ตัวอ่านเจ้าใหม่เขียน mapping ด้วย
+ * **คีย์ตามสเปก** ได้เลย แล้วให้ชั้น boundary แปลงให้ (ดู extractionService.ts) จะได้ไม่มีใครต้อง
+ * จำข้อยกเว้นสามข้อนี้เอง และความต่างก็ไม่งอกผู้พึ่งพารายใหม่เพิ่มขึ้นระหว่างรอ rename
+ */
+export const DETAIL_SPEC_KEY_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  day: 'dayOfWeek',
+  remarks: 'remark',
+  workType: 'type',
+});
+
+/** แปลงคีย์รายวันจากชื่อตามสเปก → ชื่อที่ `ExtractedDay` ใช้จริง (คีย์อื่นคืนค่าเดิม) */
+export function toInternalDetailKey(specKey: string): string {
+  return DETAIL_SPEC_KEY_ALIASES[specKey] ?? specKey;
+}
+
 const HEADER_BY_KEY = new Map(
   [...TIMESHEET_HEADER_FIELDS, ...TIMESHEET_SUMMARY_FIELDS].map((f) => [f.key, f]),
 );
