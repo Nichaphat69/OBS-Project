@@ -88,7 +88,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:4300/api/timesheets/ingest",
+        "url": "=http://localhost:4301/api/timesheets/ingest",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
@@ -104,7 +104,7 @@
         300,
         220
       ],
-      "notes": "URL เขียนตรงเป็น localhost:4300 ไว้แล้ว แก้เองถ้า OBS อยู่คนละเครื่องหรือ n8n รันใน Docker · timeout 3 นาที เพราะต้องรอโมเดล vision ในเครื่องอ่าน PDF"
+      "notes": "URL เขียนตรงเป็น localhost:4301 (apps/api ของสแต็กใหม่) ไว้แล้ว — แก้เองถ้า OBS อยู่คนละเครื่องหรือ n8n รันใน Docker · timeout 3 นาที เพราะต้องรอโมเดล vision ในเครื่องอ่าน PDF"
     },
     {
       "parameters": {
@@ -168,7 +168,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:4300/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
+        "url": "=http://localhost:4301/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
         "options": {
           "timeout": 60000
         }
@@ -229,7 +229,7 @@
     },
     {
       "parameters": {
-        "url": "=http://localhost:4300/api/cycles/ready",
+        "url": "=http://localhost:4301/api/cycles/ready",
         "options": {}
       },
       "id": "get-ready",
@@ -289,7 +289,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:4300/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
+        "url": "=http://localhost:4301/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
         "options": {
           "timeout": 60000
         }
@@ -443,5 +443,6 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "pinData": {}
+  "pinData": {},
+  "id": "773a8324-f3bd-4f28-9a7c-f8b491b5ecf7"
 }
