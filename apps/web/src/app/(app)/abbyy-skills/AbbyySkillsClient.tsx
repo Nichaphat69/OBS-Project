@@ -178,7 +178,9 @@ export default function AbbyySkillsClient() {
             style={{ marginTop: 6, width: '100%', height: 38, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 12px' }}
           />
         </label>
-        <button className="btn pri" disabled={adding} onClick={add}>
+        {/* justifySelf: ไม่ให้ปุ่มยืดเต็มคอลัมน์ของกริด ไม่งั้นมันสูงเท่าช่องกรอกและกว้างเท่ากัน
+            จนดูเป็นช่องที่สามของฟอร์มแทนที่จะเป็นปุ่มสั่งงาน */}
+        <button className="btn pri sm" style={{ justifySelf: 'start' }} disabled={adding} onClick={add}>
           {adding ? tx('กำลังเพิ่ม…') : `+ ${tx('เพิ่ม Skill ใหม่')}`}
         </button>
       </div>
