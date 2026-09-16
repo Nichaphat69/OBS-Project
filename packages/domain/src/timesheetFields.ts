@@ -256,11 +256,63 @@ export const TIMESHEET_DETAIL_FIELDS: TimesheetFieldSpec[] = [
   },
 ];
 
+/**
+ * ฟิลด์สรุปท้ายเอกสาร — หนึ่งค่าต่อหนึ่ง Timesheet เหมือนฟิลด์หัวเอกสาร แต่เป็นยอดรวมที่ "เอกสาร
+ * เขียนไว้เอง" ไม่ใช่ที่เราคำนวณจากตาราง
+ *
+ * ⚠️ **สามฟิลด์นี้ไม่มีในไฟล์ Master Template ที่ได้รับมา** — เพิ่มเข้ามาเองเมื่อ 2026-09-16
+ * หลังพบว่าสเปกต้นทางวางยอดรวมไว้ที่ระดับแถวอย่างเดียว (Normal_Hours/OT_Hours/Total_Hours/
+ * Leave_Days ต่อแถว) แต่ฟอร์มจริงหลายเจ้าพิมพ์ยอดสรุปไว้ท้ายเอกสารด้วย เช่น ThaiLife เขียน
+ * "Total Work days : 19  Leave / Sick (days) : 0  Total Hours : 152.00" และ Skill ของ ABBYY
+ * ก็มีฟิลด์ "Total Work days"/"Leave Sick" ให้ดึงตรงๆ
+ *
+ * เหตุผลที่ต้องอยู่ในสารบัญกลาง ไม่ใช่แยกไว้ในแต่ละตัวอ่าน: ระบบพึ่งค่าพวกนี้จริง (`totalWorkDays`
+ * จากช่องสรุปคือค่าหลัก ส่วนการนับจากตารางเป็น fallback) และฟอร์มเดียวกันนี้เองที่ Clear Read จะต้อง
+ * อ่านด้วย — ถ้าปล่อยให้แต่ละตัวอ่านตั้งชื่อคีย์เอง สองตัวอ่านจะเรียกของสิ่งเดียวกันคนละชื่อ ซึ่งเป็น
+ * ปัญหาที่สารบัญนี้มีไว้เพื่อกันตั้งแต่แรก
+ *
+ * กติกา "ห้ามคำนวณให้" ของสเปกต้นทางยังใช้เหมือนเดิม — ฟิลด์พวกนี้อ่านจากช่องสรุปที่เอกสารพิมพ์ไว้
+ * เท่านั้น ถ้าเอกสารไม่มีช่องสรุปก็ปล่อยว่าง แล้วให้ชั้นถัดไปตัดสินใจว่าจะนับจากตารางแทนหรือไม่
+ */
+export const TIMESHEET_SUMMARY_FIELDS: TimesheetFieldSpec[] = [
+  {
+    key: 'totalWorkDays', name: 'Total_Work_Days', label: 'จำนวนวันทำงานรวม (ช่องสรุป)',
+    description:
+      'Total number of work days reported in a document-level summary box. Map Total Work days, Total base man-day, '
+      + 'No. Manday, Summary Work Days, Claim to APHD, or equivalent. Read it from the summary the document prints — '
+      + 'do not count the daily rows yourself.',
+    type: 'number', examples: ['19', '20', '21'],
+  },
+  {
+    key: 'totalLeaveDays', name: 'Total_Leave_Days', label: 'จำนวนวันลารวม (ช่องสรุป)',
+    description:
+      'Total number of leave days reported in a document-level summary box. Map Leave / Sick (days), Leave Sick, '
+      + 'Total Leave, or equivalent. Read it from the summary the document prints — do not count the daily rows yourself.',
+    type: 'number', examples: ['0', '1', '2'],
+  },
+  {
+    key: 'totalHours', name: 'Total_Hours_Summary', label: 'ชั่วโมงรวมทั้งเอกสาร (ช่องสรุป)',
+    description:
+      'Total hours reported in a document-level summary box, such as Total Hours or '
+      + '"Total duration (hour in decimal)". Forms that summarise in days rather than hours will not have this — '
+      + 'leave it empty rather than deriving it.',
+    type: 'number', examples: ['152.00', '160.00', '168'],
+  },
+];
+
 /** ชื่อ line item ของตารางรายวันตามสเปกกลาง — ตัวอ่านที่รองรับ line item ต้องใช้ชื่อนี้ */
 export const TIMESHEET_DETAIL_LINE_ITEM = 'TimesheetDetails';
 
-const HEADER_BY_KEY = new Map(TIMESHEET_HEADER_FIELDS.map((f) => [f.key, f]));
+const HEADER_BY_KEY = new Map(
+  [...TIMESHEET_HEADER_FIELDS, ...TIMESHEET_SUMMARY_FIELDS].map((f) => [f.key, f]),
+);
 const DETAIL_BY_KEY = new Map(TIMESHEET_DETAIL_FIELDS.map((f) => [f.key, f]));
+
+/** ฟิลด์ระดับเอกสารทั้งหมด (หัวเอกสาร + ช่องสรุป) — ใช้กับหน้าตั้งค่าและ `header` ของ TimesheetFieldMap */
+export const TIMESHEET_DOCUMENT_FIELDS: TimesheetFieldSpec[] = [
+  ...TIMESHEET_HEADER_FIELDS,
+  ...TIMESHEET_SUMMARY_FIELDS,
+];
 
 export function headerField(key: string): TimesheetFieldSpec | null {
   return HEADER_BY_KEY.get(key) ?? null;
@@ -279,8 +331,19 @@ export function detailField(key: string): TimesheetFieldSpec | null {
  * ว่าหาฟิลด์ไม่เจอ
  */
 export interface TimesheetFieldMap {
+  /** คีย์กลางระดับเอกสาร (TIMESHEET_DOCUMENT_FIELDS) → ชื่อฟิลด์จริงของตัวอ่านเจ้านั้น */
   header?: Record<string, string | null>;
+  /** คีย์กลางระดับแถวรายวัน (TIMESHEET_DETAIL_FIELDS) → ชื่อคอลัมน์จริงในตารางของตัวอ่านเจ้านั้น */
   detail?: Record<string, string | null>;
   /** ชื่อตาราง/line item ของตัวอ่านเจ้านั้น (ABBYY เรียก "New Table", Clear Read ใช้ TimesheetDetails) */
   tableName?: string | null;
+  /**
+   * ฟอร์มที่แยก "เดือน" กับ "ปี" เป็นคนละช่อง (เจอจริงกับ Skill ของ Lotus) — ตั้งสองคีย์นี้แทน
+   * `header.monthYear` แล้วตัวอ่านประกอบเป็นรอบเดือนเดียวกันให้
+   *
+   * อยู่แยกจาก `header` โดยตั้งใจ เพราะไม่ใช่ฟิลด์กลางคนละตัว แต่เป็น "สองช่องในเอกสารที่รวมกันแล้ว
+   * ได้ฟิลด์กลาง monthYear ตัวเดิม" — ถ้าใส่เป็นคีย์กลางเพิ่มสองตัว ปลายทางจะต้องรู้เองว่าต้องเลือก
+   * อ่านจาก monthYear หรือจาก month+year ซึ่งเป็นความรู้ที่ควรจบอยู่ในชั้น mapping ไม่ใช่ชั้นที่ใช้ค่า
+   */
+  monthYearSplit?: { month: string | null; year: string | null };
 }
