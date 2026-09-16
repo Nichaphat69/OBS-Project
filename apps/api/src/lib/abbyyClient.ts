@@ -7,7 +7,7 @@
  * See the original file's header comment for the full verification history (real sandbox calls,
  * Swagger UI, ABBYY docs) — endpoint names and field names here are not guesses.
  */
-import { classifyDayKind, classifyLeaveType, monthFromWord, normalizeYear } from '@obs/domain';
+import { classifyDayKind, classifyLeaveType, monthFromWord, normalizeYear, type TimesheetFieldMap } from '@obs/domain';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 1_500;
@@ -196,11 +196,30 @@ const EN_MONTH: Record<string, number> = {
 };
 
 function parsePeriodFromYearField(value: unknown): string | null {
-  const m = String(value ?? '').match(/([A-Za-z]+)\s+(\d{4})/);
-  if (!m) return null;
-  const month = EN_MONTH[m[1].toLowerCase()];
-  if (!month) return null;
-  return `${m[2]}-${String(month).padStart(2, '0')}`;
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  // ทางเดิม: ชื่อเดือนอังกฤษเต็ม + ปี 4 หลัก ("May 2026") — ต่างจากเดิมตรงที่ปีต้องผ่าน normalizeYear
+  // ด้วย ไม่งั้นเอกสารที่พิมพ์ปี พ.ศ. ("May 2569") จะได้รอบเดือน "2569-05" ที่ไม่มีอยู่จริงแบบเงียบๆ
+  // (ไม่ error ไม่ขึ้นโน้ต) แล้วไหลต่อไปถึงรอบวางบิล — แย่กว่าอ่านไม่ออกไปเลย
+  const strict = text.match(/([A-Za-z]+)\s+(\d{4})/);
+  if (strict) {
+    const month = EN_MONTH[strict[1].toLowerCase()];
+    const year = normalizeYear(strict[2]);
+    if (month && year) return `${year}-${String(month).padStart(2, '0')}`;
+  }
+
+  // ทางสำรอง: ชื่อเดือนย่อ ("Jan 2026") เดือนภาษาไทย หรือเดือนเป็นตัวเลข ("8 2026", "08/2026" — สอง
+  // แบบหลังเป็นตัวอย่างในสารบัญกลางเอง) EN_MONTH ด้านบนรับแค่ชื่อเต็มภาษาอังกฤษแบบเดียว จึงใช้
+  // monthFromWord/normalizeYear ตัวเดียวกับที่ทาง month+year แยกฟิลด์ใช้อยู่แล้ว ซึ่งทนทานกว่ามาก
+  const loose = text.match(/^(.+?)[\s/,-]+(\d{2,4})$/);
+  if (loose) {
+    const numeric = /^\d{1,2}$/.test(loose[1]) ? Number(loose[1]) : null;
+    const month = (numeric !== null && numeric >= 1 && numeric <= 12 ? numeric : null) ?? monthFromWord(loose[1]);
+    const year = normalizeYear(loose[2]);
+    if (month && year) return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  return null;
 }
 
 function daysInMonth(period: string | null): number | null {
@@ -248,8 +267,8 @@ function buildDayRowsFromFlatFields(fields: Record<string, any>, period: string 
   }));
 }
 
-function hasStructuredTable(rootObject: any, tableName: string): boolean {
-  const table = rootObject?.Fields?.find((f: any) => f.Name === tableName);
+function hasStructuredTable(rootObject: any, tableName: string | null): boolean {
+  const table = findTable(rootObject, tableName);
   return Array.isArray(table?.List) && table.List.length > 0 && table.List[0]?.Value?.Fields;
 }
 
@@ -360,8 +379,8 @@ function dayOfWeekFromDate(dateStr: string): string | null {
   return Number.isNaN(d.getTime()) ? null : DOW_EN[d.getUTCDay()];
 }
 
-function buildDayRowsFromStructuredTable(rootObject: any, tableName: string, expectedYear?: number | null) {
-  const table = rootObject?.Fields?.find((f: any) => f.Name === tableName);
+function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | null, expectedYear?: number | null, detail: Record<string, string | null | undefined> = DEFAULT_DETAIL_MAP) {
+  const table = findTable(rootObject, tableName);
   if (!Array.isArray(table?.List)) return [];
 
   const days: any[] = [];
@@ -369,63 +388,136 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string, exp
     const cols: Record<string, any> = {};
     for (const f of row.Value?.Fields ?? []) cols[f.Name] = f.List?.[0]?.Value ?? null;
 
-    const date = parseTableRowDate(cols, expectedYear);
+    const date = resolveRowDate(cols, detail, expectedYear);
     if (!date) continue;
 
-    const { timeIn, timeOut, otTimeIn, otTimeOut, recovered, descriptionOverride } = extractRowTimes(cols);
-    const rawDescription = recovered ? descriptionOverride : cols['Description'];
+    // คอลัมน์เวลาที่ตั้งค่าไว้ชัดเจนเชื่อถือได้กว่าการเดาเสมอ — ใช้ตรงๆ แล้วข้ามการเรียงเวลาไปเลย
+    // (นี่คือจุดที่แก้ปัญหาคอลัมน์สลับตำแหน่งได้จริง) ตั้งไม่ครบ/ไม่ได้ตั้ง = เดาแบบเดิมทั้งแถว
+    const mappedTimes = detail.timeIn !== undefined && detail.timeOut !== undefined;
+    const { timeIn, timeOut, otTimeIn, otTimeOut, recovered, descriptionOverride } = mappedTimes
+      ? mappedRowTimes(cols, detail)
+      : extractRowTimes(cols);
+
+    const descriptionCol = detail.jobDescription;
+    const rawDescription = recovered ? descriptionOverride : pick(cols, descriptionCol);
     const jobDescription = rawDescription ? dedupeRepeatedText(rawDescription) : null;
 
     const isDateOrTimeLike = (v: unknown) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(v ?? '')) || parseTimeToMinutes(v) !== null;
     const labelParts = Object.entries(cols)
-      .filter(([name, value]) => name !== 'Description' && !isDateOrTimeLike(value))
+      .filter(([name, value]) => name !== descriptionCol && !isDateOrTimeLike(value))
       .map(([, value]) => value)
       .filter(Boolean);
     const label = labelParts.length ? dedupeRepeatedText(labelParts.join(' ')) : null;
 
-    const project = cols['Project'] ?? null;
-    const type = cols['Type'] ? dedupeRepeatedText(cols['Type']) : label;
+    const project = pick(cols, detail.project);
+    const rawType = pick(cols, detail.workType);
+    const type = rawType ? dedupeRepeatedText(rawType) : label;
 
     const computedNormal = hoursBetween(timeIn, timeOut);
     const computedOt = hoursBetween(otTimeIn, otTimeOut);
-    const normalHours = parsedOrNull(cols['Normal']) ?? computedNormal;
-    const otHours = parsedOrNull(cols['OT']) ?? computedOt;
-    const totalHours = parsedOrNull(cols['Total per day']) ?? (normalHours !== null || otHours !== null ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100 : null);
+    const normalHours = parsedOrNull(pick(cols, detail.normalHours)) ?? computedNormal;
+    const otHours = parsedOrNull(pick(cols, detail.otHours)) ?? computedOt;
+    const totalHours = parsedOrNull(pick(cols, detail.totalHours)) ?? (normalHours !== null || otHours !== null ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100 : null);
 
     days.push({
-      date, dayOfWeek: dayOfWeekFromDate(date), project,
+      date, dayOfWeek: pick(cols, detail.day) ?? dayOfWeekFromDate(date), project,
       timeIn, timeOut, otTimeIn, otTimeOut,
-      label, type, remark: null, jobDescription,
+      label, type, remark: pick(cols, detail.remarks), jobDescription,
       normalHours, otHours, totalHours,
+      // ฟิลด์ตามสารบัญกลางที่เพิ่มเข้ามา — Skill ไหนไม่ได้ตั้ง mapping ไว้ก็เป็น null เฉยๆ ไม่กระทบของเดิม
+      rowNumber: pick(cols, detail.rowNumber),
+      site: pick(cols, detail.site),
+      workLocation: pick(cols, detail.workLocation),
+      breakHours: parsedOrNull(pick(cols, detail.breakHours)),
+      otBreakHours: parsedOrNull(pick(cols, detail.otBreakHours)),
+      additionalHours: parsedOrNull(pick(cols, detail.additionalHours)),
+      activity: pick(cols, detail.activity),
+      leaveType: pick(cols, detail.leaveType),
+      leaveDays: parsedOrNull(pick(cols, detail.leaveDays)),
     });
   }
   return days;
 }
 
-function extractLeaveDaysFromTable(rootObject: any, tableName: string, expectedYear?: number | null) {
-  const table = rootObject?.Fields?.find((f: any) => f.Name === tableName);
+/** เวลาเข้า-ออกจากคอลัมน์ที่ map ไว้ — ส่วน OT ถ้ายังไม่ได้ map ต้องไม่ทิ้งไปเฉยๆ แต่ให้ไปเดาจาก
+ * "คอลัมน์ที่เหลือ" (หักคอลัมน์เข้า-ออกที่รู้แล้วออกก่อน) เพราะคนตั้งค่ามักตั้งแค่เวลาเข้า-ออกซึ่งเป็น
+ * คู่ที่เห็นชัดที่สุดก่อน ถ้าการตั้งค่านั้นทำให้ชั่วโมง OT ที่เคยตรวจเจอหายไปเงียบๆ จะกลายเป็นค่าจ้าง
+ * ที่หายไปจากบิลโดยไม่มีอะไรเตือน — ตั้งค่าแล้วต้องไม่แย่ลงกว่าไม่ตั้ง */
+function mappedRowTimes(cols: Record<string, any>, detail: Record<string, string | null | undefined>) {
+  const base = {
+    timeIn: pick(cols, detail.timeIn),
+    timeOut: pick(cols, detail.timeOut),
+    recovered: false,
+    descriptionOverride: null as string | null,
+  };
+  if (detail.otTimeIn !== undefined || detail.otTimeOut !== undefined) {
+    return { ...base, otTimeIn: pick(cols, detail.otTimeIn), otTimeOut: pick(cols, detail.otTimeOut) };
+  }
+
+  // ไม่รู้คอลัมน์เข้า-ออกจริงสักช่อง (ตั้ง null ทั้งคู่ = Skill นี้ไม่มีคอลัมน์เวลาเลย) ก็ไม่มีอะไรให้หัก
+  // ออก การเดาต่อจะกลายเป็นจับเวลาปกติมาเป็น OT — ปล่อยว่างปลอดภัยกว่า
+  const known = [detail.timeIn, detail.timeOut].filter((c): c is string => typeof c === 'string');
+  if (known.length === 0) return { ...base, otTimeIn: null, otTimeOut: null };
+
+  const rest: Record<string, any> = { ...cols };
+  for (const column of known) delete rest[column];
+  const leftover = extractRowTimes(rest);
+  return { ...base, otTimeIn: leftover.timeIn, otTimeOut: leftover.timeOut };
+}
+
+function findTable(rootObject: any, tableName: string | null) {
+  if (!tableName) return null;
+  return rootObject?.Fields?.find((f: any) => f.Name === tableName) ?? null;
+}
+
+/** คอลัมน์วันที่ที่ตั้งค่าไว้ชัดเจนมาก่อน — ไม่ได้ตั้งค่อยไล่เดาจากรูปแบบ DD/MM/YY ทุกคอลัมน์แบบเดิม */
+function resolveRowDate(cols: Record<string, any>, detail: Record<string, string | null | undefined>, expectedYear?: number | null): string | null {
+  if (detail.date !== undefined) {
+    const mapped = pick(cols, detail.date);
+    if (mapped) {
+      const parsed = parseTableRowDate({ mapped }, expectedYear);
+      if (parsed) return parsed;
+    }
+  }
+  return parseTableRowDate(cols, expectedYear);
+}
+
+function extractLeaveDaysFromTable(rootObject: any, tableName: string | null, expectedYear?: number | null, detail: Record<string, string | null | undefined> = DEFAULT_DETAIL_MAP) {
+  const table = findTable(rootObject, tableName);
   if (!Array.isArray(table?.List)) return [];
 
+  const descriptionCol = detail.jobDescription;
   const leaveDays: Array<{ date: string; type: string; rawLabel: string }> = [];
   for (const row of table.List) {
     const cols: Record<string, any> = {};
     for (const f of row.Value?.Fields ?? []) cols[f.Name] = f.List?.[0]?.Value ?? null;
 
-    const date = parseTableRowDate(cols, expectedYear);
+    const date = resolveRowDate(cols, detail, expectedYear);
     if (!date) continue;
 
-    const labelsNoDescription = Object.entries(cols).filter(([name]) => name !== 'Description').map(([, value]) => value);
-    const isLeave = classifyDayKind(...labelsNoDescription) === 'leave' || hasExactLeaveWord(cols);
+    // คอลัมน์ประเภทการลาที่ตั้งค่าไว้ = "ให้ดูช่องนี้" ไม่ใช่ "ช่องนี้มีค่าแปลว่าลา" — ตัวจำแนกยังเป็น
+    // classifyDayKind ตัวเดิมทุกประการ ฟอร์มที่พิมพ์ "-"/"N/A" ในวันทำงานปกติจึงไม่ถูกนับเป็นวันลา
+    const mappedLeaveValue = typeof detail.leaveType === 'string' ? pick(cols, detail.leaveType) : null;
+    const mappedSaysLeave = mappedLeaveValue !== null
+      && (classifyDayKind(mappedLeaveValue) === 'leave' || hasExactLeaveWord({ value: mappedLeaveValue }));
+
+    // จงใจไม่สแกนคอลัมน์รายละเอียดงาน — คำว่า "ลา" ที่แทรกกลางประโยคงานไม่ใช่วันลา (มีเทสต์คุมไว้)
+    const labelsNoDescription = Object.entries(cols).filter(([name]) => name !== descriptionCol).map(([, value]) => value);
+    // ตั้งค่าคอลัมน์ไว้แล้วก็ยังสแกนคอลัมน์อื่นต่อ — ฟอร์มที่เขียนคำลาไว้สองที่ต้องไม่หายไปหนึ่งที่
+    // เพียงเพราะแอดมินระบุชื่ออีกที่หนึ่ง (บทเรียนเดียวกับตอนที่ map เวลาเข้า-ออกแล้วทำ OT หาย)
+    const isLeave = mappedSaysLeave || classifyDayKind(...labelsNoDescription) === 'leave' || hasExactLeaveWord(cols);
     if (!isLeave) continue;
 
-    const rawLabel = [...labelsNoDescription, cols['Description']].filter(Boolean).join(' ');
-    leaveDays.push({ date, type: classifyLeaveType(rawLabel), rawLabel });
+    const rawLabel = [...labelsNoDescription, pick(cols, descriptionCol)].filter(Boolean).join(' ');
+    // ถ้าคอลัมน์ที่ตั้งไว้เป็นตัวชี้ ใช้ค่าจากช่องนั้นจำแนกประเภท แม่นกว่าเอาทั้งแถวมาต่อกันแล้วเดา
+    const type = mappedSaysLeave ? classifyLeaveType(String(mappedLeaveValue)) : classifyLeaveType(rawLabel);
+    leaveDays.push({ date, type, rawLabel });
   }
   return leaveDays;
 }
 
-function extractOtHoursFromTable(rootObject: any, tableName: string, expectedYear?: number | null) {
-  const table = rootObject?.Fields?.find((f: any) => f.Name === tableName);
+function extractOtHoursFromTable(rootObject: any, tableName: string | null, expectedYear?: number | null, detail: Record<string, string | null | undefined> = DEFAULT_DETAIL_MAP) {
+  const table = findTable(rootObject, tableName);
   if (!Array.isArray(table?.List)) return [];
 
   const otDays: Array<{ date: string; hours: number }> = [];
@@ -433,10 +525,10 @@ function extractOtHoursFromTable(rootObject: any, tableName: string, expectedYea
     const cols: Record<string, any> = {};
     for (const f of row.Value?.Fields ?? []) cols[f.Name] = f.List?.[0]?.Value ?? null;
 
-    const date = parseTableRowDate(cols, expectedYear);
+    const date = resolveRowDate(cols, detail, expectedYear);
     if (!date) continue;
 
-    const hours = Number(cols['OT']);
+    const hours = Number(pick(cols, detail.otHours));
     if (Number.isFinite(hours) && hours > 0) otDays.push({ date, hours });
   }
   return otDays;
@@ -464,58 +556,142 @@ export interface AbbyyFieldMap {
   totalWorkDays?: string | null;
 }
 
-const DEFAULT_FIELD_MAP: Required<Pick<AbbyyFieldMap, 'employeeName' | 'position' | 'tableName'>> &
-  Pick<AbbyyFieldMap, 'monthYear' | 'month' | 'year' | 'totalWorkDays'> = {
+/** รับได้ทั้งสองรูป: รูปเก่าแบน (แถว `abbyy_skills.field_map` ที่บันทึกไว้ก่อนหน้า + หน้าตั้งค่าเดิม)
+ * และรูปกลาง `TimesheetFieldMap` จาก @obs/domain — normalize เป็นรูปเดียวกันก่อนใช้งานเสมอ */
+export type AbbyySkillFieldMap = AbbyyFieldMap | TimesheetFieldMap;
+
+interface ResolvedFieldMap {
+  header: Record<string, string | null | undefined>;
+  detail: Record<string, string | null | undefined>;
+  tableName: string | null;
+  monthYearSplit: { month: string | null; year: string | null };
+}
+
+/** คีย์ระดับเอกสารตามสารบัญกลาง (TIMESHEET_DOCUMENT_FIELDS = header + summary) — ค่า default คือชื่อ
+ * ฟิลด์จริงของ Skill "OBS Timesheet2" ตรงกับพฤติกรรมเดิมทุกตัวอักษร ส่วนคีย์ที่ไม่มี default (เช่น
+ * employeeId/role/department/site) ปล่อยเป็น undefined ไว้ = ยังไม่ได้ตั้งค่า ไม่ใช่ "ไม่มีฟิลด์นี้" */
+const DEFAULT_HEADER_MAP: Record<string, string | null> = {
+  vendorName: 'Vendor',
+  clientName: 'Client Name',
+  projectName: 'Project Name',
   employeeName: 'Employee Name',
   position: 'Position',
   monthYear: 'Month Year',
-  month: null,
-  year: null,
-  tableName: 'New Table',
+  approverName: 'Approver',
   totalWorkDays: 'Total Work days',
+  totalHours: 'Total Hours',
+  totalLeaveDays: 'Leave Sick',
 };
+
+/** คอลัมน์ในตารางรายวัน — คีย์ตามสารบัญกลาง ค่า default คือชื่อคอลัมน์ที่ hardcode ไว้เดิม
+ * ตัวที่จงใจไม่ใส่ default (date/timeIn/timeOut/otTimeIn/otTimeOut) คือตัวที่โค้ดเดิมไม่ได้อ่านจากชื่อ
+ * คอลัมน์ แต่เดาเอาจากรูปแบบค่า (วันที่ DD/MM/YY, เรียงเวลาจากน้อยไปมาก) — ปล่อยเป็น undefined ไว้
+ * เพื่อให้ยัง fallback ไปใช้การเดาแบบเดิมเมื่อ Skill ไม่ได้ตั้งค่าไว้ ดู pickCol() */
+const DEFAULT_DETAIL_MAP: Record<string, string | null> = {
+  jobDescription: 'Description',
+  project: 'Project',
+  workType: 'Type',
+  normalHours: 'Normal',
+  otHours: 'OT',
+  totalHours: 'Total per day',
+};
+
+const DEFAULT_TABLE_NAME = 'New Table';
+
+function isCanonicalShape(raw: unknown): raw is TimesheetFieldMap {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = raw as Record<string, unknown>;
+  // `tableName` อย่างเดียวแยกสองรูปไม่ได้ (มีเหมือนกันทั้งคู่) — ดูคีย์ที่มีเฉพาะรูปกลางเท่านั้น
+  return ['header', 'detail', 'monthYearSplit'].some((k) => o[k] !== undefined && typeof o[k] === 'object');
+}
+
+/** รูปเก่า → รูปกลาง — คัดเฉพาะคีย์ที่ตั้งไว้จริง (ห้ามเติม undefined ลงไป ไม่งั้นจะไปทับ default
+ * ตอน spread) `month`/`year`/`totalWorkDays` ย้ายไปอยู่ในส่วนขยายของ header ตามที่อธิบายด้านบน */
+function fromLegacyShape(legacy: AbbyyFieldMap): TimesheetFieldMap {
+  const header: Record<string, string | null> = {};
+  for (const key of ['employeeName', 'position', 'monthYear', 'totalWorkDays'] as const) {
+    const value = legacy[key];
+    if (value !== undefined) header[key] = value;
+  }
+  // รูปเก่าเก็บ month/year แบนไว้ระดับเดียวกับฟิลด์อื่น — รูปกลางย้ายไปอยู่ใน monthYearSplit
+  const split = legacy.month !== undefined || legacy.year !== undefined
+    ? { month: legacy.month ?? null, year: legacy.year ?? null }
+    : undefined;
+  return {
+    header,
+    ...(split ? { monthYearSplit: split } : {}),
+    ...(legacy.tableName !== undefined ? { tableName: legacy.tableName } : {}),
+  };
+}
+
+/** แปลงค่าที่เก็บไว้ให้เป็น "รูปกลาง" สำหรับส่งออกไปให้หน้าตั้งค่าใช้ — ตั้งใจ**ไม่**เติมค่า default
+ * ลงไป เพราะหน้าตั้งค่าแยกสามสถานะ (ว่าง = ยังไม่ได้ตั้ง / null = Skill นี้ไม่มีฟิลด์นี้ / ข้อความ =
+ * ชื่อฟิลด์จริง) ถ้าเติม default ไปด้วย ค่าที่ระบบเดาให้จะกลายเป็นค่าที่ "แอดมินตั้งเอง" ทันทีที่กดบันทึก
+ * ครั้งแรก — ต่างกับ resolveFieldMap() ที่เติม default เพราะใช้ตอนอ่านเอกสารจริง */
+export function toCanonicalFieldMap(raw: AbbyySkillFieldMap | null | undefined): TimesheetFieldMap | null {
+  if (raw === null || raw === undefined) return null;
+  return isCanonicalShape(raw) ? raw : fromLegacyShape(raw as AbbyyFieldMap);
+}
+
+function resolveFieldMap(raw: AbbyySkillFieldMap | null | undefined): ResolvedFieldMap {
+  const fm = isCanonicalShape(raw) ? raw : fromLegacyShape((raw ?? {}) as AbbyyFieldMap);
+  return {
+    header: { ...DEFAULT_HEADER_MAP, ...(fm.header ?? {}) },
+    detail: { ...DEFAULT_DETAIL_MAP, ...(fm.detail ?? {}) },
+    // tableName: null = Skill นี้ไม่มีตารางรายวันจริงๆ (ไปใช้ทางก้อนข้อความแทน) ต่างจาก undefined ที่
+    // แปลว่าไม่ได้ตั้งค่า ให้ใช้ค่า default
+    tableName: fm.tableName === undefined ? DEFAULT_TABLE_NAME : fm.tableName,
+    monthYearSplit: fm.monthYearSplit ?? { month: null, year: null },
+  };
+}
+
+/** อ่านค่าตามชื่อฟิลด์ที่ map ไว้ — ชื่อเป็น null/undefined (ไม่มีฟิลด์นี้/ไม่ได้ตั้งค่า) คืน null เฉยๆ */
+function pick(source: Record<string, any>, name: string | null | undefined): any {
+  if (!name) return null;
+  return source[name] ?? null;
+}
 
 /** คำนวณรอบเดือน — เชื่อฟิลด์รวม (monthYear) ก่อนเสมอถ้าตั้งไว้ (พิสูจน์ใช้งานได้จริงกับ Skill ส่วนใหญ่
  * แล้ว) ตกไปทาง month+year แยกกันเฉพาะตอน Skill นั้นไม่มีฟิลด์รวม (เช่น Lotus) — ใช้ monthFromWord/
  * normalizeYear จาก @obs/domain (ตัวเดียวกับที่ normalizeDate ใช้) เพราะรองรับทั้งเดือนไทย/อังกฤษและ
  * ปี พ.ศ./ค.ศ. ทนทานกว่า EN_MONTH ในไฟล์นี้ที่รองรับแค่ชื่อเดือนอังกฤษเต็มรูปแบบเดียว */
-function resolvePeriod(fields: Record<string, any>, fm: AbbyyFieldMap): string | null {
-  if (fm.monthYear && fields[fm.monthYear]) {
-    const p = parsePeriodFromYearField(fields[fm.monthYear]);
+function resolvePeriod(fields: Record<string, any>, fm: ResolvedFieldMap): string | null {
+  const monthYear = pick(fields, fm.header.monthYear);
+  if (monthYear) {
+    const p = parsePeriodFromYearField(monthYear);
     if (p) return p;
   }
-  if (fm.month && fm.year && fields[fm.month] && fields[fm.year]) {
-    const month = monthFromWord(fields[fm.month]);
-    const year = normalizeYear(fields[fm.year]);
+  const rawMonth = pick(fields, fm.monthYearSplit.month);
+  const rawYear = pick(fields, fm.monthYearSplit.year);
+  if (rawMonth && rawYear) {
+    const month = monthFromWord(rawMonth);
+    const year = normalizeYear(rawYear);
     if (month && year) return `${year}-${String(month).padStart(2, '0')}`;
   }
   return null;
 }
 
 /** ported from abbyy.js mapAbbyyResult() — เดิม hardcode ชื่อฟิลด์ของ Skill "Timesheet2" ตัวเดียว
- * ตอนนี้รับ fieldMap ต่อ Skill เป็น parameter ที่สอง (ไม่ระบุ = ใช้ DEFAULT_FIELD_MAP ด้านบน ตรงกับ
+ * ตอนนี้รับ fieldMap ต่อ Skill เป็น parameter ที่สอง (ไม่ระบุ = ใช้ค่า default ด้านบน ตรงกับ
  * พฤติกรรมเดิมทุกประการ — เรียกจาก extractionService.ts ที่ดึง fieldMap จาก abbyy_skills ตาม
  * abbyySkillId ของสัญญานั้นๆ มาให้) */
-export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyyFieldMap | null) {
-  const fm: AbbyyFieldMap = { ...DEFAULT_FIELD_MAP, ...(fieldMapOverride ?? {}) };
+export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFieldMap | null) {
+  const fm = resolveFieldMap(fieldMapOverride);
   const rootObject = rawResult?.Transaction?.Documents?.[0]?.ExtractedData?.RootObject;
   const fields = fieldMap(rootObject);
 
   const period = resolvePeriod(fields, fm);
-  const employeeName = (fm.employeeName && fields[fm.employeeName]) ?? null;
-  const position = (fm.position && fields[fm.position]) ?? null;
-  const projectManagerSignatureName = fields['Approver'] ?? null;
-  // ⚠️ ชื่อฟิลด์สรุป "Total Hours"/"Leave Sick"/"Vendor"/"Client Name"/"Project Name"/"Approver" ยังไม่
-  // อยู่ใน fieldMap (ไม่ใช่ 1 ใน 4 ฟิลด์หลักที่บล็อกการ ingest) — คงไว้เป็นฟิลด์เสริมที่ null ได้เฉยๆถ้า
-  // Skill ไหนไม่มี ไม่กระทบการทำงานหลัก ต่างจาก totalWorkDays ด้านล่างที่มี fallback คำนวณเองจากตาราง
-  const rawTotalWorkDays = fm.totalWorkDays ? fields[fm.totalWorkDays] : undefined;
-  const rawTotalHours = fields['Total Hours'];
+  const employeeName = pick(fields, fm.header.employeeName);
+  const position = pick(fields, fm.header.position);
+  const projectManagerSignatureName = pick(fields, fm.header.approverName);
+  const rawTotalWorkDays = pick(fields, fm.header.totalWorkDays);
+  const rawTotalHours = pick(fields, fm.header.totalHours);
   const totalHours = rawTotalHours ? Number(rawTotalHours) : null;
-  const rawLeaveSick = fields['Leave Sick'];
+  const rawLeaveSick = pick(fields, fm.header.totalLeaveDays);
 
   const expectedYear = period ? Number(period.slice(0, 4)) : null;
-  const isStructuredTable = hasStructuredTable(rootObject, fm.tableName!);
-  const days = isStructuredTable ? buildDayRowsFromStructuredTable(rootObject, fm.tableName!, expectedYear) : buildDayRowsFromFlatFields(fields, period);
+  const isStructuredTable = hasStructuredTable(rootObject, fm.tableName);
+  const days = isStructuredTable ? buildDayRowsFromStructuredTable(rootObject, fm.tableName, expectedYear, fm.detail) : buildDayRowsFromFlatFields(fields, period);
   // ตารางรายวัน (ถ้ามี) คือแหล่งความจริงที่ใช้ได้กับทุก Skill โดยไม่ต้องรู้ชื่อฟิลด์สรุปล่วงหน้า — นับ
   // วันที่มีชั่วโมงทำงานปกติ > 0 (ตัดวันหยุด/วันลา/วันหยุดสุดสัปดาห์ที่ปกติจะเป็น 0 ชม.ออกไปเอง) ตรง
   // pattern เดียวกับ spreadsheetExtractionService.ts ที่พิสูจน์แล้วว่าใช้ได้จริงกับไฟล์จริง
@@ -524,9 +700,9 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyyFieldMap 
   // "OBS Timesheet2" ยิงจริงพิสูจน์แล้วว่าตรงกับของจริงทุกครั้ง) — คำนวณจากตารางเป็นแค่ fallback สำหรับ
   // Skill ที่ไม่มีฟิลด์นี้ในสคีมาเลย (เช่น "OBS Timesheet - iPassion") ไม่ใช่มาแทนที่ค่าที่ ABBYY ยืนยันแล้ว
   const totalWorkDays = rawTotalWorkDays ? Number(rawTotalWorkDays) : (tableWorkDays ?? 0);
-  const leaveDays = isStructuredTable ? extractLeaveDaysFromTable(rootObject, fm.tableName!, expectedYear) : [];
+  const leaveDays = isStructuredTable ? extractLeaveDaysFromTable(rootObject, fm.tableName, expectedYear, fm.detail) : [];
   const totalLeaveDays = leaveDays.length > 0 ? leaveDays.length : rawLeaveSick ? Number(rawLeaveSick) : 0;
-  const otDays = isStructuredTable ? extractOtHoursFromTable(rootObject, fm.tableName!, expectedYear) : [];
+  const otDays = isStructuredTable ? extractOtHoursFromTable(rootObject, fm.tableName, expectedYear, fm.detail) : [];
 
   const missingFieldNotes: string[] = [];
   if (isStructuredTable) {
@@ -553,12 +729,21 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyyFieldMap 
   if (!period) missingFieldNotes.push('ABBYY ยังไม่ส่งรอบเดือนมา — ต้องเลือก "รอบเดือน" เอง');
 
   return {
-    vendor: fields['Vendor'] ?? null,
-    clientName: fields['Client Name'] ?? null,
-    projectName: fields['Project Name'] ?? null,
+    vendor: pick(fields, fm.header.vendorName),
+    clientName: pick(fields, fm.header.clientName),
+    projectName: pick(fields, fm.header.projectName),
     employeeName,
     position,
     period,
+    // คีย์ระดับเอกสารที่เหลือตามสารบัญกลาง — ยังไม่มี Skill ไหนตั้ง mapping ไว้ (ไม่มี default) จึงเป็น
+    // null จนกว่า admin จะตั้งค่าให้ Skill นั้น เพิ่มแบบ additive ไม่กระทบคีย์เดิมที่ ingest ใช้อยู่
+    employeeId: pick(fields, fm.header.employeeId),
+    role: pick(fields, fm.header.role),
+    department: pick(fields, fm.header.department),
+    reportingPeriod: pick(fields, fm.header.reportingPeriod),
+    supervisorName: pick(fields, fm.header.supervisorName),
+    site: pick(fields, fm.header.site),
+    projectTeam: pick(fields, fm.header.projectTeam),
     documentNo: null,
     approvalStatus: null,
     totalWorkDays: Number.isFinite(totalWorkDays) ? totalWorkDays : 0,

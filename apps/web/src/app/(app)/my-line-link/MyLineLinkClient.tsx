@@ -15,6 +15,7 @@ export default function MyLineLinkClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addFriendUrl, setAddFriendUrl] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [oaFailed, setOaFailed] = useState(false);
 
   function load() {
     setLoadError(null);
@@ -38,10 +39,14 @@ export default function MyLineLinkClient() {
   // จะได้รู้ว่าต้องแอดก่อนถึงจะพิมพ์รหัสได้ (ของเดิมมีแค่คำอธิบายเฉยๆ ไม่มีลิงก์/QR ให้กดจริง)
   useEffect(() => {
     if (linked !== false) return;
+    setOaFailed(false);
     fetch('/api/my-line-link/oa-info', { cache: 'no-store' })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
-        if (!r.ok || !data.addFriendUrl) return;
+        if (!r.ok || !data.addFriendUrl) {
+          setOaFailed(true);
+          return;
+        }
         setAddFriendUrl(data.addFriendUrl);
         return QRCode.toDataURL(data.addFriendUrl, { width: 180, margin: 1 });
       })
@@ -49,7 +54,9 @@ export default function MyLineLinkClient() {
         if (dataUrl) setQrDataUrl(dataUrl);
       })
       .catch(() => {
-        /* หา QR ไม่ได้ก็ยังกดปุ่ม "เชื่อมต่อไลน์" ต่อได้ตามปกติ แค่ไม่มี QR ให้สแกน */
+        // ต้องบอกทางไปต่อเสมอ ห้ามปล่อยให้ "ขั้นตอนที่ 1" ว่างเปล่า — พนักงานใหม่ที่ยังไม่รู้จัก OA
+        // จะไปต่อไม่ถูกเลยถ้าไม่มีทั้ง QR ทั้งลิงก์และไม่มีคำอธิบาย
+        setOaFailed(true);
       });
   }, [linked]);
 
@@ -131,6 +138,11 @@ export default function MyLineLinkClient() {
                 <a className="btn ghost sm" href={addFriendUrl} target="_blank" rel="noopener noreferrer">
                   {tx('เพิ่มเพื่อนไลน์')} ↗
                 </a>
+              )}
+              {oaFailed && !addFriendUrl && (
+                <div className="sub">
+                  {tx('ดึงลิงก์แอดไลน์อัตโนมัติไม่สำเร็จ — ค้นหา LINE OA ของบริษัทในแอป LINE แล้วแอดเป็นเพื่อนเอง หรือโหลดหน้านี้ใหม่อีกครั้ง')}
+                </div>
               )}
             </div>
           </div>

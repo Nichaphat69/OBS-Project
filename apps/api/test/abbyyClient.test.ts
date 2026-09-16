@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AbbyyClient, AbbyyError, hasAbbyyCredentials, mapAbbyyResult } from '../src/lib/abbyyClient.js';
+import { AbbyyClient, AbbyyError, hasAbbyyCredentials, mapAbbyyResult, toCanonicalFieldMap } from '../src/lib/abbyyClient.js';
 import { withFetch, type FakeFetch } from './helpers/fakeFetch.js';
 
 const BASE = 'https://vantage-au.abbyy.com';
@@ -363,4 +363,275 @@ test('mapAbbyyResult คืน days เป็น [] ถ้าจำนวนค�
   });
   assert.deepEqual(data.days, []);
   assert.match(data.notes.join(' '), /ไม่ได้ใส่ตารางรายวันให้/);
+});
+
+/* ── fieldMap ต่อ Skill: รูปเก่า (แบน) / รูปกลาง (TimesheetFieldMap) / คอลัมน์ตารางรายวัน ────────── */
+
+/** ค่าจริงที่ตั้งไว้กับ Skill "Big-C" บนเครื่อง production (SKL-0002, อ่านมาเมื่อ 16 ก.ย. 69) — pin ไว้
+ * เป็นเทสต์เพราะแถวนี้ยังเป็นรูปเก่าอยู่จริง ถ้าการแปลงรูปเก่า→รูปกลางพัง ลูกค้ารายนี้จะอ่านผิดเงียบๆ */
+const BIGC_LEGACY_FIELD_MAP = {
+  year: 'Year', month: 'Month', position: 'Position', monthYear: 'Month_Year',
+  tableName: 'New Table', employeeName: 'Name', totalWorkDays: 'Total work day',
+};
+
+function docFields(fields: Array<{ Name: string; Value: unknown }>) {
+  return {
+    Transaction: { Documents: [{ ExtractedData: { RootObject: {
+      Fields: fields.map((f) => ({ Name: f.Name, List: [{ Value: f.Value }] })),
+    } } }] },
+  };
+}
+
+test('fieldMap รูปเก่า (แบน) ยังใช้ได้เหมือนเดิม — ค่าจริงของ Skill Big-C บน production', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Name', Value: 'Iptisam Samaheng' },
+    { Name: 'Position', Value: 'Java Programmer' },
+    { Name: 'Month_Year', Value: 'May 2026' },
+    { Name: 'Total work day', Value: '19' },
+  ]), BIGC_LEGACY_FIELD_MAP);
+
+  assert.equal(data.employeeName, 'Iptisam Samaheng');
+  assert.equal(data.position, 'Java Programmer');
+  assert.equal(data.period, '2026-05');
+  assert.equal(data.totalWorkDays, 19);
+});
+
+test('fieldMap รูปเก่า: month+year แยกสองฟิลด์ (Lotus/Big-C) ย้ายมาเป็น monthYearSplit ให้อัตโนมัติ', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Name', Value: 'Somchai Jaidee' },
+    { Name: 'Month', Value: 'May' },
+    { Name: 'Year', Value: '2026' },
+  ]), BIGC_LEGACY_FIELD_MAP);
+
+  assert.equal(data.period, '2026-05');
+});
+
+test('fieldMap รูปกลาง: อ่านฟิลด์หัวเอกสารตามชื่อที่ Skill ตั้งไว้เอง + ฟิลด์ใหม่ตามสารบัญกลาง', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'ชื่อ-สกุล', Value: 'Sunee Maneekasemsuk' },
+    { Name: 'รหัสพนักงาน', Value: 'EMP001' },
+    { Name: 'หน่วยงาน', Value: 'Digital Transformation' },
+    { Name: 'Month Year', Value: 'January 2026' },
+  ]), {
+    header: { employeeName: 'ชื่อ-สกุล', employeeId: 'รหัสพนักงาน', department: 'หน่วยงาน', position: null },
+  });
+
+  assert.equal(data.employeeName, 'Sunee Maneekasemsuk');
+  assert.equal(data.employeeId, 'EMP001');
+  assert.equal(data.department, 'Digital Transformation');
+  assert.equal(data.period, '2026-01');
+  // position: null = Skill นี้ไม่มีฟิลด์นี้จริงๆ ต้องไม่ไปหยิบค่า default "Position" มาใช้
+  assert.equal(data.position, null);
+});
+
+test('fieldMap รูปกลาง: คอลัมน์เวลาที่ map ไว้ชัดเจน ต้องชนะการเดาจากการเรียงเวลา (กะดึก 22:00→06:00)', () => {
+  const nightShift = docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'New Table', Value: { Fields: [
+      { Name: 'Date', List: [{ Value: '05/05/26' }] },
+      { Name: 'เข้างาน', List: [{ Value: '22:00' }] },
+      { Name: 'ออกงาน', List: [{ Value: '06:00' }] },
+    ] } },
+  ]);
+
+  // ไม่ตั้ง mapping = เดาแบบเดิม (เรียงเวลาน้อยไปมาก) → สลับกัน เพราะ 06:00 มาก่อน 22:00
+  const guessed = mapAbbyyResult(nightShift);
+  assert.equal(guessed.days[0].timeIn, '06:00');
+  assert.equal(guessed.days[0].timeOut, '22:00');
+  assert.equal(guessed.days[0].normalHours, 16);
+
+  // ตั้ง mapping ไว้ = เชื่อคอลัมน์ ไม่เดา → ได้กะดึกที่ถูกต้อง 8 ชม.
+  const mapped = mapAbbyyResult(nightShift, { detail: { timeIn: 'เข้างาน', timeOut: 'ออกงาน' } });
+  assert.equal(mapped.days[0].timeIn, '22:00');
+  assert.equal(mapped.days[0].timeOut, '06:00');
+  assert.equal(mapped.days[0].normalHours, 8);
+});
+
+test('fieldMap รูปกลาง: ตั้งชื่อคอลัมน์ตารางรายวันเองได้ครบ (โครงการ/ประเภท/ชั่วโมง/รายละเอียด)', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'ตารางรายวัน', Value: { Fields: [
+      { Name: 'วันที่', List: [{ Value: '06/05/26' }] },
+      { Name: 'โครงการ', List: [{ Value: 'PRJ26050' }] },
+      { Name: 'ประเภท', List: [{ Value: 'Working' }] },
+      { Name: 'ชม.ปกติ', List: [{ Value: '8' }] },
+      { Name: 'ชม.โอที', List: [{ Value: '2' }] },
+      { Name: 'งานที่ทำ', List: [{ Value: 'แก้บั๊กหน้าจอรายงาน' }] },
+    ] } },
+  ]), {
+    tableName: 'ตารางรายวัน',
+    detail: {
+      date: 'วันที่', project: 'โครงการ', workType: 'ประเภท',
+      normalHours: 'ชม.ปกติ', otHours: 'ชม.โอที', jobDescription: 'งานที่ทำ',
+    },
+  });
+
+  assert.equal(data.days.length, 1);
+  assert.equal(data.days[0].date, '2026-05-06');
+  assert.equal(data.days[0].project, 'PRJ26050');
+  assert.equal(data.days[0].type, 'Working');
+  assert.equal(data.days[0].normalHours, 8);
+  assert.equal(data.days[0].otHours, 2);
+  assert.equal(data.days[0].jobDescription, 'แก้บั๊กหน้าจอรายงาน');
+  assert.equal(data.totalWorkDays, 1);
+  assert.deepEqual(data.otDays, [{ date: '2026-05-06', hours: 2 }]);
+});
+
+test('fieldMap รูปกลาง: tableName เป็น null = Skill นี้ไม่มีตารางรายวันเลย (ต่างจากไม่ได้ตั้งค่า)', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'New Table', Value: { Fields: [
+      { Name: 'Date', List: [{ Value: '05/05/26' }] },
+    ] } },
+  ]), { tableName: null });
+
+  assert.deepEqual(data.days, []);
+});
+
+test('toCanonicalFieldMap: แปลงรูปเก่าเป็นรูปกลางให้หน้าตั้งค่า (ไม่เติมค่า default ลงไป)', () => {
+  const canonical = toCanonicalFieldMap(BIGC_LEGACY_FIELD_MAP);
+
+  // ⚠️ ต้องเช็คค่าที่ "ต้องไม่มี" ก่อน assert.deepEqual() เสมอ — deepEqual ของ node:assert เป็น
+  // assertion function (`asserts actual is T`) ที่ narrow ตัวแปรให้แคบลงเหลือแค่รูปที่คาดไว้ พอผ่าน
+  // บรรทัดนั้นไปแล้ว TypeScript จะมองว่าคีย์อื่นไม่มีอยู่จริงและ error ตอน typecheck (ไม่ใช่ตอนรัน)
+  // ห้ามมีค่า default โผล่มา ไม่งั้นหน้าตั้งค่าจะเข้าใจผิดว่าแอดมินตั้งค่าพวกนี้ไว้เอง แล้วบันทึกทับเป็นค่าจริง
+  assert.equal(canonical?.header?.vendorName, undefined);
+  assert.equal(canonical?.detail, undefined);
+
+  assert.deepEqual(canonical, {
+    header: { employeeName: 'Name', position: 'Position', monthYear: 'Month_Year', totalWorkDays: 'Total work day' },
+    monthYearSplit: { month: 'Month', year: 'Year' },
+    tableName: 'New Table',
+  });
+});
+
+test('toCanonicalFieldMap: รูปกลางส่งผ่านตรงๆ และ null คือยังไม่ได้ตั้งค่าเลย', () => {
+  const already = { header: { employeeName: 'ชื่อ-สกุล' }, detail: { timeIn: 'เข้า' } };
+  assert.deepEqual(toCanonicalFieldMap(already), already);
+  assert.equal(toCanonicalFieldMap(null), null);
+  assert.equal(toCanonicalFieldMap(undefined), null);
+});
+
+/** เคสที่ frontend เจอตอนทดสอบ guard: map ว่างเปล่า `{}` แยกไม่ออกว่าเป็นรูปเก่าหรือรูปกลาง — ฝั่งนี้
+ * ต้องไม่สนใจว่าตัดสินเป็นรูปไหน เพราะแปลงออกมาต้องได้ผลเดียวกัน (Skill ที่ยังไม่ตั้งค่า = ใช้ default
+ * ทั้งหมด) เช่นเดียวกับ map ที่มีแต่ `tableName` ซึ่งเป็นคีย์เดียวที่มีเหมือนกันทั้งสองรูป */
+test('fieldMap ว่างเปล่า / มีแต่ tableName: แปลงได้ผลเดียวกันไม่ว่าจะถูกตัดสินเป็นรูปไหน', () => {
+  const doc = docFields([
+    { Name: 'Employee Name', Value: 'Somchai Jaidee' },
+    { Name: 'Month Year', Value: 'May 2026' },
+  ]);
+
+  // {} = ยังไม่ตั้งค่าอะไรเลย ต้องเท่ากับไม่ส่ง fieldMap มาเลย (ใช้ default ของ OBS Timesheet2)
+  assert.deepEqual(mapAbbyyResult(doc, {}), mapAbbyyResult(doc));
+  assert.equal(mapAbbyyResult(doc, {}).employeeName, 'Somchai Jaidee');
+
+  // ตั้งแต่ tableName อย่างเดียว ก็ยังต้องอ่านฟิลด์หัวเอกสารด้วย default ได้ตามปกติ
+  const tableOnly = mapAbbyyResult(doc, { tableName: 'New Table' });
+  assert.equal(tableOnly.employeeName, 'Somchai Jaidee');
+  assert.equal(tableOnly.period, '2026-05');
+
+  // และแปลงไปรูปกลางสำหรับหน้าตั้งค่าแล้วต้องไม่กลายเป็น null/หายไป
+  assert.deepEqual(toCanonicalFieldMap({}), { header: {} });
+  assert.deepEqual(toCanonicalFieldMap({ tableName: null }), { header: {}, tableName: null });
+});
+
+/** รูปแบบ "เดือน/ปี" ที่พบจริงในฟอร์มลูกค้า — สองแบบล่าง ("8 2026", "08/2026") เป็นตัวอย่างในสารบัญ
+ * กลางเองแต่เดิมอ่านไม่ออกเลย ส่วนปี พ.ศ. เดิมให้ผลผิดแบบเงียบๆ ("May 2569" → "2569-05") ซึ่งอันตราย
+ * กว่าอ่านไม่ออก เพราะรอบเดือนที่ไม่มีอยู่จริงจะไหลต่อไปถึงการวางบิลโดยไม่มีอะไรเตือน */
+test('resolvePeriod: อ่านรูปแบบเดือน/ปีได้หลากหลาย และแปลงปี พ.ศ. เป็น ค.ศ. ให้เสมอ', () => {
+  const period = (value: string) => mapAbbyyResult(docFields([{ Name: 'Month Year', Value: value }])).period;
+
+  assert.equal(period('May 2026'), '2026-05');
+  assert.equal(period('January 2026'), '2026-01');
+  assert.equal(period('Jan 2026'), '2026-01');
+  assert.equal(period('8 2026'), '2026-08');
+  assert.equal(period('08/2026'), '2026-08');
+  assert.equal(period('พฤษภาคม 2569'), '2026-05');
+  assert.equal(period('May 2569'), '2026-05');
+
+  // ต้องไม่เผลอตีความค่าที่ไม่ใช่รอบเดือนให้กลายเป็นรอบเดือน
+  assert.equal(period('01/08/2026 - 31/08/2026'), null);
+  assert.equal(period(''), null);
+});
+
+/** ลำดับความสำคัญจริงของ period: ฟิลด์รวมมาก่อน แต่ "มาก่อน" ไม่ได้แปลว่าฟิลด์แยกเป็นของตาย — ถ้า
+ * ฟิลด์รวมไม่มีในเอกสารหรืออ่านไม่ออก ฟิลด์แยกจะทำงานแทนทันที (Skill Big-C ตั้งไว้ทั้งสองแบบ) */
+test('resolvePeriod: ฟิลด์แยก month+year เป็นตัวสำรองจริงตอนฟิลด์รวมอ่านไม่ออก ไม่ใช่ config ที่ตายแล้ว', () => {
+  const both = (combined: string | null) => mapAbbyyResult(
+    docFields([
+      ...(combined === null ? [] : [{ Name: 'Month_Year', Value: combined }]),
+      { Name: 'Month', Value: 'August' },
+      { Name: 'Year', Value: '2026' },
+    ]),
+    BIGC_LEGACY_FIELD_MAP,
+  ).period;
+
+  assert.equal(both('May 2026'), '2026-05');   // ฟิลด์รวมอ่านออก → ชนะ
+  assert.equal(both(null), '2026-08');         // ไม่มีฟิลด์รวมในเอกสาร → ใช้ฟิลด์แยก
+  assert.equal(both('ไม่ใช่เดือน'), '2026-08'); // มีฟิลด์รวมแต่อ่านไม่ออก → ใช้ฟิลด์แยก
+});
+
+/** การตั้งค่าต้องไม่ทำให้ผลแย่ลงกว่าไม่ตั้ง — คนตั้งค่ามักตั้งแค่เวลาเข้า-ออกก่อน (เป็นคู่ที่เห็นชัดสุด)
+ * ถ้าแค่นั้นทำให้ OT ที่เคยตรวจเจอหายไป ค่าจ้าง OT จะหายจากบิลเงียบๆ ไม่มี error ให้เห็น */
+test('fieldMap: ตั้งค่าเฉพาะเวลาเข้า-ออก ต้องยังตรวจเจอ OT จากคอลัมน์ที่เหลือเหมือนตอนไม่ได้ตั้งค่า', () => {
+  const row = docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'New Table', Value: { Fields: [
+      { Name: 'Date', List: [{ Value: '05/05/26' }] },
+      { Name: 'เข้า', List: [{ Value: '8:30' }] },
+      { Name: 'ออก', List: [{ Value: '17:30' }] },
+      { Name: 'คอลัมน์ OT 1', List: [{ Value: '18:00' }] },
+      { Name: 'คอลัมน์ OT 2', List: [{ Value: '20:00' }] },
+    ] } },
+  ]);
+
+  const unmapped = mapAbbyyResult(row).days[0];
+  assert.equal(unmapped.otTimeIn, '18:00');
+  assert.equal(unmapped.otTimeOut, '20:00');
+  assert.equal(unmapped.otHours, 2);
+
+  // ตั้งแค่เวลาเข้า-ออก: เข้า-ออกต้องมาจากคอลัมน์ที่ตั้งไว้ และ OT ต้องยังเจอจากคอลัมน์ที่เหลือ
+  const partial = mapAbbyyResult(row, { detail: { timeIn: 'เข้า', timeOut: 'ออก' } }).days[0];
+  assert.equal(partial.timeIn, '8:30');
+  assert.equal(partial.timeOut, '17:30');
+  assert.equal(partial.otTimeIn, '18:00');
+  assert.equal(partial.otTimeOut, '20:00');
+  assert.equal(partial.otHours, 2);
+
+  // ตั้งครบทั้งสี่ช่อง: เชื่อคอลัมน์ที่ตั้งไว้ล้วนๆ
+  const full = mapAbbyyResult(row, {
+    detail: { timeIn: 'เข้า', timeOut: 'ออก', otTimeIn: 'คอลัมน์ OT 1', otTimeOut: 'คอลัมน์ OT 2' },
+  }).days[0];
+  assert.equal(full.otTimeIn, '18:00');
+  assert.equal(full.otTimeOut, '20:00');
+});
+
+/** map คอลัมน์ "ประเภทการลา" = บอกว่าให้ดูช่องไหน ไม่ใช่บอกว่าช่องนั้นมีค่าแปลว่าลา — ตัวจำแนกยังเป็น
+ * ตัวเดิม ฟอร์มที่พิมพ์ "-" ในวันทำงานปกติจึงต้องไม่กลายเป็นวันลาทั้งเดือน */
+test('fieldMap: map leaveType แล้วต้องช่วยจำแนกได้แม่นขึ้น โดยไม่นับค่าที่ไม่ใช่การลาเป็นวันลา', () => {
+  const row = (cells: Array<[string, unknown]>) => docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'New Table', Value: { Fields: cells.map(([Name, Value]) => ({ Name, List: [{ Value }] })) } },
+  ]);
+
+  // "-" ในช่องประเภทการลาของวันทำงานปกติ ต้องไม่ถูกนับเป็นวันลา
+  const working = mapAbbyyResult(row([
+    ['Date', '05/05/26'], ['ประเภทการลา', '-'], ['Normal', '8'],
+  ]), { detail: { leaveType: 'ประเภทการลา' } });
+  assert.deepEqual(working.leaveDays, []);
+  assert.equal(working.totalLeaveDays, 0);
+
+  // ช่องที่ตั้งไว้บอกว่าลาป่วย → นับเป็นวันลา และได้ประเภทจากช่องนั้นตรงๆ
+  const sick = mapAbbyyResult(row([
+    ['Date', '06/05/26'], ['ประเภทการลา', 'ลาป่วย'], ['Description', 'หยุดพักรักษาตัว'],
+  ]), { detail: { leaveType: 'ประเภทการลา' } });
+  assert.equal(sick.leaveDays.length, 1);
+  assert.equal(sick.leaveDays[0].type, 'sick');
+
+  // ไม่ได้ตั้งค่า = พฤติกรรมเดิมทุกประการ (ยังเดาจากคอลัมน์อื่นได้เหมือนเดิม)
+  const unmapped = mapAbbyyResult(row([
+    ['Date', '06/05/26'], ['Type', 'Sick Leave'],
+  ]));
+  assert.equal(unmapped.leaveDays.length, 1);
+  assert.equal(unmapped.leaveDays[0].type, 'sick');
 });

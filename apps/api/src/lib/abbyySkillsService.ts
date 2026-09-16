@@ -3,7 +3,7 @@
  * entry never breaks a contract that already picked it — it only disappears from the dropdown. */
 import { prisma, Prisma } from '@obs/db';
 import { logAudit } from './audit.js';
-import type { AbbyyFieldMap } from './abbyyClient.js';
+import { toCanonicalFieldMap, type AbbyySkillFieldMap } from './abbyyClient.js';
 
 export class AbbyySkillError extends Error {
   status: number;
@@ -24,8 +24,13 @@ async function nextSkillId(): Promise<string> {
   return `SKL-${String(max + 1).padStart(4, '0')}`;
 }
 
+/** คืน fieldMap เป็น "รูปกลาง" เสมอ แม้แถวนั้นจะยังเก็บรูปเก่าแบนอยู่ (เช่น Big-C บนเครื่อง production)
+ * — หน้าตั้งค่าจะได้ไม่ต้องรู้จักรูปเก่าเลย ป้องกันเคสที่หน้าจอเรนเดอร์ฟอร์มว่างเพราะอ่านรูปเก่าไม่เป็น
+ * แล้วแอดมินกดบันทึกทับ ทำให้ mapping ที่ใช้งานได้อยู่หายไปเงียบๆ (การแปลงอยู่ที่เดียวใน abbyyClient.ts
+ * ไม่ต้องมีสำเนาที่ฝั่งเว็บให้หลุดกันคนละทาง) ตัวที่เก็บใน DB ยังเป็นรูปเดิมจนกว่าจะกดบันทึกครั้งถัดไป */
 export async function listAbbyySkills() {
-  return prisma.abbyySkill.findMany({ orderBy: { name: 'asc' } });
+  const rows = await prisma.abbyySkill.findMany({ orderBy: { name: 'asc' } });
+  return rows.map((row) => ({ ...row, fieldMap: toCanonicalFieldMap(row.fieldMap as AbbyySkillFieldMap | null) }));
 }
 
 export async function createAbbyySkill({ name, skillId, actor }: { name: string; skillId: string; actor: string }) {
@@ -58,7 +63,7 @@ export async function deleteAbbyySkill(id: string, { actor }: { actor: string })
  * ส่ง `fieldMap: null` เพื่อล้างกลับไปใช้ค่า default ของ "OBS Timesheet2"/iPassion ได้ */
 export async function updateAbbyySkill(
   id: string,
-  { fieldMap, actor }: { fieldMap: AbbyyFieldMap | null; actor: string },
+  { fieldMap, actor }: { fieldMap: AbbyySkillFieldMap | null; actor: string },
 ) {
   const row = await prisma.abbyySkill.findUnique({ where: { id } });
   if (!row) throw new AbbyySkillError('ไม่พบ Skill นี้ในสารบัญ', 404);
@@ -75,8 +80,8 @@ export async function updateAbbyySkill(
  * extractionService.ts ใช้ตอนเรียก mapAbbyyResult() จริง — คืน null ถ้าไม่เจอ Skill นี้ในสารบัญเลย
  * (ยังไม่เคยเพิ่มเข้ามา) หรือเจอแต่ยังไม่ได้ตั้ง mapping ไว้ (ทั้งสองกรณีให้ mapAbbyyResult() ใช้ค่า
  * default ของมันเองต่อไป ไม่ throw — Skill ที่ไม่มีในสารบัญยังต้องอ่านไฟล์ได้ตามปกติ) */
-export async function getFieldMapForSkill(skillId: string | null | undefined): Promise<AbbyyFieldMap | null> {
+export async function getFieldMapForSkill(skillId: string | null | undefined): Promise<AbbyySkillFieldMap | null> {
   if (!skillId) return null;
   const row = await prisma.abbyySkill.findUnique({ where: { skillId }, select: { fieldMap: true } });
-  return (row?.fieldMap as AbbyyFieldMap | null) ?? null;
+  return (row?.fieldMap as AbbyySkillFieldMap | null) ?? null;
 }
