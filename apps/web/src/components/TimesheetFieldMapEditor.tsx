@@ -85,7 +85,7 @@ export function TimesheetFieldMapEditor({
     return (
       <label key={`${section}.${f.key}`} title={f.description}>
         <b>{f.label}</b>
-        <small>
+        <small className="fieldmeta">
           {f.name}
           {f.examples.length > 0 && ` · ${tx('ตัวอย่าง')}: ${f.examples.slice(0, 3).join(', ')}`}
         </small>
@@ -95,14 +95,14 @@ export function TimesheetFieldMapEditor({
           placeholder={absent ? '—' : f.name}
           onChange={(e) => onChange(withEntry(value, section, f.key, e.target.value || undefined))}
         />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
+        <span className="fieldabsent">
           <input
             type="checkbox"
             checked={absent}
             disabled={disabled}
             onChange={(e) => onChange(withEntry(value, section, f.key, e.target.checked ? null : undefined))}
           />
-          {tx('ฟอร์มนี้ไม่มีฟิลด์นี้')}
+          {tx('ไม่มีในฟอร์ม')}
         </span>
       </label>
     );
@@ -155,7 +155,7 @@ export function TimesheetFieldMapEditor({
     return (
       <label key="header.monthYear" title={f.description}>
         <b>{f.label}</b>
-        <small>
+        <small className="fieldmeta">
           {f.name}
           {f.examples.length > 0 && ` · ${tx('ตัวอย่าง')}: ${f.examples.slice(0, 3).join(', ')}`}
         </small>
@@ -185,27 +185,29 @@ export function TimesheetFieldMapEditor({
         )}
 
         {bothSet && (
-          <small>
+          <span className="fieldnote">
             {tx('ตั้งไว้ทั้งช่องรวมและช่องแยก — ระบบอ่านช่องรวมก่อน ถ้าเอกสารฉบับไหนไม่มีช่องรวมหรืออ่านค่าไม่ได้ จะใช้ช่องแยกที่เก็บไว้')}{' '}
             ({split?.month || '—'} / {split?.year || '—'}) {tx('แทน — เก็บไว้ทั้งคู่ได้ ไม่ใช่ค่าที่ต้องลบทิ้ง')}
-          </small>
-        )}
-
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
-          <input type="checkbox" checked={isSplit} disabled={disabled} onChange={(e) => setSplit(e.target.checked)} />
-          {tx('ฟอร์มนี้แยกเดือนกับปีเป็นสองช่อง')}
-        </span>
-        {!isSplit && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
-            <input
-              type="checkbox"
-              checked={absent}
-              disabled={disabled}
-              onChange={(e) => onChange(withEntry(value, 'header', f.key, e.target.checked ? null : undefined))}
-            />
-            {tx('ฟอร์มนี้ไม่มีฟิลด์นี้')}
           </span>
         )}
+
+        <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <span className="fieldabsent">
+            <input type="checkbox" checked={isSplit} disabled={disabled} onChange={(e) => setSplit(e.target.checked)} />
+            {tx('แยกเดือน/ปีสองช่อง')}
+          </span>
+          {!isSplit && (
+            <span className="fieldabsent">
+              <input
+                type="checkbox"
+                checked={absent}
+                disabled={disabled}
+                onChange={(e) => onChange(withEntry(value, 'header', f.key, e.target.checked ? null : undefined))}
+              />
+              {tx('ไม่มีในฟอร์ม')}
+            </span>
+          )}
+        </span>
       </label>
     );
   }

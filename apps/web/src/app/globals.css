@@ -961,6 +961,12 @@ td.r.n,
   font-size: 14px;
   letter-spacing: -0.01em;
 }
+/* .sub เป็น display:block เพื่อให้ขึ้นบรรทัดใหม่เวลาซ้อนใต้ชื่อในการ์ด — แต่ถ้าเอาไปใส่บน <td> ตรงๆ
+   เซลล์นั้นจะหลุดจาก table layout (เบราว์เซอร์ห่อ anonymous cell ให้แทน) ทำให้คอลัมน์ที่เหลือในแถว
+   เลื่อนผิดตำแหน่งทั้งแถว เช่นวันที่ไปโผล่ใต้ Skill ID แล้วปุ่มไปนั่งในคอลัมน์ "สร้างเมื่อ" */
+td.sub {
+  display: table-cell;
+}
 .sub {
   display: block;
   color: var(--mut);
@@ -2287,6 +2293,38 @@ td .nm {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   align-items: end;
 }
+/* ═══ หน้าตั้งค่าฟิลด์ — แถวละฟิลด์ 39 แถว ความสูงต้องคงที่ ไม่งั้นขอบขวาจะหยักทั้งหน้า ═══ */
+.fieldmeta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldabsent {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--mut);
+  white-space: nowrap;
+  cursor: pointer;
+  width: fit-content;
+}
+.fieldabsent input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+.fieldnote {
+  color: var(--mut);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .frm small {
   font-weight: 400;
   color: var(--mut);

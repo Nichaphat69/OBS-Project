@@ -223,8 +223,8 @@ const TX: Record<string, string> = {
   ฟิลด์ในตารางรายวัน: 'Daily table columns',
   ชื่อตารางรายวัน: 'Daily table name',
   'ชื่อตาราง/line item ที่ตัวอ่านใช้เรียกตารางรายวัน': 'The table / line-item name the reader uses for the daily table',
-  ฟอร์มนี้ไม่มีฟิลด์นี้: 'Not on this form',
-  ฟอร์มนี้แยกเดือนกับปีเป็นสองช่อง: 'This form splits month and year into two boxes',
+  ไม่มีในฟอร์ม: 'Not on form',
+  'แยกเดือน/ปีสองช่อง': 'Split month/year',
   'ตั้งไว้ทั้งช่องรวมและช่องแยก — ระบบอ่านช่องรวมก่อน ถ้าเอกสารฉบับไหนไม่มีช่องรวมหรืออ่านค่าไม่ได้ จะใช้ช่องแยกที่เก็บไว้':
     'Both a combined field and a split pair are set — the reader tries the combined one first, and falls back to the stored split pair',
   'แทน — เก็บไว้ทั้งคู่ได้ ไม่ใช่ค่าที่ต้องลบทิ้ง':
