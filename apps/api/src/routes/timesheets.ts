@@ -63,6 +63,9 @@ timesheetsRouter.post('/read', async (req, res) => {
       fileName: body.fileName ?? null,
       expectedPeriod: body.expectedPeriod,
       contractId: body.contractId ?? null,
+      // เลือกเครื่องอ่านเฉพาะครั้งนี้ (ไว้ลองเทียบ ABBYY กับ Clear Read) — ไม่ส่งมา = ใช้ตัวที่เปิดอยู่ทั้งระบบ
+      // ส่งมาแล้วอ่านด้วยตัวนั้นไม่ได้ จะขึ้น error ไม่แอบสลับไปตัวอื่นให้ ไม่งั้นคนลองจะเข้าใจผิดว่าได้ลองตัวที่เลือก
+      readerId: typeof body.readerId === 'string' && body.readerId ? body.readerId : null,
     });
     const documentNo = await logAiRead({
       source: 'upload',

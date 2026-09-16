@@ -211,7 +211,7 @@ export type Extractor = (
   source: unknown,
   /* แม่แบบ/Skill แยกตามเครื่องอ่าน — ส่งมาทั้งคู่ได้ ตัวที่ถูกเลือกจะหยิบเฉพาะของตัวเองไปใช้
      (ส่งค่าของ ABBYY ให้ Clear Read ใช้ไม่ได้ เป็นคนละระบบกัน) */
-  opts: { expectedPeriod?: string; abbyySkillId?: string | null; clearReadTemplateId?: string | null },
+  opts: { expectedPeriod?: string; abbyySkillId?: string | null; clearReadTemplateId?: string | null; readerId?: string | null },
 ) => Promise<ExtractorResult>;
 
 export class IngestError extends Error {

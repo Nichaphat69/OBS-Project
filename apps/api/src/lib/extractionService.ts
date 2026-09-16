@@ -132,7 +132,22 @@ export function readerById(id: string | null | undefined): TimesheetReader | nul
  * (เช่นถอน credential ออกทีหลัง) — จงใจให้ fallback เงียบๆ แทนที่จะ throw เพราะการอ่าน Timesheet
  * ไม่ควรหยุดทั้งระบบเพราะค่าตั้งค่าค้างอยู่ แต่ผู้เรียกเห็นได้ว่าใช้ตัวไหนจริงจาก `model` ในผลลัพธ์
  */
-export async function pickReader(preferredId?: string | null): Promise<TimesheetReader> {
+export async function pickReader(
+  preferredId?: string | null,
+  { strict = false }: { strict?: boolean } = {},
+): Promise<TimesheetReader> {
+  /* strict = ผู้ใช้เจาะจงมาเองว่าจะลองตัวไหน (ปุ่ม "ลองอ่านด้วย...") — ห้าม fallback เงียบๆ เด็ดขาด
+     เพราะจุดประสงค์คือ "อยากรู้ว่าตัวนี้อ่านได้แค่ไหน" ถ้าตกไปใช้ตัวอื่นแล้วไม่บอก คนจะเข้าใจว่าได้
+     ทดสอบ Clear Read ไปแล้วทั้งที่จริงเป็นผลของ ABBYY — ตรงข้ามกับตอนทำงานปกติที่ fallback ถูกต้อง */
+  if (strict && preferredId) {
+    const wanted = readerById(preferredId);
+    if (!wanted) throw new ExtractionError(`ไม่รู้จักเครื่องอ่าน "${preferredId}"`, 400);
+    if (!wanted.isConfigured()) {
+      throw new ExtractionError(`${wanted.label} ยังตั้งค่าไม่ครบ จึงลองอ่านด้วยตัวนี้ไม่ได้`, 400);
+    }
+    return wanted;
+  }
+
   let id = preferredId ?? null;
   if (id === undefined || id === null) {
     // import แบบ dynamic — dashboardService ลาก Prisma มาทั้งสาย ส่วนไฟล์นี้ถูก import โดยเส้นที่ไม่ต้องใช้ DB ด้วย
@@ -171,12 +186,13 @@ function normalizeDetailKeys(data: any): any {
   return data;
 }
 
-export const extractTimesheet: Extractor = async (source, { expectedPeriod, abbyySkillId, clearReadTemplateId } = {}) => {
+export const extractTimesheet: Extractor = async (source, { expectedPeriod, abbyySkillId, clearReadTemplateId, readerId } = {}) => {
   if (!Buffer.isBuffer(source)) {
     throw new ExtractionError('ต้องมีไฟล์ PDF ให้อ่าน', 400);
   }
 
-  const reader = await pickReader();
+  // ระบุ readerId มา = ลองอ่านครั้งนี้ด้วยตัวนั้นโดยเฉพาะ ไม่แตะค่าที่ตั้งไว้ทั้งระบบ และไม่ fallback
+  const reader = await pickReader(readerId ?? null, { strict: Boolean(readerId) });
   // ส่งเฉพาะแม่แบบของเครื่องอ่านที่ถูกเลือกจริง — Skill ของ ABBYY กับแม่แบบของ Clear Read เป็นคนละ
   // ระบบ ส่งข้ามกันไม่ได้ ตัวอ่านที่ไม่มีแม่แบบผูกไว้จะตกไปใช้ค่าจาก .env ของตัวเองต่อ
   const templateId = reader.id === 'clear-read' ? clearReadTemplateId : reader.id === 'abbyy' ? abbyySkillId : null;

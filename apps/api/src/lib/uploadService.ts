@@ -87,11 +87,14 @@ export async function readTimesheetFile({
   fileName = null,
   expectedPeriod,
   contractId = null,
+  readerId = null,
 }: {
   fileBase64: string;
   fileName?: string | null;
   expectedPeriod?: string;
   contractId?: string | null;
+  /** ลองอ่านครั้งนี้ด้วยเครื่องอ่านที่ระบุ โดยไม่เปลี่ยนค่าที่ตั้งไว้ทั้งระบบ */
+  readerId?: string | null;
 }): Promise<ReadResult & { fileBytes: Buffer | null }> {
   if (!fileBase64) throw new UploadError('ยังไม่ได้เลือกไฟล์ Timesheet');
 
@@ -101,7 +104,7 @@ export async function readTimesheetFile({
   // เดาต่อเอง (zip = xlsx, ไม่งั้นถือเป็นข้อความ CSV)
   const isPdf = source.subarray(0, 4).toString('latin1') === '%PDF';
   const extracted = isPdf
-    ? await extractTimesheet(source, { expectedPeriod, ...(await resolveReaderTemplates(contractId)) })
+    ? await extractTimesheet(source, { expectedPeriod, readerId, ...(await resolveReaderTemplates(contractId)) })
     : await extractTimesheetFromSpreadsheet(source, { expectedPeriod });
   const { usage, model, verification } = extracted;
   const data = extracted.data;
