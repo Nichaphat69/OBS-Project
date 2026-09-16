@@ -635,3 +635,43 @@ test('fieldMap: map leaveType แล้วต้องช่วยจำแน�
   assert.equal(unmapped.leaveDays.length, 1);
   assert.equal(unmapped.leaveDays[0].type, 'sick');
 });
+
+/** ฟอร์ม Lotus เก็บเวลาเข้า-ออกรวมช่องเดียวเป็นช่วง "08.00 - 17.00" — ต้องแยกเป็นเวลาเข้า/ออกได้
+ * โดยเก็บรูปแบบเดิมของเอกสารไว้ (ไม่แปลง "." เป็น ":") ตามกติกาของสารบัญกลาง */
+test('fieldMap: ช่องเวลาที่เป็นช่วง "13.00 - 19.00" ต้องแยกเป็นเวลาเข้า/ออกได้ (ฟอร์มแบบ Lotus)', () => {
+  const row = (cells: Array<[string, unknown]>) => docFields([
+    { Name: 'Month Year', Value: 'March 2026' },
+    { Name: 'New Table', Value: { Fields: cells.map(([Name, Value]) => ({ Name, List: [{ Value }] })) } },
+  ]);
+
+  // ใส่ชื่อคอลัมน์เดียวกันทั้งเวลาเข้าและเวลาออก = บอกว่าสองค่าอยู่ในช่องเดียวกัน
+  const d = mapAbbyyResult(row([
+    ['Date', '02/03/26'],
+    ['Time', '13.00 - 19.00'],
+    ['Time (OT)', '19.30 - 21.30'],
+    ['Hrs', '6'],
+  ]), {
+    tableName: 'New Table',
+    detail: { date: 'Date', timeIn: 'Time', timeOut: 'Time', otTimeIn: 'Time (OT)', otTimeOut: 'Time (OT)', normalHours: 'Hrs' },
+  }).days[0];
+
+  assert.equal(d.timeIn, '13.00');
+  assert.equal(d.timeOut, '19.00');
+  assert.equal(d.otTimeIn, '19.30');
+  assert.equal(d.otTimeOut, '21.30');
+  assert.equal(d.normalHours, 6);
+
+  // ใส่แค่ช่องเวลาเข้าช่องเดียวก็แยกให้เหมือนกัน
+  const onlyIn = mapAbbyyResult(row([['Date', '03/03/26'], ['Time', '08:00 - 17:00']]), {
+    tableName: 'New Table', detail: { date: 'Date', timeIn: 'Time', timeOut: null },
+  }).days[0];
+  assert.equal(onlyIn.timeIn, '08:00');
+  assert.equal(onlyIn.timeOut, '17:00');
+
+  // ค่าที่ไม่ใช่ช่วงเวลา ต้องไม่ถูกแตะ
+  const plain = mapAbbyyResult(row([['Date', '04/03/26'], ['เข้า', '9:00'], ['ออก', '18:00']]), {
+    tableName: 'New Table', detail: { date: 'Date', timeIn: 'เข้า', timeOut: 'ออก' },
+  }).days[0];
+  assert.equal(plain.timeIn, '9:00');
+  assert.equal(plain.timeOut, '18:00');
+});

@@ -443,15 +443,35 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
  * "คอลัมน์ที่เหลือ" (หักคอลัมน์เข้า-ออกที่รู้แล้วออกก่อน) เพราะคนตั้งค่ามักตั้งแค่เวลาเข้า-ออกซึ่งเป็น
  * คู่ที่เห็นชัดที่สุดก่อน ถ้าการตั้งค่านั้นทำให้ชั่วโมง OT ที่เคยตรวจเจอหายไปเงียบๆ จะกลายเป็นค่าจ้าง
  * ที่หายไปจากบิลโดยไม่มีอะไรเตือน — ตั้งค่าแล้วต้องไม่แย่ลงกว่าไม่ตั้ง */
+/** ฟอร์มบางเจ้า (เช่น Lotus) เก็บเวลาเข้า-ออกรวมไว้ช่องเดียวเป็นช่วง "08.00 - 17.00" — ถ้าช่องที่ map ไว้
+ * เป็นช่วงแบบนั้นและยังไม่มีเวลาออกจากที่อื่น ให้แยกเป็นสองค่า ตั้งค่าได้โดยใส่ชื่อคอลัมน์เดียวกันทั้งช่อง
+ * "เวลาเข้า" และ "เวลาออก" (หรือใส่แค่ช่องเวลาเข้าช่องเดียวก็ได้)
+ *
+ * จงใจ**ไม่**แปลงรูปแบบเวลา ("08.00" ไม่ถูกเปลี่ยนเป็น "08:00") — สารบัญกลางกำหนดให้เก็บตามรูปเดิมของ
+ * เอกสาร การแปลงเป็นหน้าที่ของชั้น normalize ทีหลัง ไม่ใช่ของตัวอ่าน */
+const TIME_RANGE_RE = /^\s*(\d{1,2}[.:]\d{2})\s*(?:-|–|—|ถึง|to)\s*(\d{1,2}[.:]\d{2})\s*$/i;
+
+function splitTimeRange(start: any, end: any): { start: any; end: any } {
+  // ใส่ชื่อคอลัมน์เดียวกันทั้งสองช่อง = ได้ค่าช่วงเต็มมาทั้งคู่ ต้องถือว่ายังไม่มีเวลาออกจริง ไม่งั้นจะ
+  // ตัดสินว่า "มีเวลาออกแล้ว" แล้วไม่ยอมแยก (เทสต์จับเคสนี้ไว้)
+  const hasSeparateEnd = end && String(end) !== String(start);
+  if (hasSeparateEnd) return { start, end };
+  const m = TIME_RANGE_RE.exec(String(start ?? ''));
+  if (!m) return { start, end };
+  return { start: m[1], end: m[2] };
+}
+
 function mappedRowTimes(cols: Record<string, any>, detail: Record<string, string | null | undefined>) {
+  const regular = splitTimeRange(pick(cols, detail.timeIn), pick(cols, detail.timeOut));
   const base = {
-    timeIn: pick(cols, detail.timeIn),
-    timeOut: pick(cols, detail.timeOut),
+    timeIn: regular.start,
+    timeOut: regular.end,
     recovered: false,
     descriptionOverride: null as string | null,
   };
   if (detail.otTimeIn !== undefined || detail.otTimeOut !== undefined) {
-    return { ...base, otTimeIn: pick(cols, detail.otTimeIn), otTimeOut: pick(cols, detail.otTimeOut) };
+    const ot = splitTimeRange(pick(cols, detail.otTimeIn), pick(cols, detail.otTimeOut));
+    return { ...base, otTimeIn: ot.start, otTimeOut: ot.end };
   }
 
   // ไม่รู้คอลัมน์เข้า-ออกจริงสักช่อง (ตั้ง null ทั้งคู่ = Skill นี้ไม่มีคอลัมน์เวลาเลย) ก็ไม่มีอะไรให้หัก
