@@ -46,6 +46,21 @@
   /* แถบความคืบหน้าสัญญา — ไล่จากฟ้าอ่อน → น้ำเงินแบรนด์ → ม่วง ให้เห็นความคืบหน้าเด่นกว่าเส้นสีเดียว */
   --grad-progress: linear-gradient(90deg, var(--sky) 0%, var(--brand) 50%, var(--pr) 100%);
 
+  /* ตัวอ่าน Timesheet — สีประจำตัวอ่านแต่ละเจ้า ใช้ซ้ำทั้งไอคอนเมนู การ์ด และหัวแผง
+     ให้รู้ได้แวบเดียวว่ากำลังดูฝั่งไหน (แดง = ABBYY, เขียว = Clear Read) */
+  --ab-l: #f2896f;
+  --ab: #d44023;
+  --ab-d: #9b2210;
+  --ab-tint: #fdeee9;
+  --ab-line: #f4bdad;
+  --grad-ab: linear-gradient(135deg, var(--ab-l) 0%, var(--ab) 52%, var(--ab-d) 100%);
+  --cr-l: #5fcb8e;
+  --cr-g: #12975a;
+  --cr-d: #0a5f38;
+  --cr-tint: #e8f7ee;
+  --cr-line: #a6dcbd;
+  --grad-cr: linear-gradient(135deg, var(--cr-l) 0%, var(--cr-g) 52%, var(--cr-d) 100%);
+
   --ok: #16a34a;
   --okb: #ecfdf3;
   --okl: #a6f4c5;
@@ -2473,6 +2488,43 @@ td .nm {
   text-align: center;
   color: var(--ink);
 }
+/* ช่องอัตราหัก ณ ที่จ่าย — พิมพ์ตัวเลขเองได้ แต่ต้องดูเป็นตัวเลขใหญ่แบบเดิม ไม่ใช่กล่อง input ธรรมดา */
+.stepper .valbox {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.stepper input.val {
+  font: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  width: 68px;
+  min-width: 0;
+  padding: 2px 4px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-ctl);
+}
+.stepper input.val:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+  border-color: var(--brand);
+}
+/* ซ่อนลูกศรขึ้น/ลงของ number input — มีปุ่ม −/+ ของตัวเองอยู่แล้ว สองชุดพร้อมกันรกและสับสน */
+.stepper input.val::-webkit-outer-spin-button,
+.stepper input.val::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.stepper input.val {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.stepper .pcs {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+}
 .wht-result {
   display: flex;
   justify-content: space-between;
@@ -2957,3 +3009,180 @@ button.file:hover {
 .acts-l .tx { font-size: 13px; }
 .acts-l .tx small { display: block; color: var(--mut); font-size: 11.5px; }
 .acts-l .tm { font-size: 11.5px; color: var(--fnt); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ═══ หน้า "ตัวอ่าน Timesheet" — การ์ดเลือกตัวอ่าน ═══
+   แยก "กำลังดู" (preview) ออกจาก "กำลังใช้งาน" (active) ให้ขาดกัน: กดการ์ดแค่เปลี่ยนแผงที่ดูอยู่
+   ต้องกดปุ่มอีกทีถึงจะเปลี่ยนตัวอ่านจริง ไม่งั้นคนเปิดมาดูเฉยๆ แล้วเผลอสลับ ไฟล์ที่อัปหลังจากนั้น
+   จะถูกอ่านด้วยตัวที่ไม่มีใครตั้งใจเลือก */
+.rdpick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+@media (max-width: 860px) {
+  .rdpick {
+    grid-template-columns: 1fr;
+  }
+}
+.rd {
+  position: relative;
+  border-radius: var(--r-card);
+  /* แถบไล่สีด้านบนเป็น ::after ที่วางชิดขอบ padding box ซึ่งอยู่ด้านในเส้นขอบ มุมของมันจึงไม่โค้ง
+     ตามมุมนอกของการ์ด แล้วล้นออกนอกกรอบ — ตัดด้วย overflow ที่ตัวการ์ดให้โค้งตามการ์ดเสมอ */
+  overflow: hidden;
+  padding: 16px 17px;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  cursor: pointer;
+  text-align: start;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.rd:hover {
+  transform: translateY(-2px);
+}
+.rd:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+.rd .top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.rd .mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  /* เงาสีเดียวกับตัวเอง ทำให้ตราดูนูนออกมาจากการ์ด ไม่ใช่สี่เหลี่ยมแบนแปะอยู่ */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 10px -3px rgba(20, 32, 47, 0.35);
+}
+.rd.ab .mark { background: var(--grad-ab); }
+.rd.cr .mark { background: var(--grad-cr); }
+.rd .nm {
+  display: block;
+  font-weight: 700;
+  font-size: 15.5px;
+  line-height: 1.3;
+}
+.rd .ds {
+  display: block;
+  font-size: 12.5px;
+  color: var(--mut);
+  line-height: 1.55;
+}
+/* แถวล่างของการ์ด: สถานะ/ปุ่มอยู่ซ้าย ข้อมูลย่อยอยู่ขวา แต่ให้ baseline เดียวกันและระยะเท่ากันทั้งสอง
+   การ์ด ไม่ใช่ปุ่มลอยซ้ายกับตัวเลขลอยขวาจนดูเป็นคนละชิ้น */
+.rd .state {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--hair);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  flex-wrap: wrap;
+}
+.rd .state > :first-child {
+  flex: none;
+}
+.rd .live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  color: #fff;
+}
+.rd.ab .live { background: var(--grad-ab); }
+.rd.cr .live { background: var(--grad-cr); }
+.rd .live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
+}
+.rd .meta {
+  font-size: 12px;
+  color: var(--mut);
+  text-align: end;
+}
+/* กำลังใช้งานจริง — แถบไล่สีด้านบน + พื้นอ่อนไล่ลง */
+.rd.on::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 4px;
+}
+.rd.ab.on::after { background: var(--grad-ab); }
+.rd.cr.on::after { background: var(--grad-cr); }
+/* ไล่สีให้ลึกขึ้นตามที่ขอ: พื้นการ์ดไล่จากสีประจำตัวอ่านลงมาหาขาว และเงาใช้สีเดียวกับตัวอ่าน
+   ไม่ใช่เงาเทากลางๆ ทำให้การ์ดที่ใช้งานอยู่เด่นขึ้นโดยไม่ต้องเพิ่มเส้นกรอบหรือป้ายอะไรอีก */
+.rd.ab.on {
+  border-color: var(--ab-line);
+  background: linear-gradient(180deg, var(--ab-tint) 0%, color-mix(in srgb, var(--ab-tint) 45%, var(--paper)) 46px, var(--paper) 104px);
+  box-shadow: 0 14px 30px -20px rgba(155, 34, 16, 0.55);
+}
+.rd.cr.on {
+  border-color: var(--cr-line);
+  background: linear-gradient(180deg, var(--cr-tint) 0%, color-mix(in srgb, var(--cr-tint) 45%, var(--paper)) 46px, var(--paper) 104px);
+  box-shadow: 0 14px 30px -20px rgba(10, 95, 56, 0.55);
+}
+/* กำลังดูอยู่แต่ยังไม่ได้ใช้งาน — เน้นเส้นขอบอย่างเดียว ห้ามใช้สัญญาณเดียวกับ .on */
+.rd.sel:not(.on) { border-color: var(--fnt); }
+.rd:not(.on):not(.sel) { opacity: 0.72; }
+.rd:not(.on):hover { opacity: 1; }
+/* ตั้งค่าไม่ครบ — เลือกไม่ได้ ฝั่ง API ก็ปฏิเสธอยู่แล้ว กันไม่ให้กดแล้วเจอ error เปล่าๆ */
+.rd.off {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rd.off:hover {
+  transform: none;
+}
+
+.rdpanel {
+  border: 1px solid var(--rule);
+  border-radius: var(--r-card);
+  background: var(--paper);
+  overflow: hidden;
+}
+.rdpanel .phead {
+  padding: 14px 17px;
+  border-bottom: 1px solid var(--hair);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* หัวแผงไล่สีจางๆ ของตัวอ่านนั้น ต่อเนื่องจากการ์ดด้านบน ให้รู้ว่ากำลังดูฝั่งไหนโดยไม่ต้องอ่านหัวข้อ */
+.rdpanel.ab .phead { background: linear-gradient(180deg, var(--ab-tint), var(--paper)); }
+.rdpanel.cr .phead { background: linear-gradient(180deg, var(--cr-tint), var(--paper)); }
+.rdpanel .pbar {
+  width: 3px;
+  height: 17px;
+  border-radius: 2px;
+  flex: none;
+}
+.rdpanel.ab .pbar { background: var(--grad-ab); }
+.rdpanel.cr .pbar { background: var(--grad-cr); }
+.rdpanel .ptitle {
+  font-weight: 700;
+  font-size: 14.5px;
+}

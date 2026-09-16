@@ -57,7 +57,7 @@ const NAV: NavGroup[] = [
       { href: '/invoices', label: 'ใบแจ้งหนี้', icon: 'invoice', roles: ['admin', 'accounting'] },
       { href: '/tickets', label: 'แจ้งปัญหา', icon: 'alt', adminOnly: true, badgeKey: 'ticket' },
       { href: '/master', label: 'ข้อมูลหลัก', icon: 'users', roles: ['admin', 'accounting'] },
-      { href: '/abbyy-skills', label: 'Skill ABBYY', icon: 'monitor', adminOnly: true },
+      { href: '/readers', label: 'ตัวอ่าน Timesheet', icon: 'eye', roles: ['admin', 'accounting'] },
       { href: '/admin', label: 'จัดการระบบ', icon: 'cog', adminOnly: true },
       { href: '/my-line-link', label: 'เชื่อมต่อ LINE', icon: 'bell', userOnly: true },
     ],

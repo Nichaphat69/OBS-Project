@@ -49,6 +49,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
   const [employeeName, setEmployeeName] = useState(result.data.employeeName ?? '');
   const [position, setPosition] = useState(result.data.position ?? '');
   const [period, setPeriod] = useState(result.data.period ?? '');
+  const [workDays, setWorkDays] = useState(String(result.data.totalWorkDays ?? ''));
   const [leaveDays, setLeaveDays] = useState<Array<{ date: string; type: string }>>(
     result.data.leaveDays.map((l) => ({ date: l.date, type: l.type })),
   );
@@ -92,7 +93,16 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           documentNo: result.documentNo,
-          extraction: { ...result.data, employeeName, position, period, leaveDays, totalLeaveDays: leaveDays.length },
+          extraction: {
+            ...result.data,
+            employeeName,
+            position,
+            period,
+            leaveDays,
+            totalLeaveDays: leaveDays.length,
+            // ช่องวันทำงานแก้ได้แล้ว ต้องส่งค่าที่แก้ไปด้วย ไม่ใช่ค่าเดิมจาก ...result.data
+            totalWorkDays: Number(workDays) || 0,
+          },
           readModel: result.model,
           sourceEmailId: result.sourceEmailId,
           sourceEmailSubject: result.email?.subject,
@@ -144,12 +154,10 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
         <Field label={tx('ชื่อพนักงาน')} value={employeeName} onChange={setEmployeeName} />
         <Field label={tx('ตำแหน่ง')} value={position} onChange={setPosition} />
         <Field label={tx('รอบเดือน (YYYY-MM)')} value={period} onChange={setPeriod} />
-        <div>
-          <div className="ey">{tx('วันทำงาน / วันลา')}</div>
-          <div style={{ marginTop: 6 }}>
-            {result.data.totalWorkDays} {tx('วัน')} / {leaveDays.length} {tx('วัน')}
-          </div>
-        </div>
+        <Field label={tx('วันทำงาน')} value={workDays} onChange={setWorkDays} />
+        {/* วันลาเป็นค่าที่นับจากรายการ "วันลาที่อ่านได้" ด้านล่าง ซึ่งเป็นตัวจริงที่แก้ไขได้ — ทำเป็นช่อง
+            พิมพ์ได้ด้วยจะขัดกันเองทันทีที่สองค่าไม่ตรง จึงโชว์เป็นช่องอ่านอย่างเดียวให้รูปแบบเหมือนกัน */}
+        <Field label={tx('วันลา (นับอัตโนมัติ)')} value={String(leaveDays.length)} readOnly />
       </div>
 
       <div style={{ marginBottom: 18 }}>
@@ -240,14 +248,33 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({
+  label,
+  value,
+  onChange,
+  readOnly,
+}: {
+  label: string;
+  value: string;
+  onChange?: (v: string) => void;
+  readOnly?: boolean;
+}) {
   return (
     <label>
       <div className="ey">{label}</div>
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ marginTop: 6, width: '100%', height: 38, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 12px' }}
+        readOnly={readOnly}
+        onChange={(e) => onChange?.(e.target.value)}
+        style={{
+          marginTop: 6,
+          width: '100%',
+          height: 38,
+          borderRadius: 'var(--r-ctl)',
+          border: '1px solid var(--rule)',
+          padding: '0 12px',
+          ...(readOnly ? { background: 'var(--sunk)', color: 'var(--mut)', cursor: 'default' } : null),
+        }}
       />
     </label>
   );
@@ -330,7 +357,23 @@ function WhtSection({
           <button type="button" {...minus}>
             −
           </button>
-          <span className="val">{pct}%</span>
+          {/* พิมพ์เองได้ ไม่ต้องกด −/+ ทีละขั้น — ปุ่มยังอยู่สำหรับปรับละเอียดทีละ 0.1 */}
+          <span className="valbox">
+            <input
+              className="val"
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={pct}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (e.target.value === '' || !Number.isFinite(n)) return;
+                onChange(pctRound(Math.min(100, Math.max(0, n))));
+              }}
+            />
+            <span className="pcs">%</span>
+          </span>
           <button type="button" {...plus}>
             +
           </button>

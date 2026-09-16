@@ -210,6 +210,44 @@ const TX: Record<string, string> = {
   'ระบบยังอ่านค่าเดิมได้ตามปกติ แต่แก้ผ่านหน้านี้ยังไม่ได้จนกว่าฝั่ง API จะแปลงรูปให้ตอนอ่าน — ถ้าแก้ตอนนี้ค่าที่ตั้งไว้เดิมจะหายทั้งหมด':
     'It still reads correctly as-is, but cannot be edited here until the API converts the format on read — editing now would wipe every value already configured.',
 
+  // ── readers/ReadersClient.tsx ──
+  'ตัวอ่าน Timesheet': 'Timesheet reader',
+  'เลือกว่าจะให้ระบบใช้เครื่องมือไหนอ่านไฟล์ Timesheet ที่อัปโหลดเข้ามา เปลี่ยนได้ตลอด มีผลกับไฟล์ที่อ่านหลังจากนี้ ไม่กระทบใบที่อ่านไปแล้ว':
+    'Choose which engine reads uploaded Timesheet files. You can change this at any time; it affects files read from now on and does not change anything already read.',
+  'อ่านด้วย Skill ที่เทรนไว้ต่อฟอร์มลูกค้า': 'Reads using a Skill trained per customer form',
+  'อ่านด้วยแม่แบบฟิลด์ พร้อมตาราง TimesheetDetails': 'Reads using a field template with a TimesheetDetails table',
+  กำลังใช้งาน: 'In use',
+  เปลี่ยนมาใช้ตัวนี้: 'Switch to this one',
+  'กำลังเปลี่ยน…': 'Switching…',
+  ยังตั้งค่าไม่ครบ: 'Not fully configured',
+  'เปลี่ยนตัวอ่าน Timesheet?': 'Switch the Timesheet reader?',
+  ไฟล์ที่อัปโหลดหลังจากนี้จะถูกอ่านด้วย: 'Files uploaded from now on will be read by',
+  ใบที่อ่านไปแล้วไม่เปลี่ยนตาม: 'documents already read are unaffected',
+  เปลี่ยนตัวอ่านไม่สำเร็จ: 'Could not switch reader',
+  เปลี่ยนมาใช้: 'Switched to',
+  แล้ว: '',
+  ตอนนี้ระบบใช้: 'The system is currently using',
+  'ไม่ใช่ทั้ง ABBYY และ Clear Read — มักเกิดจากตัวที่ตั้งไว้ยังตั้งค่าไม่ครบ ระบบจึงถอยมาใช้ตัวสำรอง กดเลือกตัวที่ต้องการด้านล่างเพื่อกลับไปใช้':
+    'neither ABBYY nor Clear Read — usually because the chosen one is not fully configured, so the system fell back. Pick the one you want below to go back to it.',
+  'ช้ากว่า ABBYY มาก (หลักนาทีต่อหน้า)': 'Much slower than ABBYY (minutes per page)',
+  'Skill ของ ABBYY': 'ABBYY Skills',
+  'จัดการ Skill': 'Manage Skills',
+  การจับคู่ฟิลด์: 'Field mapping',
+  ใช้ค่าเริ่มต้น: 'Using defaults',
+  'แม่แบบของ Clear Read': 'Clear Read templates',
+  ยังเลือกแม่แบบจากหน้านี้ไม่ได้: 'Templates cannot be chosen from this page yet',
+  'ฝั่งระบบหลังบ้านกำลังทำส่วนดึงรายการแม่แบบจาก Clear Read อยู่ เมื่อเสร็จแล้วหน้านี้จะจัดการได้เหมือนฝั่ง ABBYY — เลือกแม่แบบต่อสัญญา และจับคู่ฟิลด์ด้วยสารบัญฟิลด์กลางชุดเดียวกัน':
+    'The backend work to list Clear Read templates is in progress. Once it lands, this panel will work like the ABBYY side — choose a template per contract and map fields using the same central field registry.',
+  'ระหว่างนี้สลับมาใช้ Clear Read ได้ แต่จะอ่านด้วยค่าเริ่มต้น ยังกำหนดแม่แบบต่อสัญญาไม่ได้':
+    'You can switch to Clear Read in the meantime, but it will read with defaults — per-contract templates are not selectable yet.',
+  ข้อควรรู้ก่อนเปลี่ยน: 'Before you switch',
+  'Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า และถึงสิบนาทีกว่าถ้าไฟล์หลายหน้า ส่วน ABBYY ใช้เวลาไม่กี่วินาที':
+    'Clear Read is far slower than ABBYY — around 3 minutes for a single page and over ten for a multi-page file, where ABBYY takes seconds.',
+  'การเปลี่ยนมีผลกับไฟล์ที่อัปโหลดหลังจากนี้เท่านั้น ใบที่อ่านไปแล้วยังใช้ผลเดิม':
+    'Switching only affects files uploaded from now on; documents already read keep their existing result.',
+  'ตัวที่ยังตั้งค่าไม่ครบจะเลือกไม่ได้ ระบบจะถอยไปใช้ตัวสำรองให้เองถ้าตัวที่ตั้งไว้ใช้งานไม่ได้':
+    'An engine that is not fully configured cannot be selected, and the system falls back automatically if the chosen one becomes unusable.',
+
   // ── components/TimesheetFieldMapEditor.tsx ──
   จับคู่ชื่อฟิลด์กับเอกสารของลูกค้า: "Match field names to the customer's document",
   'กรอกว่าเอกสารของลูกค้ารายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ':
@@ -455,7 +493,8 @@ const TX: Record<string, string> = {
   จับคู่: 'Matched',
   จับคู่พนักงานไม่ได้: 'Could not match an employee',
   ชื่อพนักงาน: 'Employee name',
-  'วันทำงาน / วันลา': 'Workdays / leave days',
+  วันทำงาน: 'Workdays',
+  'วันลา (นับอัตโนมัติ)': 'Leave days (auto)',
   'วันลา — แก้ไขได้ก่อนยืนยัน (เทียบกับ HRDD ด้านล่างเพื่อตรวจสอบ)': 'Leave days — editable before confirming (compare with HRDD below to verify)',
   วันลาที่อ่านได้: 'Leave days read from the file',
   'แก้ไขได้ก่อนยืนยัน — เทียบกับ HRDD ด้านล่างเพื่อตรวจสอบ': 'Editable before confirming — compare with HRDD below to verify',

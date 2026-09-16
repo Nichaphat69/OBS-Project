@@ -1,26 +1,8 @@
-import { requireUser } from '../../../lib/session';
-import { Card } from '../../../components/ui';
-import { TxPageHeader, TxEmptyState } from '../../../components/TxPageHeader';
-import AbbyySkillsClient from './AbbyySkillsClient';
+import { redirect } from 'next/navigation';
 
-export default async function AbbyySkillsPage() {
-  const { user } = await requireUser();
-
-  if (user.role !== 'admin') {
-    return (
-      <>
-        <TxPageHeader eyebrow="ผู้ดูแลระบบ" title="Skill ABBYY" />
-        <Card>
-          <TxEmptyState label="ต้องเป็น admin เท่านั้นถึงจะเข้าหน้านี้ได้" />
-        </Card>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <TxPageHeader eyebrow="ผู้ดูแลระบบ" title="Skill ABBYY" subtitle="สารบัญ Skill ABBYY Vantage ที่เทรนไว้แล้ว — ตั้งชื่อให้จำง่ายแล้วนำ Skill ID ไปเลือกตอนแก้ไขสัญญา" />
-      <AbbyySkillsClient />
-    </>
-  );
+/** ย้ายการจัดการ Skill ไปอยู่ในหน้า "ตัวอ่าน Timesheet" แล้ว (ใต้การ์ด ABBYY) และเอาเมนูนี้ออกจากแถบ
+ * ข้างแล้ว — คง route ไว้เป็นทางเปลี่ยนเส้นทาง เผื่อใครเคยบุ๊กมาร์กหรือมีลิงก์เก่าค้างอยู่ จะได้ไปถึง
+ * ที่ที่ใช้งานได้จริงแทนที่จะเจอ 404 */
+export default function AbbyySkillsPage() {
+  redirect('/readers');
 }

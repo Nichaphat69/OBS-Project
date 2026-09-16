@@ -130,18 +130,22 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         />
       </div>
 
-      <Card title={tx('งานที่ต้องทำ')}>
-        <TaskList tasks={data.tasks} />
-      </Card>
+      {/* .mosaic.c2 คือ 1.6fr 1fr — ให้ "งานที่ต้องทำ" อยู่คอลัมน์กว้าง เพราะรายการยาวได้ไม่จำกัดและ
+          บรรทัดรายละเอียดยาว ส่วนสรุปสถานะเป็นสี่บรรทัดสั้นคงที่ จึงอยู่คอลัมน์แคบได้สบาย */}
+      <div className="mosaic c2">
+        <Card title={tx('งานที่ต้องทำ')}>
+          <TaskList tasks={data.tasks} />
+        </Card>
 
-      <Card title={tx('สรุปสถานะ Timesheet')}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <StatRow label={tx('ทั้งหมด')} value={data.counts.total} />
-          <StatRow label={tx('ข้อมูลไม่ตรง')} value={data.counts.mismatch} />
-          <StatRow label={tx('วางบิลแล้ว')} value={data.counts.billed} />
-          <StatRow label={tx('ตีกลับ')} value={data.counts.rejected} />
-        </div>
-      </Card>
+        <Card title={tx('สรุปสถานะ Timesheet')}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <StatRow label={tx('ทั้งหมด')} value={data.counts.total} />
+            <StatRow label={tx('ข้อมูลไม่ตรง')} value={data.counts.mismatch} />
+            <StatRow label={tx('วางบิลแล้ว')} value={data.counts.billed} />
+            <StatRow label={tx('ตีกลับ')} value={data.counts.rejected} />
+          </div>
+        </Card>
+      </div>
 
       <div className="mosaic c2">
         <Card title={tx('รอบบิล')} flush>

@@ -2,11 +2,11 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import type { TimesheetFieldMap } from '@obs/domain';
-import { Card, ErrorState, Tag } from '../../../components/ui';
-import { Icon } from '../../../components/Icon';
-import { TimesheetFieldMapEditor } from '../../../components/TimesheetFieldMapEditor';
-import { useConfirm, useToast } from '../../../components/Overlays';
-import { useLang } from '../../../lib/language';
+import { Card, ErrorState, Tag } from './ui';
+import { Icon } from './Icon';
+import { TimesheetFieldMapEditor } from './TimesheetFieldMapEditor';
+import { useConfirm, useToast } from './Overlays';
+import { useLang } from '../lib/language';
 
 interface AbbyySkillRow {
   id: string;
@@ -39,7 +39,7 @@ function hasAnyMapping(map: TimesheetFieldMap | null): boolean {
   return !!map.monthYearSplit && !!(map.monthYearSplit.month || map.monthYearSplit.year);
 }
 
-export default function AbbyySkillsClient() {
+export default function AbbyySkillsManager({ embedded }: { embedded?: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
   const { tx } = useLang();
@@ -157,8 +157,14 @@ export default function AbbyySkillsClient() {
     }
   }
 
+  // ฝังอยู่ในแผงของหน้า "ตัวอ่าน Timesheet" แล้วไม่ต้องมีการ์ดซ้อนการ์ดอีกชั้น ใช้โค้ดชุดเดียวกัน
+  // ทั้งสองที่ เพื่อไม่ให้สองทางเข้าค่อยๆ ต่างกันไปคนละทาง
+  const Shell = embedded
+    ? ({ children }: { children: React.ReactNode }) => <div style={{ padding: '17px' }}>{children}</div>
+    : ({ children }: { children: React.ReactNode }) => <Card title={tx('สารบัญ Skill ABBYY')}>{children}</Card>;
+
   return (
-    <Card title={tx('สารบัญ Skill ABBYY')}>
+    <Shell>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14, marginBottom: 18, alignItems: 'end' }}>
         <label>
           <div className="ey">{tx('ชื่อ Skill')}</div>
@@ -276,6 +282,6 @@ export default function AbbyySkillsClient() {
         </table>
       </div>
       )}
-    </Card>
+    </Shell>
   );
 }
