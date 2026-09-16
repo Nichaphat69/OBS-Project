@@ -17,7 +17,6 @@
  * ⚠️ พอร์ตแบบ code-complete แต่ยังไม่ได้พิสูจน์ด้วยข้อมูลจริงในสภาพแวดล้อมนี้ (Phase 5.7) — เครื่องที่รัน
  * โมเดล (LOCAL_LLM_BASE_URL) เชื่อมต่อจากเซสชันที่พอร์ตไม่ได้ ต้อง deploy ไปรันบน production จริงก่อน
  */
-import { pdf } from 'pdf-to-img';
 import { callLocalJSON, localVisionModel, localTextModel } from './localLlmClient.js';
 import { normalizePeriod, normalizeDate, classifyDayKind, classifyLeaveType } from '@obs/domain';
 import { extractPdfText, employeeNameIn, periodIn, signatureNamesIn, dayRowsIn } from './pdfTextService.js';
@@ -136,8 +135,11 @@ const SYSTEM_PROMPT = `คุณคือผู้ช่วยฝ่ายบั
   ให้อ่าน "เลขที่เอกสาร" ลง documentNo และ "สถานะ" ลง approvalStatus
   หน้านั้นไม่มีตารางรายวัน ให้ days และ leaveDays เป็น [] ตามปกติ`;
 
-/** แปลง PDF (Buffer) เป็นรูปภาพทีละหน้า — pdf-to-img รับ path หรือ data URL ไม่รับ Buffer ตรงๆ */
+/** แปลง PDF (Buffer) เป็นรูปภาพทีละหน้า — pdf-to-img รับ path หรือ data URL ไม่รับ Buffer ตรงๆ
+ * โหลด pdf-to-img ตอนใช้จริงเท่านั้น (ก้อนใหญ่มาก ลาก pdfjs มาด้วย) — ฟังก์ชันนี้เป็นจุดเดียวในไฟล์
+ * ที่ต้องใช้มัน ส่วน verifyExtraction/mergePageResults เป็นตรรกะล้วนที่ทดสอบได้โดยไม่ต้องแตะ PDF */
 async function pdfToImages(pdfBuffer: Buffer): Promise<Buffer[]> {
+  const { pdf } = await import('pdf-to-img');
   const dataUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
   const doc = await pdf(dataUrl, { scale: 2 });
   try {
@@ -432,7 +434,7 @@ async function runPages(
  * ตรวจผลที่โมเดลอ่านมาด้วยโค้ด — จับความไม่สอดคล้องภายในเอกสารเอง ไม่ได้ตรวจกับปฏิทินหรือสัญญา (นั่น
  * เป็นหน้าที่ของ recomputeTimesheet)
  */
-function verifyExtraction(data: any, { expectedPeriod }: { expectedPeriod?: string } = {}) {
+export function verifyExtraction(data: any, { expectedPeriod }: { expectedPeriod?: string } = {}) {
   const issues: Array<{ severity: string; message: string }> = [];
 
   if (data.failedPages?.length) {

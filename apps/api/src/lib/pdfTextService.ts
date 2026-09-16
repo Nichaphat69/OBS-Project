@@ -6,8 +6,6 @@
  * กว่าการให้โมเดล vision มองรูปมาก ฉบับที่เป็นภาพสแกนจริงจะได้ข้อความน้อยมาก — ตัวเรียกต้องเช็ค hasText
  * แล้วถอยไปใช้ทางโมเดล vision แทน (ดู extractionService.ts)
  */
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-
 // ต่ำกว่านี้ถือว่าไม่มีชั้นข้อความจริง — ไฟล์สแกนมักได้เศษข้อความจากลายน้ำหรือหัวกระดาษติดมาบ้าง
 const MIN_CHARS_PER_PAGE = 150;
 
@@ -18,6 +16,9 @@ export interface PdfTextResult {
 }
 
 export async function extractPdfText(pdfBuffer: Buffer | Uint8Array): Promise<PdfTextResult> {
+  // โหลดตอนใช้จริงเท่านั้น — pdfjs-dist เป็นก้อนหลายสิบ MB และมีแค่ฟังก์ชันนี้ฟังก์ชันเดียวในไฟล์ที่ใช้มัน
+  // ส่วนที่เหลือ (employeeNameIn/periodIn/dayRowsIn/signatureNamesIn) เป็นการแปลงสตริงล้วน
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await getDocument({
     data: new Uint8Array(pdfBuffer),
     useSystemFonts: true,
