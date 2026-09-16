@@ -73,7 +73,11 @@ const abbyyReader: TimesheetReader = {
       data,
       verification: { ok: true, issues: (data.notes ?? []).map((message: string) => ({ severity: 'warn', message })) },
       usage: null,
-      model: 'abbyy',
+      // ติด Skill ที่ใช้ไปกับชื่อตัวอ่านด้วย — ค่านี้ถูกเก็บลง timesheets.extraction.model ตอนยืนยัน และเป็น
+      // ร่องรอยเดียวที่บอกได้ว่าตัวเลขในใบนี้มาจากการแมปชุดไหน พอระบบรองรับหลายฟอร์แมต/หลายบริษัท
+      // "อ่านด้วย ABBYY" อย่างเดียวตอบไม่ได้ว่าทำไมฟอร์มนี้อ่านเพี้ยน (ก่อน refactor multi-reader เคยมี
+      // ท้ายชื่อแบบนี้อยู่แล้ว เช่น "abbyy:Timesheet" — ใส่กลับเข้ามา)
+      model: templateId ? `abbyy:${templateId}` : 'abbyy',
       rawResponse: rawResult,
     } satisfies ExtractorResult;
   },
@@ -94,7 +98,8 @@ const clearReadReader: TimesheetReader = {
       data,
       verification: { ok: true, issues: (data.notes ?? []).map((message: string) => ({ severity: 'warn', message })) },
       usage: null,
-      model: 'clear-read',
+      // เหตุผลเดียวกับฝั่ง ABBYY ด้านบน — แม่แบบที่ใช้อ่านคือสิ่งที่ต้องรู้เวลาไล่ว่าฟอร์มไหนอ่านเพี้ยน
+      model: templateId ? `clear-read:${templateId}` : 'clear-read',
       rawResponse: detail,
     } satisfies ExtractorResult;
   },
