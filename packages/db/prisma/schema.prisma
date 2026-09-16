@@ -173,6 +173,29 @@ model Timesheet {
   updatedAt           String   @map("updated_at")
   // เพิ่มทีหลัง (ADDED_COLUMNS) — ช่องทางที่ Timesheet เข้าระบบมา
   submissionMethod    String?  @map("submission_method")
+  // เพิ่ม 16 ก.ย. 69 — ฟิลด์หัวเอกสารตามสเปกกลาง (TIMESHEET_HEADER_FIELDS ใน @obs/domain) ทุกช่อง
+  // nullable เพราะแต่ละบริษัทมีไม่ครบเหมือนกัน และแถวเดิมที่บันทึกไปแล้วต้องใช้งานต่อได้โดยไม่ต้องแก้
+  // ⚠️ rawEmployeeId = "รหัสพนักงานที่พิมพ์บนเอกสาร" (สเปกเรียก Employee_ID) คนละค่ากับ employeeId
+  // ด้านบนที่เป็น FK ของพนักงานในระบบเรา — ตั้งชื่อ raw* ให้เข้าชุดกับ rawEmployeeName/rawPosition
+  vendorName          String?  @map("vendor_name")
+  clientName          String?  @map("client_name")
+  projectName         String?  @map("project_name")
+  rawEmployeeId       String?  @map("raw_employee_id")
+  role                String?
+  department          String?
+  monthYear           String?  @map("month_year")
+  reportingPeriod     String?  @map("reporting_period")
+  supervisorName      String?  @map("supervisor_name")
+  approverName        String?  @map("approver_name")
+  site                String?
+  projectTeam         String?  @map("project_team")
+  // ช่องสรุปท้ายเอกสาร (TIMESHEET_SUMMARY_FIELDS) — "ตามที่เอกสารพิมพ์ไว้" ล้วนๆ ต่างจาก
+  // reportedWorkdays/reportedLeave ด้านบนที่เป็นค่าที่ระบบใช้ตั้งบิล (มาจากช่องสรุปถ้ามี ไม่มีก็นับจาก
+  // ตารางรายวันแทน) เก็บแยกไว้เพื่อให้ไล่เทียบได้ว่าเลขที่เอกสารบอกกับที่เรานับเองตรงกันไหม
+  // เป็น Float เพราะบางฟอร์มรายงานเป็นครึ่งวัน (0.5) ไม่ใช่จำนวนเต็มเสมอ
+  summaryTotalWorkDays  Float? @map("summary_total_work_days")
+  summaryTotalLeaveDays Float? @map("summary_total_leave_days")
+  summaryTotalHours     Float? @map("summary_total_hours")
 
   contract      Contract       @relation(fields: [contractId], references: [id])
   employee      Employee?      @relation(fields: [employeeId], references: [id])
@@ -256,6 +279,17 @@ model TimesheetDay {
   normalHours Float?  @map("normal_hours")
   otHours     Float?  @map("ot_hours")
   totalHours  Float?  @map("total_hours")
+  // เพิ่ม 16 ก.ย. 69 — คอลัมน์รายวันที่เหลือตามสเปกกลาง (TIMESHEET_DETAIL_FIELDS ใน @obs/domain)
+  // rowNumber เก็บเป็น text ตามกติกาสเปก ("ห้ามแปลง") เพราะต้นฉบับมีทั้ง "1" และ "01" เลข 0 นำหน้าสำคัญ
+  rowNumber       String? @map("row_number")
+  site            String?
+  workLocation    String? @map("work_location")
+  breakHours      Float?  @map("break_hours")
+  otBreakHours    Float?  @map("ot_break_hours")
+  additionalHours Float?  @map("additional_hours")
+  activity        String?
+  leaveType       String? @map("leave_type")
+  leaveDays       Float?  @map("leave_days")
 
   timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
 

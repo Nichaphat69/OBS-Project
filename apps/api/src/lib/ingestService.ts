@@ -115,6 +115,10 @@ export const NEXT_ACTION = {
   ALREADY_BILLED: 'already_billed',
 } as const;
 
+/** หนึ่งแถวรายวัน — คีย์ตรงกับ TIMESHEET_DETAIL_FIELDS ใน @obs/domain (สเปกกลาง Clear Read AI Master
+ * Timesheet Template) ยกเว้น 3 ชื่อที่มีอยู่ก่อนสเปกและยังคงชื่อเดิมไว้เพื่อไม่ให้ตัวอ่าน/หน้าจอที่ใช้อยู่
+ * พังทั้งระบบ — `dayOfWeek` = สเปก `day`, `remark` = สเปก `remarks`, `type` = สเปก `workType`
+ * (ส่วน `label` ไม่มีในสเปก เป็นค่าจัดประเภทวันภายในของเราเอง ใช้คำนวณ manday/ปฏิทิน) */
 export interface ExtractedDay {
   date: string;
   dayOfWeek?: string | null;
@@ -130,8 +134,26 @@ export interface ExtractedDay {
   normalHours?: number | null;
   otHours?: number | null;
   totalHours?: number | null;
+  // เพิ่ม 16 ก.ย. 69 ตามสเปกกลาง — ฟอร์มของลูกค้าบางเจ้า (Fujitsu/Virtual Link/T8) มีช่องพวกนี้จริง
+  // ของเดิมอ่านมาได้ก็ตกหล่นหายไปเพราะ type กลางไม่มีที่ให้เก็บ ทุกช่องเป็น optional ตัวอ่านเจ้าไหน
+  // ไม่มีก็ปล่อยว่างได้ตามเดิม
+  rowNumber?: string | null;
+  site?: string | null;
+  workLocation?: string | null;
+  breakHours?: number | null;
+  otBreakHours?: number | null;
+  additionalHours?: number | null;
+  activity?: string | null;
+  leaveType?: string | null;
+  leaveDays?: number | null;
 }
 
+/** ฟิลด์หัวเอกสาร — คีย์ตรงกับ TIMESHEET_HEADER_FIELDS ใน @obs/domain
+ * หมายเหตุ `employeeId` ที่นี่คือ "รหัสพนักงานที่พิมพ์อยู่บนเอกสาร" (เช่น EMP001) ตามสเปกกลาง ไม่ใช่
+ * `Employee.id` ภายในระบบเรา — ตอนบันทึกลง DB จึงลงคอลัมน์ `raw_employee_id` ไม่ใช่ `employee_id`
+ * (คอลัมน์หลังเป็น FK ที่ได้จากการจับคู่ชื่อ คนละค่ากันคนละที่มา) ดู timesheet.create() ด้านล่าง
+ * `period` เป็นค่าที่ normalize แล้วของเราเอง (YYYY-MM) ส่วน `monthYear`/`reportingPeriod` เก็บตามรูป
+ * ที่เอกสารเขียนไว้จริงตามกติกาของสเปก ("ห้ามแปลง/ห้ามเดา" — การแปลงเป็นหน้าที่ชั้น normalize) */
 export interface ExtractedData {
   employeeName: string;
   position: string;
@@ -144,6 +166,33 @@ export interface ExtractedData {
   signedByEmployee?: boolean;
   signedByProjectManager?: boolean;
   notes?: string[];
+  // เพิ่ม 16 ก.ย. 69 ตามสเปกกลาง — mapAbbyyResult() คืน vendor/clientName/projectName มาอยู่แล้วแต่
+  // type กลางเดิมไม่มีที่ให้ลง เลยถูกทิ้งทั้งที่อ่านมาได้
+  vendorName?: string | null;
+  clientName?: string | null;
+  projectName?: string | null;
+  employeeId?: string | null;
+  role?: string | null;
+  department?: string | null;
+  monthYear?: string | null;
+  reportingPeriod?: string | null;
+  supervisorName?: string | null;
+  approverName?: string | null;
+  site?: string | null;
+  projectTeam?: string | null;
+  /** ช่องสรุปท้ายเอกสาร ตาม TIMESHEET_SUMMARY_FIELDS — "สิ่งที่เอกสารพิมพ์ไว้" ล้วนๆ ว่างได้ถ้าฟอร์มนั้น
+   * ไม่มีช่องสรุป (กติกาสเปก: ห้ามนับจากตารางมาเติมให้)
+   *
+   * ⚠️ จงใจแยกจาก `totalWorkDays`/`totalLeaveDays` ด้านบนที่ชื่อซ้ำกันแต่คนละความหมาย — ตัวด้านบนคือ
+   * "ค่าที่ระบบใช้ตั้งบิลจริง" ซึ่งมาจากช่องสรุปถ้ามี ไม่มีก็นับจากตารางรายวันแทน สองค่านี้ตรงกันเกือบทุก
+   * ครั้ง และต่างกันพอดีตอนฟอร์มไม่มีช่องสรุป ซึ่งเป็นเคสที่ fallback มีไว้รองรับ ถ้ายุบเป็นค่าเดียวจะแยก
+   * ไม่ออกอีกต่อไปว่า "เอกสารบอกมา 19" กับ "เรานับเองได้ 19" ต่างกันตรงไหน — เป็นข้อมูลที่ต้องใช้ตอนไล่
+   * เทียบเลขไม่ตรงกันระหว่างแท็บ (เคส Big-C 15 ก.ย. 69 ที่ช่องสรุปบอก 19 แต่นับจากตารางได้ 14) */
+  summary?: {
+    totalWorkDays?: number | null;
+    totalLeaveDays?: number | null;
+    totalHours?: number | null;
+  };
 }
 
 export interface ExtractorResult {
@@ -397,6 +446,22 @@ export async function ingestTimesheet({
         rawPosition: data.position,
         reportedWorkdays: data.totalWorkDays,
         reportedLeave: data.totalLeaveDays,
+        // ฟิลด์หัวเอกสารที่เหลือตามสเปกกลาง — ตัวอ่านเจ้าไหนไม่มีก็เป็น null ตามเดิม
+        vendorName: data.vendorName ?? null,
+        clientName: data.clientName ?? null,
+        projectName: data.projectName ?? null,
+        rawEmployeeId: data.employeeId ?? null,
+        role: data.role ?? null,
+        department: data.department ?? null,
+        monthYear: data.monthYear ?? null,
+        reportingPeriod: data.reportingPeriod ?? null,
+        supervisorName: data.supervisorName ?? null,
+        approverName: data.approverName ?? null,
+        site: data.site ?? null,
+        projectTeam: data.projectTeam ?? null,
+        summaryTotalWorkDays: data.summary?.totalWorkDays ?? null,
+        summaryTotalLeaveDays: data.summary?.totalLeaveDays ?? null,
+        summaryTotalHours: data.summary?.totalHours ?? null,
         status: 'extracted',
         submissionMethod,
         createdAt: new Date().toISOString(),
@@ -418,7 +483,22 @@ export async function ingestTimesheet({
     }
 
     for (const day of data.days ?? []) {
-      if (!day.label && !day.timeIn) continue;
+      // เดิมเก็บเฉพาะแถวที่มี label หรือเวลาเข้า — พอสเปกกลางเพิ่มช่องรายวันมา แถวที่มีแต่ข้อมูลลา/
+      // กิจกรรม/ชั่วโมง (ไม่มีทั้ง label และเวลาเข้า) จะถูกทิ้งทั้งแถวทั้งที่อ่านมาได้จริง จึงนับว่ามีข้อมูล
+      // ถ้าช่องใดช่องหนึ่งที่มีความหมายมีค่า — เงื่อนไขนี้ "เก็บเพิ่ม" เท่านั้น ไม่เคยทำให้แถวที่เคยเก็บหายไป
+      const hasContent =
+        day.label ||
+        day.timeIn ||
+        day.leaveType ||
+        day.activity ||
+        day.jobDescription ||
+        day.type ||
+        day.normalHours != null ||
+        day.otHours != null ||
+        day.totalHours != null ||
+        day.additionalHours != null ||
+        day.leaveDays != null;
+      if (!hasContent) continue;
       await tx.timesheetDay.create({
         data: {
           timesheetId: documentNo,
@@ -432,9 +512,20 @@ export async function ingestTimesheet({
           type: day.type ?? null,
           label: day.label ?? null,
           jobDesc: day.jobDescription ?? null,
+          // เดิมมีคอลัมน์ remark อยู่แล้วแต่ไม่เคยเขียนลงเลย (ตกหล่นมาแต่ต้น) — เก็บให้ครบในคราวเดียวกัน
+          remark: day.remark ?? null,
           normalHours: day.normalHours ?? null,
           otHours: day.otHours ?? null,
           totalHours: day.totalHours ?? null,
+          rowNumber: day.rowNumber ?? null,
+          site: day.site ?? null,
+          workLocation: day.workLocation ?? null,
+          breakHours: day.breakHours ?? null,
+          otBreakHours: day.otBreakHours ?? null,
+          additionalHours: day.additionalHours ?? null,
+          activity: day.activity ?? null,
+          leaveType: day.leaveType ?? null,
+          leaveDays: day.leaveDays ?? null,
         },
       });
     }
