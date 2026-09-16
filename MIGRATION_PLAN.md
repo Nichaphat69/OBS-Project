@@ -634,6 +634,29 @@ policy การชนกันทีละตาราง) ในขณะท�
 Phase 5.1-5.4 — โดยเฉพาะใบแจ้งหนี้จริง `BL2026070003` ที่สร้างเอกสารจริงใน FlowAccount ไปแล้ว
 **สร้างซ้ำไม่ได้เพราะจะวางบิลซ้ำ**
 
+**สภาพจริงบนเซิร์ฟเวอร์ (ตรวจเองผ่าน ssh เมื่อ 2026-09-16 — เดิมข้อนี้เป็นคำถามค้างว่า "ระบบเก่ารันที่ไหน")**
+
+เครื่องเดียวกันทั้งหมด `ubuntu@43.210.234.54` (คีย์ `ipassion-key-n8n.pem`):
+
+| อะไร | อยู่ที่ | รันยังไง |
+|---|---|---|
+| **ระบบเก่า** | `/opt/obs` | `obs.service` (systemd, active) ฟังพอร์ต **4300** |
+| Cloudflare tunnel ของ LINE webhook | — | `obs-tunnel.service` (systemd, active) |
+| **ระบบใหม่** | `/opt/outsource-auto-new` | docker compose 3 คอนเทนเนอร์ (api/web/postgres) |
+| **n8n** | โปรแกรม `/usr/lib/node_modules/n8n` · ข้อมูล `/home/ubuntu/.n8n` | `n8n.service` (systemd, active) ฟัง **127.0.0.1:5678** เท่านั้น |
+
+ไฟล์ service ของ n8n อยู่ที่ `/etc/systemd/system/n8n.service` — ตั้ง `Restart=always`
+(ถ้าแก้ config ผิดจะวนสตาร์ทใหม่ไม่หยุด ต้อง `systemctl stop` ก่อนแก้เสมอ) และ
+`GENERIC_TIMEZONE=Asia/Bangkok` ซึ่งทำให้ Schedule Trigger 09:00 ยิงตามเวลาไทยจริง
+
+⚠️ **`obs-tunnel.service` เป็นตัวที่แผนเดิมมองข้าม** — LINE ยิง webhook เข้าระบบเก่าผ่าน tunnel นี้
+ถ้าหยุดแค่ `obs.service` แล้วลืม tunnel ปลายทางจะตายแต่ LINE ยังยิงมาที่เดิม ต้องจัดการคู่กัน
+
+⚠️ **workflow จริงของ n8n อยู่ใน `/home/ubuntu/.n8n/database.sqlite` ไม่ใช่ในไฟล์ `n8n/01-obs-workflow.json`
+ของ repo** — ไฟล์ใน repo เป็นแค่สำเนาที่ export ไว้ และไม่ได้ถูกแก้มาตั้งแต่ commit `049216c`
+ขณะที่ฐานข้อมูล n8n ถูกแก้ล่าสุด 2026-09-15 **สองที่นี้ไม่ตรงกันแน่นอน** ดังนั้นข้อ 6 ด้านล่าง
+(repoint n8n) ต้องแก้ **ในหน้าเว็บ n8n** แล้วค่อย export ทับไฟล์ใน repo ไม่ใช่แก้ไฟล์แล้วคิดว่าจบ
+
 **ขั้นตอน cutover จริง:**
 1. ก่อนหยุดระบบเก่า: จด (snapshot) รายการ record จริงที่มีอยู่ใน Postgres เท่านั้น (ไม่มีใน SQLite) —
    ตอนนี้เป็นรายการสั้นและนับได้ตาม MIGRATION_PLAN.md ที่บันทึกไว้แล้วทุก phase: ใบแจ้งหนี้
@@ -641,8 +664,11 @@ Phase 5.1-5.4 — โดยเฉพาะใบแจ้งหนี้จร�
    `OBS202675` (กรอกเอง), timesheet 2 รายการที่อ่านจาก Gmail ผ่าน ABBYY + แถว `ai_reads`, ตั๋วแจ้งปัญหา
    #2 — ผู้ใช้/ผู้รับแจ้งเตือน/ABBYY skill/โดเมนอีเมลที่สร้างระหว่างทดสอบหน้า admin ถูกลบ/คืนค่ากลับ
    หมดแล้วทุกจุดในเซสชันเดียวกัน ไม่ต้องกังวล
-2. หยุด `src/server.js` (ให้ WAL checkpoint ก่อน — ไฟล์ `.sqlite` ตอนนี้เปิดค้างอยู่จริง) แล้ว archive
-   `data/billing.sqlite` + `data/backups/` ไว้ที่ปลอดภัยนอกเครื่อง (ก่อนลบ)
+2. หยุดระบบเก่าบนเซิร์ฟเวอร์ — **สอง service ไม่ใช่หนึ่ง**:
+   `sudo systemctl stop obs.service obs-tunnel.service` แล้ว `disable` ทั้งคู่ ไม่งั้นบูตครั้งหน้ามันกลับมาเอง
+   (ถ้าหยุดแค่ `obs.service` LINE จะยังยิง webhook เข้ามาทาง tunnel แล้วเจอปลายทางตาย)
+   จากนั้นให้ WAL checkpoint แล้ว archive `/opt/obs/data/billing.sqlite` + `/opt/obs/data/backups/`
+   ไว้นอกเครื่อง (ก่อนลบ) — ไฟล์อยู่บนเซิร์ฟเวอร์ ไม่ใช่บนเครื่องที่พัฒนา
 3. **ล้าง Postgres แล้วรัน `migrate-sqlite-to-postgres.ts` ใหม่ทั้งหมด** จาก SQLite ที่หยุดแล้ว (ตอนนี้
    SQLite กลายเป็นแหล่งข้อมูลจริงที่สมบูรณ์ที่สุด เพราะเป็นระบบ production ตัวจริงจนถึงวินาทีที่หยุด)
    ยืนยัน row count ตรงกันทุกตารางเหมือน verification เดิมของสคริปต์
@@ -651,8 +677,15 @@ Phase 5.1-5.4 — โดยเฉพาะใบแจ้งหนี้จร�
    เพิ่ง reload ใหม่
 5. Pre-flight เช็ค schema drift: เทียบ `PRAGMA table_info` ของ SQLite กับ `schema.prisma` ก่อนรัน
    ข้อ 3 เผื่อมีคอลัมน์ใหม่จาก `ADDED_COLUMNS` ที่เพิ่มระหว่างทางที่สคริปต์ยังไม่รู้จัก
-6. Repoint n8n workflow (`n8n/01-obs-workflow.json`) 3 URL ให้ชี้ stack ใหม่ (หรือ swap hostname ถ้า
-   วางไว้หลัง reverse proxy เดียวกัน) — ทดสอบยิง n8n จริงหลัง repoint ก่อนประกาศ cutover เสร็จ
+6. Repoint n8n — **แก้ในหน้าเว็บ n8n ไม่ใช่ในไฟล์ repo** (ดูหมายเหตุด้านบน: workflow จริงอยู่ใน
+   `/home/ubuntu/.n8n/database.sqlite`) เปิดหน้าเว็บผ่าน tunnel เพราะ n8n ผูกกับ 127.0.0.1 เท่านั้น:
+   `ssh -i <key> -L 5679:127.0.0.1:5678 ubuntu@43.210.234.54` แล้วเปิด `http://localhost:5679`
+   - เปลี่ยน 3 URL จาก `localhost:4300` → `localhost:4301` (ระบบใหม่อยู่เครื่องเดียวกัน จึงยังใช้
+     localhost ได้ ไม่ต้องใช้ `host.docker.internal` เพราะ n8n ไม่ได้รันใน Docker)
+   - **ต้องเพิ่ม header `x-n8n-secret` ให้ตรงกับ `N8N_SHARED_SECRET` ใน `.env` ของระบบใหม่ทั้ง 3 เส้น**
+     ของเดิมไม่มี auth เลย ถ้าลืมจะได้ `401` ทุกเส้นและรอบบิลอัตโนมัติจะเงียบทั้งระบบโดยไม่มี error ให้เห็น
+   - ทดสอบยิงจริงจาก n8n (กด Execute) ให้ได้ 200 ทั้ง 3 เส้นก่อนประกาศ cutover เสร็จ
+   - แล้วค่อย export workflow ทับ `n8n/01-obs-workflow.json` แล้ว commit ให้ repo ตรงกับของจริง
 7. ตัดขาด: ลบ `src/`, `public/` (~27,500 บรรทัดรวม) ออกจาก repo, แก้ root `package.json`:
    ลบ `start`/`dev`/`seed`/`reset` script และ `pdf-to-img`/`pdfjs-dist` deps (ลบเฉพาะถ้าไม่เอา
    local-LLM path แล้วจริงๆ ตาม Phase 5.7)
