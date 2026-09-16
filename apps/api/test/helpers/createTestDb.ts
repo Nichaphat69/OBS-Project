@@ -26,7 +26,9 @@ const testUrl = new URL(source);
 testUrl.pathname = `/${testDb}`;
 
 try {
-  execFileSync('npx', ['prisma', 'db', 'execute', '--url', adminUrl.toString(), '--stdin', '--schema', SCHEMA], {
+  // `--url` กับ `--schema` ใช้ด้วยกันไม่ได้ — prisma ปฏิเสธด้วย "Only 1 must be provided" ที่นี่ต้องใช้
+  // `--url` เพราะต้องต่อเข้าฐาน `postgres` เพื่อสร้างฐานใหม่ ไม่ใช่ฐานที่ schema.prisma ชี้อยู่
+  execFileSync('npx', ['prisma', 'db', 'execute', '--url', adminUrl.toString(), '--stdin'], {
     input: `CREATE DATABASE "${testDb}"`,
     stdio: ['pipe', 'inherit', 'pipe'],
   });
