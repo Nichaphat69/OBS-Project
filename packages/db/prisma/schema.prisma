@@ -100,6 +100,7 @@ model Employee {
   supportTickets SupportTicket[]
   users          User[]
   aiReads        AiRead[]
+  submissions    TimesheetSubmission[]
 
   @@map("employees")
 }
@@ -482,4 +483,51 @@ model AbbyySkill {
   fieldMap  Json?  @map("field_map")
 
   @@map("abbyy_skills")
+}
+
+// ── บันทึกการส่ง Timesheet รายคนรายรอบ (หน้า "บันทึกการส่ง") ──────────
+// หนึ่งแถว = พนักงานหนึ่งคนในรอบบิลหนึ่งรอบ บันทึกว่าเขาตอบกลับทาง LINE ว่าจะส่งทางไหน
+//
+// **ไม่มีคอลัมน์ status โดยตั้งใจ** — สถานะที่แสดงบนหน้าจอเป็นค่าคำนวณจากของจริงเสมอ โดยแถวใน
+// `timesheets` ชนะทุกอย่าง (มีคนอัปโหลดทางอื่นแล้วหน้าจอต้องสะท้อนทันที ไม่ต้องรอใครมากด) ส่วนสิ่งที่
+// admin กดเก็บแยกไว้ที่ reviewStatus จึงไม่ถูกทับเมื่อพนักงานกดปุ่มใน LINE ใหม่อีกครั้ง
+//
+// ⚠️ `method` เก็บได้แค่ "ช่องทางการส่งจริง" 3 ค่าเท่านั้นตามที่ user กำหนด (ระบบ OBS / Email /
+// ให้ผู้ดูแลส่งแทน) — การกด "ขอเลื่อน" ไม่ใช่ช่องทางการส่ง จึงเก็บที่ deferredAt แยกต่างหาก แล้วปล่อย
+// method เป็น null ไม่งั้นคอลัมน์ "ช่องทางการส่ง" บนหน้าจอจะโกหก เหตุผลเดียวกับที่ user ย้ำว่าห้ามเอา
+// "LINE OA" ไปใส่เป็นช่องทาง เพราะ LINE คือช่องแจ้งเตือนให้เลือกวิธี ไม่ใช่วิธีส่ง
+//
+// การแยก deferredAt ออกมายังตอบอีกเรื่องที่สำคัญ: คนกดเลื่อน = **ตอบแล้ว** ต่างจากคนที่เงียบสนิท
+// ถ้าไม่แยก หน้าจอจะพูดแทนพนักงานว่า "ไม่ตอบ" ทั้งที่เขาตอบแล้ว
+//
+// replyOk ตอบคำถามว่า "พนักงานได้รับข้อความยืนยันกลับไหม" ไม่ใช่เก็บ response ดิบของ LINE (ซึ่งเก็บ
+// ไม่ได้จริงเพราะโค้ดตอบกลับเป็น fire-and-forget และเป็นส่วนที่ห้ามแก้ — ดู lineWebhookService.ts)
+model TimesheetSubmission {
+  id                 String   @id
+  employeeId         String   @map("employee_id")
+  period             String
+  contractId         String?  @map("contract_id")
+  /// self_obs | self_email | proxy_email — null = ยังไม่เคยเลือกช่องทาง (รวมถึงคนที่กดขอเลื่อน)
+  method             String?
+  methodChosenAt     String?  @map("method_chosen_at")
+  /// เวลาที่กด "ขอเลื่อน" ล่าสุด — มีค่า = ตอบแล้วแต่ยังไม่เลือกช่องทาง ต่างจากเงียบสนิท
+  deferredAt         String?  @map("deferred_at")
+  lineUserId         String?  @map("line_user_id")
+  /// ผู้ดำเนินการ — กรณี proxy_email คือคนที่ส่งแทน คนละคนกับ reviewedBy ที่กดยืนยันทีหลัง
+  actedBy            String?  @map("acted_by")
+  replyOk            Boolean? @map("reply_ok")
+  replyFailureReason String?  @map("reply_failure_reason")
+  /// confirmed | problem — เฉพาะที่ admin/แผนกบัญชีกดเท่านั้น null = ยังไม่มีใครตรวจ
+  reviewStatus       String?  @map("review_status")
+  reviewedBy         String?  @map("reviewed_by")
+  reviewedAt         String?  @map("reviewed_at")
+  note               String?
+  createdAt          String   @map("created_at")
+  updatedAt          String   @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, period])
+  @@index([period])
+  @@map("timesheet_submissions")
 }
