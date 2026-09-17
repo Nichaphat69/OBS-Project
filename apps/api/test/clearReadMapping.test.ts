@@ -88,13 +88,15 @@ test('วันทำงานปกติไม่ถูกนับเป็�
   assert.equal(d.totalWorkDays, 2);
 });
 
-test('summary.* ต้องว่างเสมอ — Clear Read อ่านช่องสรุปท้ายเอกสารไม่ได้ ห้ามเอายอดที่นับเองไปใส่แทน', () => {
+test('เอกสารไม่มีช่องสรุป — summary ต้องเป็น undefined ห้ามเอายอดที่นับเองไปใส่แทน', () => {
+  // (ตั้งแต่ V4 แม่แบบมีช่องสรุปได้แล้ว เทสนี้จึงคุมเฉพาะ "กรณีที่เอกสารไม่มี" ไม่ใช่ว่าเติมไม่ได้เลย
+  //  กรณีที่มีช่องสรุปดูเทสกลุ่ม V4 ด้านล่าง)
   const d: any = mapClearReadResult(detailWith([workRow(2), workRow(3)]));
   assert.equal(d.summary, undefined);
   assert.equal(d.totalWorkDays, 2, 'ยอดที่นับเองยังต้องอยู่ที่ totalWorkDays ตามเดิม');
   assert.ok(
     d.notes.some((n: string) => n.includes('ช่องสรุป')),
-    'ต้องมีหมายเหตุบอกผู้ใช้ว่าอ่านช่องสรุปไม่ได้',
+    'ต้องมีหมายเหตุบอกผู้ใช้ว่าไม่ได้ค่าช่องสรุปมา',
   );
 });
 
@@ -126,4 +128,76 @@ test('แปลงรอบเดือนจากภาษาไทยได�
   for (const internal of ['type', 'dayOfWeek', 'remark']) {
     assert.ok(!keys.includes(internal), `ยังไม่ควรมีคีย์ภายใน "${internal}" ที่ชั้นนี้`);
   }
+});
+
+// ── Master Template V4 ────────────────────────────────────────────
+// V4 มี CORE RULE ว่าชื่อฟิลด์ห้ามซ้ำกันทั้ง schema จึงแยก site/totalHours เป็นระดับเอกสารกับระดับแถว
+// เทสกลุ่มนี้ตรึงไว้สองอย่าง: (1) ชื่อ V4 ไปลงคีย์ที่ถูก (2) แม่แบบรุ่นเก่าที่ยังไม่อัปเดตต้องยังอ่านได้
+// ข้อ (2) สำคัญเพราะ prompt อยู่ในแม่แบบฝั่ง Clear Read เราบังคับให้อัปพร้อมกันไม่ได้
+
+function docFields(extra: Record<string, unknown>, rows: Array<Record<string, unknown>> = []) {
+  return {
+    fields: [
+      { key_field: 'Employee_Name', value: 'Somchai' },
+      { key_field: 'Month_Year', value: 'Feb 2026' },
+      ...Object.entries(extra).map(([key_field, value]) => ({ key_field, value })),
+      { key_field: 'TimesheetDetails', value: rows },
+    ],
+  };
+}
+
+test('V4: Document_Site ลงคีย์ site ระดับเอกสาร และ Approved_By_Name ลง approverName', () => {
+  const d: any = mapClearReadResult(docFields({ Document_Site: 'สำนักงานใหญ่', Approved_By_Name: 'Nichaphat' }));
+  assert.equal(d.site, 'สำนักงานใหญ่');
+  assert.equal(d.approverName, 'Nichaphat');
+});
+
+test('แม่แบบรุ่นเก่า (Site / Approver_Name) ต้องยังอ่านได้ ไม่หายเงียบๆ', () => {
+  const d: any = mapClearReadResult(docFields({ Site: 'สาขา 2', Approver_Name: 'Supranee' }));
+  assert.equal(d.site, 'สาขา 2', 'แม่แบบที่ยังไม่อัปเป็น V4 ต้องไม่ทำให้ค่าหาย');
+  assert.equal(d.approverName, 'Supranee');
+});
+
+test('V4: Daily_Site / Daily_Total_Hours ลงคีย์รายวันที่ถูก', () => {
+  const d: any = mapClearReadResult(
+    docFields({}, [{ Date: '02/02/2026', Daily_Site: 'PTT', Daily_Total_Hours: 8, Normal_Hours: 8 }]),
+  );
+  assert.equal(d.days[0].dailySite, 'PTT');
+  assert.equal(d.days[0].dailyTotalHours, 8);
+});
+
+test('แม่แบบรุ่นเก่า (Customer_site / Total_Hours) ต้องยังลงคีย์รายวันเดียวกันได้', () => {
+  const d: any = mapClearReadResult(
+    docFields({}, [{ Date: '02/02/2026', Customer_site: 'PTT', Total_Hours: 8, Normal_Hours: 8 }]),
+  );
+  assert.equal(d.days[0].dailySite, 'PTT');
+  assert.equal(d.days[0].dailyTotalHours, 8);
+});
+
+test('ช่องสรุปลง summary.* ไม่ทับค่าที่ระบบใช้ตั้งบิล', () => {
+  const d: any = mapClearReadResult(
+    docFields({ Total_Work_Days: 19, Monthly_Total_Hours: 152 }, [
+      { Date: '02/02/2026', Normal_Hours: 8 },
+      { Date: '03/02/2026', Normal_Hours: 8 },
+    ]),
+  );
+  assert.equal(d.summary.totalWorkDays, 19, 'เลขที่เอกสารพิมพ์ไว้');
+  assert.equal(d.totalWorkDays, 2, 'เลขที่ระบบนับเอง ต้องไม่ถูกช่องสรุปทับ');
+  assert.equal(d.summary.totalHours, 152, 'Monthly_Total_Hours ต้องลง summary ไม่ใช่ระดับแถว');
+});
+
+test('ค่าลารวมช่องเดียว ต้องไม่ถูกกระจายลงช่องลา/ป่วยแยก', () => {
+  const d: any = mapClearReadResult(docFields({ Total_Leave_Sick_Days: 2 }));
+  assert.equal(d.summary.totalLeaveSickDays, 2);
+  assert.equal(d.summary.totalLeaveDays, undefined, 'ห้ามเอาค่ารวมไปใส่ช่องแยก');
+  assert.equal(d.summary.totalSickDays, undefined);
+});
+
+test('อ่านช่องสรุปได้แล้ว ต้องไม่เตือนว่าอ่านไม่ได้ (เตือนตามสภาพจริง)', () => {
+  const withSummary: any = mapClearReadResult(docFields({ Total_Work_Days: 19 }));
+  assert.ok(!withSummary.notes.some((n: string) => n.includes('ไม่ได้ค่าช่องสรุป')));
+
+  const without: any = mapClearReadResult(docFields({}));
+  assert.ok(without.notes.some((n: string) => n.includes('ไม่ได้ค่าช่องสรุป')));
+  assert.equal(without.summary, undefined, 'ไม่รู้ ต้องเป็น undefined ไม่ใช่ 0');
 });

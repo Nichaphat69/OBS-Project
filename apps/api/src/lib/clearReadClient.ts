@@ -19,8 +19,10 @@ import { randomUUID } from 'node:crypto';
 import {
   TIMESHEET_DETAIL_FIELDS,
   TIMESHEET_DETAIL_LINE_ITEM,
-  TIMESHEET_HEADER_FIELDS,
+  TIMESHEET_DOCUMENT_FIELDS,
+  TIMESHEET_SUMMARY_FIELDS,
   classifyDayKind,
+  toInternalHeaderKey,
   classifyLeaveType,
   normalizeDate,
   normalizePeriod,
@@ -306,15 +308,37 @@ function jwtExpiryMs(token: string): number | null {
 
 // ── แปลงผลของ Clear Read → รูปกลางของระบบ ──────────────────────────────
 
-/** ชื่อฟิลด์ในเทมเพลต Clear Read ตรงกับ `name` ของสารบัญกลางทุกช่อง ยกเว้นช่องเดียว: ตารางรายวันของ
- * Clear Read เรียก "Customer_site" แต่สารบัญเรียก "Site" — เก็บข้อยกเว้นไว้ที่เดียวตรงนี้ */
-const DETAIL_NAME_ALIASES: Record<string, string> = { Customer_site: 'Site' };
+/**
+ * ชื่อฟิลด์ของแม่แบบรุ่นเก่า (ก่อน Master Template V4) → ชื่อตาม V4
+ *
+ * ทำไมต้องมี: prompt กับ schema อยู่ใน "แม่แบบฝั่ง Clear Read" ไม่ได้ส่งไปจาก request ของเรา (ดูหมายเหตุ
+ * หัวไฟล์) แม่แบบฝั่งเขากับสารบัญกลางฝั่งเราจึงขยับเวอร์ชันแยกกัน และจะไม่ตรงกันอยู่ช่วงหนึ่งเสมอจนกว่า
+ * จะมีคนไปอัปเดตแม่แบบ ถ้า map ตามสารบัญ V4 อย่างเดียว แม่แบบที่ยังเป็นรุ่นเก่าจะคืนชื่อเดิมมาแล้ว
+ * **ค่าหายเงียบๆ ทั้งชุด ไม่ error ไม่เตือน** — รอยต่อนี้จึงรับความต่างไว้เอง เพื่อให้สารบัญกลางเป็น V4
+ * สะอาดๆ ได้โดยไม่ต้องแบก alias ย้อนหลัง
+ *
+ * รายการนี้มาจากการอ่านแม่แบบจริงในบัญชีของ user (16 ก.ย. 69) ไม่ได้ไล่เดาจากเอกสาร — ลบออกได้เมื่อ
+ * ยืนยันแล้วว่าแม่แบบทุกตัวที่ใช้งานจริงอัปเป็น V4 หมดแล้ว
+ */
+const LEGACY_NAME_ALIASES: Record<string, string> = {
+  Approver_Name: 'Approved_By_Name',
+  Site: 'Document_Site',
+  Customer_site: 'Daily_Site',
+  Total_Hours: 'Daily_Total_Hours',
+};
 
-const HEADER_KEY_BY_NAME = new Map(TIMESHEET_HEADER_FIELDS.map((f) => [f.name, f.key]));
+/** ระดับเอกสารรวมทั้งหัวเอกสาร ช่องสรุป และลายเซ็น — V4 แยกสามหมวดแต่ Clear Read คืนมาปนกันใน
+ * `fields` ชุดเดียว จึงต้องหาจากทั้งสามหมวด */
+const DOCUMENT_KEY_BY_NAME = new Map(TIMESHEET_DOCUMENT_FIELDS.map((f) => [f.name, f.key]));
 const DETAIL_KEY_BY_NAME = new Map(TIMESHEET_DETAIL_FIELDS.map((f) => [f.name, f.key]));
+const SUMMARY_KEYS = new Set(TIMESHEET_SUMMARY_FIELDS.map((f) => f.key));
+
+function documentKeyFor(name: string): string | undefined {
+  return DOCUMENT_KEY_BY_NAME.get(LEGACY_NAME_ALIASES[name] ?? name);
+}
 
 function detailKeyFor(columnName: string): string | undefined {
-  return DETAIL_KEY_BY_NAME.get(DETAIL_NAME_ALIASES[columnName] ?? columnName);
+  return DETAIL_KEY_BY_NAME.get(LEGACY_NAME_ALIASES[columnName] ?? columnName);
 }
 
 /** คำที่ถ้าทั้งช่องเป็นคำนี้พอดี ถือว่าเป็นวันลาแน่นอน — สำเนามาจาก abbyyClient.ts's EXACT_LEAVE_WORDS
@@ -375,14 +399,27 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
   const fields: ClearReadField[] = Array.isArray(detail?.fields) ? detail.fields : [];
 
   const header: Record<string, string | null> = {};
+  const summary: Record<string, number | null> = {};
   let rawRows: any[] = [];
   for (const f of fields) {
     if (f.key_field === TIMESHEET_DETAIL_LINE_ITEM) {
       rawRows = Array.isArray(f.value) ? f.value : [];
       continue;
     }
-    const key = HEADER_KEY_BY_NAME.get(f.key_field);
-    if (key) header[key] = f.value === null || f.value === undefined ? null : String(f.value);
+    const specKey = documentKeyFor(f.key_field);
+    if (!specKey) continue;
+    // ปล่อยออกเป็น "คีย์ภายใน" ตั้งแต่ตรงนี้เลย ต่างจากคีย์รายวันที่ปล่อยเป็นชื่อสเปกได้ — เพราะ
+    // extractionService แปลงให้เฉพาะระดับรายวัน (normalizeDetailKeys) ไม่มีตัวแปลงระดับเอกสาร ถ้าปล่อย
+    // เป็นชื่อสเปกออกไป ingestService จะอ่านไม่เจอแล้วคอลัมน์เป็น null เงียบๆ — abbyyClient ก็ทำแบบนี้
+    const key = toInternalHeaderKey(specKey);
+    // ช่องสรุปท้ายเอกสารต้องลง summary.* เท่านั้น ห้ามไปทับค่าระดับบนที่ชื่อพ้องกัน — โดยเฉพาะ
+    // `totalWorkDays` ที่ระดับบนแปลว่า "ค่าที่ระบบใช้ตั้งบิล" ส่วนใน summary แปลว่า "เลขที่เอกสารพิมพ์ไว้"
+    // ถ้าปล่อยให้ทับกัน จะเทียบสองค่านี้ไม่ได้อีกเลย ซึ่งเป็นตัวจับบั๊กที่ตั้งใจสร้างไว้
+    if (SUMMARY_KEYS.has(specKey)) {
+      summary[key] = toNumber(f.value);
+      continue;
+    }
+    header[key] = f.value === null || f.value === undefined ? null : String(f.value);
   }
 
   const period = resolvePeriod(header.monthYear ?? null) ?? expectedPeriod ?? '';
@@ -429,14 +466,19 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
 
   const workDays = days.filter((d) => (d.normalHours ?? 0) > 0).length;
 
+  const hasSummary = Object.values(summary).some((v) => v !== null && v !== undefined);
+
   const notes: string[] = [];
-  // เทมเพลต Master Template ของ Clear Read ไม่มีช่องสรุปท้ายเอกสาร (Total_Work_Days/Total_Leave_Days/
-  // Total_Hours) จึงเติม summary.* ไม่ได้เลย — จงใจปล่อยว่างไว้ ไม่เอายอดที่นับจากตารางมาใส่แทน เพราะ
-  // summary.* แปลว่า "ตัวเลขที่เอกสารพิมพ์ไว้" ถ้าเอายอดที่เรานับเองไปใส่ จะเทียบสองค่านี้ไม่ได้อีกเลย
-  notes.push(
-    'Clear Read อ่านช่องสรุปท้ายเอกสารไม่ได้ (เทมเพลตยังไม่มีฟิลด์ Total_Work_Days/Total_Leave_Days/Total_Hours) — ' +
-      'จำนวนวันทำงาน/วันลาด้านล่างนับจากตารางรายวันแทน ตรวจกับช่องสรุปในเอกสารต้นฉบับก่อนยืนยัน',
-  );
+  // เตือน "อ่านช่องสรุปไม่ได้" เฉพาะตอนที่ไม่ได้ค่ามาจริงเท่านั้น ไม่ใช่เตือนทุกครั้ง — แม่แบบรุ่นก่อน V4
+  // ไม่มีช่องสรุปเลยจึงเตือนถูกเสมอ แต่ V4 มีช่องสรุป 13 ช่อง พออัปแม่แบบแล้วข้อความนี้จะกลายเป็นคำที่
+  // ไม่จริงทันที (ดูเงื่อนไข hasSummary) — ยังคงกติกาเดิมไว้: ไม่เอายอดที่นับจากตารางไปใส่ summary.*
+  // เพราะ summary.* แปลว่า "เลขที่เอกสารพิมพ์ไว้" ถ้าเอาเลขที่เรานับเองไปใส่ จะเทียบสองค่านี้ไม่ได้อีก
+  if (!hasSummary) {
+    notes.push(
+      'ไม่ได้ค่าช่องสรุปท้ายเอกสารจาก Clear Read (แม่แบบอาจยังไม่มีฟิลด์ช่องสรุป — V4 มีให้แล้ว) — ' +
+        'จำนวนวันทำงาน/วันลาด้านล่างนับจากตารางรายวันแทน ตรวจกับช่องสรุปในเอกสารต้นฉบับก่อนยืนยัน',
+    );
+  }
   if (!period) {
     notes.push('อ่านรอบเดือนจากเอกสารไม่ได้ (ช่อง Month_Year ว่างหรืออ่านไม่ออก) — ต้องเลือกรอบเดือนเอง');
   } else if (expectedPeriod && period !== expectedPeriod) {
@@ -459,8 +501,8 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
     employeeName: header.employeeName ?? '',
     position: header.position ?? '',
     period,
-    // ค่าที่ระบบใช้ตั้งบิล — Clear Read ไม่มีช่องสรุปให้เชื่อ จึงนับจากตารางรายวันเสมอ (ต่างจาก summary.*
-    // ด้านล่างที่ต้องเป็นค่าที่เอกสารพิมพ์ไว้จริงเท่านั้น)
+    // ค่าที่ระบบใช้ตั้งบิล — นับจากตารางรายวันเสมอ **แม้จะอ่านช่องสรุปมาได้แล้วก็ตาม** จงใจไม่เอาเลขช่อง
+    // สรุปมาแทน เพราะสองค่านี้มีไว้ให้เทียบกัน ถ้าเอาค่าเดียวกันมาใส่ทั้งสองที่ การเทียบก็ไร้ความหมาย
     totalWorkDays: workDays,
     totalLeaveDays: leaveDays.length,
     days,
@@ -479,5 +521,8 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
     approverName: header.approverName ?? null,
     site: header.site ?? null,
     projectTeam: header.projectTeam ?? null,
+    // มีค่าก็ต่อเมื่อแม่แบบฝั่ง Clear Read มีช่องสรุปจริง (V4 เป็นต้นไป) — ไม่มีก็ปล่อย undefined ไม่ใช่
+    // ใส่ 0 หรือใส่เลขที่นับเอง เพราะ "ไม่รู้" กับ "เอกสารบอกว่าศูนย์" คนละความหมายกันคนละผลลัพธ์
+    summary: hasSummary ? summary : undefined,
   };
 }
