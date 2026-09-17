@@ -168,6 +168,13 @@ export interface ExtractedData {
   notes?: string[];
   // เพิ่ม 16 ก.ย. 69 ตามสเปกกลาง — mapAbbyyResult() คืน vendor/clientName/projectName มาอยู่แล้วแต่
   // type กลางเดิมไม่มีที่ให้ลง เลยถูกทิ้งทั้งที่อ่านมาได้
+  //
+  // ⚠️ ตัวอ่านสามในสี่เจ้าคืนช่องนี้ในชื่อ `vendor` (ABBYY, โมเดลในเครื่อง, ป้อนด้วยมือ) มีแต่ Clear Read
+  // ที่คืนเป็น `vendorName` ตอนเพิ่มฟิลด์นี้จึงรับไว้ชื่อเดียวแล้วอ่านไม่เจอจากสามเจ้าแรก — ผลคือ
+  // `timesheets.vendor_name` เป็น null ทุกแถวตั้งแต่วันที่เพิ่มมา (ตรวจจากข้อมูลจริง 17 ก.ย. 69 พบว่า
+  // ว่างทั้ง 6 แถว ทุกเครื่องอ่าน) รับทั้งสองชื่อไว้ที่จุดรวมนี้จุดเดียว จะได้ไม่ต้องไปไล่แก้ตัวอ่านสี่ไฟล์
+  // และไม่ทำให้ข้อมูลที่ Clear Read เคยเขียนไว้เสียด้วย
+  vendor?: string | null;
   vendorName?: string | null;
   clientName?: string | null;
   projectName?: string | null;
@@ -449,7 +456,7 @@ export async function ingestTimesheet({
         reportedWorkdays: data.totalWorkDays,
         reportedLeave: data.totalLeaveDays,
         // ฟิลด์หัวเอกสารที่เหลือตามสเปกกลาง — ตัวอ่านเจ้าไหนไม่มีก็เป็น null ตามเดิม
-        vendorName: data.vendorName ?? null,
+        vendorName: data.vendorName ?? data.vendor ?? null,
         clientName: data.clientName ?? null,
         projectName: data.projectName ?? null,
         rawEmployeeId: data.employeeId ?? null,

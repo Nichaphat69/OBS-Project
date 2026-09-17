@@ -62,3 +62,26 @@ test('ชื่อที่ V4 สั่งห้าม ต้องไม่ถ
     assert.ok(!detailKeys.includes(stale), `DEFAULT_DETAIL_MAP ยังใช้คีย์เก่า "${stale}"`);
   }
 });
+
+/* ── ช่องผู้ให้บริการ: ตัวอ่านคืนคนละชื่อกัน ingest ต้องรับได้ทั้งคู่ ───────────────────────
+   เคสจริง: ABBYY/โมเดลในเครื่อง/ป้อนด้วยมือ คืน `vendor` ส่วน Clear Read คืน `vendorName`
+   ตอนเพิ่มฟิลด์นี้รับไว้ชื่อเดียว ทำให้ timesheets.vendor_name ว่างทุกแถวโดยไม่มีใครรู้ */
+
+const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+
+test('ingestService รับช่องผู้ให้บริการทั้งสองชื่อที่ตัวอ่านใช้กันอยู่', () => {
+  // เทสนี้ตรวจ "ปลายทางรับได้ครบ" ไม่ได้ตรวจว่าตัวอ่านแต่ละเจ้าใช้ชื่อไหน — การแยกสองอย่างนั้น
+  // ด้วยการอ่านซอร์สเปราะเกินไป (abbyyClient มีคำว่า vendorName อยู่ทั้งในผังตั้งค่าและในผลลัพธ์
+  // คนละความหมายกัน) ปลายทางที่รับทั้งคู่คือสิ่งที่กันไม่ให้ค่าหายจริงๆ
+  const write = read('../src/lib/ingestService.ts').match(/vendorName:\s*([^,\n]+),/);
+  assert.ok(write, 'หาบรรทัดที่เขียน vendorName ลงฐานข้อมูลไม่เจอ — ถ้าย้ายที่ ต้องแก้เทสนี้ด้วย');
+
+  const accepted = new Set([...write![1].matchAll(/data\.(vendor(?:Name)?)\b/g)].map((m) => m[1]));
+  for (const key of ['vendor', 'vendorName']) {
+    assert.ok(
+      accepted.has(key),
+      `ingestService ไม่ได้อ่าน data.${key} — ตัวอ่านที่คืนช่องนี้เป็น "${key}" จะเขียนค่าลงไม่ได้และหายเงียบๆ `
+      + `(เคยเกิดมาแล้ว: timesheets.vendor_name ว่างทุกแถวเพราะรับไว้ชื่อเดียว)`,
+    );
+  }
+});
