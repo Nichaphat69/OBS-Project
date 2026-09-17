@@ -580,6 +580,13 @@ export interface TemplateRegistryCheck {
 export interface PinnedTemplateResult {
   connected: boolean;
   templateId: string | null;
+  /** แม่แบบที่เปิดดูอยู่นี้ คือตัวที่ระบบใช้อ่านเอกสารจริงหรือไม่ (ตรงกับ CLEAR_READ_TEMPLATE_ID)
+   * คำนวณฝั่ง server เพื่อไม่ให้หน้าจอต้องเทียบ id เอง แล้วเผลอเทียบผิดฝั่ง — การเปิดดูแม่แบบตัวอื่น
+   * **ไม่ได้** เปลี่ยนตัวที่ระบบใช้อ่าน ค่านี้จึงเป็น false ได้ทั้งที่กำลังเปิดดูอยู่ ซึ่งเป็นเรื่องปกติ
+   *
+   * จงใจใช้คำว่า "pinned" ไม่ใช่ "active" เพราะระบบนี้มีคำว่า active อยู่แล้วกับ "เครื่องอ่านที่เปิดใช้"
+   * (ACTIVE_READER_SETTING) ถ้าเอามาใช้กับแม่แบบด้วยจะชนกันจนแยกไม่ออกว่าหมายถึงอะไร */
+  isPinned: boolean;
   /** ข้อความบอกสาเหตุเมื่อต่อไม่ได้ — หน้าเว็บต้องแสดงสถานะนี้แทนที่จะพัง */
   error?: string;
   template?: ClearReadTemplate;
@@ -659,11 +666,14 @@ export async function describePinnedTemplate(
   const cached = templateCache.get(key);
   if (!force && cached && Date.now() - cached.at < TEMPLATE_CACHE_TTL_MS) return cached.value;
 
+  const isPinned = Boolean(templateId) && templateId === (process.env.CLEAR_READ_TEMPLATE_ID ?? null);
+
   let value: PinnedTemplateResult;
   if (!hasClearReadCredentials() || !templateId) {
     value = {
       connected: false,
       templateId,
+      isPinned,
       error: !templateId
         ? 'ยังไม่ได้ระบุแม่แบบที่จะใช้ — ตั้ง CLEAR_READ_TEMPLATE_ID ใน .env'
         : 'ยังไม่ได้ตั้งค่าการเชื่อมต่อ Clear Read — ดู CLEAR_READ_* ใน .env',
@@ -673,10 +683,10 @@ export async function describePinnedTemplate(
       const client = new ClearReadClient();
       const template = await client.getTemplate(templateId);
       value = template
-        ? { connected: true, templateId, template, registry: compareWithRegistry(template) }
-        : { connected: false, templateId, error: `ไม่พบแม่แบบ ${templateId} ในโปรเจกต์นี้ — ตรวจ CLEAR_READ_TEMPLATE_ID` };
+        ? { connected: true, templateId, isPinned, template, registry: compareWithRegistry(template) }
+        : { connected: false, templateId, isPinned, error: `ไม่พบแม่แบบ ${templateId} ในโปรเจกต์นี้ — ตรวจ CLEAR_READ_TEMPLATE_ID` };
     } catch (error: any) {
-      value = { connected: false, templateId, error: error?.message ?? 'เชื่อมต่อ Clear Read ไม่สำเร็จ' };
+      value = { connected: false, templateId, isPinned, error: error?.message ?? 'เชื่อมต่อ Clear Read ไม่สำเร็จ' };
     }
   }
 
