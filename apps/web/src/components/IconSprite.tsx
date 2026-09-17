@@ -156,6 +156,15 @@ export default function IconSprite() {
         <rect x="2.5" y="4.5" width="19" height="15" rx="2" />
         <path d="m3 6.5 9 6 9-6" />
       </symbol>
+      {/* สองอันล่างไม่ได้มาจากสไปรต์เดิมของแอปเก่า — เพิ่มใหม่ตอนทำช่องค้นหา/แถวพับได้ในสารบัญฟิลด์
+          วาดด้วยเส้นระยะเดียวกับที่เหลือ จะได้ไม่ดูหลุดชุด */}
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="m16 16 4.5 4.5" />
+      </symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24">
+        <path d="m7 10 5 5 5-5" />
+      </symbol>
     </svg>
   );
 }

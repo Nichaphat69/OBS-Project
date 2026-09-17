@@ -220,46 +220,93 @@ const TX: Record<string, string> = {
 
   // ── upload/UploadFileTab.tsx — เลือกตัวอ่านเฉพาะครั้งนี้ ──
   อ่านด้วย: 'Read with',
-  ค่าปกติ: 'default',
-  'เฉพาะการอ่านครั้งนี้ ไม่เปลี่ยนค่าของทั้งระบบ': 'This read only — the system-wide setting is unchanged',
+  'Skill ที่ใช้อ่าน': 'Skill to read with',
+  'ตาม Skill ที่ผูกกับสัญญานี้': "Use this contract's Skill",
+  'Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า ไฟล์หลายหน้าอาจถึงสิบนาที':
+    'Clear Read is far slower than ABBYY — around 3 minutes per page, and up to ten for a multi-page file.',
 
   // ── readers/ReadersClient.tsx ──
+  'ตั้งค่า Skill ของ ABBYY และแม่แบบของ Clear Read — เลือกว่าจะอ่านไฟล์ด้วยตัวไหนทำที่หน้าอัปโหลด Timesheet ตอนอ่านแต่ละครั้ง':
+    "Configure ABBYY's Skills and Clear Read's templates here. Choosing which one reads a file happens on the upload screen, per read.",
+  พร้อมใช้งาน: 'Ready to use',
+  ข้อควรรู้: 'Worth knowing',
+  'หน้านี้ใช้ตั้งค่าอย่างเดียว การเลือกว่าจะอ่านไฟล์ด้วยตัวไหนทำที่หน้าอัปโหลด Timesheet ตอนอ่านแต่ละครั้ง':
+    'This page is for configuration only — which engine reads a file is chosen on the upload screen, per read.',
+  'ตัวที่ยังตั้งค่าไม่ครบจะเลือกตอนอ่านไม่ได้ ต้องตั้งค่าที่หน้านี้ให้ครบก่อน':
+    'An engine that is not fully configured cannot be picked at read time — finish setting it up here first.',
   'ตัวอ่าน Timesheet': 'Timesheet reader',
-  'เลือกว่าจะให้ระบบใช้เครื่องมือไหนอ่านไฟล์ Timesheet ที่อัปโหลดเข้ามา เปลี่ยนได้ตลอด มีผลกับไฟล์ที่อ่านหลังจากนี้ ไม่กระทบใบที่อ่านไปแล้ว':
-    'Choose which engine reads uploaded Timesheet files. You can change this at any time; it affects files read from now on and does not change anything already read.',
   'อ่านด้วย Skill ที่เทรนไว้ต่อฟอร์มลูกค้า': 'Reads using a Skill trained per customer form',
   'อ่านด้วยแม่แบบฟิลด์ พร้อมตาราง TimesheetDetails': 'Reads using a field template with a TimesheetDetails table',
-  กำลังใช้งาน: 'In use',
-  เปลี่ยนมาใช้ตัวนี้: 'Switch to this one',
-  'กำลังเปลี่ยน…': 'Switching…',
   ยังตั้งค่าไม่ครบ: 'Not fully configured',
-  'เปลี่ยนตัวอ่าน Timesheet?': 'Switch the Timesheet reader?',
-  ไฟล์ที่อัปโหลดหลังจากนี้จะถูกอ่านด้วย: 'Files uploaded from now on will be read by',
-  ใบที่อ่านไปแล้วไม่เปลี่ยนตาม: 'documents already read are unaffected',
-  เปลี่ยนตัวอ่านไม่สำเร็จ: 'Could not switch reader',
-  เปลี่ยนมาใช้: 'Switched to',
-  แล้ว: '',
-  ตอนนี้ระบบใช้: 'The system is currently using',
-  'ไม่ใช่ทั้ง ABBYY และ Clear Read — มักเกิดจากตัวที่ตั้งไว้ยังตั้งค่าไม่ครบ ระบบจึงถอยมาใช้ตัวสำรอง กดเลือกตัวที่ต้องการด้านล่างเพื่อกลับไปใช้':
-    'neither ABBYY nor Clear Read — usually because the chosen one is not fully configured, so the system fell back. Pick the one you want below to go back to it.',
   'ช้ากว่า ABBYY มาก (หลักนาทีต่อหน้า)': 'Much slower than ABBYY (minutes per page)',
   'Skill ของ ABBYY': 'ABBYY Skills',
   'จัดการ Skill': 'Manage Skills',
   การจับคู่ฟิลด์: 'Field mapping',
   ใช้ค่าเริ่มต้น: 'Using defaults',
   'แม่แบบของ Clear Read': 'Clear Read templates',
-  ยังเลือกแม่แบบจากหน้านี้ไม่ได้: 'Templates cannot be chosen from this page yet',
-  'ฝั่งระบบหลังบ้านกำลังทำส่วนดึงรายการแม่แบบจาก Clear Read อยู่ เมื่อเสร็จแล้วหน้านี้จะจัดการได้เหมือนฝั่ง ABBYY — เลือกแม่แบบต่อสัญญา และจับคู่ฟิลด์ด้วยสารบัญฟิลด์กลางชุดเดียวกัน':
-    'The backend work to list Clear Read templates is in progress. Once it lands, this panel will work like the ABBYY side — choose a template per contract and map fields using the same central field registry.',
-  'ระหว่างนี้สลับมาใช้ Clear Read ได้ แต่จะอ่านด้วยค่าเริ่มต้น ยังกำหนดแม่แบบต่อสัญญาไม่ได้':
-    'You can switch to Clear Read in the meantime, but it will read with defaults — per-contract templates are not selectable yet.',
-  ข้อควรรู้ก่อนเปลี่ยน: 'Before you switch',
   'Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า และถึงสิบนาทีกว่าถ้าไฟล์หลายหน้า ส่วน ABBYY ใช้เวลาไม่กี่วินาที':
     'Clear Read is far slower than ABBYY — around 3 minutes for a single page and over ten for a multi-page file, where ABBYY takes seconds.',
-  'การเปลี่ยนมีผลกับไฟล์ที่อัปโหลดหลังจากนี้เท่านั้น ใบที่อ่านไปแล้วยังใช้ผลเดิม':
-    'Switching only affects files uploaded from now on; documents already read keep their existing result.',
-  'ตัวที่ยังตั้งค่าไม่ครบจะเลือกไม่ได้ ระบบจะถอยไปใช้ตัวสำรองให้เองถ้าตัวที่ตั้งไว้ใช้งานไม่ได้':
-    'An engine that is not fully configured cannot be selected, and the system falls back automatically if the chosen one becomes unusable.',
+
+  // ── components/ClearReadFieldCatalog.tsx ──
+  ระดับเอกสาร: 'Document level',
+  'หนึ่งค่าต่อหนึ่งใบ Timesheet — หัวเอกสาร ช่องสรุป และลายเซ็น':
+    'One value per Timesheet — header, summary boxes and signatures.',
+  ตารางรายวัน: 'Daily table',
+  'หนึ่งแถวต่อหนึ่งวันที่มีการลงเวลา — คนละระดับกับด้านบน แม้ชื่อฟิลด์จะคล้ายกัน':
+    'One row per logged day — a different level from the group above, even where the field names look alike.',
+  'ค้นหาชื่อช่อง หรือข้อความในคำอธิบาย': 'Search field names or description text',
+  ค้นหาฟิลด์: 'Search fields',
+  แม่แบบที่เปิดดู: 'Viewing template',
+  ใช้ตัวนี้อ่านจริง: 'Read with this one',
+  'กำลังเปลี่ยน…': 'Switching…',
+  'เปลี่ยนแม่แบบที่ใช้อ่านได้เฉพาะ admin': 'Only an admin can change which template reads files',
+  'เปลี่ยนแม่แบบที่ใช้อ่านจริง?': 'Change the template files are read with?',
+  'แม่แบบนี้อ่าน Timesheet ไม่ได้ ยืนยันหรือไม่?': 'This template cannot read Timesheets — are you sure?',
+  ไฟล์ที่อ่านหลังจากนี้จะใช้: 'Files read from now on will use',
+  ใบที่อ่านไปแล้วไม่เปลี่ยนตาม: 'documents already read are unaffected',
+  'แม่แบบนี้ไม่มีคอลัมน์รายวันเลย จะอ่านไม่ได้ทั้งวันลาและ OT และไม่มีข้อมูลพอจะตั้งบิล':
+    'This template has no daily columns at all — no leave days, no overtime, and nothing to bill from.',
+  เปลี่ยน: 'Change',
+  เปลี่ยนแม่แบบไม่สำเร็จ: 'Could not change the template',
+  ตอนนี้ระบบอ่านด้วยแม่แบบ: 'The system now reads with',
+  มีตารางรายวัน: 'Has a daily table',
+  'ไม่มีตารางรายวัน — ใช้กับ Timesheet ไม่ได้': 'No daily table — cannot be used for Timesheets',
+  ตัวที่ระบบใช้อ่าน: 'the one the system reads with',
+  แม่แบบนี้อ่านตารางรายวันไม่ได้: 'This template cannot read a daily table',
+  'ไม่มีคอลัมน์รายวันเลย ถ้าเอามาอ่าน Timesheet จะไม่ได้วันลา ไม่ได้ OT และไม่มีข้อมูลพอจะตั้งบิล — เปิดดูฟิลด์ได้ตามปกติ แต่คนละงานกับ Timesheet':
+    'It has no daily columns at all. Used on a Timesheet it would yield no leave days, no overtime, and nothing to bill from — you can still browse its fields, but it is built for a different job.',
+  'กำลังเปิดดูเฉยๆ ยังไม่ได้เปลี่ยนแม่แบบที่ใช้อ่านจริง ระบบยังอ่านด้วย':
+    'Viewing only — this has not changed which template actually reads files. The system still reads with',
+  ขยายทั้งหมด: 'Expand all',
+  ย่อทั้งหมด: 'Collapse all',
+  ไม่พบฟิลด์ที่ตรงกับคำค้น: 'No field matches',
+  ช่อง: 'fields',
+  ช่องระดับเอกสาร: 'document fields',
+  คอลัมน์รายวัน: 'daily columns',
+  ดึงใหม่: 'Refresh',
+  ค่าเริ่มต้น: 'Default',
+  รหัสแม่แบบ: 'Template ID',
+  โหลดรายการฟิลด์ไม่สำเร็จ: 'Could not load the field list',
+  ลองอีกครั้ง: 'Try again',
+  'ต่อกับ Clear Read ไม่ได้ตอนนี้': 'Cannot reach Clear Read right now',
+  ไม่ทราบสาเหตุ: 'Reason unknown',
+  เทียบกับสารบัญฟิลด์กลาง: 'Checked against the central field registry',
+  'แม่แบบตรงตามสเปกครบทุกช่อง ไม่มีชื่อที่เลิกใช้ ไม่มีช่องที่ระบบอ่านไม่ได้':
+    'The template matches the spec on every field — no retired names, and nothing the system cannot read.',
+  ระบบอ่านค่าจากช่องเหล่านี้ไม่ได้: 'The system cannot read these fields',
+  'ตั้งไว้ในแม่แบบแล้ว แต่ระบบไม่รู้จักชื่อนี้ ข้อมูลจึงไม่ไหลเข้ามา':
+    'They exist in the template, but the system does not recognise the name, so the values never arrive.',
+  'ชื่อที่ V4 เลิกใช้แล้ว': 'Names V4 has retired',
+  'สเปกห้ามใช้ชื่อซ้ำข้ามระดับ จึงแยกเป็นชื่อใหม่แทน':
+    'The spec forbids reusing one name across levels, so each level got its own name.',
+  สเปกมีแต่แม่แบบยังไม่มี: 'In the spec but not in the template',
+  'ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มลูกค้าไม่มีช่องนี้จริงก็ไม่ต้องมี':
+    'Not necessarily a problem — if the customer form genuinely has no such box, it does not need one.',
+  ระบบอ่านไม่ได้: 'Unreadable',
+  ชื่อที่เลิกใช้: 'Retired name',
+  ใช้แทนด้วย: 'Use instead:',
+  'ช่องนี้ไม่มีคำอธิบายในแม่แบบ — เครื่องอ่านจะเดาจากชื่อช่องอย่างเดียว':
+    'This field has no description in the template — the reader has only the field name to go on.',
 
   // ── components/TimesheetFieldMapEditor.tsx ──
   จับคู่ชื่อฟิลด์กับเอกสารของลูกค้า: "Match field names to the customer's document",
@@ -403,6 +450,9 @@ const TX: Record<string, string> = {
   รายการคำนวณ: 'Calculation',
 
   // ── manday/page.tsx ──
+  กำลังดูข้ามทุกบริษัท: 'Viewing across all companies',
+  กำลังดูเฉพาะ: 'Viewing only',
+  บริษัทที่กำลังดำเนินการอยู่: 'the company currently being worked on',
   ต้องตรวจ: 'Needs review',
   ยืนยันแล้ว: 'Verified',
   ยืนยันไม่สำเร็จ: 'Verify failed',
@@ -812,7 +862,6 @@ const TX: Record<string, string> = {
   วันสิ้นสุด: 'End date',
 
   // ── master/CustomersContractsTab.tsx ──
-  'เว้นว่าง = ใช้ Skill กลาง': 'Leave blank = use the shared skill',
   ทำรายการไม่สำเร็จ: 'Action failed',
   'เชื่อมต่อ FlowAccount?': 'Connect FlowAccount?',
   'ปิดการเชื่อมต่อ FlowAccount?': 'Disconnect FlowAccount?',
@@ -869,12 +918,8 @@ const TX: Record<string, string> = {
   วันสิ้นสุดสัญญา: 'Contract end date',
   'หัก ณ ที่จ่าย (%)': 'Withholding tax (%)',
   'พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"': 'Employees/pay rates for this customer can be added later from the "Employees & aliases" tab',
-  'การอ่าน Timesheet ด้วย ABBYY': 'Reading timesheets with ABBYY',
-  'ABBYY Skill เฉพาะบริษัทนี้': 'Company-specific ABBYY skill',
   บันทึกลูกค้าใหม่: 'Save new customer',
   ข้อมูลสัญญา: 'Contract details',
-  'ถ้าลูกค้ารายนี้มี Timesheet คนละแบบฟอร์ม เทรน Skill แยกใน ABBYY Vantage แล้วใส่ Skill ID ไว้ที่นี่ — ตอนอัปโหลด Timesheet ระบบจะเลือกใช้ Skill นี้ให้เองตามบริษัทที่กำลังดำเนินการอยู่ ไม่ต้องเลือกอะไรเพิ่ม เว้นว่างไว้ถ้ายังไม่มี Skill เฉพาะ ระบบจะใช้ Skill กลางแทน':
-    'If this customer’s timesheets use a different form, train a separate skill in ABBYY Vantage and put its Skill ID here — the system will automatically use this skill based on the currently active company when uploading timesheets, no extra selection needed. Leave blank if there’s no dedicated skill yet; the system will use the shared skill instead.',
 
   // ── companies/page.tsx, companies/[contractId]/page.tsx ──
   รายละเอียดบริษัท: 'Company details',

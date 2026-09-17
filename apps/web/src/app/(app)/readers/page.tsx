@@ -18,5 +18,7 @@ export default async function ReadersPage() {
     );
   }
 
-  return <ReadersClient />;
+  // เปลี่ยนแม่แบบที่ใช้อ่านจริงเป็น admin เท่านั้น (แคบกว่าสิทธิ์เข้าหน้านี้) — ส่งลงไปเพื่อ "ไม่ยื่นปุ่มให้"
+  // ตั้งแต่แรก ดีกว่าให้กดแล้วเจอ 403 ส่วนการบังคับจริงอยู่ฝั่ง API ไม่ใช่ที่นี่
+  return <ReadersClient canSwitchTemplate={user.role === 'admin'} />;
 }
