@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
-import { describePinnedTemplate } from '../lib/clearReadClient.js';
+import { describePinnedTemplate, listTemplateSummaries } from '../lib/clearReadClient.js';
 import { settingsSnapshot, setFlowAccountConnected, listReaders, setActiveReader, SettingsError } from '../lib/settingsService.js';
 
 export const settingsRouter = Router();
@@ -31,12 +31,24 @@ settingsRouter.get('/readers', async (_req, res) => {
  * ต่อไม่ได้จะคืน `connected: false` พร้อมเหตุผล ไม่ใช่ error เพื่อให้หน้าตั้งค่ายังเปิดได้ตามปกติ
  */
 settingsRouter.get('/clear-read/template', async (req, res) => {
-  // รับทั้งแบบมีพารามิเตอร์เฉยๆ (?refresh) และแบบใส่ค่า แต่ `?refresh=0` / `?refresh=false` ต้องแปลว่า
-  // "ไม่ต้องดึงใหม่" ตามที่ชื่อพารามิเตอร์สื่อ — เดิมเช็คแค่ว่ามีพารามิเตอร์ไหม ทำให้ใส่ 0 แล้วยังดึงใหม่
-  const raw = req.query.refresh;
-  const force = raw !== undefined && raw !== '0' && raw !== 'false';
-  res.json(await describePinnedTemplate({ force }));
+  const templateId = typeof req.query.id === 'string' && req.query.id ? req.query.id : null;
+  res.json(await describePinnedTemplate({ force: wantsRefresh(req.query.refresh), templateId }));
 });
+
+/** รายการแม่แบบทั้งหมดในโปรเจกต์ สำหรับ dropdown — คืนแบบย่อ (ไม่มีคำอธิบายรายฟิลด์) เพราะ 13 แม่แบบ
+ * รวมกันหนักเกินจำเป็น กดเลือกแล้วค่อยดึงตัวเต็มจาก /clear-read/template?id=
+ *
+ * `detailColumnCount` ส่งมาเสมอเพราะแม่แบบที่เป็น 0 อ่านตารางรายวันไม่ได้เลย (มีหลายตัวในบัญชีนี้ที่เป็น
+ * แม่แบบใบกำกับภาษี/บัตรประชาชน ไม่ใช่ Timesheet) หน้าจอต้องเตือนหรือปิดไม่ให้เลือกได้
+ */
+settingsRouter.get('/clear-read/templates', async (req, res) => {
+  res.json(await listTemplateSummaries({ force: wantsRefresh(req.query.refresh) }));
+});
+
+/** `?refresh` แบบไม่ใส่ค่า = ดึงใหม่ แต่ `?refresh=0` / `=false` ต้องแปลว่าไม่ดึงใหม่ตามที่ชื่อสื่อ */
+function wantsRefresh(raw: unknown): boolean {
+  return raw !== undefined && raw !== '0' && raw !== 'false';
+}
 
 /** สลับเครื่องอ่านทั้งระบบ — admin/แผนกบัญชีเท่านั้น มีผลกับไฟล์ที่อ่านหลังจากนี้ */
 settingsRouter.patch('/readers/active', requireAdmin, async (req, res) => {

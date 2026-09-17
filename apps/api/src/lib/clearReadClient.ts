@@ -586,9 +586,33 @@ export interface PinnedTemplateResult {
   registry?: TemplateRegistryCheck;
 }
 
-/** Clear Read ช้าและคิดเครดิตต่อการเรียก จึง cache ไว้ — หน้าตั้งค่าเปิดบ่อยกว่าที่แม่แบบเปลี่ยนมาก */
+/** Clear Read ช้าและคิดเครดิตต่อการเรียก จึง cache ไว้ — หน้าตั้งค่าเปิดบ่อยกว่าที่แม่แบบเปลี่ยนมาก
+ * เก็บเป็น Map ต่อแม่แบบ ไม่ใช่ช่องเดียว เพราะหน้าจอมี dropdown ให้กดสลับดูหลายตัว ถ้าใช้ช่องเดียว
+ * การกดสลับไปมาจะล้าง cache ของตัวก่อนหน้าทุกครั้งแล้วยิงใหม่ทั้งหมด */
 const TEMPLATE_CACHE_TTL_MS = 5 * 60 * 1000;
-let templateCache: { key: string; at: number; value: PinnedTemplateResult } | null = null;
+const templateCache = new Map<string, { at: number; value: PinnedTemplateResult }>();
+let listCache: { key: string; at: number; value: TemplateListResult } | null = null;
+
+/** รายการแม่แบบแบบย่อสำหรับ dropdown — ไม่ส่งคำอธิบายรายฟิลด์มาด้วยเพราะ 13 แม่แบบรวมกันหนักเกินจำเป็น
+ * (กดเลือกแล้วค่อยดึงตัวเต็มทีละตัว) แต่ส่ง `detailColumnCount` มาเสมอ เพราะแม่แบบที่เป็น 0 อ่านตาราง
+ * รายวันไม่ได้เลย — ถ้าเผลอเอาไปอ่าน Timesheet จะได้ผลที่ไม่มีตารางโดยไม่มีอะไรเตือน */
+export interface ClearReadTemplateSummary {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  version: number | null;
+  fieldCount: number;
+  detailColumnCount: number;
+  /** ตัวที่ระบบใช้อ่านจริงอยู่ตอนนี้ (ตรงกับ CLEAR_READ_TEMPLATE_ID) — ไม่ใช่ "ตัวที่กำลังเปิดดู" */
+  pinned: boolean;
+}
+
+export interface TemplateListResult {
+  connected: boolean;
+  pinnedTemplateId: string | null;
+  error?: string;
+  templates: ClearReadTemplateSummary[];
+}
 
 function compareWithRegistry(template: ClearReadTemplate): TemplateRegistryCheck {
   const docNames = new Set(template.fields.map((f) => f.name));
@@ -624,13 +648,16 @@ function compareWithRegistry(template: ClearReadTemplate): TemplateRegistryCheck
  *
  * ต่อไม่ได้ก็คืน `connected: false` พร้อมเหตุผล ไม่ throw — หน้าตั้งค่าต้องเปิดได้เสมอแม้ Clear Read ล่ม
  */
-export async function describePinnedTemplate({ force = false }: { force?: boolean } = {}): Promise<PinnedTemplateResult> {
-  const templateId = process.env.CLEAR_READ_TEMPLATE_ID ?? null;
+export async function describePinnedTemplate(
+  { force = false, templateId: requested }: { force?: boolean; templateId?: string | null } = {},
+): Promise<PinnedTemplateResult> {
+  // ไม่ระบุ id = ดูตัวที่ระบบใช้อ่านจริงอยู่ (พฤติกรรมเดิม ห้ามเปลี่ยน) ระบุมา = ดูตัวนั้นเพื่อเลือกจาก
+  // dropdown — การ "ดู" ไม่ได้เปลี่ยนตัวที่ใช้อ่านจริง ตัวที่ใช้อ่านยังมาจาก CLEAR_READ_TEMPLATE_ID เสมอ
+  const templateId = requested || process.env.CLEAR_READ_TEMPLATE_ID || null;
   const key = `${process.env.CLEAR_READ_PROJECT_ID ?? ''}:${templateId ?? ''}`;
 
-  if (!force && templateCache && templateCache.key === key && Date.now() - templateCache.at < TEMPLATE_CACHE_TTL_MS) {
-    return templateCache.value;
-  }
+  const cached = templateCache.get(key);
+  if (!force && cached && Date.now() - cached.at < TEMPLATE_CACHE_TTL_MS) return cached.value;
 
   let value: PinnedTemplateResult;
   if (!hasClearReadCredentials() || !templateId) {
@@ -653,6 +680,59 @@ export async function describePinnedTemplate({ force = false }: { force?: boolea
     }
   }
 
-  templateCache = { key, at: Date.now(), value };
+  templateCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+/**
+ * รายการแม่แบบทั้งหมดในโปรเจกต์ สำหรับ dropdown ให้เลือกดู — **อ่านอย่างเดียวเหมือนกัน**
+ *
+ * การเลือกในหน้าจอคือการ "เลือกดูฟิลด์ของแม่แบบนั้น" ไม่ใช่การเปลี่ยนแม่แบบที่ระบบใช้อ่านจริง
+ * (ตัวที่ใช้อ่านยังมาจาก CLEAR_READ_TEMPLATE_ID อย่างเดียว — user สั่งไว้ว่า "ใช้อันนี้เท่านั้น")
+ * `active` ในแต่ละรายการบอกว่าตัวไหนคือตัวที่ใช้อ่านจริง หน้าจอจะได้แยกออกจากตัวที่แค่เปิดดู
+ */
+export async function listTemplateSummaries({ force = false }: { force?: boolean } = {}): Promise<TemplateListResult> {
+  const pinnedTemplateId = process.env.CLEAR_READ_TEMPLATE_ID ?? null;
+  const key = `${process.env.CLEAR_READ_PROJECT_ID ?? ''}:${pinnedTemplateId ?? ''}`;
+
+  if (!force && listCache && listCache.key === key && Date.now() - listCache.at < TEMPLATE_CACHE_TTL_MS) {
+    return listCache.value;
+  }
+
+  let value: TemplateListResult;
+  if (!hasClearReadCredentials()) {
+    value = {
+      connected: false,
+      pinnedTemplateId,
+      templates: [],
+      error: 'ยังไม่ได้ตั้งค่าการเชื่อมต่อ Clear Read — ดู CLEAR_READ_* ใน .env',
+    };
+  } else {
+    try {
+      const templates = await new ClearReadClient().listTemplates();
+      value = {
+        connected: true,
+        pinnedTemplateId,
+        templates: templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          isDefault: t.isDefault,
+          version: t.version,
+          fieldCount: t.fields.length,
+          detailColumnCount: t.detailColumns.length,
+          pinned: t.id === pinnedTemplateId,
+        })),
+      };
+    } catch (error: any) {
+      value = {
+        connected: false,
+        pinnedTemplateId,
+        templates: [],
+        error: error?.message ?? 'ดึงรายการแม่แบบจาก Clear Read ไม่สำเร็จ',
+      };
+    }
+  }
+
+  listCache = { key, at: Date.now(), value };
   return value;
 }
