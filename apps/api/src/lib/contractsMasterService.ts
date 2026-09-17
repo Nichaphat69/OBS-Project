@@ -300,27 +300,33 @@ export interface UpdateContractInput {
 }
 
 /** ported from service.js updateContract() — แก้ทั้ง customers + contracts ในคราวเดียว (ฟอร์มเดียว
- * กับตอน "เพิ่มลูกค้าใหม่" ที่สร้างทั้งคู่พร้อมกันอยู่แล้ว) */
-export async function updateContract({
-  contractId,
-  poNo,
-  contractNo = null,
-  projectName,
-  startDate,
-  endDate,
-  creditDays = 30,
-  divisorMode = 'fixed',
-  divisorValue = 20,
-  vatRate = 0.07,
-  whtRate = 0.03,
-  customerNameTh,
-  taxId,
-  contactName = null,
-  contactPhone = null,
-  billingPlace = null,
-  abbyySkillId = null,
-  actor,
-}: UpdateContractInput): Promise<ContractSummary | undefined> {
+ * กับตอน "เพิ่มลูกค้าใหม่" ที่สร้างทั้งคู่พร้อมกันอยู่แล้ว)
+ *
+ * ⚠️ `abbyySkillId` ต่างจากฟิลด์อื่นในฟังก์ชันนี้ — **ไม่ส่งคีย์นี้มา = ไม่แตะค่าเดิม** ไม่ใช่ "ล้างเป็น
+ * null" ตั้งใจแยกสองสถานะนี้ออกจากกันเพราะหน้าเว็บถอดช่องเลือก Skill ออกจากฟอร์มแก้สัญญาแล้ว (17 ก.ย.
+ * 69) ถ้าใช้ค่า default เป็น null แบบฟิลด์อื่น ค่าที่ตั้งไว้จะถูกล้างทิ้งเงียบๆ ตอนมีคนกดแก้สัญญาครั้ง
+ * ถัดไป — และเส้น Gmail ที่ดึงไฟล์เข้ามาเองยังใช้ค่านี้เป็นค่าตั้งต้นอยู่ จะกลายเป็นอ่านด้วย Skill ผิดตัว
+ * โดยไม่มีอะไรเตือน ส่ง `abbyySkillId: null` มาตรงๆ ยังล้างได้ตามปกติถ้าตั้งใจ */
+export async function updateContract(input: UpdateContractInput): Promise<ContractSummary | undefined> {
+  const {
+    contractId,
+    poNo,
+    contractNo = null,
+    projectName,
+    startDate,
+    endDate,
+    creditDays = 30,
+    divisorMode = 'fixed',
+    divisorValue = 20,
+    vatRate = 0.07,
+    whtRate = 0.03,
+    customerNameTh,
+    taxId,
+    contactName = null,
+    contactPhone = null,
+    billingPlace = null,
+    actor,
+  } = input;
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) throw new ContractMasterError('ไม่พบสัญญานี้', 404);
   if (!poNo || !projectName || !startDate || !endDate) {
@@ -348,7 +354,8 @@ export async function updateContract({
         divisorValue: Number(divisorValue) || 20,
         vatRate: Number(vatRate),
         whtRate: Number(whtRate),
-        abbyySkillId: abbyySkillId?.trim() || null,
+        // มีคีย์มา = ตั้งค่าตามนั้น (null = ล้าง) / ไม่มีคีย์ = ไม่ใส่ลง data เลย ค่าเดิมจึงอยู่ครบ
+        ...('abbyySkillId' in input ? { abbyySkillId: input.abbyySkillId?.trim() || null } : {}),
       },
     }),
   ]);
