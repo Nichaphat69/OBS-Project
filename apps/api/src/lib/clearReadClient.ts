@@ -24,6 +24,7 @@ import {
   TIMESHEET_PROMPT_VERSION,
   FORBIDDEN_FIELD_NAMES,
   classifyDayKind,
+  isWorkedRow,
   toInternalHeaderKey,
   classifyLeaveType,
   normalizeDate,
@@ -508,7 +509,10 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
     .filter((d) => (d.otHours ?? 0) > 0)
     .map((d) => ({ date: d.date as string, hours: Number(d.otHours) }));
 
-  const workDays = days.filter((d) => (d.normalHours ?? 0) > 0).length;
+  // "มาทำงานกี่วัน" ใช้ isWorkedRow() ตัวกลางจาก @obs/domain เพื่อให้ตัวอ่านทุกเจ้าตัดสินเหมือนกัน —
+  // ฟอร์มหลายเจ้า (T8/TSG/ThaiLife) ไม่มีคอลัมน์ชั่วโมงเลย มีแค่เวลาเข้า-ออก ถ้านับจากชั่วโมงอย่างเดียว
+  // จะได้ 0 วันทั้งใบทั้งที่เอกสารบอกชัดว่ามาทำงาน — แถวที่เป็นวันลาไม่นับเป็นวันทำงานแม้จะมีเวลาเข้า-ออก
+  const workDays = days.filter((d) => !isLeaveRow(d) && isWorkedRow(d)).length;
 
   const hasSummary = Object.values(summary).some((v) => v !== null && v !== undefined);
 
