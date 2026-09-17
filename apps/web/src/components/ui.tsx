@@ -202,3 +202,39 @@ export function ComingSoon({ title, eyebrow }: { title: string; eyebrow: string 
     </>
   );
 }
+
+/** ป้ายบอกว่า Timesheet ใบนี้อ่านมาด้วยอะไร — ค่าที่เก็บไว้ใน `extraction.model` มีรูปแบบ
+ * `<engine>[:<skill/template>][ · คนยืนยัน]` เช่น "abbyy", "abbyy:Timesheet · คนยืนยัน",
+ * "local:google/gemma-4-e4b (ชั้นข้อความ)", "manual"
+ *
+ * โชว์ชื่อเครื่องอ่านเป็นตัวหลัก ส่วน skill/template id ยาวๆ ซ่อนไว้ใน tooltip — คนที่ดูใบวางบิล
+ * อยากรู้ว่า "เจ้าไหนอ่าน" ส่วน id เอาไว้ตอนไล่ปัญหา ไม่ใช่ข้อมูลที่ต้องอ่านทุกครั้ง */
+const READ_ENGINE_LABEL: Record<string, string> = {
+  abbyy: 'ABBYY',
+  'clear-read': 'Clear Read',
+  local: 'โมเดลในเครื่อง',
+  'local-llm': 'โมเดลในเครื่อง',
+  manual: 'ป้อนด้วยมือ',
+};
+
+export function parseReadModel(model?: string | null) {
+  if (!model) return null;
+  const humanConfirmed = model.includes(' · คนยืนยัน');
+  const base = model.replace(' · คนยืนยัน', '').trim();
+  const sep = base.indexOf(':');
+  const engine = sep >= 0 ? base.slice(0, sep) : base;
+  const detail = sep >= 0 ? base.slice(sep + 1).trim() : null;
+  return { engine, detail, humanConfirmed, label: READ_ENGINE_LABEL[engine] ?? engine };
+}
+
+export function ReadModelTag({ model }: { model?: string | null }) {
+  const parsed = parseReadModel(model);
+  if (!parsed) return null;
+  return (
+    <span className="readmodel" title={parsed.detail ? `${parsed.label} · ${parsed.detail}` : parsed.label}>
+      <span className={`rm-dot ${parsed.engine}`} />
+      {parsed.label}
+      {parsed.detail && <span className="rm-id">{parsed.detail}</span>}
+    </span>
+  );
+}

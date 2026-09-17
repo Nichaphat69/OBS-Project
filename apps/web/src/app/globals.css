@@ -3243,3 +3243,40 @@ button.file:hover {
   color: var(--wn);
   flex-basis: 100%;
 }
+
+/* ═══ ป้ายบอกว่าใบนี้อ่านมาด้วยเครื่องอ่านตัวไหน ═══
+   จุดสีใช้สีประจำตัวอ่านชุดเดียวกับหน้า "ตัวอ่าน Timesheet" จะได้จำได้ว่าแดงคือ ABBYY เขียวคือ
+   Clear Read โดยไม่ต้องอ่านตัวหนังสือซ้ำ */
+.readmodel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  background: var(--hov);
+  border: 1px solid var(--rule);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.readmodel .rm-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--mut);
+}
+.readmodel .rm-dot.abbyy { background: var(--ab); }
+.readmodel .rm-dot.clear-read { background: var(--cr-g); }
+.readmodel .rm-dot.local,
+.readmodel .rm-dot.local-llm { background: var(--pr); }
+.readmodel .rm-dot.manual { background: var(--fnt); }
+/* id ของ skill/template ยาวได้มาก — ตัดด้วย ellipsis ไม่ให้ดันแถวจนเสียรูป ตัวเต็มอยู่ใน tooltip */
+.readmodel .rm-id {
+  font-weight: 400;
+  color: var(--mut);
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { PageHeader, PoTag, StatusPill } from '../../../../components/ui';
+import { PageHeader, PoTag, ReadModelTag, StatusPill } from '../../../../components/ui';
 import { Icon } from '../../../../components/Icon';
 import { usePdfPreview } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
@@ -247,6 +247,12 @@ export default function ManadyDetailPage() {
           </h1>
           <p>
             {sheet.contract.customerName} · {tx('โครงการ')} {sheet.contract.projectName} · <PoTag>{sheet.contract.poNo}</PoTag> · {tx('สัญญา')} {sheet.contract.contractNo ?? '—'}
+            {sheet.extraction?.model && (
+              <>
+                {' '}
+                <ReadModelTag model={sheet.extraction.model} />
+              </>
+            )}
           </p>
         </div>
         <div className="acts">
@@ -380,6 +386,8 @@ export default function ManadyDetailPage() {
                   <dd>{sheet.contract.customerName}</dd>
                   <dt>{tx('เลขผู้เสียภาษี')}</dt>
                   <dd className="n">{sheet.contractDetail.taxId ?? '—'}</dd>
+                  <dt>{tx('อ่านด้วย')}</dt>
+                  <dd>{sheet.extraction?.model ? <ReadModelTag model={sheet.extraction.model} /> : '—'}</dd>
                   <dt>{tx('ใบว่าจ้าง')}</dt>
                   <dd className="n"><PoTag>{sheet.contract.poNo}</PoTag></dd>
                   <dt>{tx('สัญญา')}</dt>
