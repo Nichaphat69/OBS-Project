@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { PageHeader, ReadModelTag, StatusPill, Tag, useReadModelNameMap } from '../../../components/ui';
+import { PageHeader, ReadModelTag, StatusPill, Tag } from '../../../components/ui';
+import { useReadModelNameMap } from '../../../components/readModelNames';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 

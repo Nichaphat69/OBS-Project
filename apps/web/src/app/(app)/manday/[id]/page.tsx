@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { PageHeader, PoTag, ReadModelTag, StatusPill, useReadModelNameMap } from '../../../../components/ui';
+import { PageHeader, PoTag, ReadModelTag, StatusPill } from '../../../../components/ui';
+import { useReadModelNameMap } from '../../../../components/readModelNames';
 import { Icon } from '../../../../components/Icon';
 import { usePdfPreview } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
