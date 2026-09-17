@@ -21,6 +21,8 @@ import {
   TIMESHEET_DETAIL_LINE_ITEM,
   TIMESHEET_DOCUMENT_FIELDS,
   TIMESHEET_SUMMARY_FIELDS,
+  TIMESHEET_PROMPT_VERSION,
+  FORBIDDEN_FIELD_NAMES,
   classifyDayKind,
   toInternalHeaderKey,
   classifyLeaveType,
@@ -64,18 +66,31 @@ export interface ClearReadField {
   value: unknown;
 }
 
-/** เทมเพลตหนึ่งตัวในรูปที่หน้าเลือกเทมเพลตใช้ได้เลย — ตัดส่วนที่ไม่ได้ใช้ (bbox/validations/timestamps)
- * ออกตั้งแต่ชั้นนี้ เพราะ schema_json ดิบมีคำอธิบายฟิลด์ยาวมากต่อช่อง (ส่งให้เครื่องอ่านใช้ตัดสินใจ) */
+/**
+ * ฟิลด์หนึ่งช่องในแม่แบบ พร้อม **คำอธิบาย**
+ *
+ * ⚠️ `description` ไม่ใช่คอมเมนต์ประกอบ — มันคือข้อความที่สั่งเครื่องอ่านจริงๆ ว่าช่องไหนในเอกสารคือ
+ * ฟิลด์นี้ (prompt อยู่ในแม่แบบฝั่ง Clear Read ไม่ได้ส่งไปจาก request ของเรา) แก้ข้อความนี้ = เปลี่ยน
+ * พฤติกรรมการอ่าน จึงต้องแสดงให้ผู้ใช้เห็นได้ ก่อนหน้านี้ที่นี่ตัดทิ้งเพราะคิดว่าเป็นแค่คำอธิบายยาวๆ
+ * ซึ่งเข้าใจผิด (17 ก.ย. 69 — user ขอให้หน้าตั้งค่าแสดงคำอธิบายให้เหมือนที่เห็นใน Clear Read)
+ */
+export interface ClearReadTemplateField {
+  name: string;
+  description: string | null;
+  type: string | null;
+}
+
+/** เทมเพลตหนึ่งตัวในรูปที่หน้าตั้งค่าใช้ได้เลย — ตัดเฉพาะส่วนที่ไม่ได้ใช้จริง (bbox/validations/timestamps) */
 export interface ClearReadTemplate {
   id: string;
   name: string;
   isDefault: boolean;
   description: string | null;
   version: number | null;
-  /** ชื่อฟิลด์ระดับหัวเอกสารที่เทมเพลตนี้อ่าน */
-  fields: string[];
-  /** คอลัมน์ในตารางรายวัน (ว่างถ้าเทมเพลตนั้นไม่มี line item) */
-  detailColumns: string[];
+  /** ฟิลด์ระดับเอกสารที่แม่แบบนี้อ่าน พร้อมคำอธิบายของแต่ละช่อง */
+  fields: ClearReadTemplateField[];
+  /** คอลัมน์ในตารางรายวัน พร้อมคำอธิบาย (ว่างถ้าแม่แบบนั้นไม่มี line item) */
+  detailColumns: ClearReadTemplateField[];
 }
 
 function toTemplateSummary(tpl: any, isDefault: boolean): ClearReadTemplate {
@@ -97,8 +112,16 @@ function toTemplateSummary(tpl: any, isDefault: boolean): ClearReadTemplate {
     isDefault,
     description: tpl.description ? String(tpl.description) : null,
     version: typeof tpl.version === 'number' ? tpl.version : null,
-    fields: specs.filter((f) => f?.type !== 'object_list').map((f) => String(f?.name)),
-    detailColumns: columns.map((c) => String(c?.name)),
+    fields: specs.filter((f) => f?.type !== 'object_list').map(toField),
+    detailColumns: columns.map(toField),
+  };
+}
+
+function toField(f: any): ClearReadTemplateField {
+  return {
+    name: String(f?.name ?? ''),
+    description: f?.description ? String(f.description) : null,
+    type: f?.type ? String(f.type) : null,
   };
 }
 
@@ -268,6 +291,17 @@ export class ClearReadClient {
       }
     }
     return out;
+  }
+
+  /** แม่แบบตัวเดียวพร้อม schema เต็ม (รวมคำอธิบายรายฟิลด์) — คืน null ถ้าไม่มีแม่แบบนั้นในโปรเจกต์ */
+  async getTemplate(templateId: string): Promise<ClearReadTemplate | null> {
+    this.assertConfigured();
+    const body = await this.post('/inquiry/template', {
+      json: { project_id: this.projectId, template_id: templateId },
+    });
+    const tpl = body?.data?.template ?? body?.data;
+    if (!tpl?.template_id) return null;
+    return toTemplateSummary(tpl, Boolean(tpl.default_template));
   }
 
   async fetchDetail(documentId: string): Promise<any> {
@@ -525,4 +559,100 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
     // ใส่ 0 หรือใส่เลขที่นับเอง เพราะ "ไม่รู้" กับ "เอกสารบอกว่าศูนย์" คนละความหมายกันคนละผลลัพธ์
     summary: hasSummary ? summary : undefined,
   };
+}
+
+// ── แม่แบบที่ปักไว้ใช้ตัวเดียว + เทียบกับสารบัญกลาง ─────────────────────
+
+/** ผลเทียบแม่แบบฝั่ง Clear Read กับสารบัญกลาง — ตอบคำถามว่า "แม่แบบอัปเป็น V4 แล้วหรือยัง" */
+export interface TemplateRegistryCheck {
+  /** เวอร์ชันสเปกที่ฝั่งเราคาดหวัง */
+  promptVersion: string;
+  /** ฟิลด์ที่สเปกมีแต่แม่แบบยังไม่มี — ยิ่งเยอะยิ่งแปลว่าแม่แบบตามไม่ทัน */
+  documentMissing: string[];
+  detailMissing: string[];
+  /** ชื่อที่ V4 ห้ามใช้แล้วแต่ยังเจอในแม่แบบ พร้อมชื่อที่ควรใช้แทน (ดู FORBIDDEN_FIELD_NAMES) */
+  forbidden: Array<{ name: string; useInstead: string }>;
+  /** ชื่อในแม่แบบที่ไม่รู้จักในสเปกเลย — ฝั่งเราจะอ่านค่าเหล่านี้ไม่ได้ แยกตามระดับเพื่อให้แก้ถูกจุด */
+  unknownDocument: string[];
+  unknownDetail: string[];
+}
+
+export interface PinnedTemplateResult {
+  connected: boolean;
+  templateId: string | null;
+  /** ข้อความบอกสาเหตุเมื่อต่อไม่ได้ — หน้าเว็บต้องแสดงสถานะนี้แทนที่จะพัง */
+  error?: string;
+  template?: ClearReadTemplate;
+  registry?: TemplateRegistryCheck;
+}
+
+/** Clear Read ช้าและคิดเครดิตต่อการเรียก จึง cache ไว้ — หน้าตั้งค่าเปิดบ่อยกว่าที่แม่แบบเปลี่ยนมาก */
+const TEMPLATE_CACHE_TTL_MS = 5 * 60 * 1000;
+let templateCache: { key: string; at: number; value: PinnedTemplateResult } | null = null;
+
+function compareWithRegistry(template: ClearReadTemplate): TemplateRegistryCheck {
+  const docNames = new Set(template.fields.map((f) => f.name));
+  const detailNames = new Set(template.detailColumns.map((f) => f.name));
+
+  const specDoc = TIMESHEET_DOCUMENT_FIELDS.map((f) => f.name);
+  const specDetail = TIMESHEET_DETAIL_FIELDS.map((f) => f.name);
+
+  const forbidden: Array<{ name: string; useInstead: string }> = [];
+  for (const [name, useInstead] of Object.entries(FORBIDDEN_FIELD_NAMES)) {
+    if (docNames.has(name) || detailNames.has(name)) forbidden.push({ name, useInstead });
+  }
+
+  // ชื่อที่ไม่รู้จัก = ฝั่งเราอ่านค่าไม่ได้เลย ยกเว้นตัวที่ LEGACY_NAME_ALIASES รับไว้ให้แล้ว
+  const known = (name: string, spec: string[]) =>
+    spec.includes(name) || spec.includes(LEGACY_NAME_ALIASES[name] ?? '');
+  return {
+    promptVersion: TIMESHEET_PROMPT_VERSION,
+    documentMissing: specDoc.filter((n) => !docNames.has(n)),
+    detailMissing: specDetail.filter((n) => !detailNames.has(n)),
+    forbidden,
+    unknownDocument: template.fields.map((f) => f.name).filter((n) => n && !known(n, specDoc)),
+    unknownDetail: template.detailColumns.map((f) => f.name).filter((n) => n && !known(n, specDetail)),
+  };
+}
+
+/**
+ * แม่แบบที่ระบบปักไว้ใช้ตัวเดียว (CLEAR_READ_TEMPLATE_ID) พร้อมคำอธิบายทุกฟิลด์ และผลเทียบกับสารบัญกลาง
+ *
+ * **อ่านอย่างเดียว** — ไม่เรียก /update/template หรือ /create/template เด็ดขาด ถ้าพบว่าแม่แบบยังไม่ตรง
+ * V4 จะรายงานผ่าน `registry` ให้คนตัดสินใจ ไม่ใช่ไปแก้ให้ (user อนุญาตให้เชื่อมต่อและระบุแม่แบบมา
+ * แต่ไม่ได้อนุญาตให้เขียนทับแม่แบบของเขา)
+ *
+ * ต่อไม่ได้ก็คืน `connected: false` พร้อมเหตุผล ไม่ throw — หน้าตั้งค่าต้องเปิดได้เสมอแม้ Clear Read ล่ม
+ */
+export async function describePinnedTemplate({ force = false }: { force?: boolean } = {}): Promise<PinnedTemplateResult> {
+  const templateId = process.env.CLEAR_READ_TEMPLATE_ID ?? null;
+  const key = `${process.env.CLEAR_READ_PROJECT_ID ?? ''}:${templateId ?? ''}`;
+
+  if (!force && templateCache && templateCache.key === key && Date.now() - templateCache.at < TEMPLATE_CACHE_TTL_MS) {
+    return templateCache.value;
+  }
+
+  let value: PinnedTemplateResult;
+  if (!hasClearReadCredentials() || !templateId) {
+    value = {
+      connected: false,
+      templateId,
+      error: !templateId
+        ? 'ยังไม่ได้ระบุแม่แบบที่จะใช้ — ตั้ง CLEAR_READ_TEMPLATE_ID ใน .env'
+        : 'ยังไม่ได้ตั้งค่าการเชื่อมต่อ Clear Read — ดู CLEAR_READ_* ใน .env',
+    };
+  } else {
+    try {
+      const client = new ClearReadClient();
+      const template = await client.getTemplate(templateId);
+      value = template
+        ? { connected: true, templateId, template, registry: compareWithRegistry(template) }
+        : { connected: false, templateId, error: `ไม่พบแม่แบบ ${templateId} ในโปรเจกต์นี้ — ตรวจ CLEAR_READ_TEMPLATE_ID` };
+    } catch (error: any) {
+      value = { connected: false, templateId, error: error?.message ?? 'เชื่อมต่อ Clear Read ไม่สำเร็จ' };
+    }
+  }
+
+  templateCache = { key, at: Date.now(), value };
+  return value;
 }

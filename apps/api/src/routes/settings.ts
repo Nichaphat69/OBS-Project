@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
+import { describePinnedTemplate } from '../lib/clearReadClient.js';
 import { settingsSnapshot, setFlowAccountConnected, listReaders, setActiveReader, SettingsError } from '../lib/settingsService.js';
 
 export const settingsRouter = Router();
@@ -17,6 +18,20 @@ settingsRouter.get('/', async (_req, res) => {
  * เปิดให้ทุก role ที่ล็อกอินอ่านได้ (แค่ดูว่าระบบใช้ตัวไหน ไม่ใช่ความลับ) */
 settingsRouter.get('/readers', async (_req, res) => {
   res.json({ readers: await listReaders() });
+});
+
+/**
+ * แม่แบบ Clear Read ที่ระบบปักไว้ใช้ตัวเดียว พร้อม **คำอธิบายรายฟิลด์** (คือ prompt ที่สั่งเครื่องอ่านจริง
+ * ดู clearReadClient.ts) และผลเทียบกับสารบัญฟิลด์กลาง ว่าแม่แบบฝั่งเขาตามสเปกทันหรือยัง
+ *
+ * เปิดให้ทุก role ที่ล็อกอินอ่านได้เหมือน /readers — เป็นการตั้งค่าที่ดูได้ ไม่ใช่ความลับ
+ * **อ่านอย่างเดียว** ไม่มีเส้นทางเขียนกลับไปที่แม่แบบของ user จากที่นี่โดยตั้งใจ
+ *
+ * ผลถูก cache ไว้ฝั่ง service (Clear Read ช้าและคิดเครดิตต่อการเรียก) — ส่ง ?refresh=1 เพื่อดึงใหม่
+ * ต่อไม่ได้จะคืน `connected: false` พร้อมเหตุผล ไม่ใช่ error เพื่อให้หน้าตั้งค่ายังเปิดได้ตามปกติ
+ */
+settingsRouter.get('/clear-read/template', async (req, res) => {
+  res.json(await describePinnedTemplate({ force: req.query.refresh !== undefined }));
 });
 
 /** สลับเครื่องอ่านทั้งระบบ — admin/แผนกบัญชีเท่านั้น มีผลกับไฟล์ที่อ่านหลังจากนี้ */
