@@ -746,3 +746,162 @@ export async function listTemplateSummaries({ force = false }: { force?: boolean
   listCache = { key, at: Date.now(), value };
   return value;
 }
+
+// ── แผนปรับแม่แบบให้ตรงสเปก V4 (คำนวณอย่างเดียว ยังไม่เขียน) ──────────
+
+/** ชื่อเดิมในแม่แบบของ user → ชื่อตาม V4 ที่ควรเปลี่ยนไปใช้ ที่มาจากสเปก V4 ส่วน "Renamed / Merged"
+ * ไม่ได้เดาเอง — ตัวที่แปลงตรงๆ ได้เท่านั้น ตัวที่ต้องตัดสินใจแยกค่าดู MANUAL_REVIEW ด้านล่าง */
+const V4_RENAMES: Record<string, { to: string; level: 'document' | 'detail' }> = {
+  Site: { to: 'Document_Site', level: 'document' },
+  Customer_Site: { to: 'Document_Site', level: 'document' },
+  Total_Base_Duration: { to: 'Total_Normal_Hours', level: 'document' },
+  Place: { to: 'Daily_Site', level: 'detail' },
+  Adjust: { to: 'Total_OT_Adjust', level: 'detail' },
+  Adjustment_Value: { to: 'Total_OT_Adjust', level: 'detail' },
+};
+
+/** ชื่อที่ "แปลงอัตโนมัติไม่ได้" เพราะหนึ่งช่องเดิมอาจต้องแตกเป็นหลายช่อง — ต้องให้คนตัดสิน ห้ามเดาแทน */
+const MANUAL_REVIEW: Record<string, string> = {
+  Working_Time:
+    'ค่าเดิมอาจเป็นช่วงเวลา (ต้องแตกเป็น Time_In + Time_Out) หรือเป็นจำนวนชั่วโมง (Daily_Total_Hours) ' +
+    'หรือเป็นยอดรวมทั้งงวด (Monthly_Total_Hours) — ระบบเดาแทนไม่ได้ ต้องดูเอกสารจริงก่อน',
+};
+
+export interface TemplateUpgradeChange {
+  level: 'document' | 'detail';
+  name: string;
+  /** ชื่อใหม่ (เฉพาะรายการที่เป็นการเปลี่ยนชื่อ) */
+  to?: string;
+  /** ข้อความ prompt ที่จะใส่ให้ช่องนี้ (มาจากสารบัญกลาง) */
+  description?: string;
+  reason: string;
+}
+
+export interface TemplateUpgradePlan {
+  connected: boolean;
+  templateId: string | null;
+  templateName?: string;
+  error?: string;
+  /** ช่องที่สเปกมีแต่แม่แบบยังไม่มี — จะถูกเพิ่มเข้าไป */
+  add: TemplateUpgradeChange[];
+  /** ช่องที่ต้องเปลี่ยนชื่อให้ตรง V4 (ข้อมูลเดิมไม่หาย แค่เปลี่ยนชื่อกับคำอธิบาย) */
+  rename: TemplateUpgradeChange[];
+  /** ช่องที่ระบบตัดสินแทนไม่ได้ ต้องให้คนดูเอง — จะไม่ถูกแตะเลย */
+  manual: TemplateUpgradeChange[];
+  /** ช่องในแม่แบบที่ไม่อยู่ในสเปกและไม่มีกฎแปลง — คงไว้ตามเดิม ไม่ลบทิ้ง */
+  keep: string[];
+  /** จำนวนช่องที่ตรงสเปกอยู่แล้ว ไม่ต้องแตะ */
+  unchangedCount: number;
+}
+
+/**
+ * คำนวณว่า "ถ้าจะปรับแม่แบบให้ตรง V4 ต้องเปลี่ยนอะไรบ้าง" — **ไม่เขียนอะไรทั้งสิ้น**
+ *
+ * มีไว้ให้หน้าจอแสดงก่อนกดยืนยัน ตามหลักว่าการอนุญาตให้ระบบแก้แม่แบบได้ ไม่ได้แปลว่าแก้เมื่อไหร่ก็ได้
+ * โดยไม่บอกว่าจะแก้อะไร — คนกดต้องเห็นรายการเปลี่ยนแปลงทั้งหมดก่อนเสมอ
+ *
+ * หลักการที่ยึด: **เพิ่มกับเปลี่ยนชื่อเท่านั้น ไม่ลบช่องใดทิ้งเลย** ช่องที่ไม่รู้จักและไม่มีกฎแปลงจะคงไว้
+ * ตามเดิม (ดู `keep`) เพราะมันคือช่องที่ user ตั้งใจใส่ไว้เอง เราไม่มีสิทธิ์ตัดสินว่าไม่จำเป็น
+ */
+export async function planTemplateUpgrade(templateId?: string | null): Promise<TemplateUpgradePlan> {
+  const current = await describePinnedTemplate({ templateId: templateId ?? null, force: true });
+  if (!current.connected || !current.template) {
+    return {
+      connected: false,
+      templateId: current.templateId,
+      error: current.error,
+      add: [], rename: [], manual: [], keep: [], unchangedCount: 0,
+    };
+  }
+
+  const tpl = current.template;
+  const docNames = new Set(tpl.fields.map((f) => f.name));
+  const detailNames = new Set(tpl.detailColumns.map((f) => f.name));
+
+  const add: TemplateUpgradeChange[] = [];
+  const rename: TemplateUpgradeChange[] = [];
+  const manual: TemplateUpgradeChange[] = [];
+  const keep: string[] = [];
+
+  for (const [from, rule] of Object.entries(V4_RENAMES)) {
+    const present = rule.level === 'document' ? docNames.has(from) : detailNames.has(from);
+    if (!present) continue;
+    const spec = [...TIMESHEET_DOCUMENT_FIELDS, ...TIMESHEET_DETAIL_FIELDS].find((f) => f.name === rule.to);
+    rename.push({
+      level: rule.level,
+      name: from,
+      to: rule.to,
+      description: spec?.description,
+      reason: `V4 เลิกใช้ชื่อ "${from}" แล้ว — ต้องเป็น "${rule.to}"`,
+    });
+  }
+
+  for (const [name, why] of Object.entries(MANUAL_REVIEW)) {
+    if (docNames.has(name)) manual.push({ level: 'document', name, reason: why });
+    if (detailNames.has(name)) manual.push({ level: 'detail', name, reason: why });
+  }
+
+  // ⚠️ ด่านกันทำลายแม่แบบ — ตรวจก่อนเสมอว่าการเปลี่ยนชื่อชุดนี้ทำได้จริงไหม เจอปัญหาให้ย้ายไปให้คน
+  // ตัดสินแทนที่จะฝืนทำ (พบจริงตอนรันกับแม่แบบของ user: Site กับ Customer_Site จะกลายเป็นชื่อเดียวกัน
+  // และ Adjust/Adjustment_Value ที่เป็นคอลัมน์รายวันจะถูกเปลี่ยนเป็นชื่อฟิลด์ระดับเอกสาร ซึ่งผิดระดับ)
+  const targetCount = new Map<string, number>();
+  for (const r of rename) targetCount.set(r.to!, (targetCount.get(r.to!) ?? 0) + 1);
+
+  const safeRenames: TemplateUpgradeChange[] = [];
+  for (const r of rename) {
+    const specLevel = TIMESHEET_DETAIL_FIELDS.some((f) => f.name === r.to) ? 'detail' : 'document';
+    if ((targetCount.get(r.to!) ?? 0) > 1) {
+      manual.push({
+        ...r,
+        reason: `มีมากกว่าหนึ่งช่องที่จะถูกเปลี่ยนเป็น "${r.to}" — ถ้าเปลี่ยนทั้งคู่จะได้ชื่อซ้ำกัน ` +
+          'ซึ่ง V4 ห้าม และข้อมูลช่องหนึ่งจะหาย ต้องเลือกเองว่าช่องไหนคือตัวจริง อีกช่องจะเอาไปเป็นอะไร',
+      });
+      continue;
+    }
+    if (specLevel !== r.level) {
+      manual.push({
+        ...r,
+        reason: `"${r.name}" อยู่ระดับ${r.level === 'detail' ? 'รายวัน' : 'เอกสาร'} แต่ "${r.to}" ในสเปกเป็นช่องระดับ` +
+          `${specLevel === 'detail' ? 'รายวัน' : 'เอกสาร'} — ย้ายข้ามระดับให้อัตโนมัติไม่ได้ ต้องตัดสินเอง`,
+      });
+      continue;
+    }
+    const existsAlready = r.level === 'document' ? docNames.has(r.to!) : detailNames.has(r.to!);
+    if (existsAlready) {
+      manual.push({
+        ...r,
+        reason: `แม่แบบมีช่อง "${r.to}" อยู่แล้ว การเปลี่ยนชื่อจะทับของเดิม — ต้องเลือกเองว่าจะเก็บช่องไหน`,
+      });
+      continue;
+    }
+    safeRenames.push(r);
+  }
+  rename.length = 0;
+  rename.push(...safeRenames);
+
+  const renamedTo = new Set(rename.map((r) => r.to!));
+  for (const spec of TIMESHEET_DOCUMENT_FIELDS) {
+    if (docNames.has(spec.name) || renamedTo.has(spec.name)) continue;
+    add.push({ level: 'document', name: spec.name, description: spec.description, reason: 'สเปก V4 มีช่องนี้แต่แม่แบบยังไม่มี' });
+  }
+  for (const spec of TIMESHEET_DETAIL_FIELDS) {
+    if (detailNames.has(spec.name) || renamedTo.has(spec.name)) continue;
+    add.push({ level: 'detail', name: spec.name, description: spec.description, reason: 'สเปก V4 มีช่องนี้แต่แม่แบบยังไม่มี' });
+  }
+
+  const handled = new Set([...Object.keys(V4_RENAMES), ...Object.keys(MANUAL_REVIEW)]);
+  const specNames = new Set([...TIMESHEET_DOCUMENT_FIELDS, ...TIMESHEET_DETAIL_FIELDS].map((f) => f.name));
+  for (const f of [...tpl.fields, ...tpl.detailColumns]) {
+    if (!f.name || specNames.has(f.name) || handled.has(f.name)) continue;
+    keep.push(f.name);
+  }
+
+  const unchangedCount = [...tpl.fields, ...tpl.detailColumns].filter((f) => specNames.has(f.name)).length;
+
+  return {
+    connected: true,
+    templateId: current.templateId,
+    templateName: tpl.name,
+    add, rename, manual, keep, unchangedCount,
+  };
+}
