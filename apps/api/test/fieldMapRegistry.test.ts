@@ -167,3 +167,17 @@ test('เวลาพักที่เขียนไว้มากกว่�
   ]), { tableName: 'ตาราง', detail: { date: 'วันที่', timeIn: 'เข้า', timeOut: 'ออก', breakHours: 'พัก' } });
   assert.equal(data.days[0].normalHours, 0);
 });
+
+/* ── ยอดตั๋วค้างบนแถบเมนู ต้องผูกขอบเขตที่เซิร์ฟเวอร์ ไม่ใช่ซ่อนที่หน้าจอ ──────────────────
+   เดิมนับทั้งบริษัทแล้วส่งให้ทุก role — ไม่มีใครเห็นเพราะเมนูเปิดให้ admin เท่านั้น
+   แต่ "ไม่มีใครเห็น" ไม่เท่ากับ "ไม่มีใครเข้าถึงได้" ใครยิง /api/pulse ตรงๆ ก็ได้ตัวเลขนี้ */
+
+test('pulse นับตั๋วค้างแยกตาม role — role user ต้องไม่ได้ยอดรวมทั้งบริษัท', () => {
+  const src = read('../src/lib/pulseService.ts');
+  const block = src.slice(src.indexOf('const openTicketCount'), src.indexOf('const feed'));
+
+  assert.match(block, /role !== 'user'/, 'ต้องแยกเคส role user ออกจาก role อื่น');
+  assert.match(block, /status: 'open', employeeId \}/, "role user ต้องกรองด้วย employeeId ของตัวเอง");
+  // บัญชี user ที่ยังไม่ผูกพนักงาน ต้องได้ 0 ไม่ใช่ตกไปนับทั้งบริษัท
+  assert.match(block, /:\s*0;/, 'user ที่ยังไม่ผูกพนักงานต้องได้ 0 ไม่ใช่ยอดรวม');
+});
