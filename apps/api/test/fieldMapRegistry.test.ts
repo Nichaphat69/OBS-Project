@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { headerField, detailField } from '@obs/domain';
+import { mapAbbyyResult } from '../src/lib/abbyyClient.js';
 
 const SRC = fileURLToPath(new URL('../src/lib/abbyyClient.ts', import.meta.url));
 
@@ -38,6 +39,15 @@ function mapKeys(source: string, marker: string): string[] {
 }
 
 const source = readFileSync(SRC, 'utf8');
+
+/** ผลลัพธ์ปลอมรูปเดียวกับที่ ABBYY คืนมาจริง — รูปเดียวกับที่ abbyyClient.test.ts ใช้ */
+function docFields(fields: Array<{ Name: string; Value: unknown }>) {
+  return {
+    Transaction: { Documents: [{ ExtractedData: { RootObject: {
+      Fields: fields.map((f) => ({ Name: f.Name, List: [{ Value: f.Value }] })),
+    } } }] },
+  };
+}
 
 test('DEFAULT_HEADER_MAP ของ ABBYY อ้างคีย์ระดับเอกสารที่มีอยู่จริงทุกตัว', () => {
   const keys = mapKeys(source, 'DEFAULT_HEADER_MAP');
@@ -84,4 +94,76 @@ test('ingestService รับช่องผู้ให้บริการท
       + `(เคยเกิดมาแล้ว: timesheets.vendor_name ว่างทุกแถวเพราะรับไว้ชื่อเดียว)`,
     );
   }
+});
+
+/* ── ชั่วโมงที่คำนวณจากเวลาเข้า-ออก ต้องหักเวลาพักที่เอกสารเขียนไว้ ──────────────────────
+   เดิมอ่านช่องพักมาเก็บแต่ไม่เคยใช้ตอนคำนวณ ทำให้ฟอร์มที่เขียนพักไว้ถูกนับชั่วโมงเกินจริง
+   สำคัญที่สุดกับ OT เพราะชั่วโมง OT คูณเป็นเงินตรงๆ (ชั่วโมง ÷ 8 × เรทต่อวัน) */
+
+test('ชั่วโมงที่คำนวณจากเวลาเข้า-ออก หักเวลาพักที่เอกสารเขียนไว้ ทั้งงานปกติและ OT', () => {
+  // เข้า 08:00 ออก 18:00 = 10 ชม. พัก 1 → 9 · OT 19:00-22:00 = 3 ชม. พัก OT 0.5 → 2.5
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'ตาราง', Value: { Fields: [
+      { Name: 'วันที่', List: [{ Value: '06/05/26' }] },
+      { Name: 'เข้า', List: [{ Value: '08:00' }] },
+      { Name: 'ออก', List: [{ Value: '18:00' }] },
+      { Name: 'พัก', List: [{ Value: '1' }] },
+      { Name: 'OT เข้า', List: [{ Value: '19:00' }] },
+      { Name: 'OT ออก', List: [{ Value: '22:00' }] },
+      { Name: 'พัก OT', List: [{ Value: '0.5' }] },
+    ] } },
+  ]), {
+    tableName: 'ตาราง',
+    detail: {
+      date: 'วันที่', timeIn: 'เข้า', timeOut: 'ออก', breakHours: 'พัก',
+      otTimeIn: 'OT เข้า', otTimeOut: 'OT ออก', otBreakHours: 'พัก OT',
+    },
+  });
+
+  const d = data.days[0];
+  assert.equal(d.normalHours, 9, '10 ชม. หักพัก 1 = 9 (เดิมได้ 10 เพราะไม่เคยหักพัก)');
+  assert.equal(d.otHours, 2.5, '3 ชม. หักพัก OT 0.5 = 2.5 — ตัวนี้คูณเป็นเงินตรงๆ');
+  // ⚠️ ความไม่ตรงกันที่มีอยู่จริงในระบบ ไม่ใช่เทสเขียนผิด — บันทึกไว้ให้เห็นชัดจนกว่าเจ้าของระบบจะตัดสิน
+  //
+  // `days[].otHours` (ตัวที่โชว์บนหน้าจอ) = คอลัมน์ ?? คำนวณจากเวลา OT เข้า-ออก
+  // `otDays`        (ตัวที่กลายเป็นเงิน)  = คอลัมน์ **อย่างเดียว** ไม่มี fallback
+  //
+  // ผลคือฟอร์มที่เขียนเวลา OT เข้า-ออกไว้แต่ไม่มีคอลัมน์ชั่วโมง OT (เจอจริง: _T8 Chakrit)
+  // จะ **โชว์ OT บนหน้าตรวจ Manday แต่ไม่มีบรรทัด OT ในใบแจ้งหนี้เลย** — เก็บเงินขาด ไม่ใช่เกิน
+  // และคนตรวจเห็นตัวเลขไม่ตรงกันสองหน้าจอโดยไม่มีอะไรอธิบาย
+  //
+  // แก้ให้ตรงกันได้ทางเดียวคือเพิ่ม/ลดเงิน ซึ่งเป็นการตัดสินใจของเจ้าของระบบ ไม่ใช่ของโค้ด
+  assert.equal(data.days[0].otHours, 2.5, 'หน้าจอเห็น OT ที่คำนวณแล้ว');
+  assert.deepEqual(data.otDays, [], 'แต่ยอดที่ไปคิดเงินยังว่าง เพราะอ่านจากคอลัมน์อย่างเดียว');
+});
+
+test('เอกสารเขียนชั่วโมงมาเองชนะการคำนวณเสมอ — ไม่ไปหักพักซ้ำจากค่าที่เขาให้มาแล้ว', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'ตาราง', Value: { Fields: [
+      { Name: 'วันที่', List: [{ Value: '06/05/26' }] },
+      { Name: 'เข้า', List: [{ Value: '08:00' }] },
+      { Name: 'ออก', List: [{ Value: '18:00' }] },
+      { Name: 'พัก', List: [{ Value: '1' }] },
+      { Name: 'ชม.ปกติ', List: [{ Value: '8' }] },
+    ] } },
+  ]), {
+    tableName: 'ตาราง',
+    detail: { date: 'วันที่', timeIn: 'เข้า', timeOut: 'ออก', breakHours: 'พัก', normalHours: 'ชม.ปกติ' },
+  });
+  assert.equal(data.days[0].normalHours, 8, 'ต้องได้ 8 ตามที่เอกสารเขียน ไม่ใช่ 9 จากการคำนวณ');
+});
+
+test('เวลาพักที่เขียนไว้มากกว่าช่วงเวลาทำงาน (พิมพ์ผิด) ต้องได้ 0 ไม่ใช่ค่าติดลบ', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Month Year', Value: 'May 2026' },
+    { Name: 'ตาราง', Value: { Fields: [
+      { Name: 'วันที่', List: [{ Value: '06/05/26' }] },
+      { Name: 'เข้า', List: [{ Value: '09:00' }] },
+      { Name: 'ออก', List: [{ Value: '11:00' }] },
+      { Name: 'พัก', List: [{ Value: '5' }] },
+    ] } },
+  ]), { tableName: 'ตาราง', detail: { date: 'วันที่', timeIn: 'เข้า', timeOut: 'ออก', breakHours: 'พัก' } });
+  assert.equal(data.days[0].normalHours, 0);
 });

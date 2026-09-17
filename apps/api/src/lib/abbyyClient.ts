@@ -413,8 +413,25 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
     const rawType = pick(cols, detail.workType);
     const type = rawType ? dedupeRepeatedText(rawType) : label;
 
-    const computedNormal = hoursBetween(timeIn, timeOut);
-    const computedOt = hoursBetween(otTimeIn, otTimeOut);
+    const breakHours = parsedOrNull(pick(cols, detail.breakHours));
+    const otBreakHours = parsedOrNull(pick(cols, detail.otBreakHours));
+
+    // หักเวลาพักที่ "เอกสารเขียนไว้เอง" ออกจากชั่วโมงที่คำนวณจากเวลาเข้า-ออก
+    //
+    // เดิมอ่านช่องพักมาเก็บไว้เฉยๆ แต่ไม่เคยเอามาใช้ตอนคำนวณเลย ทั้งที่ค่าอยู่ในมือแล้ว — ฟอร์มที่เขียน
+    // เวลาเข้า-ออกห่างกัน 9 ชม. แล้วระบุพัก 1 ชม. จะถูกนับเป็น 9 ชม. เกินจริงไปเต็มๆ 1 ชม.ทุกแถว
+    //
+    // ⚠️ จุดที่สำคัญกว่านั้นคือฝั่ง OT: ชั่วโมง OT คูณเป็นเงินตรงๆ (ชั่วโมง ÷ 8 × เรทต่อวัน) ต่างจาก
+    // ชั่วโมงทำงานปกติที่ไม่เข้าสูตรคิดเงิน ชั่วโมง OT ที่เกินจริงจึงกลายเป็นเงินที่เรียกเก็บเกินทันที
+    //
+    // นี่ยัง **ไม่ใช่** การเลิกคำนวณเอง — เอกสารที่ไม่ได้เขียนเวลาพักไว้ก็ยังถูกคำนวณแบบเดิมและยังอาจ
+    // เกินจริงอยู่ เรื่องนั้นเป็นการตัดสินใจของเจ้าของระบบว่าจะให้เดาต่อหรือปล่อยว่าง (ถามไปแล้ว รอคำตอบ)
+    // ตรงนี้แค่เลิกทิ้งข้อมูลที่เอกสารบอกเราไว้แล้ว ซึ่งทำให้ตัวเลขถูกขึ้นเสมอ ไม่มีทางแย่ลง
+    const minusBreak = (hours: number | null, brk: number | null) =>
+      hours === null ? null : Math.max(0, Math.round((hours - (brk ?? 0)) * 100) / 100);
+
+    const computedNormal = minusBreak(hoursBetween(timeIn, timeOut), breakHours);
+    const computedOt = minusBreak(hoursBetween(otTimeIn, otTimeOut), otBreakHours);
     const normalHours = parsedOrNull(pick(cols, detail.normalHours)) ?? computedNormal;
     const otHours = parsedOrNull(pick(cols, detail.otHours)) ?? computedOt;
     const totalHours = parsedOrNull(pick(cols, detail.dailyTotalHours)) ?? (normalHours !== null || otHours !== null ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100 : null);
@@ -428,8 +445,8 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
       rowNumber: pick(cols, detail.rowNumber),
       site: pick(cols, detail.dailySite),
       workLocation: pick(cols, detail.workLocation),
-      breakHours: parsedOrNull(pick(cols, detail.breakHours)),
-      otBreakHours: parsedOrNull(pick(cols, detail.otBreakHours)),
+      breakHours,
+      otBreakHours,
       additionalHours: parsedOrNull(pick(cols, detail.additionalHours)),
       activity: pick(cols, detail.activity),
       leaveType: pick(cols, detail.leaveType),
