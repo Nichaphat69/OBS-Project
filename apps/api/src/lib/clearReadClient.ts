@@ -20,10 +20,10 @@ import {
   TIMESHEET_DETAIL_FIELDS,
   TIMESHEET_DETAIL_LINE_ITEM,
   TIMESHEET_HEADER_FIELDS,
+  classifyDayKind,
   classifyLeaveType,
-  monthFromWord,
   normalizeDate,
-  normalizeYear,
+  normalizePeriod,
 } from '@obs/domain';
 
 const BASE_URL = () => process.env.CLEAR_READ_BASE_URL ?? 'https://ai.prior-dev.app/prior-clear-read';
@@ -317,6 +317,43 @@ function detailKeyFor(columnName: string): string | undefined {
   return DETAIL_KEY_BY_NAME.get(DETAIL_NAME_ALIASES[columnName] ?? columnName);
 }
 
+/** คำที่ถ้าทั้งช่องเป็นคำนี้พอดี ถือว่าเป็นวันลาแน่นอน — สำเนามาจาก abbyyClient.ts's EXACT_LEAVE_WORDS
+ * ให้ตรงกันคำต่อคำ (จงใจไม่ import ข้ามไฟล์เพราะเป็นของอีกเซสชันที่กำลังแก้อยู่ ถ้าย้ายไป @obs/domain
+ * เมื่อไหร่ควรให้ทั้งสองฝั่งใช้ตัวเดียวกัน) เทียบแบบ "ทั้งช่องต้องเท่ากับคำนี้" ไม่ใช่ substring จึงเอาไป
+ * เทียบกับช่องรายละเอียดงานที่เป็นข้อความยาวๆได้โดยไม่ตีความผิด */
+const EXACT_LEAVE_WORDS = new Set([
+  'leave', 'vacation', 'sick', 'personal', 'annual', 'absent',
+  'vacation leave', 'sick leave', 'personal leave', 'annual leave',
+  'ลา', 'ลาป่วย', 'ลากิจ', 'ลาพักร้อน',
+]);
+
+/** ช่องที่ถือเป็น "ป้ายบอกประเภทวัน" — ตรงกับที่ ABBYY ส่งให้ classifyDayKind() คือทุกช่องยกเว้นช่อง
+ * รายละเอียดงาน (ข้อความยาวอิสระ ถ้าเอาไปรวมจะ match คำว่า leave/holiday โดยบังเอิญได้ง่าย) */
+const LEAVE_LABEL_KEYS = ['workType', 'leaveType', 'activity', 'remarks', 'site', 'workLocation', 'project', 'day'] as const;
+
+function leaveRowLabel(row: Record<string, unknown>): string {
+  return [...LEAVE_LABEL_KEYS.map((k) => row[k]), row.jobDescription].filter(Boolean).map(String).join(' ');
+}
+
+/**
+ * แถวนี้เป็นวันลาไหม — ใช้กติกาเดียวกับฝั่ง ABBYY ทุกประการ (17 ก.ย. 69)
+ *
+ * เดิมที่นี่ดูแค่ช่อง `Leave_Type` ช่องเดียว ซึ่งแคบกว่า ABBYY มาก ฟอร์มที่เขียนวันลาไว้ในช่องประเภทวัน
+ * หรือเขียนเป็นคำว่า "ลา" ในช่องอื่นจะอ่านได้วันลา = 0 แล้วส่วนลดวันลาในใบแจ้งหนี้จะเป็น 0 ตามไปด้วย
+ * (ยอดในใบแจ้งหนี้ = ค่าจ้างรายเดือน − ส่วนลดวันลา) = เก็บเงินลูกค้าเกินแบบเงียบๆ — ความต่างนี้เกิดจาก
+ * โค้ดสองเจ้าเขียนคนละแบบ ไม่ได้ตั้งใจให้ต่าง จึงทำให้ตัดสินใจเหมือนกัน
+ *
+ * ลำดับความสำคัญของ classifyDayKind() สำคัญและต้องคงไว้: วันหยุด/เสาร์-อาทิตย์ มาก่อนวันลา ดังนั้นแถว
+ * ที่เป็นวันหยุดนักขัตฤกษ์จะไม่ถูกนับเป็นวันลาแม้จะมีคำว่าลาปนอยู่ในช่องอื่น
+ */
+function isLeaveRow(row: Record<string, unknown>): boolean {
+  const labels = LEAVE_LABEL_KEYS.map((k) => (row[k] == null ? null : String(row[k])));
+  if (classifyDayKind(...labels) === 'leave') return true;
+  return [...labels, row.jobDescription == null ? null : String(row.jobDescription)].some(
+    (v) => v !== null && EXACT_LEAVE_WORDS.has(v.trim().toLowerCase()),
+  );
+}
+
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
@@ -327,12 +364,11 @@ function toNumber(value: unknown): number | null {
  * รองรับเดือนไทย/อังกฤษและปี พ.ศ./ค.ศ. เหมือนกันทั้งระบบ ค่าดิบยังเก็บไว้ที่ `monthYear` ตามกติกาสเปก */
 function resolvePeriod(monthYear: string | null): string | null {
   if (!monthYear) return null;
-  const m = String(monthYear).match(/([A-Za-z฀-๿]+|\d{1,2})[\s/._-]+(\d{2,4})/);
-  if (!m) return null;
-  const month = monthFromWord(m[1]) ?? (Number(m[1]) >= 1 && Number(m[1]) <= 12 ? Number(m[1]) : null);
-  const year = normalizeYear(m[2]);
-  if (!month || !year) return null;
-  return `${year}-${String(month).padStart(2, '0')}`;
+  // ใช้ normalizePeriod() ของ @obs/domain ตัวเดียวกับที่ระบบใช้อยู่ ไม่เขียน regex เอง — ของเดิมที่เขียน
+  // เองตัดคำผิด ("พ.ค. - 2026" ได้แค่ "ค") เพราะไม่ได้เผื่อจุดที่คั่นกลางตัวย่อเดือนไทย ตัวกลางรองรับทั้ง
+  // เดือนไทยเต็ม/ย่อ อังกฤษ ตัวเลข และปี พ.ศ. อยู่แล้ว — คืนสตริงเดิมกลับมาถ้าแปลงไม่ได้ จึงต้องเช็ครูป
+  const period = normalizePeriod(monthYear);
+  return typeof period === 'string' && /^\d{4}-\d{2}$/.test(period) ? period : null;
 }
 
 export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPeriod?: string } = {}) {
@@ -376,8 +412,17 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
   }
 
   const leaveDays = days
-    .filter((d) => d.leaveType)
-    .map((d) => ({ date: d.date as string, type: classifyLeaveType(String(d.leaveType)), rawLabel: String(d.leaveType) }));
+    .filter((d) => isLeaveRow(d))
+    .map((d) => {
+      const rawLabel = leaveRowLabel(d);
+      return {
+        date: d.date as string,
+        // ใช้ค่าจากช่อง Leave_Type ก่อนถ้ามี เพราะเป็นช่องที่ระบุประเภทตรงๆ — ตกไปใช้ข้อความรวมทั้งแถว
+        // เฉพาะตอนที่ฟอร์มไม่มีช่องนั้น (ข้อความรวมมีรายละเอียดงานปนอยู่ จัดประเภทพลาดได้ง่ายกว่า)
+        type: classifyLeaveType(d.leaveType ? String(d.leaveType) : rawLabel),
+        rawLabel,
+      };
+    });
   const otDays = days
     .filter((d) => (d.otHours ?? 0) > 0)
     .map((d) => ({ date: d.date as string, hours: Number(d.otHours) }));
