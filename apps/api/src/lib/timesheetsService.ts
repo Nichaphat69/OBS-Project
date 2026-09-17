@@ -65,6 +65,10 @@ export interface TimesheetListItem {
   dailyRate: number | null;
   leaveDatesText: string;
   approvedByLabel: string | null;
+  /** เครื่องอ่านที่ผลิตตัวเลขในแถวนี้ รูปแบบ `<engine>[:<skill/แม่แบบ>][ · คนยืนยัน]`
+   * อยู่ในก้อน extraction อยู่แล้ว ดึงขึ้นมาเป็นฟิลด์เดี่ยวเพราะหน้ารายการต้องกวาดดูทั้งตารางว่า
+   * ใบไหนอ่านด้วยเจ้าไหน (ไม่ส่ง extraction ทั้งก้อนมา จะหนักโดยไม่จำเป็น) */
+  readModel: string | null;
 }
 
 async function shapeTimesheetRow(row: any): Promise<TimesheetListItem> {
@@ -121,6 +125,7 @@ async function shapeTimesheetRow(row: any): Promise<TimesheetListItem> {
       .map((l: any) => `${thaiDate(l.date)}${LEAVE_TH[l.type] ? ` (${LEAVE_TH[l.type]})` : ''}`)
       .join(', '),
     approvedByLabel: row.approvedBy ?? null,
+    readModel: (row.extraction as any)?.model ?? null,
   };
 }
 
@@ -129,10 +134,35 @@ export interface TimesheetListResult {
   counts: { needsReview: number; checked: number; all: number; billed: number; rejected: number };
 }
 
+/** ช่องที่ shapeTimesheetRow() ใช้จริง — ต้องระบุเป็น select ไม่ใช่ include เฉยๆ เพราะ include จะดึง
+ * ทุกคอลัมน์รวม `source_file_bytes` ที่เก็บไฟล์ PDF ทั้งไฟล์มาด้วย หน้ารายการไม่ได้ใช้ไบต์พวกนั้นเลย
+ * (คนกดดูไฟล์ค่อยไปโหลดที่ GET /api/timesheets/:id/file) แต่ของจริงจะลากมาทั้งหมดทุกครั้งที่เปิดหน้า
+ * — วัดจาก DB dev: 6 แถว = 1.3 MB ซึ่งยังไม่รู้สึก แต่พอเก็บไปทั้งปีจะเป็นหลักร้อย MB ต่อการเปิดหน้า 1 ครั้ง
+ * ⚠️ เพิ่มช่องใน shapeTimesheetRow() เมื่อไหร่ ต้องเพิ่มที่นี่ด้วย ไม่งั้นจะได้ undefined เงียบๆ */
+const LIST_ROW_SELECT = {
+  id: true,
+  period: true,
+  receivedAt: true,
+  sourceFile: true,
+  status: true,
+  statusReason: true,
+  employeeId: true,
+  contractId: true,
+  rawEmployeeName: true,
+  rawPosition: true,
+  reportedWorkdays: true,
+  reportedLeave: true,
+  approvedBy: true,
+  computed: true,
+  extraction: true,
+  employee: true,
+  contract: { include: { customer: true } },
+} as const;
+
 export async function listTimesheets({ contractId }: { contractId?: string } = {}): Promise<TimesheetListResult> {
   const rows = await prisma.timesheet.findMany({
     where: contractId ? { contractId } : undefined,
-    include: { employee: true, contract: { include: { customer: true } } },
+    select: LIST_ROW_SELECT,
     orderBy: { receivedAt: 'desc' },
   });
 
@@ -193,7 +223,9 @@ export interface TimesheetDetail extends TimesheetListItem {
 export async function getTimesheet(id: string): Promise<TimesheetDetail | null> {
   const row = await prisma.timesheet.findUnique({
     where: { id },
-    include: { employee: true, contract: { include: { customer: true } } },
+    // เหตุผลเดียวกับ LIST_ROW_SELECT — หน้ารายละเอียดก็ไม่ได้ใช้ไบต์ของไฟล์ PDF เหมือนกัน
+    // (ปุ่มดูไฟล์ยิงไป GET /api/timesheets/:id/file ซึ่งโหลดไบต์เองอยู่แล้ว)
+    select: { ...LIST_ROW_SELECT, approvedAt: true, sourceEmailId: true, sourceEmailSubject: true },
   });
   if (!row) return null;
 
