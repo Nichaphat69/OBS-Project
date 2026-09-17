@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { PageHeader, PoTag, ReadModelTag, StatusPill } from '../../../../components/ui';
+import { PageHeader, PoTag, ReadModelTag, StatusPill, useReadModelNameMap } from '../../../../components/ui';
 import { Icon } from '../../../../components/Icon';
 import { usePdfPreview } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
@@ -151,6 +151,7 @@ export default function ManadyDetailPage() {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const readModelNames = useReadModelNameMap();
   const [tab, setTab] = useState<1 | 2 | 3>(1);
   const [calDay, setCalDay] = useState<string | null>(null);
 
@@ -250,7 +251,7 @@ export default function ManadyDetailPage() {
             {sheet.extraction?.model && (
               <>
                 {' '}
-                <ReadModelTag model={sheet.extraction.model} />
+                <ReadModelTag model={sheet.extraction.model} nameMap={readModelNames} />
               </>
             )}
           </p>
@@ -387,7 +388,7 @@ export default function ManadyDetailPage() {
                   <dt>{tx('เลขผู้เสียภาษี')}</dt>
                   <dd className="n">{sheet.contractDetail.taxId ?? '—'}</dd>
                   <dt>{tx('อ่านด้วย')}</dt>
-                  <dd>{sheet.extraction?.model ? <ReadModelTag model={sheet.extraction.model} /> : '—'}</dd>
+                  <dd>{sheet.extraction?.model ? <ReadModelTag model={sheet.extraction.model} nameMap={readModelNames} /> : '—'}</dd>
                   <dt>{tx('ใบว่าจ้าง')}</dt>
                   <dd className="n"><PoTag>{sheet.contract.poNo}</PoTag></dd>
                   <dt>{tx('สัญญา')}</dt>

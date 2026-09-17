@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { PageHeader, ReadModelTag, StatusPill, Tag } from '../../../components/ui';
+import { PageHeader, ReadModelTag, StatusPill, Tag, useReadModelNameMap } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 
@@ -68,6 +68,7 @@ export default function MandayPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const readModelNames = useReadModelNameMap();
 
   /**
    * ไม่ส่ง `contractId` ขึ้นไปแล้วโดยตั้งใจ — ให้เซิร์ฟเวอร์เลือกสัญญาที่กำลังดำเนินการอยู่เอง
@@ -195,7 +196,7 @@ export default function MandayPage() {
                 {item.leaveDatesText && <Tag tone="wn">{tx('ลา')}: {item.leaveDatesText}</Tag>}
                 {/* กวาดตาทีเดียวว่าใบไหนมาจากเครื่องอ่านตัวไหน — จุดประสงค์หลักของการแสดงตรงนี้
                     คือเทียบหลังสลับตัวอ่านไปมา ซึ่งดูทีละใบในหน้ารายละเอียดไม่ตอบโจทย์ */}
-                <ReadModelTag model={item.readModel} />
+                <ReadModelTag model={item.readModel} nameMap={readModelNames} />
               </div>
               <div className="sub" style={{ marginBottom: 14 }}>
                 {tx('รับเมื่อ')} {item.receivedAt?.slice(0, 10)} · {item.contract.customerName} · {item.contract.projectName}
