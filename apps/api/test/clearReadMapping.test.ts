@@ -257,3 +257,11 @@ test('วันลาที่มีเวลาเข้า-ออกติด�
   assert.equal(d.totalWorkDays, 0);
   assert.equal(d.totalLeaveDays, 1);
 });
+
+// ── เขียนกลับแม่แบบ — เฉพาะการเพิ่ม ไม่ทดสอบกับ service จริง ─────────────
+// (ไม่มี mock ของ /update/template เพราะยิงจริงเข้าไปครั้งเดียวแล้วยืนยันด้วยมือแล้ว เทสนี้แค่คุม
+// ว่า mapping รับ Document_Site ที่เพิ่งเพิ่มเข้าไปในแม่แบบได้ถูกต้อง)
+test('Document_Site ที่เพิ่งเพิ่มในแม่แบบ ต้องแมปเข้า site ได้เหมือน Site เดิม', () => {
+  const d: any = mapClearReadResult(docFields({ Document_Site: 'สำนักงานใหญ่' }));
+  assert.equal(d.site, 'สำนักงานใหญ่');
+});

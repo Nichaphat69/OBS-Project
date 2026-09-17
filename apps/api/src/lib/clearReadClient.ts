@@ -305,6 +305,33 @@ export class ClearReadClient {
     return toTemplateSummary(tpl, Boolean(tpl.default_template));
   }
 
+  /** แม่แบบตัวเดียว schema_json ดิบ (ไม่ผ่านชั้นสรุปที่ตัด order/โครงสร้างจริงออก) — ใช้ตอนต้อง
+   * เขียนกลับเท่านั้น เพราะการเขียนกลับต้องคงโครงสร้างเดิมไว้ทุกจุดที่ไม่ได้ตั้งใจแก้ */
+  async getRawTemplate(templateId: string): Promise<any | null> {
+    this.assertConfigured();
+    const body = await this.post('/inquiry/template', {
+      json: { project_id: this.projectId, template_id: templateId },
+    });
+    const tpl = body?.data?.template ?? body?.data;
+    return tpl?.template_id ? tpl : null;
+  }
+
+  /** เขียนกลับแม่แบบ — เมธอดนี้เป็นทางเดียวที่คลาสนี้เขียนกลับไปที่ Clear Read ได้ ผู้เรียกต้องส่ง
+   * schema_json เต็มที่ต้องการให้เป็นหลังเขียน ไม่ใช่แค่ส่วนที่เปลี่ยน (endpoint ฝั่งเขาเป็น replace
+   * ทั้งชุด ไม่ใช่ merge) */
+  async updateTemplate(input: { templateId: string; templateName: string; version: number; schemaJson: unknown }): Promise<any> {
+    this.assertConfigured();
+    return this.post('/update/template', {
+      json: {
+        template_id: input.templateId,
+        template_name: input.templateName,
+        project_id: this.projectId,
+        version: input.version,
+        schema_json: input.schemaJson,
+      },
+    });
+  }
+
   async fetchDetail(documentId: string): Promise<any> {
     const body = await this.post('/inquiry/ocr-detail', {
       json: { project_id: this.projectId, document_id: documentId },
@@ -918,4 +945,63 @@ export async function planTemplateUpgrade(templateId?: string | null): Promise<T
     templateName: tpl.name,
     add, rename, manual, keep, unchangedCount,
   };
+}
+
+// ── เขียนกลับแม่แบบ — ใช้ได้เฉพาะการ "เพิ่มฟิลด์ใหม่" เท่านั้น ────────────
+
+/**
+ * เพิ่มฟิลด์ `Document_Site` เข้าไปในแม่แบบที่ปักไว้ — **นี่คือฟังก์ชันเขียนกลับแม่แบบตัวแรกและตัวเดียว**
+ * ที่มีในระบบ ตั้งใจให้แคบเท่าที่จำเป็น ไม่ใช่ฟังก์ชันเขียนแม่แบบทั่วไป
+ *
+ * ที่ทำได้แค่ "เพิ่ม" ไม่ทำ "เปลี่ยนชื่อ": ไล่ดูของจริงแล้วพบว่าอีก 5 ช่องที่ดูเหมือนต้องเปลี่ยนชื่อ
+ * (Site/Customer_Site→Document_Site, Total_Base_Duration→Total_Normal_Hours, Place→Daily_Site,
+ * Adjust/Adjustment_Value→Total_OT_Adjust) มีช่องปลายทางอยู่แล้วในแม่แบบและ**ถูกต้องอยู่แล้ว** — การ
+ * เปลี่ยนชื่อจะไปทับข้อมูลที่ทำงานได้อยู่ (ดู planTemplateUpgrade() สำหรับรายละเอียดทั้งหมด) มีแค่
+ * `Document_Site` ตัวเดียวที่สเปกมีแต่แม่แบบไม่มี จึงเป็นการเพิ่มล้วน ไม่มีความเสี่ยงทับข้อมูล
+ *
+ * ขั้นตอน: อ่าน schema_json ดิบมาทั้งชุด (ไม่ผ่านชั้นสรุปที่ตัดรายละเอียดออก) → เติมฟิลด์ใหม่ต่อท้าย
+ * โดยไม่แตะฟิลด์เดิมแม้แต่ตัวเดียว → เขียนกลับ → **อ่านกลับมาตรวจซ้ำว่ามีจริง** ไม่เชื่อแค่ response
+ * สำเร็จ (200/2000 พิสูจน์แค่ว่าเขารับคำขอ ไม่ได้พิสูจน์ว่าแม่แบบเปลี่ยนจริง)
+ */
+export async function addDocumentSiteField(
+  templateId?: string | null,
+): Promise<{ applied: boolean; message: string; templateId: string | null }> {
+  const id = templateId || process.env.CLEAR_READ_TEMPLATE_ID || null;
+  if (!id) return { applied: false, message: 'ยังไม่ได้ระบุแม่แบบ (CLEAR_READ_TEMPLATE_ID)', templateId: null };
+
+  const client = new ClearReadClient();
+  const tpl = await client.getRawTemplate(id);
+  if (!tpl) return { applied: false, message: `ไม่พบแม่แบบ ${id}`, templateId: id };
+
+  const schema = typeof tpl.schema_json === 'string' ? JSON.parse(tpl.schema_json) : tpl.schema_json;
+  const fields: any[] = Array.isArray(schema?.fields) ? schema.fields : [];
+
+  if (fields.some((f) => f?.name === 'Document_Site')) {
+    return { applied: false, message: 'มีฟิลด์ Document_Site อยู่แล้ว ไม่ต้องเพิ่มซ้ำ', templateId: id };
+  }
+
+  const spec = TIMESHEET_DOCUMENT_FIELDS.find((f) => f.name === 'Document_Site');
+  if (!spec) return { applied: false, message: 'ไม่พบ Document_Site ในสารบัญกลาง — ผิดปกติ ไม่ควรเกิดขึ้น', templateId: id };
+
+  const nextOrder = Math.max(0, ...fields.map((f) => Number(f?.order) || 0)) + 1;
+  const updatedFields = [...fields, { name: spec.name, description: spec.description, type: 'string', order: nextOrder }];
+
+  const updateBody = await client.updateTemplate({
+    templateId: id,
+    templateName: tpl.template_name,
+    version: tpl.version,
+    schemaJson: { ...schema, fields: updatedFields },
+  });
+  if (updateBody?.code !== '2000') {
+    throw new ClearReadError(`เขียนแม่แบบไม่สำเร็จ (${updateBody?.message ?? updateBody?.code})`, { body: updateBody });
+  }
+
+  // ตรวจซ้ำด้วยการอ่านกลับมาจริง ไม่เชื่อแค่ response ว่าสำเร็จ
+  const verify = await client.getTemplate(id);
+  const landed = verify?.fields.some((f) => f.name === 'Document_Site' && f.description === spec.description);
+  if (!landed) {
+    throw new ClearReadError('เขียนแม่แบบสำเร็จตาม response แต่อ่านกลับมาแล้วไม่พบ Document_Site — ต้องตรวจด้วยมือ');
+  }
+
+  return { applied: true, message: 'เพิ่ม Document_Site สำเร็จ และยืนยันแล้วด้วยการอ่านกลับมาจริง', templateId: id };
 }
