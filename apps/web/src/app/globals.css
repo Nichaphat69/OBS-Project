@@ -699,8 +699,28 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   gap: 20px;
   margin-bottom: 26px;
 }
+/* การ์ดสรุป 5 ใบของหน้า "บันทึกการส่ง" — ใช้ .kpi เดิมทั้งหมด ต่างแค่จำนวนคอลัมน์ ไม่ได้ทำการ์ดชุดใหม่ */
+.kpis.k5 {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+.kpis.k5 .kpi {
+  padding: 16px 18px 18px;
+}
+.kpis.k5 .kv {
+  margin-top: 10px;
+  font-size: 24px;
+}
 @media (max-width: 1180px) {
   .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .kpis.k5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .kpis.k5 {
     grid-template-columns: repeat(2, 1fr);
   }
 }

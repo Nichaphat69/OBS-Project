@@ -17,6 +17,9 @@ interface NavItem {
   label: string;
   icon: string;
   badgeKey?: 'queue' | 'cycle' | 'ticket' | 'bell';
+  /** role ที่เห็นตัวเลขบนเมนูได้ — แยกจาก `roles` เพราะบางเมนูเปิดให้ทุกคนเข้า แต่ตัวเลขเป็นของทีมหลังบ้าน
+   *  (เช่น "บันทึกการส่ง": พนักงานเข้าได้แต่ไม่ควรเห็นจำนวนตั๋วค้างของทั้งบริษัท ซึ่งไม่ใช่ของเขา) */
+  badgeRoles?: string[];
   adminOnly?: boolean;
   userOnly?: boolean;
   roles?: string[];
@@ -55,7 +58,10 @@ const NAV: NavGroup[] = [
     label: 'อ้างอิง',
     items: [
       { href: '/invoices', label: 'ใบแจ้งหนี้', icon: 'invoice', roles: ['admin', 'accounting'] },
-      { href: '/tickets', label: 'แจ้งปัญหา', icon: 'alt', adminOnly: true, badgeKey: 'ticket' },
+      // เดิมชื่อ "แจ้งปัญหา" และเป็น adminOnly — ตอนนี้กลายเป็นหน้ารวมบันทึกการส่ง Timesheet ตามรอบบิล
+      // โดยมีแจ้งปัญหาเป็นแท็บหนึ่งข้างใน พนักงานจึงเข้าได้ด้วย แต่เห็นเฉพาะของตัวเอง — การกัน "เห็นของ
+      // คนอื่น" อยู่ที่ API (เส้น /mine ผูก employeeId จาก session) ไม่ใช่ที่การซ่อนเมนูตรงนี้
+      { href: '/submissions', label: 'บันทึกการส่ง', icon: 'send', roles: ['admin', 'accounting', 'user'], badgeKey: 'ticket', badgeRoles: ['admin'] },
       { href: '/master', label: 'ข้อมูลหลัก', icon: 'users', roles: ['admin', 'accounting'] },
       { href: '/readers', label: 'ตัวอ่าน Timesheet', icon: 'eye', roles: ['admin', 'accounting'] },
       { href: '/admin', label: 'จัดการระบบ', icon: 'cog', adminOnly: true },
@@ -397,7 +403,8 @@ export function AppShell({
                   {group.label && <span className="sgrp">{tx(group.label)}</span>}
                   {visibleItems.map((item) => {
                     const active = pathname?.startsWith(item.href);
-                    const badge = item.badgeKey ? badgeValue[item.badgeKey] : undefined;
+                    const badgeAllowed = !item.badgeRoles || item.badgeRoles.includes(user.role);
+                    const badge = item.badgeKey && badgeAllowed ? badgeValue[item.badgeKey] : undefined;
                     return (
                       <Link key={item.href} href={item.href} className={`mtab${active ? ' on' : ''}`}>
                         <Icon name={item.icon} />

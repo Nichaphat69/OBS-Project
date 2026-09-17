@@ -449,6 +449,37 @@ const TX: Record<string, string> = {
   ข้อ: 'issue(s)',
   รายการคำนวณ: 'Calculation',
 
+  // ── submissions/SubmissionsClient.tsx ──
+  บันทึกการส่ง: 'Submission log',
+  'ติดตามและบันทึกสถานะการส่ง Timesheet ตามรอบบิล': 'Track and record Timesheet submission status by billing period',
+  หน้านี้แสดงเฉพาะรายการส่งของคุณเอง: 'This page shows only your own submissions',
+  รายการส่ง: 'Submissions',
+  ยังไม่ส่ง: 'Not sent',
+  ส่งแล้ว: 'Sent',
+  มีปัญหา: 'Has a problem',
+  ยังไม่ได้ต่อข้อมูลจริง: 'Not connected to live data yet',
+  'ฝั่งระบบหลังบ้านกำลังทำส่วนเก็บและดึงบันทึกการส่งอยู่ เมื่อเสร็จแล้วตารางนี้จะขึ้นรายการของทุกคนในรอบ รวมคนที่ยังไม่ส่งด้วย':
+    'The backend work to record and serve submissions is in progress. Once it lands, this table will list everyone in the period — including the people who have not sent anything yet.',
+  'ต้องเป็น admin แผนกบัญชี หรือพนักงานเท่านั้นถึงจะเข้าหน้านี้ได้':
+    'Only an admin, accounting, or an employee can open this page',
+  ทุกสถานะ: 'All statuses',
+  ทุกช่องทาง: 'All methods',
+  ลำดับ: 'No.',
+  สถานะการส่ง: 'Submission status',
+  ช่องทางการส่ง: 'Method',
+  'วันที่/เวลาที่ส่ง': 'Sent at',
+  สถานะการตรวจสอบ: 'Review status',
+  ผู้ดำเนินการ: 'Handled by',
+  ขอเลื่อน: 'Deferred',
+  'ยังไม่ผูก LINE — ระบบไม่มีทางรู้สถานะจริง': 'Not linked to LINE yet — the system has no way to know the real status',
+  พนักงานอาจไม่เห็นข้อความตอบกลับ: 'The employee may not have seen the reply',
+  ยืนยัน: 'Confirm',
+  'ทำเครื่องหมายว่ามีปัญหา?': 'Mark as having a problem?',
+  ทำเครื่องหมาย: 'Mark',
+  ทำเครื่องหมายว่ามีปัญหาแล้ว: 'Marked as having a problem',
+  'รายการยังไม่ทราบสถานะจริง เพราะพนักงานยังไม่ได้ผูกบัญชี LINE — ไม่ใช่ยืนยันแล้วว่าไม่ส่ง':
+    'items have unknown status because the employee has not linked LINE yet — this is not a confirmed non-submission',
+
   // ── manday/page.tsx ──
   กำลังดูข้ามทุกบริษัท: 'Viewing across all companies',
   กำลังดูเฉพาะ: 'Viewing only',

@@ -1,5 +1,9 @@
 'use client';
 
+/* ยกมาจาก app/(app)/tickets/TicketsClient.tsx ทั้งก้อนตอนที่หน้า "แจ้งปัญหา" กลายเป็นแท็บหนึ่งของ
+   "บันทึกการส่ง" — **ตรรกะไม่ถูกแตะเลยแม้แต่บรรทัดเดียว** เปลี่ยนแค่ชื่อฟังก์ชันกับที่อยู่ของไฟล์
+   เจ้าของระบบสั่งไว้ว่าย้ายได้แต่ห้ามเปลี่ยนการทำงาน */
+
 import { useEffect, useState } from 'react';
 import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
 import { useToast } from '../../../components/Overlays';
@@ -17,7 +21,7 @@ interface TicketRow {
   resolvedBy: string | null;
 }
 
-export default function TicketsClient() {
+export default function SupportTicketsPanel() {
   const toast = useToast();
   const { tx } = useLang();
   const [tickets, setTickets] = useState<TicketRow[] | null>(null);
