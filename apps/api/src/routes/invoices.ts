@@ -3,6 +3,7 @@ import { prisma } from '@obs/db';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
 import { CycleActionError, deleteInvoice, listInvoices } from '../lib/cyclesService.js';
+import { getActiveContract } from '../lib/dashboardService.js';
 
 export const invoicesRouter = Router();
 
@@ -10,8 +11,28 @@ invoicesRouter.use(requireAuth);
 
 // ⚠️ เดิมไม่มี role check เลย — role 'user' เห็นใบแจ้งหนี้ทุกใบของทุกบริษัทได้ (เจอจริง 15 ก.ย. 69 ตอน
 // ไล่ตรวจ audit ทั้งระบบ) ตรงกับหน้า "ใบแจ้งหนี้" ใน nav ที่จำกัด admin/accounting เท่านั้นอยู่แล้ว
+/**
+ * ⚠️ เหตุผลเดียวกับ GET /api/timesheets — ไม่ส่ง contractId มา = ใช้สัญญาที่กำลังดำเนินการอยู่
+ * ไม่ใช่ "เอาทุกบริษัท"
+ *
+ * หน้าเว็บดึงสัญญาที่ active มาแนบเป็น query เอง ถ้าขั้นนั้นพลาด query จะว่าง แล้วรายการจะข้ามบริษัท
+ * เงียบๆ — พลาดแล้วขอบเขตกว้างขึ้นไม่ใช่แคบลง ซึ่งผิดทิศสำหรับยอดเงินของลูกค้าแต่ละราย
+ * (เจอรูปแบบเดียวกันนี้จริงในหน้าตรวจ Manday เมื่อ 17 ก.ย. 69 — หน้านี้เป็นที่ที่สองที่ยังเหลืออยู่)
+ *
+ * ต้องการดูข้ามบริษัทจริงๆ ส่ง `?all=1` มาอย่างชัดเจน
+ */
 invoicesRouter.get('/', requireAdmin, async (req, res) => {
-  const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
+  const explicit = typeof req.query.contractId === 'string' && req.query.contractId ? req.query.contractId : null;
+  const wantsAll = req.query.all === '1' || req.query.all === 'true';
+
+  let contractId = explicit ?? undefined;
+  if (!explicit && !wantsAll) {
+    const active = await getActiveContract();
+    contractId = active?.id;
+  }
+
+  // คืนรูปเดิมเป๊ะ ไม่ห่อ scope เพิ่มเหมือนฝั่ง timesheets เพราะหน้านี้รับเป็น array ตรงๆ อยู่แล้ว
+  // การเปลี่ยนรูป response จะทำให้หน้าเว็บพังทันที ซึ่งไม่ใช่เรื่องที่แก้อยู่
   res.json(await listInvoices(contractId));
 });
 
