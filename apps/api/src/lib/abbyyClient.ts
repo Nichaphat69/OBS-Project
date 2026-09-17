@@ -395,6 +395,34 @@ function dayOfWeekFromDate(dateStr: string): string | null {
   return Number.isNaN(d.getTime()) ? null : DOW_EN[d.getUTCDay()];
 }
 
+function minusBreak(hours: number | null, brk: number | null): number | null {
+  return hours === null ? null : Math.max(0, Math.round((hours - (brk ?? 0)) * 100) / 100);
+}
+
+/**
+ * ชั่วโมง OT ของแถวหนึ่ง — ใช้ร่วมกันระหว่าง `buildDayRowsFromStructuredTable()` (หน้าตรวจ Manday) และ
+ * `extractOtHoursFromTable()` (รายการที่ใบแจ้งหนี้ใช้คิดเงิน) เพราะชั่วโมง OT คูณเป็นเงินตรงๆ
+ * (ชั่วโมง ÷ 8 × เรทต่อวัน) ต่างจากชั่วโมงทำงานปกติที่ไม่เข้าสูตรคิดเงิน — สองจุดนี้เคยแยกลอจิกกัน:
+ * ที่นี่คำนวณจากเวลาเข้า-ออก OT ได้เมื่อไม่มีคอลัมน์ชั่วโมง แต่ `extractOtHoursFromTable` เดิมอ่านจาก
+ * คอลัมน์ชั่วโมงอย่างเดียว ผลคือหน้าจอตรวจ Manday โชว์ OT แต่ใบแจ้งหนี้ไม่คิดเงินให้เลย (เจอจริงกับ
+ * ฟอร์ม _T8 Chakrit ที่มี OT_In/OT_Out แต่ไม่มีคอลัมน์ OT_Hours — 17 ก.ย. 69) ดึงมาเป็นฟังก์ชันเดียว
+ * ตรงนี้เพื่อกันไม่ให้สองจุดคิดเลขไม่ตรงกันอีกในอนาคต — ห้ามคัดลอกลอจิกนี้ไปเขียนซ้ำที่อื่น
+ *
+ * ลำดับ: คอลัมน์ชั่วโมงที่เอกสารเขียนไว้ตรงๆ ชนะเสมอ ไม่มีค่อยคำนวณจากเวลาเข้า-ออก OT หักด้วยเวลาพัก
+ * OT ที่เอกสารเขียนไว้ (ถ้ามี) — ยังคำนวณต่อแม้เอกสารไม่ได้เขียนเวลาพัก OT ไว้ (ผู้ใช้ยืนยันแล้ว
+ * 17 ก.ย. 69: "ก็คิดตามชม.ที่ทำ OT มันจะมี Total สรุปอยู่" — มีช่องสรุปทั้งงวดให้ไขว้เช็คได้ ดู
+ * cross-check ท้าย mapAbbyyResult ถ้าตัวเลขเบี่ยงเกินเกณฑ์)
+ */
+function resolveOtHoursForRow(cols: Record<string, any>, detail: Record<string, string | null | undefined>): number | null {
+  const direct = parsedOrNull(pick(cols, detail.otHours));
+  if (direct !== null) return direct;
+
+  const mappedTimes = detail.timeIn !== undefined && detail.timeOut !== undefined;
+  const { otTimeIn, otTimeOut } = mappedTimes ? mappedRowTimes(cols, detail) : extractRowTimes(cols);
+  const otBreakHours = parsedOrNull(pick(cols, detail.otBreakHours));
+  return minusBreak(hoursBetween(otTimeIn, otTimeOut), otBreakHours);
+}
+
 function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | null, expectedYear?: number | null, detail: Record<string, string | null | undefined> = DEFAULT_DETAIL_MAP) {
   const table = findTable(rootObject, tableName);
   if (!Array.isArray(table?.List)) return [];
@@ -432,24 +460,18 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
     const breakHours = parsedOrNull(pick(cols, detail.breakHours));
     const otBreakHours = parsedOrNull(pick(cols, detail.otBreakHours));
 
-    // หักเวลาพักที่ "เอกสารเขียนไว้เอง" ออกจากชั่วโมงที่คำนวณจากเวลาเข้า-ออก
-    //
-    // เดิมอ่านช่องพักมาเก็บไว้เฉยๆ แต่ไม่เคยเอามาใช้ตอนคำนวณเลย ทั้งที่ค่าอยู่ในมือแล้ว — ฟอร์มที่เขียน
-    // เวลาเข้า-ออกห่างกัน 9 ชม. แล้วระบุพัก 1 ชม. จะถูกนับเป็น 9 ชม. เกินจริงไปเต็มๆ 1 ชม.ทุกแถว
-    //
-    // ⚠️ จุดที่สำคัญกว่านั้นคือฝั่ง OT: ชั่วโมง OT คูณเป็นเงินตรงๆ (ชั่วโมง ÷ 8 × เรทต่อวัน) ต่างจาก
-    // ชั่วโมงทำงานปกติที่ไม่เข้าสูตรคิดเงิน ชั่วโมง OT ที่เกินจริงจึงกลายเป็นเงินที่เรียกเก็บเกินทันที
-    //
-    // นี่ยัง **ไม่ใช่** การเลิกคำนวณเอง — เอกสารที่ไม่ได้เขียนเวลาพักไว้ก็ยังถูกคำนวณแบบเดิมและยังอาจ
-    // เกินจริงอยู่ เรื่องนั้นเป็นการตัดสินใจของเจ้าของระบบว่าจะให้เดาต่อหรือปล่อยว่าง (ถามไปแล้ว รอคำตอบ)
-    // ตรงนี้แค่เลิกทิ้งข้อมูลที่เอกสารบอกเราไว้แล้ว ซึ่งทำให้ตัวเลขถูกขึ้นเสมอ ไม่มีทางแย่ลง
-    const minusBreak = (hours: number | null, brk: number | null) =>
-      hours === null ? null : Math.max(0, Math.round((hours - (brk ?? 0)) * 100) / 100);
-
+    // หักเวลาพักที่ "เอกสารเขียนไว้เอง" ออกจากชั่วโมงที่คำนวณจากเวลาเข้า-ออก — เดิมอ่านช่องพักมาเก็บไว้
+    // เฉยๆ แต่ไม่เคยเอามาใช้ตอนคำนวณเลย ทั้งที่ค่าอยู่ในมือแล้ว ฟอร์มที่เขียนเวลาเข้า-ออกห่างกัน 9 ชม.
+    // แล้วระบุพัก 1 ชม. จะถูกนับเป็น 9 ชม. เกินจริงไปเต็มๆ 1 ชม.ทุกแถว — นี่ยัง **ไม่ใช่** การเลิก
+    // คำนวณเอง เอกสารที่ไม่ได้เขียนเวลาพักไว้ก็ยังถูกคำนวณแบบเดิมและยังอาจเกินจริงอยู่ (ผู้ใช้ยืนยันแล้ว
+    // 17 ก.ย. 69 ว่าให้คำนวณต่อไป มีช่องสรุปทั้งงวดให้ไขว้เช็คได้ — ดู cross-check ท้าย mapAbbyyResult)
     const computedNormal = minusBreak(hoursBetween(timeIn, timeOut), breakHours);
-    const computedOt = minusBreak(hoursBetween(otTimeIn, otTimeOut), otBreakHours);
     const normalHours = parsedOrNull(pick(cols, detail.normalHours)) ?? computedNormal;
-    const otHours = parsedOrNull(pick(cols, detail.otHours)) ?? computedOt;
+    // ชั่วโมง OT ใช้ resolveOtHoursForRow() ตัวเดียวกับที่ extractOtHoursFromTable() (ใบแจ้งหนี้) เรียก —
+    // เดิมสองจุดนี้แยกกันคนละลอจิก (ที่นี่คำนวณจากเวลาเข้า-ออกได้ แต่ extractOtHoursFromTable อ่านจาก
+    // คอลัมน์ชั่วโมงอย่างเดียว) หน้าจอตรวจ Manday จึงโชว์ OT แต่ใบแจ้งหนี้ไม่คิดเงินให้เลย ตัวเลขไม่ตรงกัน
+    // ระหว่างสองจุดที่ควรเป็นค่าเดียวกัน
+    const otHours = resolveOtHoursForRow(cols, detail);
     const totalHours = parsedOrNull(pick(cols, detail.dailyTotalHours)) ?? (normalHours !== null || otHours !== null ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100 : null);
 
     days.push({
@@ -589,8 +611,11 @@ function extractOtHoursFromTable(rootObject: any, tableName: string | null, expe
     const date = resolveRowDate(cols, detail, expectedYear);
     if (!date) continue;
 
-    const hours = Number(pick(cols, detail.otHours));
-    if (Number.isFinite(hours) && hours > 0) otDays.push({ date, hours });
+    // ใช้ resolveOtHoursForRow() ตัวเดียวกับหน้าตรวจ Manday แทนการอ่านคอลัมน์ชั่วโมงตรงๆ อย่างเดียว —
+    // เดิมฟอร์มที่มีแต่เวลาเข้า-ออก OT (ไม่มีคอลัมน์ชั่วโมง) จะได้ otDays ว่างเปล่า ใบแจ้งหนี้จึงไม่คิด
+    // เงิน OT ให้เลย ทั้งที่หน้าจอตรวจ Manday เห็นชั่วโมง OT อยู่แล้ว (ดูคอมเมนต์ที่ resolveOtHoursForRow)
+    const hours = resolveOtHoursForRow(cols, detail);
+    if (hours !== null && hours > 0) otDays.push({ date, hours });
   }
   return otDays;
 }
@@ -811,6 +836,24 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
     }
   }
   if (!resolvedPeriod) missingFieldNotes.push('ABBYY ยังไม่ส่งรอบเดือนมา — ต้องเลือก "รอบเดือน" เอง');
+
+  /* ไขว้เช็คผลรวมชั่วโมงที่คำนวณจากตารางรายวัน กับช่องสรุปทั้งงวด "Total Hours" ที่เอกสารพิมพ์ไว้เอง —
+     ไม่ block การยืนยัน แค่เตือนให้คนตรวจเห็น เพราะชั่วโมงที่คำนวณจากเวลาเข้า-ออก (โดยเฉพาะ OT ที่ไม่มี
+     คอลัมน์ชั่วโมงตรงๆ) ยังอาจเกินจริงถ้าเอกสารไม่ได้เขียนเวลาพักไว้ (ผู้ใช้ยืนยันให้คำนวณต่อ 17 ก.ย. 69
+     — ดู resolveOtHoursForRow) ช่องสรุปนี้จึงเป็นตัวช่วยจับความคลาดเคลื่อนที่ทำได้ทันทีโดยไม่ต้องเดา
+     ชื่อฟิลด์ "Total OT" ที่ยังไม่เคยยืนยันว่ามีจริงใน Skill ไหน — ใช้เกณฑ์ 5% หรือ 1 ชม. (เลือกค่ามาก
+     กว่า) กันไม่ให้เตือนจุกจิกกับความคลาดเคลื่อนเล็กน้อยจากการปัดเศษ */
+  if (totalHours !== null && days.length > 0) {
+    const sumHours = days.reduce((sum, d) => sum + (d.normalHours ?? 0) + (d.otHours ?? 0), 0);
+    const diff = Math.round(Math.abs(sumHours - totalHours) * 100) / 100;
+    const threshold = Math.max(1, totalHours * 0.05);
+    if (diff > threshold) {
+      missingFieldNotes.push(
+        `ผลรวมชั่วโมงที่คำนวณจากตารางรายวัน (${Math.round(sumHours * 100) / 100} ชม.) ต่างจากช่องสรุป "Total Hours" ` +
+          `ในเอกสาร (${totalHours} ชม.) อยู่ ${diff} ชม. — ควรตรวจสอบชั่วโมงกับ PDF ต้นฉบับก่อนยืนยัน`,
+      );
+    }
+  }
 
   return {
     vendor: pick(fields, fm.header.vendorName),
