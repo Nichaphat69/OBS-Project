@@ -29,13 +29,11 @@ export default function InvoicesPage() {
   const { tx } = useLang();
   const [rows, setRows] = useState<InvoiceRow[] | null>(null);
 
+  // ไม่ส่ง contractId ขึ้นไปแล้ว — เซิร์ฟเวอร์เลือกสัญญาที่กำลังดำเนินการอยู่ให้เอง เหตุผลเดียวกับหน้า
+  // ตรวจ Manday: ถ้าหน้าเว็บดึงสัญญา active มาไม่ได้ query จะว่าง แล้วกลายเป็น "ขอทุกบริษัท" คือพลาด
+  // แล้วขอบเขตกว้างขึ้น ซึ่งผิดทิศสำหรับยอดเงินของลูกค้าแต่ละราย
   useEffect(() => {
-    fetch('/api/contracts/active', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((c: { id: string } | null) => {
-        const qs = c ? `?contractId=${encodeURIComponent(c.id)}` : '';
-        return fetch(`/api/invoices${qs}`, { cache: 'no-store' });
-      })
+    fetch('/api/invoices', { cache: 'no-store' })
       .then((r) => r.json())
       .then(setRows);
   }, []);

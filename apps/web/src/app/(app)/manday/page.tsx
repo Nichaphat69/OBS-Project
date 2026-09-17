@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { PageHeader, StatusPill, Tag } from '../../../components/ui';
+import { PageHeader, ReadModelTag, StatusPill, Tag } from '../../../components/ui';
+import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 
 interface TimesheetListItem {
@@ -21,11 +22,14 @@ interface TimesheetListItem {
   discount: number | null;
   lineAmount: number | null;
   leaveDatesText: string;
+  readModel: string | null;
 }
 
 interface ListResult {
   items: TimesheetListItem[];
   counts: { needsReview: number; checked: number; all: number; billed: number; rejected: number };
+  /** ขอบเขตที่เซิร์ฟเวอร์ใช้จริง ไม่ใช่ที่หน้านี้ตั้งใจขอ — ต้องเอาอันนี้ขึ้นจอ ไม่ใช่เดาจากรายการที่เห็น */
+  scope?: { contractId: string | null; allCompanies: boolean };
 }
 
 const TABS = [
@@ -59,17 +63,32 @@ function matchesTab(item: TimesheetListItem, tab: string): boolean {
 export default function MandayPage() {
   const { tx } = useLang();
   const [data, setData] = useState<ListResult | null>(null);
+  const [scopeName, setScopeName] = useState<string | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('needsReview');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  /**
+   * ไม่ส่ง `contractId` ขึ้นไปแล้วโดยตั้งใจ — ให้เซิร์ฟเวอร์เลือกสัญญาที่กำลังดำเนินการอยู่เอง
+   *
+   * ของเดิมหน้านี้ดึงสัญญา active มาแล้วแนบไปเอง ซึ่งแปลว่าถ้าหน้าดึงมาไม่ทัน/ดึงพลาด มันจะกลายเป็น
+   * "ขอทุกบริษัท" คือ**พลาดแล้วขอบเขตกว้างขึ้น** ซึ่งผิดทิศสำหรับข้อมูลค่าจ้างรายคน (เจอจริง: เลือก ปตท.
+   * อยู่แต่รายการขึ้นพนักงานไทยประกันชีวิตมาด้วย) ตอนนี้ฝั่งเซิร์ฟเวอร์ตั้งค่าเริ่มต้นให้แล้ว หน้านี้จึงไม่ควร
+   * ส่งค่าที่อาจเก่ากว่าของจริงไปทับ
+   *
+   * ชื่อบริษัทที่โชว์ยึด `scope.contractId` ที่เซิร์ฟเวอร์ตอบกลับมาเป็นหลัก แล้วค่อยหาชื่อจากสัญญา active
+   * ถ้า id ไม่ตรงกันแปลว่าเพิ่งมีการสลับบริษัทคาบเกี่ยวกัน — โชว์ชื่อไม่ได้ ดีกว่าโชว์ชื่อผิด
+   */
   async function load() {
-    const activeRes = await fetch('/api/contracts/active', { cache: 'no-store' });
-    const active: { id: string } | null = await activeRes.json();
-    const qs = active ? `?contractId=${encodeURIComponent(active.id)}` : '';
-    const res = await fetch(`/api/timesheets${qs}`, { cache: 'no-store' });
-    setData(await res.json());
+    const [listRes, activeRes] = await Promise.all([
+      fetch('/api/timesheets', { cache: 'no-store' }),
+      fetch('/api/contracts/active', { cache: 'no-store' }),
+    ]);
+    const list: ListResult = await listRes.json();
+    const active: { id: string; customerName: string } | null = await activeRes.json().catch(() => null);
+    setData(list);
+    setScopeName(active && active.id === list.scope?.contractId ? active.customerName : null);
   }
 
   useEffect(() => {
@@ -127,6 +146,23 @@ export default function MandayPage() {
     <>
       <PageHeader eyebrow={tx('ขั้นตอน 2 · ตรวจ Manday')} title={tx('ตรวจ Manday')} subtitle={tx('ตรวจผลคำนวณ Manday แล้วยืนยันหรือตีกลับให้แก้ไข')} />
 
+      {/* บอกขอบเขตที่เซิร์ฟเวอร์ใช้จริง — ก่อนหน้านี้หน้านี้ไม่เคยบอก คนจึงต้องเดาจากรายชื่อที่เห็น
+          และนั่นคือเหตุผลที่รายการข้ามบริษัทอยู่นานโดยไม่มีใครจับได้ */}
+      {data.scope && (
+        <div className={data.scope.allCompanies ? 'scopebar all' : 'scopebar'}>
+          <Icon name={data.scope.allCompanies ? 'info' : 'building'} />
+          <span>
+            {data.scope.allCompanies ? (
+              <b>{tx('กำลังดูข้ามทุกบริษัท')}</b>
+            ) : (
+              <>
+                {tx('กำลังดูเฉพาะ')} <b>{scopeName ?? tx('บริษัทที่กำลังดำเนินการอยู่')}</b>
+              </>
+            )}
+          </span>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 22 }}>
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`btn sm${tab === t.key ? ' pri' : ''}`}>
@@ -157,6 +193,9 @@ export default function MandayPage() {
                 <Tag tone="mu">{item.periodLabel}</Tag>
                 <Tag tone="mu">{tx('เลขที่')} {item.id}</Tag>
                 {item.leaveDatesText && <Tag tone="wn">{tx('ลา')}: {item.leaveDatesText}</Tag>}
+                {/* กวาดตาทีเดียวว่าใบไหนมาจากเครื่องอ่านตัวไหน — จุดประสงค์หลักของการแสดงตรงนี้
+                    คือเทียบหลังสลับตัวอ่านไปมา ซึ่งดูทีละใบในหน้ารายละเอียดไม่ตอบโจทย์ */}
+                <ReadModelTag model={item.readModel} />
               </div>
               <div className="sub" style={{ marginBottom: 14 }}>
                 {tx('รับเมื่อ')} {item.receivedAt?.slice(0, 10)} · {item.contract.customerName} · {item.contract.projectName}
