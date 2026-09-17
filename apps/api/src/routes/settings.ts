@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
 import { describePinnedTemplate, listTemplateSummaries } from '../lib/clearReadClient.js';
-import { settingsSnapshot, setFlowAccountConnected, listReaders, setActiveReader, SettingsError } from '../lib/settingsService.js';
+import { settingsSnapshot, setFlowAccountConnected, listReaders, setActiveReader, setActiveClearReadTemplate, SettingsError } from '../lib/settingsService.js';
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
@@ -49,6 +49,25 @@ settingsRouter.get('/clear-read/templates', async (req, res) => {
 function wantsRefresh(raw: unknown): boolean {
   return raw !== undefined && raw !== '0' && raw !== 'false';
 }
+
+/**
+ * เลือกแม่แบบ Clear Read ที่ใช้อ่านทั้งระบบ — admin/แผนกบัญชีเท่านั้น
+ *
+ * เจ้าของระบบสั่ง 17 ก.ย. 69 ว่าเลือกจากหน้าตัวอ่านแล้วต้องเปลี่ยนตัวที่ใช้อ่านจริงด้วย ไม่ใช่แค่เปิดดู
+ * ค่าที่เลือกทับ CLEAR_READ_TEMPLATE_ID ใน .env — ยังไม่เคยเลือกก็ใช้ค่าจาก .env เหมือนเดิม
+ *
+ * ⚠️ คนละเรื่องกับการ "แก้แม่แบบ" — เส้นนี้แค่บอกว่าจะใช้แม่แบบตัวไหน ไม่ได้ไปเขียนอะไรในแม่แบบของ user
+ */
+settingsRouter.patch('/clear-read/template/active', requireAdmin, async (req, res) => {
+  try {
+    const id = String(req.body?.id ?? '');
+    res.json(await setActiveClearReadTemplate(id, { actor: req.user!.nameTh }));
+  } catch (error) {
+    if (error instanceof SettingsError) return res.status(error.status).json({ error: error.message });
+    const message = error instanceof Error ? error.message : 'เลือกแม่แบบไม่สำเร็จ';
+    res.status(502).json({ error: message });
+  }
+});
 
 /** สลับเครื่องอ่านทั้งระบบ — admin/แผนกบัญชีเท่านั้น มีผลกับไฟล์ที่อ่านหลังจากนี้ */
 settingsRouter.patch('/readers/active', requireAdmin, async (req, res) => {

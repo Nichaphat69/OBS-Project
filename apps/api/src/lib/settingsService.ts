@@ -113,6 +113,38 @@ export async function setActiveReader(id: string, { actor }: { actor: string }):
 }
 
 /**
+ * เลือกแม่แบบ Clear Read ที่จะใช้อ่านทั้งระบบ — มีผลกับไฟล์ที่อ่านหลังจากนี้ ไม่ย้อนไปแตะใบที่อ่านไปแล้ว
+ *
+ * ตรวจกับรายการจริงจาก Clear Read ก่อนบันทึกเสมอ ไม่ใช่รับ id อะไรมาก็เก็บ — id ที่พิมพ์ผิดจะทำให้
+ * การอ่านครั้งถัดไปล้มตอนยิงจริง ซึ่งไปรู้ตอนนั้นสายเกินไปแล้ว
+ */
+export async function setActiveClearReadTemplate(
+  id: string,
+  { actor }: { actor: string },
+): Promise<{ id: string; name: string; detailColumnCount: number }> {
+  const { ACTIVE_CLEAR_READ_TEMPLATE_SETTING } = await import('./extractionService.js');
+  const { ClearReadClient, hasClearReadCredentials } = await import('./clearReadClient.js');
+  if (!hasClearReadCredentials()) throw new SettingsError('ยังไม่ได้ตั้งค่าการเชื่อมต่อ Clear Read');
+  if (!id) throw new SettingsError('ต้องระบุแม่แบบที่จะใช้');
+
+  const templates = await new ClearReadClient().listTemplates();
+  const chosen = templates.find((t) => t.id === id);
+  if (!chosen) throw new SettingsError(`ไม่พบแม่แบบ "${id}" ในบัญชี Clear Read นี้`);
+
+  await setSetting(ACTIVE_CLEAR_READ_TEMPLATE_SETTING, { id });
+  await logAudit({
+    actor,
+    action: 'set_active_clear_read_template',
+    entityType: 'settings',
+    entityId: ACTIVE_CLEAR_READ_TEMPLATE_SETTING,
+    // เก็บจำนวนคอลัมน์รายวันไว้ใน audit ด้วย เพราะแม่แบบที่ไม่มีตารางรายวันอ่าน Timesheet ไม่ได้จริง
+    // ถ้าวันหนึ่งมีคนงงว่าทำไมอ่านแล้วไม่มีวันลา/OT เลย ร่องรอยตรงนี้จะตอบได้ทันที
+    detail: { id, name: chosen.name, detailColumnCount: chosen.detailColumns.length },
+  });
+  return { id: chosen.id, name: chosen.name, detailColumnCount: chosen.detailColumns.length };
+}
+
+/**
  * เปิด/ปิดสวิตช์เชื่อมต่อ FlowAccount จากแถบบนของเว็บ — ปิด = dry-run (ไม่ยิงออกไปหา FlowAccount จริง
  * เลยสักคำขอ) เปิด = ใช้โหมดจริงตามที่ตั้งไว้ใน .env (FLOWACCOUNT_MODE เช่น sandbox/live) ตัวแปรเดียวกับ
  * ที่ newFlowAccountClient() ใช้อยู่แล้ว จึงมีผลทันทีกับทั้งการดึงข้อมูลและตอนกดอนุมัติวางบิลจริง

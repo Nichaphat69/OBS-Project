@@ -89,9 +89,11 @@ const clearReadReader: TimesheetReader = {
   isConfigured: hasClearReadCredentials,
   async read(source, { expectedPeriod, templateId }) {
     const client = new ClearReadClient();
-    // ไม่ได้ตั้งแม่แบบไว้กับสัญญา → client ตกไปใช้ CLEAR_READ_TEMPLATE_ID จาก .env เอง
-    // (แบบเดียวกับที่ ABBYY ตกไปใช้ ABBYY_SKILL_ID)
-    const detail = await client.readDocument(source, { templateId: templateId ?? null });
+    // ลำดับการเลือกแม่แบบ: ที่ส่งมากับคำขอ → ที่เลือกไว้ในหน้าตัวอ่าน → CLEAR_READ_TEMPLATE_ID ใน .env
+    // (ตัวสุดท้ายคือ client จัดการเองถ้าได้ null) — เจ้าของระบบสั่งไว้ว่าเลือกในหน้าตัวอ่านแล้วต้อง
+    // เปลี่ยนแม่แบบที่ใช้อ่านจริงด้วย ไม่ใช่แค่เปิดดูเฉยๆ
+    const chosen = templateId ?? (await activeClearReadTemplateId());
+    const detail = await client.readDocument(source, { templateId: chosen });
     const data: any = mapClearReadResult(detail, { expectedPeriod });
 
     return {
@@ -99,7 +101,7 @@ const clearReadReader: TimesheetReader = {
       verification: { ok: true, issues: (data.notes ?? []).map((message: string) => ({ severity: 'warn', message })) },
       usage: null,
       // เหตุผลเดียวกับฝั่ง ABBYY ด้านบน — แม่แบบที่ใช้อ่านคือสิ่งที่ต้องรู้เวลาไล่ว่าฟอร์มไหนอ่านเพี้ยน
-      model: templateId ? `clear-read:${templateId}` : 'clear-read',
+      model: chosen ? `clear-read:${chosen}` : 'clear-read',
       rawResponse: detail,
     } satisfies ExtractorResult;
   },
@@ -125,6 +127,18 @@ export const READERS: TimesheetReader[] = [abbyyReader, clearReadReader, localLl
 
 /** คีย์ใน settings ที่เก็บว่าเลือกเครื่องอ่านตัวไหนไว้ทั้งระบบ */
 export const ACTIVE_READER_SETTING = 'active_reader';
+
+/** แม่แบบ Clear Read ที่เลือกไว้จากหน้า "ตัวอ่าน Timesheet" — เก็บในตาราง settings ไม่ใช่ .env
+ * เพราะเจ้าของระบบต้องเปลี่ยนเองได้จากหน้าเว็บโดยไม่ต้องแก้ไฟล์แล้วรีสตาร์ต
+ * ยังไม่เคยเลือก = ตกไปใช้ CLEAR_READ_TEMPLATE_ID จาก .env เหมือนเดิม */
+export const ACTIVE_CLEAR_READ_TEMPLATE_SETTING = 'active_clear_read_template';
+
+/** แม่แบบที่ระบบใช้อ่านอยู่จริง — null แปลว่ายังไม่ได้เลือก ให้ ClearReadClient ใช้ค่าจาก .env เอง */
+export async function activeClearReadTemplateId(): Promise<string | null> {
+  const { getSetting } = await import('./dashboardService.js');
+  const saved = await getSetting<{ id?: string }>(ACTIVE_CLEAR_READ_TEMPLATE_SETTING, {});
+  return saved.id ?? null;
+}
 
 export function readerById(id: string | null | undefined): TimesheetReader | null {
   return READERS.find((r) => r.id === id) ?? null;
