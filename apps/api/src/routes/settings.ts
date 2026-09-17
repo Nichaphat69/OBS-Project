@@ -31,7 +31,11 @@ settingsRouter.get('/readers', async (_req, res) => {
  * ต่อไม่ได้จะคืน `connected: false` พร้อมเหตุผล ไม่ใช่ error เพื่อให้หน้าตั้งค่ายังเปิดได้ตามปกติ
  */
 settingsRouter.get('/clear-read/template', async (req, res) => {
-  res.json(await describePinnedTemplate({ force: req.query.refresh !== undefined }));
+  // รับทั้งแบบมีพารามิเตอร์เฉยๆ (?refresh) และแบบใส่ค่า แต่ `?refresh=0` / `?refresh=false` ต้องแปลว่า
+  // "ไม่ต้องดึงใหม่" ตามที่ชื่อพารามิเตอร์สื่อ — เดิมเช็คแค่ว่ามีพารามิเตอร์ไหม ทำให้ใส่ 0 แล้วยังดึงใหม่
+  const raw = req.query.refresh;
+  const force = raw !== undefined && raw !== '0' && raw !== 'false';
+  res.json(await describePinnedTemplate({ force }));
 });
 
 /** สลับเครื่องอ่านทั้งระบบ — admin/แผนกบัญชีเท่านั้น มีผลกับไฟล์ที่อ่านหลังจากนี้ */
