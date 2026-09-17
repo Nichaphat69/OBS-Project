@@ -26,15 +26,25 @@ export default function UploadFileTab() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReadResultShape | null>(null);
   const [readers, setReaders] = useState<Array<{ id: string; label: string; configured: boolean; active: boolean }>>([]);
-  // null = ใช้ตัวที่เปิดอยู่ทั้งระบบ (พฤติกรรมเดิม) — ตั้งค่าเมื่อผู้ใช้เลือกเองเฉพาะรอบนี้เท่านั้น
+  // null = ใช้ตัวที่ระบบตั้งไว้ (พฤติกรรมเดิม) — ตั้งค่าเมื่อผู้ใช้เลือกเองเฉพาะรอบนี้เท่านั้น
   const [readerId, setReaderId] = useState<string | null>(null);
+  const [skills, setSkills] = useState<Array<{ id: string; name: string; skillId: string }>>([]);
+  // null = ใช้ Skill ที่ผูกกับสัญญานี้ไว้ (เส้น Gmail ที่ไม่มีคนกดเลือกก็ใช้ทางนี้) — เลือกเองแล้วชนะค่าของสัญญา
+  const [abbyySkillId, setAbbyySkillId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/settings/readers', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : { readers: [] }))
       .then((d) => setReaders(d.readers ?? []))
       .catch(() => setReaders([]));
+
+    fetch('/api/abbyy-skills', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setSkills(Array.isArray(rows) ? rows : []))
+      .catch(() => setSkills([]));
   }, []);
+
+  const chosenReaderId = readerId ?? readers.find((r) => r.active)?.id ?? null;
 
   function pickFile(f: File | null | undefined) {
     if (!f) return;
@@ -62,7 +72,14 @@ export default function UploadFileTab() {
       const res = await fetch('/api/timesheets/read', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ fileBase64, fileName: file.name, readerId }),
+        // ส่ง abbyySkillId เฉพาะตอนที่จะอ่านด้วย ABBYY จริงๆ — ไม่งั้น Skill ที่ค้างจากตอนกดสลับไปมา
+        // จะติดไปกับคำขอที่อ่านด้วยเครื่องอื่น
+        body: JSON.stringify({
+          fileBase64,
+          fileName: file.name,
+          readerId,
+          abbyySkillId: chosenReaderId === 'abbyy' ? abbyySkillId : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -108,25 +125,44 @@ export default function UploadFileTab() {
         {readers.length > 0 && (
           <div className="readerpick">
             <span className="lbl">{tx('อ่านด้วย')}</span>
-            {readers.map((r) => {
-              const chosen = readerId ? readerId === r.id : r.active;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={`rp${chosen ? ' on' : ''}`}
-                  disabled={!r.configured || reading}
-                  title={r.configured ? undefined : tx('ยังตั้งค่าไม่ครบ')}
-                  onClick={() => setReaderId(r.id)}
-                >
-                  {r.label}
-                  {r.active && <span className="rp-now">{tx('ค่าปกติ')}</span>}
-                </button>
-              );
-            })}
-            {readerId && readerId !== readers.find((r) => r.active)?.id && (
-              <span className="rp-note">{tx('เฉพาะการอ่านครั้งนี้ ไม่เปลี่ยนค่าของทั้งระบบ')}</span>
-            )}
+            {readers.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className={`rp${chosenReaderId === r.id ? ' on' : ''}`}
+                disabled={!r.configured || reading}
+                title={r.configured ? undefined : tx('ยังตั้งค่าไม่ครบ')}
+                onClick={() => setReaderId(r.id)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Skill เลือกได้เฉพาะฝั่ง ABBYY — ฝั่ง Clear Read ระบบปักแม่แบบเดียวทั้งระบบ จึงไม่มีอะไรให้เลือก
+            ไม่เลือก = ใช้ Skill ที่ผูกกับสัญญานี้ไว้ ซึ่งเป็นทางที่เส้น Gmail (ไม่มีคนกด) ใช้อยู่ */}
+        {chosenReaderId === 'abbyy' && skills.length > 0 && (
+          <div className="readeropt">
+            <label className="lbl" htmlFor="abbyy-skill">{tx('Skill ที่ใช้อ่าน')}</label>
+            <select
+              id="abbyy-skill"
+              value={abbyySkillId ?? ''}
+              disabled={reading}
+              onChange={(e) => setAbbyySkillId(e.target.value || null)}
+            >
+              <option value="">{tx('ตาม Skill ที่ผูกกับสัญญานี้')}</option>
+              {skills.map((s) => (
+                <option key={s.skillId} value={s.skillId}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {chosenReaderId === 'clear-read' && (
+          <div className="readerwarn">
+            <Icon name="clock" />
+            <span>{tx('Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า ไฟล์หลายหน้าอาจถึงสิบนาที')}</span>
           </div>
         )}
 
