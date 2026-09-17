@@ -8,6 +8,7 @@
 import { thaiMonth, thaiDate, thaiDateShort } from '@obs/domain';
 import { prisma } from '@obs/db';
 import { logAudit } from './audit.js';
+import { recordSubmissionResponse } from './submissionRecordService.js';
 import { employeeProgress, type EmployeeProgress } from './dashboardService.js';
 import {
   LineClient,
@@ -499,6 +500,12 @@ async function handleTimesheetMethodPostback({
   const employee = await prisma.employee.findFirst({ where: { lineUserId: userId ?? undefined }, select: { id: true, nameTh: true } });
   if (!employee) return { outcome: 'not_linked' };
 
+  // เก็บว่าพนักงาน "ได้รับข้อความตอบกลับไหม" เพื่อบันทึกลง timesheet_submissions — ไม่เปลี่ยนพฤติกรรม
+  // เดิมแม้แต่น้อย (error ยังถูกกลืนเหมือนเดิมทุกจุด) แค่จำผลไว้ ดู submissionRecordService.ts
+  let replyOk: boolean | null = null;
+  let replyFailureReason: string | null = null;
+  const noteReplyFailed = (error: any) => { replyOk = false; replyFailureReason = error?.message ?? null; };
+
   const contract = await prisma.contract.findUnique({ where: { id: contractId }, include: { customer: true } });
   const periodLabel = thaiMonth(period);
 
@@ -506,11 +513,13 @@ async function handleTimesheetMethodPostback({
     if (replyToken) {
       try {
         await line.reply(replyToken, 'รับทราบครับ ระบบจะเตือนอีกครั้งพรุ่งนี้', EMPLOYEE_QUICK_REPLY);
-      } catch {
-        /* เงียบไว้ */
+        replyOk = true;
+      } catch (error) {
+        noteReplyFailed(error); /* เงียบไว้เหมือนเดิม */
       }
     }
     await logAudit({ actor: `line:${userId}`, action: 'timesheet_method_snooze', entityType: 'employee', entityId: employee.id, detail: { contractId, period } });
+    await recordSubmissionResponse({ employeeId: employee.id, period, contractId, lineUserId: userId, replyOk, replyFailureReason, deferred: true });
     return { outcome: 'snoozed' };
   }
 
@@ -525,11 +534,13 @@ async function handleTimesheetMethodPostback({
           uploadUrl: uploadLink(),
         });
         await line.replyFlex(replyToken, 'ส่ง Timesheet ผ่านระบบ OBS', flex, EMPLOYEE_QUICK_REPLY);
-      } catch {
-        /* เงียบไว้ */
+        replyOk = true;
+      } catch (error) {
+        noteReplyFailed(error); /* เงียบไว้เหมือนเดิม */
       }
     }
     await logAudit({ actor: `line:${userId}`, action: 'timesheet_method_self_obs', entityType: 'employee', entityId: employee.id, detail: { contractId, period } });
+    await recordSubmissionResponse({ employeeId: employee.id, period, contractId, lineUserId: userId, replyOk, replyFailureReason, method: 'self_obs' });
     return { outcome: 'self_obs' };
   }
 
@@ -539,8 +550,9 @@ async function handleTimesheetMethodPostback({
       try {
         const flex = buildTimesheetEmailConfirmFlex({ customerName: contract?.customer.nameTh, projectName: contract?.projectName, periodLabel, emailTargets });
         await line.replyFlex(replyToken, 'บันทึกการส่งผ่าน Email เรียบร้อย', flex, EMPLOYEE_QUICK_REPLY);
-      } catch {
-        /* เงียบไว้ */
+        replyOk = true;
+      } catch (error) {
+        noteReplyFailed(error); /* เงียบไว้เหมือนเดิม */
       }
     }
     try {
@@ -550,6 +562,7 @@ async function handleTimesheetMethodPostback({
       await logAudit({ actor: 'system', action: 'notify_timesheet_self_email_error', entityType: 'employee', entityId: employee.id, detail: { message: error.message } });
     }
     await logAudit({ actor: `line:${userId}`, action: 'timesheet_method_self_email', entityType: 'employee', entityId: employee.id, detail: { contractId, period } });
+    await recordSubmissionResponse({ employeeId: employee.id, period, contractId, lineUserId: userId, replyOk, replyFailureReason, method: 'self_email' });
     return { outcome: 'self_email' };
   }
 
@@ -569,5 +582,6 @@ async function handleTimesheetMethodPostback({
     await logAudit({ actor: 'system', action: 'notify_timesheet_proxy_error', entityType: 'employee', entityId: employee.id, detail: { message: error.message } });
   }
   await logAudit({ actor: `line:${userId}`, action: 'timesheet_method_proxy_email', entityType: 'employee', entityId: employee.id, detail: { contractId, period } });
+  await recordSubmissionResponse({ employeeId: employee.id, period, contractId, lineUserId: userId, replyOk, replyFailureReason, method: 'proxy_email' });
   return { outcome: 'proxy_email' };
 }
