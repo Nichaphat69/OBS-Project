@@ -33,6 +33,12 @@ interface ContractRow {
   monthlyTotal: number;
   status: string;
 }
+/** ลูกค้าที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลย — ดู GET /api/customers/without-contract */
+interface CustomerWithoutContract {
+  id: string;
+  nameTh: string;
+  taxId: string;
+}
 interface FlowAccountEmployee {
   nameTh: string;
   invoicePosition: string;
@@ -130,6 +136,101 @@ function dateOnly(iso: string, lang: 'th' | 'en'): string {
   return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/** ปัดเป็นทศนิยม 2 ตำแหน่งไม่ให้เพี้ยนจาก floating point (เช่น 0.0158*100 อาจได้ 1.5800000000000001)
+ * แต่ไม่บังคับโชว์ทศนิยมท้ายที่ไม่มีนัยสำคัญ (3% ยังโชว์ "3" ไม่ใช่ "3.00") */
+function pctPrecise(rate: number) {
+  return Math.round(rate * 10000) / 100;
+}
+
+/** ช่องอัตราหัก ณ ที่จ่าย พร้อมปุ่มดินสอแก้เฉพาะช่องนี้ — เดิมมีแต่ตัวเลขปัดเศษเต็ม (Math.round) ล้วนๆ
+ * แก้ค่าละเอียด (เช่น 1.58%) ไม่ได้เลยนอกจากเปิดฟอร์ม "แก้ไขข้อมูลสัญญา" ทั้งใบซึ่งต้องกรอกทุกช่อง
+ * ยิงตรงไปที่ PATCH /:id/wht-rate (จุดเดียวกับที่หน้าอัปโหลด/ตรวจ Timesheet ใช้อยู่แล้ว) ไม่ผ่าน
+ * updateContract() แบบ full-replace — validation 0–30% อยู่ฝั่ง server (updateContractWhtRate) แล้ว */
+function WhtRateCell({ contract, onSaved }: { contract: ContractRow; onSaved: () => void }) {
+  const toast = useToast();
+  const { tx } = useLang();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(pctPrecise(contract.whtRate)));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const pct = Number(value);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 30) {
+      toast(tx('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%'), true);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/contracts/${encodeURIComponent(contract.id)}/wht-rate`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ whtRate: pct / 100 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data?.error ?? tx('บันทึกไม่สำเร็จ'), true);
+        return;
+      }
+      toast(tx('บันทึกอัตราหัก ณ ที่จ่ายแล้ว'));
+      setEditing(false);
+      onSaved();
+    } catch {
+      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {pctPrecise(contract.whtRate)}%
+        <button
+          type="button"
+          className="btn sm icon"
+          title={tx('แก้อัตราหัก ณ ที่จ่าย')}
+          aria-label={tx('แก้ไข')}
+          onClick={() => {
+            setValue(String(pctPrecise(contract.whtRate)));
+            setEditing(true);
+          }}
+        >
+          <Icon name="edit" />
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <input
+        type="number"
+        min={0}
+        max={30}
+        step={0.01}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        autoFocus
+        style={{
+          width: 64,
+          height: 30,
+          borderRadius: 'var(--r-ctl)',
+          border: '1px solid var(--rule)',
+          padding: '0 8px',
+          fontSize: 12.5,
+        }}
+      />
+      %
+      <button type="button" className="btn sm pri" disabled={saving} onClick={save}>
+        {tx('บันทึก')}
+      </button>
+      <button type="button" className="btn sm ghost" disabled={saving} onClick={() => setEditing(false)}>
+        {tx('ยกเลิก')}
+      </button>
+    </span>
+  );
+}
+
 /** ported from public/app.js's renderMaster() tab 2 (ลูกค้า & สัญญา) + renderCustomerAddForm()/
  * renderContractEditForm() */
 export default function CustomersContractsTab() {
@@ -138,8 +239,10 @@ export default function CustomersContractsTab() {
   const { tx, lang } = useLang();
 
   const [contracts, setContracts] = useState<ContractRow[] | null>(null);
+  const [orphanCustomers, setOrphanCustomers] = useState<CustomerWithoutContract[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [editContractId, setEditContractId] = useState<string | null>(null);
+  const [addContractForCustomerId, setAddContractForCustomerId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -155,6 +258,12 @@ export default function CustomersContractsTab() {
         setContracts(await r.json());
       })
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
+    // ลูกค้าที่สร้างไว้แต่ยังไม่มีสัญญา (เพิ่งแยกขั้นตอนสร้างลูกค้า/สัญญาออกจากกัน) — ล้มเหลวได้เงียบๆ
+    // เพราะไม่ใช่ข้อมูลหลักของหน้านี้ ไม่ควรทำให้ทั้งหน้าใช้งานไม่ได้ถ้าดึงไม่สำเร็จ
+    fetch('/api/customers/without-contract', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setOrphanCustomers)
+      .catch(() => setOrphanCustomers([]));
   }
   useEffect(load, []);
 
@@ -226,6 +335,36 @@ export default function CustomersContractsTab() {
         />
       )}
 
+      {/* ลูกค้าที่สร้างไว้แล้วแต่ยังไม่มีสัญญา (เพิ่งเพิ่มลูกค้าแบบเว้นสัญญาไว้ก่อน) — ต้องมีที่ให้กลับมา
+          หาแล้วเพิ่มสัญญาต่อได้ ไม่งั้นลูกค้ากลุ่มนี้จะหายไปจากหน้านี้ถาวรเพราะรายการหลักไล่จากสัญญา */}
+      {orphanCustomers.length > 0 &&
+        (addContractForCustomerId ? (
+          <AddContractForm
+            customer={orphanCustomers.find((o) => o.id === addContractForCustomerId)!}
+            onCancel={() => setAddContractForCustomerId(null)}
+            onSaved={() => {
+              setAddContractForCustomerId(null);
+              load();
+            }}
+          />
+        ) : (
+          <Card title={tx('ลูกค้าที่ยังไม่มีสัญญา')} right={<span className="rt">{orphanCustomers.length}</span>}>
+            <div className="tasklist">
+              {orphanCustomers.map((o) => (
+                <div key={o.id} className="taskrow">
+                  <div className="tt">
+                    <b>{o.nameTh}</b>
+                    <span>{tx('เลขผู้เสียภาษี')} {o.taxId}</span>
+                  </div>
+                  <button className="btn pri sm" onClick={() => setAddContractForCustomerId(o.id)}>
+                    {tx('เพิ่มสัญญา')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ))}
+
       {contracts.map((c) =>
         editContractId === c.id ? (
           <ContractEditForm
@@ -283,7 +422,9 @@ export default function CustomersContractsTab() {
                 <dt>VAT</dt>
                 <dd className="n">{Math.round(c.vatRate * 100)}%</dd>
                 <dt>{tx('หัก ณ ที่จ่าย')}</dt>
-                <dd className="n">{Math.round(c.whtRate * 100)}%</dd>
+                <dd className="n">
+                  <WhtRateCell contract={c} onSaved={load} />
+                </dd>
                 <dt>{tx('เครดิต')}</dt>
                 <dd className="n">{c.creditDays} {tx('วัน')}</dd>
                 <dt>{tx('ผู้ประสานงาน')}</dt>
@@ -364,8 +505,17 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     const ti = taxId.trim();
     const po = poNo.trim();
     const pn = projectName.trim();
-    if (!nt || !ti || !po || !pn || !startDate || !endDate) {
-      toast(tx('กรอกชื่อบริษัท เลขผู้เสียภาษี เลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน'), true);
+    if (!nt || !ti) {
+      toast(tx('กรอกชื่อบริษัทและเลขผู้เสียภาษีให้ครบก่อน'), true);
+      return;
+    }
+    // สัญญาไม่บังคับกรอกตอนสร้างลูกค้าอีกต่อไป (createCustomer() เองก็ต้องการแค่ชื่อ+เลขผู้เสียภาษี
+    // อยู่แล้ว) แต่ถ้าจะกรอกสัญญาด้วยก็ต้องครบทั้ง 4 ช่อง เพราะ createContract() ฝั่ง server ยัง
+    // ต้องการครบเหมือนเดิม — ไม่แตะ validation นั้นเพราะมีเหตุผลของมันเอง (บิล/PO อ้างอิงฟิลด์พวกนี้)
+    const hasAnyContractField = Boolean(po || pn || startDate || endDate);
+    const hasAllContractFields = Boolean(po && pn && startDate && endDate);
+    if (hasAnyContractField && !hasAllContractFields) {
+      toast(tx('ถ้าจะเพิ่มสัญญาด้วยเลย ต้องกรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบ — หรือเว้นว่างทั้งหมดไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้'), true);
       return;
     }
     setSaving(true);
@@ -390,6 +540,14 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
       if (!customerRes.ok) {
         toast(customer?.error ?? tx('สร้างลูกค้าไม่สำเร็จ'), true);
         setSaving(false);
+        return;
+      }
+
+      if (!hasAllContractFields) {
+        // ยังไม่กรอกสัญญาเลย — สร้างแค่ลูกค้าไว้ก่อน ไปเพิ่มสัญญาทีหลังได้จากรายการ "ลูกค้าที่ยังไม่มี
+        // สัญญา" ด้านบน (ดึงจาก GET /api/customers/without-contract)
+        toast(`${tx('เพิ่มลูกค้า')} "${nt}" ${tx('แล้ว — ยังไม่มีสัญญา เพิ่มสัญญาให้ทีหลังได้จากรายการ "ลูกค้าที่ยังไม่มีสัญญา" ด้านบน')}`);
+        onSaved();
         return;
       }
 
@@ -531,6 +689,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
       <div className="fsec">
         <div className="fsec-h">
           <b>{tx('สัญญาแรก')}</b>
+          <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('ไม่บังคับ — เว้นว่างไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้')}</span>
         </div>
         <div className="frm">
           <label>
@@ -578,6 +737,125 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
         <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"')}</small>
       </div>
 
+    </Card>
+  );
+}
+
+/** ฟอร์ม "เพิ่มสัญญา" ให้ลูกค้าที่มีอยู่แล้วแต่ยังไม่มีสัญญาเลย (มาจาก CustomerAddForm ที่แยกขั้นตอนไว้
+ * ให้เว้นสัญญาว่างไว้ก่อนได้) validation ฝั่งนี้ครบทุกช่องเหมือน createContract() ฝั่ง server เดิม
+ * ไม่ได้ผ่อนอะไรลง แค่แยกเวลากรอกออกจากตอนสร้างลูกค้าเท่านั้น */
+function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWithoutContract; onCancel: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const { tx } = useLang();
+  const [poNo, setPoNo] = useState('');
+  const [contractNo, setContractNo] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [divisorMode, setDivisorMode] = useState('fixed');
+  const [divisorValue, setDivisorValue] = useState('20');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [vat, setVat] = useState('7');
+  const [wht, setWht] = useState('3');
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const po = poNo.trim();
+    const pn = projectName.trim();
+    if (!po || !pn || !startDate || !endDate) {
+      toast(tx('กรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน'), true);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/contracts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          customerId: customer.id,
+          poNo: po,
+          projectName: pn,
+          contractNo: contractNo.trim() || null,
+          divisorMode,
+          divisorValue: Number(divisorValue) || 20,
+          startDate,
+          endDate,
+          vatRate: (Number(vat) || 0) / 100,
+          whtRate: (Number(wht) || 0) / 100,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data?.error ?? tx('สร้างสัญญาไม่สำเร็จ'), true);
+        setSaving(false);
+        return;
+      }
+      toast(`${tx('เพิ่มสัญญาให้')} "${customer.nameTh}" ${tx('แล้ว')}`);
+      onSaved();
+    } catch {
+      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card
+      title={tx('เพิ่มสัญญา')}
+      right={<span className="rt">{customer.nameTh}</span>}
+      footer={
+        <>
+          <button className="btn" onClick={onCancel}>
+            {tx('ยกเลิก')}
+          </button>
+          <button className="btn pri" disabled={saving} onClick={save}>
+            {tx('บันทึก')}
+          </button>
+        </>
+      }
+    >
+      <div className="frm">
+        <label>
+          {tx('เลขที่ใบว่าจ้าง (PO)')}
+          <input value={poNo} onChange={(e) => setPoNo(e.target.value)} placeholder="เช่น 26/B0200" />
+        </label>
+        <label>
+          {tx('เลขที่สัญญา')}
+          <input value={contractNo} onChange={(e) => setContractNo(e.target.value)} />
+        </label>
+        <label>
+          {tx('ชื่อโครงการ')}
+          <input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+        </label>
+        <label>
+          {tx('ตัวหารอัตราต่อวัน')}
+          <span className="selectchip grow">
+            <select value={divisorMode} onChange={(e) => setDivisorMode(e.target.value)}>
+              <option value="fixed">{tx('คงที่ (ระบุจำนวนวัน)')}</option>
+              <option value="actual_working_days">{tx('วันทำงานจริงของเดือน')}</option>
+            </select>
+          </span>
+        </label>
+        <label>
+          {tx('จำนวนวัน (ถ้าคงที่)')}
+          <input type="number" min={1} value={divisorValue} onChange={(e) => setDivisorValue(e.target.value)} />
+        </label>
+        <label>
+          {tx('วันเริ่มสัญญา')}
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </label>
+        <label>
+          {tx('วันสิ้นสุดสัญญา')}
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </label>
+        <label>
+          VAT (%)
+          <input type="number" min={0} max={100} step={0.1} value={vat} onChange={(e) => setVat(e.target.value)} />
+        </label>
+        <label>
+          {tx('หัก ณ ที่จ่าย (%)')}
+          <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
+        </label>
+      </div>
+      <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"')}</small>
     </Card>
   );
 }

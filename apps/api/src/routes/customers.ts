@@ -1,13 +1,26 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
-import { requireAdmin, requireSuperAdmin } from '../lib/requireRole.js';
-import { listCustomerDomains, setCustomerEmailDomain, claimCustomerEmailDomain, createCustomer, CustomerActionError } from '../lib/customersService.js';
+import { requireAdmin, requireSuperAdmin, requireNotUser } from '../lib/requireRole.js';
+import {
+  listCustomerDomains,
+  listCustomersWithoutContract,
+  setCustomerEmailDomain,
+  claimCustomerEmailDomain,
+  createCustomer,
+  CustomerActionError,
+} from '../lib/customersService.js';
 
 export const customersRouter = Router();
 customersRouter.use(requireAuth);
 
 customersRouter.get('/domains', requireSuperAdmin, async (_req, res) => {
   res.json(await listCustomerDomains());
+});
+
+/** ใหม่ — รายชื่อลูกค้าที่ยังไม่มีสัญญาเลย (ดู listCustomersWithoutContract) หน้า "ลูกค้า & สัญญา"
+ * ใช้แสดงเป็นรายการแยกให้กลับมาเพิ่มสัญญาต่อได้ หลังแยกขั้นตอนสร้างลูกค้า/สัญญาออกจากกัน */
+customersRouter.get('/without-contract', requireNotUser, async (_req, res) => {
+  res.json(await listCustomersWithoutContract());
 });
 
 /** ported from server.js `POST /api/customers` — สร้างลูกค้าเปล่าๆ ยังใช้งานไม่ได้จนกว่าจะ

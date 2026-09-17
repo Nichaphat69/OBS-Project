@@ -99,6 +99,16 @@ export async function createCustomer({
   return row;
 }
 
+/** ลูกค้าที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลยสักฉบับ — ใช้ตอนสร้างลูกค้าใหม่แบบแยกขั้นตอน (กรอกแค่ชื่อ+
+ * เลขผู้เสียภาษีก่อน แล้วค่อยกลับมาเพิ่มสัญญาทีหลัง) ลูกค้ากลุ่มนี้ยัง "ใช้งานไม่ได้" ตามคอมเมนต์ของ
+ * createCustomer() ด้านบน จึงต้องมีที่ให้กลับมาหาแล้วเพิ่มสัญญาต่อได้ ไม่งั้นจะหายไปจากหน้านี้ถาวร */
+export async function listCustomersWithoutContract(): Promise<Customer[]> {
+  return prisma.customer.findMany({
+    where: { contracts: { none: {} } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
 export async function listCustomerDomains(): Promise<CustomerDomainRow[]> {
   const rows = await prisma.customer.findMany({
     orderBy: { nameTh: 'asc' },
