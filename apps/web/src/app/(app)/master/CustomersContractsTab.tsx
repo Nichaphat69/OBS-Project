@@ -26,15 +26,12 @@ interface ContractRow {
   divisorValue: number;
   vatRate: number;
   whtRate: number;
+  /** ยังอยู่ในข้อมูลและยังถูกใช้จริงโดยเส้น Gmail ที่ไม่มีคนมากดเลือก Skill ให้ — หน้านี้แค่เลิกแก้มัน
+   * (ผู้ใช้เลือก Skill ที่หน้าอัปโหลดแทนแล้ว) จึงไม่ส่งคีย์นี้ขึ้นไปตอนบันทึก ไม่ใช่ส่ง null ซึ่งจะล้างค่า */
   abbyySkillId: string | null;
   headcount: number;
   monthlyTotal: number;
   status: string;
-}
-interface AbbyySkill {
-  id: string;
-  name: string;
-  skillId: string;
 }
 interface FlowAccountEmployee {
   nameTh: string;
@@ -133,26 +130,6 @@ function dateOnly(iso: string, lang: 'th' | 'en'): string {
   return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** ช่องเลือก Skill ABBYY ตามชื่อแทนต้องพิมพ์/วาง Skill ID เอง — ถ้าสัญญานี้เคยตั้ง Skill ID ที่ไม่ตรง
- * กับชื่อไหนในสารบัญเลย ยังต้องเห็นค่าเดิมอยู่ ไม่งั้นจะดูเหมือนตั้งค่าหายไปเงียบๆทั้งที่จริงยังใช้อยู่ */
-function AbbyySkillSelect({ value, onChange, skills }: { value: string; onChange: (v: string) => void; skills: AbbyySkill[] }) {
-  const { tx } = useLang();
-  const known = skills.some((s) => s.skillId === value);
-  return (
-    <span className="selectchip grow">
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">{tx('เว้นว่าง = ใช้ Skill กลาง')}</option>
-        {skills.map((s) => (
-          <option key={s.id} value={s.skillId}>
-            {s.name}
-          </option>
-        ))}
-        {value && !known && <option value={value}>({tx('ไม่ทราบชื่อ')}) {value}</option>}
-      </select>
-    </span>
-  );
-}
-
 /** ported from public/app.js's renderMaster() tab 2 (ลูกค้า & สัญญา) + renderCustomerAddForm()/
  * renderContractEditForm() */
 export default function CustomersContractsTab() {
@@ -161,7 +138,6 @@ export default function CustomersContractsTab() {
   const { tx, lang } = useLang();
 
   const [contracts, setContracts] = useState<ContractRow[] | null>(null);
-  const [abbyySkills, setAbbyySkills] = useState<AbbyySkill[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [editContractId, setEditContractId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -179,10 +155,6 @@ export default function CustomersContractsTab() {
         setContracts(await r.json());
       })
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
-    fetch('/api/abbyy-skills', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then(setAbbyySkills)
-      .catch(() => setAbbyySkills([]));
   }
   useEffect(load, []);
 
@@ -246,7 +218,6 @@ export default function CustomersContractsTab() {
 
       {addOpen && (
         <CustomerAddForm
-          abbyySkills={abbyySkills}
           onCancel={() => setAddOpen(false)}
           onSaved={() => {
             setAddOpen(false);
@@ -260,8 +231,7 @@ export default function CustomersContractsTab() {
           <ContractEditForm
             key={c.id}
             contract={c}
-            abbyySkills={abbyySkills}
-            onCancel={() => setEditContractId(null)}
+              onCancel={() => setEditContractId(null)}
             onSaved={() => {
               setEditContractId(null);
               load();
@@ -337,7 +307,7 @@ export default function CustomersContractsTab() {
 
 /** ฟอร์ม "เพิ่มลูกค้าใหม่" — สร้างลูกค้า + สัญญาแรกในคราวเดียว เพราะลูกค้าที่ไม่มีสัญญาเลยใช้งานอะไร
  * ไม่ได้ (ไม่มีอัตราจ้าง ไม่มีรอบบิล) */
-function CustomerAddForm({ abbyySkills, onCancel, onSaved }: { abbyySkills: AbbyySkill[]; onCancel: () => void; onSaved: () => void }) {
+function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => void }) {
   const toast = useToast();
   const { tx } = useLang();
   const [faCompanies, setFaCompanies] = useState<FlowAccountCompany[]>([]);
@@ -364,7 +334,6 @@ function CustomerAddForm({ abbyySkills, onCancel, onSaved }: { abbyySkills: Abby
   const [endDate, setEndDate] = useState('');
   const [vat, setVat] = useState('7');
   const [wht, setWht] = useState('3');
-  const [abbyySkillId, setAbbyySkillId] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -438,7 +407,6 @@ function CustomerAddForm({ abbyySkills, onCancel, onSaved }: { abbyySkills: Abby
           endDate,
           vatRate: (Number(vat) || 0) / 100,
           whtRate: (Number(wht) || 0) / 100,
-          abbyySkillId: abbyySkillId.trim() || null,
         }),
       });
       const contract = await contractRes.json();
@@ -610,23 +578,12 @@ function CustomerAddForm({ abbyySkills, onCancel, onSaved }: { abbyySkills: Abby
         <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"')}</small>
       </div>
 
-      <div className="fsec">
-        <div className="fsec-h">
-          <b>{tx('การอ่าน Timesheet ด้วย ABBYY')}</b>
-        </div>
-        <div className="frm">
-          <label>
-            {tx('ABBYY Skill เฉพาะบริษัทนี้')}
-            <AbbyySkillSelect value={abbyySkillId} onChange={setAbbyySkillId} skills={abbyySkills} />
-          </label>
-        </div>
-      </div>
     </Card>
   );
 }
 
 /** ฟอร์ม "แก้ไขข้อมูลสัญญา" — แก้ทั้งลูกค้า+สัญญาในคราวเดียว (มาแทนที่การ์ดของสัญญานั้นเลยในหน้า) */
-function ContractEditForm({ contract, abbyySkills, onCancel, onSaved }: { contract: ContractRow; abbyySkills: AbbyySkill[]; onCancel: () => void; onSaved: () => void }) {
+function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractRow; onCancel: () => void; onSaved: () => void }) {
   const toast = useToast();
   const { tx } = useLang();
   const [customerNameTh, setCustomerNameTh] = useState(contract.customerName);
@@ -645,7 +602,6 @@ function ContractEditForm({ contract, abbyySkills, onCancel, onSaved }: { contra
   const [vat, setVat] = useState(String(Math.round(contract.vatRate * 100)));
   const [wht, setWht] = useState(String(Math.round(contract.whtRate * 100)));
   const [creditDays, setCreditDays] = useState(String(contract.creditDays));
-  const [abbyySkillId, setAbbyySkillId] = useState(contract.abbyySkillId ?? '');
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -678,7 +634,6 @@ function ContractEditForm({ contract, abbyySkills, onCancel, onSaved }: { contra
           contactName: contactName.trim() || null,
           contactPhone: contactPhone.trim() || null,
           billingPlace: billingPlace.trim() || null,
-          abbyySkillId: abbyySkillId.trim() || null,
         }),
       });
       const data = await res.json();
@@ -790,20 +745,6 @@ function ContractEditForm({ contract, abbyySkills, onCancel, onSaved }: { contra
         </div>
       </div>
 
-      <div className="fsec">
-        <div className="fsec-h">
-          <b>{tx('การอ่าน Timesheet ด้วย ABBYY')}</b>
-        </div>
-        <div className="frm">
-          <label>
-            {tx('ABBYY Skill เฉพาะบริษัทนี้')}
-            <AbbyySkillSelect value={abbyySkillId} onChange={setAbbyySkillId} skills={abbyySkills} />
-          </label>
-        </div>
-        <small className="fhint">
-          {tx('ถ้าลูกค้ารายนี้มี Timesheet คนละแบบฟอร์ม เทรน Skill แยกใน ABBYY Vantage แล้วใส่ Skill ID ไว้ที่นี่ — ตอนอัปโหลด Timesheet ระบบจะเลือกใช้ Skill นี้ให้เองตามบริษัทที่กำลังดำเนินการอยู่ ไม่ต้องเลือกอะไรเพิ่ม เว้นว่างไว้ถ้ายังไม่มี Skill เฉพาะ ระบบจะใช้ Skill กลางแทน')}
-        </small>
-      </div>
     </Card>
   );
 }
