@@ -236,3 +236,21 @@ export async function syncEmailSent(
     return false;
   }
 }
+
+/**
+ * หน้ารอบบิลที่หน้าเว็บเรียก — เหมือน previewCycleInvoice() แต่แวะเช็คกล่อง Gmail ก่อน
+ * ported from src/service.js's cycleDetail()
+ *
+ * เช็คตอนเปิดหน้าเพราะเป็นจังหวะเดียวที่คนกำลังมองผลอยู่จริง — ไม่ต้องตั้ง cron มาไล่เช็คทุกใบ
+ * ทั้งที่ส่วนใหญ่ไม่มีอะไรเปลี่ยน
+ *
+ * แยกเป็นฟังก์ชันคนละตัวกับ previewCycleInvoice() ตามต้นฉบับ ไม่ยัด syncEmailSent() เข้าไปข้างใน
+ * ด้วยเหตุผลเรื่องความเร็ว: previewCycleInvoice() ถูกเรียกจากหลายที่ (รวม createGmailDraft() เอง)
+ * ถ้าฝังไว้ข้างในจะมี network call ไป Gmail พ่วงไปทุกจุดที่เรียกโดยไม่ได้ตั้งใจ ส่วนที่นี่คือจุดเดียว
+ * ที่ตั้งใจให้เช็ค — และ syncEmailSent() ก็ออกก่อนทันทีถ้าใบนั้นปิดไปแล้วหรือยังไม่มี threadId
+ * ของจริงจึงยิงถาม Gmail แค่ช่วงสั้นๆ ระหว่างที่ร่างถูกสร้างแล้วแต่ยังไม่มีใครกดส่ง
+ */
+export async function cycleDetail(contractId: string, period: string, { client }: { client?: GmailClient } = {}) {
+  await syncEmailSent(`INV-${contractId}-${period}`, { client });
+  return previewCycleInvoice(contractId, period);
+}
