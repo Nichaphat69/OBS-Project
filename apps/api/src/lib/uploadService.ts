@@ -22,25 +22,25 @@ import { ingestTimesheet, nextDocumentNo, type ExtractedData } from './ingestSer
 /** เลือก ABBYY Skill ให้ตรงบริษัท (multi-skill) — ใช้สัญญาที่ระบุมาก่อน (ถ้ามี) ไม่งั้น fallback ไป
  * ใช้สัญญาที่ "กำลังดำเนินการอยู่" (ตัวสลับบริษัทบนแถบบน) เพราะตอนอ่านไฟล์ preview ยังไม่รู้ว่าเป็น
  * ของพนักงานสัญญาไหน (จับคู่ชื่อพนักงาน→สัญญาเกิดขึ้น "หลัง" ขั้นตอนนี้) — คืน null ถ้าไม่มีทั้งคู่หรือ
- * สัญญานั้นยังไม่ได้ตั้ง Skill ไว้ ให้ extractTimesheet() ปล่อยไปใช้ ABBYY_SKILL_ID เดิมจาก .env ต่อ */
+ * สัญญานั้นยังไม่ได้ตั้ง Skill ไว้ ให้ extractTimesheet() ปล่อยไปใช้ ABBYY_SKILL_ID เดิมจาก .env ต่อ
+ *
+ * ⚠️ ฝั่ง Clear Read ต่างจาก ABBYY: เจ้าของระบบสั่งไว้ 17 ก.ย. 69 ว่าให้ใช้ **แม่แบบเดียวทั้งระบบ**
+ * (CLEAR_READ_TEMPLATE_ID ใน .env) และเอาแม่แบบเก่าออกให้หมด จึงคืน null เสมอเพื่อให้ตกไปใช้ค่าจาก
+ * .env ไม่ว่าสัญญานั้นเคยตั้ง clearReadTemplateId ไว้ว่าอะไร — คอลัมน์ยังอยู่เพื่อไม่ให้ข้อมูลเดิมหาย
+ * แต่ไม่มีผลกับการอ่านแล้ว ถ้าวันหนึ่งกลับมาใช้หลายแม่แบบอีก ให้แก้ที่จุดนี้จุดเดียว */
 async function resolveReaderTemplates(
   contractId: string | null,
 ): Promise<{ abbyySkillId: string | null; clearReadTemplateId: string | null }> {
+  const clearReadTemplateId = null;
   if (contractId) {
     const contract = await prisma.contract.findUnique({
       where: { id: contractId },
-      select: { abbyySkillId: true, clearReadTemplateId: true },
+      select: { abbyySkillId: true },
     });
-    return {
-      abbyySkillId: contract?.abbyySkillId ?? null,
-      clearReadTemplateId: contract?.clearReadTemplateId ?? null,
-    };
+    return { abbyySkillId: contract?.abbyySkillId ?? null, clearReadTemplateId };
   }
   const active = await getActiveContract();
-  return {
-    abbyySkillId: active?.abbyySkillId ?? null,
-    clearReadTemplateId: (active as { clearReadTemplateId?: string | null } | null)?.clearReadTemplateId ?? null,
-  };
+  return { abbyySkillId: active?.abbyySkillId ?? null, clearReadTemplateId };
 }
 
 export class UploadError extends Error {
