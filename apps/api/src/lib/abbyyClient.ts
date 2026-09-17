@@ -417,7 +417,7 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
     const computedOt = hoursBetween(otTimeIn, otTimeOut);
     const normalHours = parsedOrNull(pick(cols, detail.normalHours)) ?? computedNormal;
     const otHours = parsedOrNull(pick(cols, detail.otHours)) ?? computedOt;
-    const totalHours = parsedOrNull(pick(cols, detail.totalHours)) ?? (normalHours !== null || otHours !== null ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100 : null);
+    const totalHours = parsedOrNull(pick(cols, detail.dailyTotalHours)) ?? (normalHours !== null || otHours !== null ? Math.round(((normalHours ?? 0) + (otHours ?? 0)) * 100) / 100 : null);
 
     days.push({
       date, dayOfWeek: pick(cols, detail.day) ?? dayOfWeekFromDate(date), project,
@@ -426,7 +426,7 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
       normalHours, otHours, totalHours,
       // ฟิลด์ตามสารบัญกลางที่เพิ่มเข้ามา — Skill ไหนไม่ได้ตั้ง mapping ไว้ก็เป็น null เฉยๆ ไม่กระทบของเดิม
       rowNumber: pick(cols, detail.rowNumber),
-      site: pick(cols, detail.site),
+      site: pick(cols, detail.dailySite),
       workLocation: pick(cols, detail.workLocation),
       breakHours: parsedOrNull(pick(cols, detail.breakHours)),
       otBreakHours: parsedOrNull(pick(cols, detail.otBreakHours)),
@@ -597,9 +597,11 @@ const DEFAULT_HEADER_MAP: Record<string, string | null> = {
   employeeName: 'Employee Name',
   position: 'Position',
   monthYear: 'Month Year',
-  approverName: 'Approver',
+  // คีย์ฝั่งซ้ายเปลี่ยนตามสารบัญกลาง V4 (Approver_Name → Approved_By_Name, Total_Hours ระดับสรุป →
+  // Monthly_Total_Hours) ส่วนค่าฝั่งขวาคือชื่อฟิลด์จริงใน Skill ของ ABBYY ไม่ได้เปลี่ยนสักตัว
+  approvedByName: 'Approver',
   totalWorkDays: 'Total Work days',
-  totalHours: 'Total Hours',
+  monthlyTotalHours: 'Total Hours',
   totalLeaveDays: 'Leave Sick',
 };
 
@@ -613,7 +615,8 @@ const DEFAULT_DETAIL_MAP: Record<string, string | null> = {
   workType: 'Type',
   normalHours: 'Normal',
   otHours: 'OT',
-  totalHours: 'Total per day',
+  // Total_Hours ระดับแถว → Daily_Total_Hours ตาม V4 ค่าฝั่งขวาคือชื่อคอลัมน์จริงใน Skill ไม่เปลี่ยน
+  dailyTotalHours: 'Total per day',
 };
 
 const DEFAULT_TABLE_NAME = 'New Table';
@@ -703,9 +706,9 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
   const period = resolvePeriod(fields, fm);
   const employeeName = pick(fields, fm.header.employeeName);
   const position = pick(fields, fm.header.position);
-  const projectManagerSignatureName = pick(fields, fm.header.approverName);
+  const projectManagerSignatureName = pick(fields, fm.header.approvedByName);
   const rawTotalWorkDays = pick(fields, fm.header.totalWorkDays);
-  const rawTotalHours = pick(fields, fm.header.totalHours);
+  const rawTotalHours = pick(fields, fm.header.monthlyTotalHours);
   const totalHours = rawTotalHours ? Number(rawTotalHours) : null;
   const rawLeaveSick = pick(fields, fm.header.totalLeaveDays);
 
@@ -762,7 +765,7 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
     department: pick(fields, fm.header.department),
     reportingPeriod: pick(fields, fm.header.reportingPeriod),
     supervisorName: pick(fields, fm.header.supervisorName),
-    site: pick(fields, fm.header.site),
+    site: pick(fields, fm.header.documentSite),
     projectTeam: pick(fields, fm.header.projectTeam),
     documentNo: null,
     approvalStatus: null,

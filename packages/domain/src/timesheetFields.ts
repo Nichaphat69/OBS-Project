@@ -102,22 +102,43 @@ export const TIMESHEET_HEADER_FIELDS: TimesheetFieldSpec[] = [
     type: 'text', examples: ['John Smith', 'Project Supervisor A'],
   },
   {
-    key: 'approverName', name: 'Approver_Name', label: 'ชื่อผู้อนุมัติ',
+    key: 'projectManagerName', name: 'Project_Manager_Name', label: 'ชื่อ Project Manager',
     description:
-      'Name of the person who approves the Timesheet, such as Approver, Approved By, Project Manager, or equivalent.',
+      'Name of the Project Manager when the source states it as its own field. May be the same person as '
+      + 'Approved_By_Name, but never copy one into the other unless the source itself repeats the name.',
+    type: 'text', examples: ['Nichaphat Chokrak', 'Apinya Phuangtaw'],
+  },
+  {
+    key: 'approvedByName', name: 'Approved_By_Name', label: 'ชื่อผู้อนุมัติ',
+    description:
+      'Name of the person who approves the Timesheet. Map the source aliases Approver, Approved By, and '
+      + 'Approver Name onto this single canonical field.',
     type: 'text', examples: ['Nichaphat Chokrak', 'Supranee Suwannates'],
   },
   {
-    key: 'site', name: 'Site', label: 'สถานที่ปฏิบัติงาน (ระดับเอกสาร)',
+    key: 'documentSite', name: 'Document_Site', label: 'สถานที่ปฏิบัติงาน (ระดับเอกสาร)',
     description:
-      'Site, customer site, office, branch, location name, or work site associated with the specific record when '
-      + 'explicitly shown. This describes the site itself, not remote/on-site working arrangement.',
+      'Physical site at document/header level, such as office, branch, or customer site. Map Place, Location, '
+      + 'Office, Branch, and Customer Site when they appear at document level. Use Daily_Site for a site printed '
+      + 'on an individual daily row, and Work_Location for a working arrangement such as WFH or Remote — '
+      + 'those are different fields, not aliases of this one.',
     type: 'text', examples: ['Office', 'Bangkok', 'PTT', 'Head Office', 'Branch 01', 'Building A'],
   },
   {
     key: 'projectTeam', name: 'Project_Team', label: 'ทีมโครงการ',
     description: 'Project team, squad, group, or work team when explicitly shown.',
     type: 'text', examples: ['Team A', 'Development Team', 'Project Team 1'],
+  },
+  {
+    key: 'documentType', name: 'Document_Type', label: 'ประเภทเอกสาร',
+    description: 'Document type or document title as printed on the form.',
+    type: 'text', examples: ['Timesheet', 'Working Report', 'Monthly Timesheet'],
+  },
+  {
+    key: 'documentNumber', name: 'Document_Number', label: 'เลขที่เอกสาร',
+    description:
+      'Document, Timesheet, or reference number printed on the form. Do not use Employee_ID or a row number.',
+    type: 'text', examples: ['TS-2026-08-001', '000000213'],
   },
 ];
 
@@ -148,15 +169,19 @@ export const TIMESHEET_DETAIL_FIELDS: TimesheetFieldSpec[] = [
     type: 'text', examples: ['PRJ26050', 'BSCP-AI Object', 'Internal-Other', 'Project A'],
   },
   {
-    key: 'site', name: 'Site', label: 'สถานที่ (รายวัน)',
-    description: 'Daily customer/site/office/branch associated with the row when explicitly shown.',
+    key: 'dailySite', name: 'Daily_Site', label: 'สถานที่ (รายวัน)',
+    description:
+      'Physical site printed on this daily row. Map the source alias Place when it names a location. '
+      + 'Use Document_Site for a site stated once at document level, and Work_Location for a working '
+      + 'arrangement such as WFH or Remote — never mix Daily_Site and Work_Location.',
     type: 'text', examples: ['Office', 'PTT', 'Bangkok', 'Head Office', 'Branch 01'],
   },
   {
     key: 'workLocation', name: 'Work_Location', label: 'รูปแบบการทำงาน',
     description:
-      'Working arrangement or physical working location, distinct from Site. Use only when explicitly stated.',
-    type: 'text', examples: ['WFH', 'Remote', 'On-site', 'Office', 'Customer Site'],
+      'Working arrangement only — remote, WFH, on-site, or office arrangement. This is not a physical site: '
+      + 'a named place belongs in Daily_Site or Document_Site. Use only when explicitly stated.',
+    type: 'text', examples: ['WFH', 'Remote', 'On-site', 'Office'],
   },
   {
     key: 'workType', name: 'Work_Type', label: 'ประเภทของวัน',
@@ -211,18 +236,25 @@ export const TIMESHEET_DETAIL_FIELDS: TimesheetFieldSpec[] = [
     type: 'number', examples: ['0', '1', '2.00', '3.5'],
   },
   {
-    key: 'totalHours', name: 'Total_Hours', label: 'ชั่วโมงรวม',
+    key: 'dailyTotalHours', name: 'Daily_Total_Hours', label: 'ชั่วโมงรวมของวันนั้น',
     description:
-      'Total duration reported for the row. Map Total, Total per day, Working Hrs., Duration as hour, or equivalent '
-      + 'when the source reports it. Do not calculate it yourself.',
-    type: 'number', examples: ['8', '8.00', '9.5', '160.00'],
+      'Total duration for THIS ONE daily row only. Map Total, Total per day, Working Hrs., or Duration as hour '
+      + 'when the value belongs to a single date. Never put a monthly or period total here — that is '
+      + 'Monthly_Total_Hours, a different field. Do not calculate it yourself.',
+    type: 'number', examples: ['8', '8.00', '9.5'],
   },
   {
-    key: 'additionalHours', name: 'Additional_Hours', label: 'ชั่วโมง/แมนเดย์เพิ่มเติม',
+    key: 'additionalHours', name: 'Additional_Hours', label: 'ชั่วโมงเพิ่มเติม',
     description:
-      'Additional hours or additional man-day explicitly reported by the source. Do not treat this as overtime '
-      + 'unless the source explicitly identifies it as OT.',
-    type: 'number', examples: ['0', '0.5', '1'],
+      'Additional hours the source separates out but does not clearly label as overtime. Do not treat this as '
+      + 'overtime unless the source explicitly identifies it as OT. For an additional man-day figure use '
+      + 'Additional_Man_Day instead.',
+    type: 'number', examples: ['0', '0.5', '1', '2.00'],
+  },
+  {
+    key: 'additionalManDay', name: 'Additional_Man_Day', label: 'แมนเดย์เพิ่มเติม (รายวัน)',
+    description: 'Additional man-day value on this daily row when the source states it.',
+    type: 'number', examples: ['0.5', '1', '2'],
   },
   {
     key: 'jobDescription', name: 'Job_Description', label: 'รายละเอียดงาน',
@@ -251,8 +283,32 @@ export const TIMESHEET_DETAIL_FIELDS: TimesheetFieldSpec[] = [
   },
   {
     key: 'remarks', name: 'Remarks', label: 'หมายเหตุ',
-    description: 'Remark, note, or status text for the row when the source provides it separately.',
+    description:
+      'Separate note or comment text that is not the main work description. If the source has one combined '
+      + 'Job Description / Remark cell, keep the whole cell in Job_Description and leave this empty — '
+      + 'never duplicate the same text into both.',
     type: 'text', examples: ['Approved', 'Pending', 'Remark A', 'N/A'],
+  },
+  {
+    key: 'prLink', name: 'PR_Link', label: 'ลิงก์ PR/อ้างอิง',
+    description:
+      'Pull-request or reference URL appearing on this daily row. Preserve the URL exactly — do not shorten it.',
+    type: 'text', examples: ['https://github.com/org/repo/pull/1795'],
+  },
+  {
+    key: 'ticketId', name: 'Ticket_ID', label: 'เลขที่ Ticket/Issue',
+    description: 'Issue, ticket, or reference ID explicitly shown on this daily row. Preserve it exactly.',
+    type: 'text', examples: ['HEAL-2886', 'BSD-103', 'BSD-116'],
+  },
+  {
+    key: 'status', name: 'Status', label: 'สถานะของแถว',
+    description: 'Row status when the source prints it separately from Work_Type.',
+    type: 'text', examples: ['Pending', 'Approved', 'Completed', 'Working'],
+  },
+  {
+    key: 'otApproval', name: 'OT_Approval', label: 'สถานะอนุมัติ OT',
+    description: 'Overtime approval state when the source shows it as its own column.',
+    type: 'text', examples: ['Approved', 'Pending', 'Yes', 'No'],
   },
 ];
 
@@ -278,25 +334,146 @@ export const TIMESHEET_SUMMARY_FIELDS: TimesheetFieldSpec[] = [
   {
     key: 'totalWorkDays', name: 'Total_Work_Days', label: 'จำนวนวันทำงานรวม (ช่องสรุป)',
     description:
-      'Total number of work days reported in a document-level summary box. Map Total Work days, Total base man-day, '
-      + 'No. Manday, Summary Work Days, Claim to APHD, or equivalent. Read it from the summary the document prints — '
-      + 'do not count the daily rows yourself.',
-    type: 'number', examples: ['19', '20', '21'],
+      'Total number of work days printed in a document-level summary box. Map Total Work days or Working days. '
+      + 'Read it from the summary the document prints — do not count the daily rows yourself. '
+      + 'A base man-day figure belongs in Total_Base_Man_Day, not here.',
+    type: 'number', examples: ['19', '20', '17'],
+  },
+  {
+    key: 'totalLeaveSickDays', name: 'Total_Leave_Sick_Days', label: 'วันลา+ป่วยรวม (ช่องเดียวในเอกสาร)',
+    description:
+      'Use ONLY when the source prints leave and sick together in one combined box, such as "Leave / Sick (days)" '
+      + 'or "Leave/Sick days". Do not split that one number into Total_Leave_Days and Total_Sick_Days, and do not '
+      + 'fill this by adding two separate figures together.',
+    type: 'number', examples: ['0', '1', '2'],
   },
   {
     key: 'totalLeaveDays', name: 'Total_Leave_Days', label: 'จำนวนวันลารวม (ช่องสรุป)',
     description:
-      'Total number of leave days reported in a document-level summary box. Map Leave / Sick (days), Leave Sick, '
-      + 'Total Leave, or equivalent. Read it from the summary the document prints — do not count the daily rows yourself.',
+      'Total leave days when the source prints a leave total on its own. Map Total Leave or Leave days. '
+      + 'Does not include sick leave unless the source itself defines it that way. If the form only has one '
+      + 'combined Leave/Sick box, use Total_Leave_Sick_Days instead and leave this empty.',
+    type: 'number', examples: ['1', '2', '5'],
+  },
+  {
+    key: 'totalSickDays', name: 'Total_Sick_Days', label: 'จำนวนวันลาป่วยรวม (ช่องสรุป)',
+    description:
+      'Total sick-leave days when the source prints it separately. Map Sick Leave days or Total Sick. '
+      + 'If the form only has one combined Leave/Sick box, use Total_Leave_Sick_Days instead and leave this empty.',
     type: 'number', examples: ['0', '1', '2'],
   },
   {
-    key: 'totalHours', name: 'Total_Hours_Summary', label: 'ชั่วโมงรวมทั้งเอกสาร (ช่องสรุป)',
+    key: 'totalNormalHours', name: 'Total_Normal_Hours', label: 'ชั่วโมงทำงานปกติรวมทั้งงวด',
     description:
-      'Total hours reported in a document-level summary box, such as Total Hours or '
-      + '"Total duration (hour in decimal)". Forms that summarise in days rather than hours will not have this — '
-      + 'leave it empty rather than deriving it.',
-    type: 'number', examples: ['152.00', '160.00', '168'],
+      'Regular/base working hours for the whole period when the source prints such a total. '
+      + 'Map the alias Base Duration when it means monthly regular hours.',
+    type: 'number', examples: ['152', '136.00', '168.00'],
+  },
+  {
+    key: 'totalOtHours', name: 'Total_OT_Hours', label: 'ชั่วโมง OT รวมทั้งงวด',
+    description:
+      'Overtime total for the whole period when the source clearly labels it as OT. '
+      + 'Map Total OT, OT Total, or OverTime Total.',
+    type: 'number', examples: ['0', '11.50', '5.00'],
+  },
+  {
+    key: 'monthlyTotalHours', name: 'Monthly_Total_Hours', label: 'ชั่วโมงรวมทั้งงวด (ช่องสรุป)',
+    description:
+      'Total working hours for the ENTIRE reporting month or period, printed in a summary/total section. '
+      + 'Map Total Hours and Total Duration at period scope. Never copy a single day\'s value here — that is '
+      + 'Daily_Total_Hours, a different field. Do not sum the daily rows to produce this; leave it empty if the '
+      + 'document does not print it.',
+    type: 'number', examples: ['152.00', '136.00', '179.50'],
+  },
+  {
+    key: 'totalWeekendDays', name: 'Total_Weekend_Days', label: 'จำนวนวันหยุดสุดสัปดาห์รวม',
+    description: 'Count of weekend days when the source prints it.',
+    type: 'number', examples: ['4', '8', '10'],
+  },
+  {
+    key: 'totalHolidayDays', name: 'Total_Holiday_Days', label: 'จำนวนวันหยุดนักขัตฤกษ์รวม',
+    description: 'Count of holiday days when the source prints it.',
+    type: 'number', examples: ['1', '2'],
+  },
+  {
+    key: 'totalBaseManDay', name: 'Total_Base_Man_Day', label: 'แมนเดย์พื้นฐานรวม',
+    description:
+      'Base man-day total when the source prints it. This is not Total_Work_Days — keep them separate even when '
+      + 'the two numbers happen to match.',
+    type: 'number', examples: ['20', '19.0', '21'],
+  },
+  {
+    key: 'totalAdditionalManDay', name: 'Total_Additional_Man_Day', label: 'แมนเดย์เพิ่มเติมรวม',
+    description: 'Additional man-day total when the source prints it.',
+    type: 'number', examples: ['0', '1', '2.5'],
+  },
+  {
+    key: 'totalAdditionalHours', name: 'Total_Additional_Hours', label: 'ชั่วโมงเพิ่มเติมรวม',
+    description:
+      'Additional-hours total when the source prints it and does not clearly label it as overtime.',
+    type: 'number', examples: ['0', '2', '5.5'],
+  },
+  {
+    key: 'totalOtAdjust', name: 'Total_OT_Adjust', label: 'ยอดปรับ OT ทั้งงวด',
+    description: 'Overtime adjustment at month/period level when the source prints it.',
+    type: 'number', examples: ['0', '0.5', '1'],
+  },
+];
+
+/**
+ * ฟิลด์ลายเซ็น/การอนุมัติ — หนึ่งค่าต่อหนึ่ง Timesheet เหมือนฟิลด์หัวเอกสาร
+ * เพิ่มตาม Master Template V4 หมวด 5 (SIGNATURE / APPROVAL / CONTROL)
+ *
+ * แยกกลุ่มจากหัวเอกสารเพื่อให้หน้าตั้งค่าจัดกลุ่มได้ตรงกับที่สเปกแบ่งไว้ แต่ในทางข้อมูลถือเป็นฟิลด์
+ * ระดับเอกสารเหมือนกัน จึงรวมอยู่ใน TIMESHEET_DOCUMENT_FIELDS ด้วย
+ */
+export const TIMESHEET_SIGNATURE_FIELDS: TimesheetFieldSpec[] = [
+  {
+    key: 'employeeSignatureName', name: 'Employee_Signature_Name', label: 'ชื่อที่ลงนาม (พนักงาน)',
+    description:
+      'Name attached to the employee/resource signature. Map the alias Resource Signature when the signer is '
+      + 'the same recorded employee.',
+    type: 'text', examples: ['Pitikorn Chumphuchanapai', 'Korrawit Soodnalao'],
+  },
+  {
+    key: 'employeeSignatureDate', name: 'Employee_Signature_Date', label: 'วันที่ลงนาม (พนักงาน)',
+    description: 'Date of the employee/resource signature. Preserve the source format.',
+    type: 'text', examples: ['31/05/2026', '31/07/2026'],
+  },
+  {
+    key: 'projectManagerSignatureName', name: 'Project_Manager_Signature_Name', label: 'ชื่อที่ลงนาม (PM)',
+    description: 'Name attached to the Project Manager signature.',
+    type: 'text', examples: ['Nichaphat Chokrak', 'Apinya Phuangtaw'],
+  },
+  {
+    key: 'projectManagerSignatureDate', name: 'Project_Manager_Signature_Date', label: 'วันที่ลงนาม (PM)',
+    description: 'Date of the Project Manager signature. Preserve the source format.',
+    type: 'text', examples: ['31/05/2026', '31/07/2026'],
+  },
+  {
+    key: 'authorizedSignatureName', name: 'Authorized_Signature_Name', label: 'ชื่อผู้มีอำนาจลงนาม',
+    description: 'Name of the authorized signatory when the document has such a block.',
+    type: 'text', examples: ['Patompong Kongwarin', 'Client Authorized Signatory'],
+  },
+  {
+    key: 'issuedByName', name: 'Issued_By_Name', label: 'ผู้ออกเอกสาร',
+    description: 'Person named in an "Issued by" field.',
+    type: 'text', examples: ['Surasith Thatdee'],
+  },
+  {
+    key: 'issuedDate', name: 'Issued_Date', label: 'วันที่ออกเอกสาร',
+    description: 'Date shown in the "Issued by" block. Preserve the source format.',
+    type: 'text', examples: ['02/09/2026', '31/08/2026'],
+  },
+  {
+    key: 'approvedDate', name: 'Approved_Date', label: 'วันที่อนุมัติ',
+    description: 'Approval date. Preserve the source format. Do not use a daily row date.',
+    type: 'text', examples: ['02/09/2026', '31/08/2026'],
+  },
+  {
+    key: 'signatureStatus', name: 'Signature_Status', label: 'สถานะลายเซ็น',
+    description: 'Signature or approval state when the source states it.',
+    type: 'text', examples: ['Signed', 'Approved', 'Pending'],
   },
 ];
 
@@ -318,6 +495,9 @@ export const DETAIL_SPEC_KEY_ALIASES: Readonly<Record<string, string>> = Object.
   day: 'dayOfWeek',
   remarks: 'remark',
   workType: 'type',
+  // V4 แยกชื่อให้ไม่ซ้ำกับระดับเอกสาร แต่คอลัมน์ในฐานข้อมูลยังชื่อเดิม — ดูหมายเหตุ V4 ด้านล่าง
+  dailySite: 'site',
+  dailyTotalHours: 'totalHours',
 });
 
 /** แปลงคีย์รายวันจากชื่อตามสเปก → ชื่อที่ `ExtractedDay` ใช้จริง (คีย์อื่นคืนค่าเดิม) */
@@ -325,16 +505,40 @@ export function toInternalDetailKey(specKey: string): string {
   return DETAIL_SPEC_KEY_ALIASES[specKey] ?? specKey;
 }
 
-const HEADER_BY_KEY = new Map(
-  [...TIMESHEET_HEADER_FIELDS, ...TIMESHEET_SUMMARY_FIELDS].map((f) => [f.key, f]),
-);
-const DETAIL_BY_KEY = new Map(TIMESHEET_DETAIL_FIELDS.map((f) => [f.key, f]));
+/**
+ * คีย์ระดับเอกสารที่ชื่อตามสเปก V4 ไม่ตรงกับชื่อที่ระบบเก็บจริง — เหตุผลเดียวกับตารางรายวันด้านบน
+ *
+ * V4 บังคับว่า **ชื่อฟิลด์ต้องไม่ซ้ำกันเลยทั้ง schema** (CORE RULE) ซึ่งสารบัญเดิมของเราละเมิดอยู่สองจุด
+ * พอดี และเป็นสองจุดที่สเปกเขียนถึงมากที่สุด:
+ *   - `Site` เคยใช้ทั้งระดับเอกสารและระดับแถว → V4 แยกเป็น `Document_Site` / `Daily_Site`
+ *   - `Total_Hours` เคยใช้ทั้งระดับแถวและช่องสรุป → V4 แยกเป็น `Daily_Total_Hours` / `Monthly_Total_Hours`
+ *     และสั่งห้ามใช้ชื่อ `Total_Hours` อีกเลย
+ *
+ * สารบัญนี้จึงใช้ชื่อ V4 ที่ไม่ซ้ำเป็นคีย์ ส่วนคอลัมน์ในฐานข้อมูล (`timesheets.site`,
+ * `timesheets.summary_total_hours`) ยังชื่อเดิม เพราะการเปลี่ยนชื่อคอลัมน์ไม่ใช่การเพิ่มแบบ additive
+ * และกระทบหลายไฟล์พร้อมกัน — แปลงที่ชั้น boundary แทน แบบเดียวกับที่ทำกับ day/remarks/workType
+ * มาตั้งแต่ Phase 5.1 ตารางสองตารางนี้คือแหล่งความจริงแหล่งเดียวของความต่างทั้งหมด
+ */
+export const HEADER_SPEC_KEY_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  documentSite: 'site',
+  monthlyTotalHours: 'totalHours',
+  approvedByName: 'approverName',
+});
 
-/** ฟิลด์ระดับเอกสารทั้งหมด (หัวเอกสาร + ช่องสรุป) — ใช้กับหน้าตั้งค่าและ `header` ของ TimesheetFieldMap */
+/** แปลงคีย์ระดับเอกสารจากชื่อตามสเปก → ชื่อที่ระบบเก็บจริง (คีย์อื่นคืนค่าเดิม) */
+export function toInternalHeaderKey(specKey: string): string {
+  return HEADER_SPEC_KEY_ALIASES[specKey] ?? specKey;
+}
+
+/** ฟิลด์ระดับเอกสารทั้งหมด (หัวเอกสาร + ช่องสรุป + ลายเซ็น) — ใช้กับหน้าตั้งค่าและ `header` ของ TimesheetFieldMap */
 export const TIMESHEET_DOCUMENT_FIELDS: TimesheetFieldSpec[] = [
   ...TIMESHEET_HEADER_FIELDS,
   ...TIMESHEET_SUMMARY_FIELDS,
+  ...TIMESHEET_SIGNATURE_FIELDS,
 ];
+
+const HEADER_BY_KEY = new Map(TIMESHEET_DOCUMENT_FIELDS.map((f) => [f.key, f]));
+const DETAIL_BY_KEY = new Map(TIMESHEET_DETAIL_FIELDS.map((f) => [f.key, f]));
 
 export function headerField(key: string): TimesheetFieldSpec | null {
   return HEADER_BY_KEY.get(key) ?? null;
