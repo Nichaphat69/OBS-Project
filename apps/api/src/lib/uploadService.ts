@@ -88,6 +88,7 @@ export async function readTimesheetFile({
   expectedPeriod,
   contractId = null,
   readerId = null,
+  abbyySkillId = null,
 }: {
   fileBase64: string;
   fileName?: string | null;
@@ -95,6 +96,9 @@ export async function readTimesheetFile({
   contractId?: string | null;
   /** ลองอ่านครั้งนี้ด้วยเครื่องอ่านที่ระบุ โดยไม่เปลี่ยนค่าที่ตั้งไว้ทั้งระบบ */
   readerId?: string | null;
+  /** เลือก ABBYY Skill เองสำหรับการอ่านครั้งนี้ — ทับ Skill ที่ผูกไว้กับสัญญา ไม่ได้แก้ค่าของสัญญา
+   * (ฝั่ง Clear Read ไม่มีคู่กันเพราะใช้แม่แบบเดียวทั้งระบบ ดู resolveReaderTemplates) */
+  abbyySkillId?: string | null;
 }): Promise<ReadResult & { fileBytes: Buffer | null }> {
   if (!fileBase64) throw new UploadError('ยังไม่ได้เลือกไฟล์ Timesheet');
 
@@ -103,8 +107,16 @@ export async function readTimesheetFile({
   // เชื่อไม่ได้) — PDF ขึ้นต้นด้วย "%PDF" เสมอ ที่เหลือ (xlsx/csv) ให้ spreadsheetExtractionService.ts
   // เดาต่อเอง (zip = xlsx, ไม่งั้นถือเป็นข้อความ CSV)
   const isPdf = source.subarray(0, 4).toString('latin1') === '%PDF';
+  // Skill ที่คนเลือกเองตอนอัปโหลดชนะ Skill ที่ผูกไว้กับสัญญาเสมอ — ถ้าไม่ได้เลือกค่อยใช้ของสัญญา
+  // (เลือกแล้วต้องได้ตัวนั้นจริง ไม่งั้นคนที่กำลังลองเทียบ Skill จะเข้าใจผิดว่าได้ลองไปแล้ว)
+  const contractTemplates = await resolveReaderTemplates(contractId);
   const extracted = isPdf
-    ? await extractTimesheet(source, { expectedPeriod, readerId, ...(await resolveReaderTemplates(contractId)) })
+    ? await extractTimesheet(source, {
+        expectedPeriod,
+        readerId,
+        ...contractTemplates,
+        ...(abbyySkillId ? { abbyySkillId } : {}),
+      })
     : await extractTimesheetFromSpreadsheet(source, { expectedPeriod });
   const { usage, model, verification } = extracted;
   const data = extracted.data;
