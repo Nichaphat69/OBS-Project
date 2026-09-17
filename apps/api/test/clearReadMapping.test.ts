@@ -201,3 +201,23 @@ test('อ่านช่องสรุปได้แล้ว ต้องไ�
   assert.ok(without.notes.some((n: string) => n.includes('ไม่ได้ค่าช่องสรุป')));
   assert.equal(without.summary, undefined, 'ไม่รู้ ต้องเป็น undefined ไม่ใช่ 0');
 });
+
+test('Working_Time (ฟอร์ม Fujitsu/V-Link) ต้องนับเป็นชั่วโมงทำงานปกติ ไม่งั้นวันทำงานเป็น 0 ทั้งใบ', () => {
+  // ค่าจริงจากเอกสาร 2 ใบ: Working_Time="8.00" ส่วน Normal_Hours ว่างทุกแถว
+  const d: any = mapClearReadResult(
+    detailWith([
+      { Date: '03/02/2026', Working_Time: '8.00', Time_In: '9:00', Time_Out: '18:00' },
+      { Date: '04/02/2026', Working_Time: '8.00', Time_In: '9:00', Time_Out: '18:00' },
+      { Date: '01/02/2026', Working_Time: '0.00' },
+    ]),
+  );
+  assert.equal(d.days[0].normalHours, 8);
+  assert.equal(d.totalWorkDays, 2, 'แถวที่ 0.00 ไม่ใช่วันทำงาน — ต้องนับได้ 2 วัน ไม่ใช่ 0');
+});
+
+test('ถ้าแม่แบบมีทั้ง Normal_Hours และ Working_Time — ชื่อตามสเปกต้องชนะ ค่าเก่าห้ามมาทับ', () => {
+  const d: any = mapClearReadResult(
+    detailWith([{ Date: '03/02/2026', Normal_Hours: 7, Working_Time: '8.00' }]),
+  );
+  assert.equal(d.days[0].normalHours, 7, 'ค่าจากช่องตามสเปกต้องอยู่ ไม่ถูกช่องชื่อเก่าทับ');
+});

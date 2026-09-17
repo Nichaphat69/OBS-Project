@@ -359,6 +359,11 @@ const LEGACY_NAME_ALIASES: Record<string, string> = {
   Site: 'Document_Site',
   Customer_site: 'Daily_Site',
   Total_Hours: 'Daily_Total_Hours',
+  // Working_Time เป็นชื่อของฟอร์ม Fujitsu/Virtual Link — **ยืนยันจากเอกสารจริง 2 ใบ** (17 ก.ย. 69)
+  // ว่าค่าข้างในคือ "ชั่วโมงทำงานปกติ" เป็นตัวเลขล้วน ("8.00") ไม่ใช่ช่วงเวลา และในแถวเดียวกันนั้น
+  // Normal_Hours ว่างทุกแถว — ถ้าไม่อ่านช่องนี้ ฟอร์มสองเจ้านี้จะนับวันทำงานได้ 0 วันทั้งใบ แล้วส่งผล
+  // ถึงการตั้งบิลโดยตรง (ดูเงื่อนไข workDays ด้านล่างที่นับจาก normalHours > 0)
+  Working_Time: 'Normal_Hours',
 };
 
 /** ระดับเอกสารรวมทั้งหัวเอกสาร ช่องสรุป และลายเซ็น — V4 แยกสามหมวดแต่ Clear Read คืนมาปนกันใน
@@ -470,7 +475,12 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
       const key = detailKeyFor(col);
       if (!key) continue;
       const spec = TIMESHEET_DETAIL_FIELDS.find((f) => f.key === key);
-      out[key] = spec?.type === 'number' ? toNumber(value) : value === '' ? null : value;
+      const parsed = spec?.type === 'number' ? toNumber(value) : value === '' ? null : value;
+      // ชื่อตามสเปกชนะชื่อเก่าเสมอเมื่อแม่แบบมีทั้งสองช่อง — กันเคสที่ช่องเก่า (ว่าง) มาทับค่าที่ช่องตาม
+      // สเปทอ่านมาได้แล้ว ซึ่งจะทำให้ข้อมูลหายแบบเงียบๆ ขึ้นกับลำดับคีย์ใน JSON ที่ควบคุมไม่ได้
+      const fromLegacy = col in LEGACY_NAME_ALIASES;
+      if (fromLegacy && out[key] !== undefined && out[key] !== null) continue;
+      if (!fromLegacy || parsed !== null) out[key] = parsed;
     }
 
     const date = normalizeDate(out.date, period || null);
