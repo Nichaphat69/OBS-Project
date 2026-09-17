@@ -1,14 +1,17 @@
 /**
- * ตัวเชื่อม Gmail — ported (narrowed to the intake/read path) from src/integrations/gmail.js.
- * `createDraft`/`findSentMessage` (the billing-cycle email-draft side) are still out of scope
- * here — this file otherwise covers reading the inbox for Timesheet approval emails, per
- * MIGRATION_PLAN.md's Gmail-intake scope.
+ * ตัวเชื่อม Gmail — ported from src/integrations/gmail.js.
+ *   ขาเข้า  ดึงอีเมลแจ้งอนุมัติ Timesheet + ไฟล์แนบ PDF มาให้ระบบอ่าน
+ *   ขาออก (ธุรกิจ)  createDraft() สร้าง **ร่าง** อีเมลวางบิลไว้ในกล่อง Drafts — ยังเป็นแค่ร่างเสมอ
+ *   ขาออก (auth)    sendMessage() ส่งอีเมลรหัสยืนยัน 6 หลักตอนลืมรหัสผ่านจริง
  *
- * `sendMessage()` IS ported (5.5.7) — but per the original file's own explicit warning, it must
- * stay used ONLY for the forgot-password verification-code email. Business email (billing/
- * approval notices) must always go through `createDraft()` once that's ported — never
- * `sendMessage()` — this was a deliberate, explicitly-approved exception, not a general green
- * light to start sending mail automatically elsewhere.
+ * `sendMessage()` ported ไว้ที่ 5.5.7 — ตามคำเตือนของไฟล์ต้นฉบับ ต้องใช้ **เฉพาะ** อีเมลรหัสยืนยัน
+ * ตอนลืมรหัสผ่านเท่านั้น อีเมลฝั่งธุรกิจ (วางบิล/แจ้งอนุมัติ) ต้องผ่าน `createDraft()` เสมอ ห้ามใช้
+ * `sendMessage()` — ข้อยกเว้นนั้นเจ้าของระบบอนุญาตไว้เฉพาะเรื่องเดียว ไม่ใช่ไฟเขียวให้ส่งเมลอัตโนมัติ
+ * ที่อื่น
+ *
+ * หมายเหตุ: `createDraft`/`findSentMessage` พอร์ตมาแล้ว (ก่อนหน้านี้อยู่นอกขอบเขต) แต่ฝั่ง service
+ * ที่เรียกใช้ — รวบไฟล์แนบ ผูก threadId กับใบแจ้งหนี้ และ syncEmailSent() ที่คอยดูว่าร่างถูกกดส่งแล้ว
+ * หรือยัง — ยังไม่ได้พอร์ต ดู MIGRATION_PLAN.md
  */
 
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -47,14 +50,67 @@ function encodeHeader(text: string | undefined): string {
   return /^[\x20-\x7E]*$/.test(text ?? '') ? String(text ?? '') : `=?UTF-8?B?${Buffer.from(String(text ?? ''), 'utf8').toString('base64')}?=`;
 }
 
-/** ประกอบ raw MIME message ให้ Gmail API — ข้อความล้วน (ไม่มีไฟล์แนบ) เท่านั้นตอนนี้ (ใช้กับ
- * sendMessage() สำหรับอีเมลรหัสยืนยันลืมรหัสผ่าน) */
-function buildMime({ to, subject, body }: { to: string; subject: string; body: string }): Buffer {
-  const head = [`To: ${to}`, `Subject: ${encodeHeader(subject)}`, 'MIME-Version: 1.0'];
-  return Buffer.from(
-    [...head, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', Buffer.from(body, 'utf8').toString('base64')].join('\r\n'),
-    'utf8',
-  );
+export interface MimeAttachment {
+  filename: string;
+  mimeType?: string;
+  content: Buffer;
+}
+
+/** ประกอบ raw MIME message ให้ Gmail API — Gmail ไม่มี API แบบกรอกช่อง รับเป็นอีเมลดิบอย่างเดียว
+ * ports src/integrations/gmail.js's buildMime() — ไม่มีไฟล์แนบได้ text/plain ล้วน มีแล้วเป็น multipart/mixed */
+export function buildMime({
+  to,
+  cc = null,
+  subject,
+  body,
+  attachments = [],
+}: {
+  to: string;
+  cc?: string | null;
+  subject: string;
+  body: string;
+  attachments?: MimeAttachment[];
+}): Buffer {
+  const boundary = `obs_${Buffer.from(String(body).slice(0, 24)).toString('hex').slice(0, 16)}`;
+  const head = [
+    `To: ${to}`,
+    cc ? `Cc: ${cc}` : null,
+    `Subject: ${encodeHeader(subject)}`,
+    'MIME-Version: 1.0',
+  ].filter(Boolean) as string[];
+
+  if (!attachments.length) {
+    return Buffer.from(
+      [...head, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', Buffer.from(body, 'utf8').toString('base64')].join('\r\n'),
+      'utf8',
+    );
+  }
+
+  const parts: string[] = [
+    ...head,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(body, 'utf8').toString('base64'),
+  ];
+
+  for (const file of attachments) {
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: ${file.mimeType ?? 'application/octet-stream'}; name="${file.filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${file.filename}"`,
+      '',
+      // ตัดบรรทัดทุก 76 ตัวอักษรตามมาตรฐาน base64 ในอีเมล
+      Buffer.from(file.content).toString('base64').replace(/(.{76})/g, '$1\r\n'),
+    );
+  }
+  parts.push(`--${boundary}--`, '');
+
+  return Buffer.from(parts.join('\r\n'), 'utf8');
 }
 
 export function hasGmailCredentials(): boolean {
@@ -205,6 +261,91 @@ export class GmailClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw: toBase64Url(mime) }),
     });
+  }
+
+  /**
+   * สร้าง **ร่าง** อีเมลในกล่อง Drafts — ไม่ส่ง
+   * ported from src/integrations/gmail.js's createDraft() — พฤติกรรมเหมือนต้นฉบับทุกอย่าง
+   *
+   * ⚠️ ห้ามเปลี่ยนให้ไปเรียก sendMessage() โดยไม่ถามเจ้าของระบบก่อน (ดูคำเตือนหัวไฟล์)
+   *    อีเมลฝั่งธุรกิจ (วางบิล/แจ้งอนุมัติ) ต้องเป็นแค่ร่างให้คนกดส่งเองเสมอ
+   */
+  async createDraft({
+    to,
+    cc = null,
+    subject,
+    body,
+    attachments = [],
+  }: {
+    to: string;
+    cc?: string | null;
+    subject: string;
+    body: string;
+    attachments?: MimeAttachment[];
+  }): Promise<{ draftId: string; messageId: string | null; threadId: string | null; url: string; attachmentCount: number }> {
+    if (!to) throw new GmailError('ต้องระบุอีเมลผู้รับก่อนสร้างร่าง', { status: 400 });
+
+    const mime = buildMime({ to, cc, subject, body, attachments });
+    const [result, profile] = await Promise.all([
+      this.call('/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: { raw: toBase64Url(mime) } }),
+      }),
+      this.profile(),
+    ]);
+
+    /* ลิงก์เปิดร่างนั้นใน Gmail บนเว็บ — คนกดจากหน้าเราไปแก้และกดส่งต่อได้เลย
+       ห้ามใช้ /mail/u/0/ เฉยๆ เพราะ "0" คือช่องบัญชีแรกที่ล็อกอินไว้ใน**เบราว์เซอร์คนกด**
+       ไม่ใช่บัญชีที่ต่อ Gmail API ไว้ — ถ้าเบราว์เซอร์นั้นล็อกอินบัญชีอื่นเป็นช่องแรก จะเปิดผิดบัญชี
+       ใช้ authuser=อีเมลจริงแทน ให้ Gmail หาช่องที่ตรงกับบัญชีนี้เอง */
+    const authuser = encodeURIComponent(profile.email);
+    return {
+      draftId: result.id,
+      messageId: result.message?.id ?? null,
+      /* เก็บ threadId ไว้ด้วย เพราะเป็นตัวเดียวที่อยู่ยงหลังกดส่ง — ตอนส่ง Gmail จะลบร่างทิ้ง
+         แล้วสร้าง message ใหม่คนละ id ในสนทนาเดิม เลยตามจาก draftId/messageId ไม่ได้
+         (ใช้ใน findSentMessage เพื่อรู้ว่าร่างนี้ถูกส่งออกไปแล้วหรือยัง) */
+      threadId: result.message?.threadId ?? null,
+      url: result.message?.id
+        ? `https://mail.google.com/mail/?authuser=${authuser}#drafts?compose=${result.message.id}`
+        : `https://mail.google.com/mail/?authuser=${authuser}#drafts`,
+      attachmentCount: attachments.length,
+    };
+  }
+
+  /**
+   * ร่างในสนทนานี้ถูกกดส่งไปแล้วหรือยัง — คืนข้อมูลฉบับที่ส่งแล้ว หรือ null ถ้ายัง
+   * ported from src/integrations/gmail.js's findSentMessage()
+   *
+   * คืน null แทนการโยน error เมื่อ Gmail ตอบ 404 หรือ 400 (สนทนาถูกลบทิ้ง หรือ threadId ที่เก็บไว้
+   * ใช้ไม่ได้แล้ว — Gmail ตอบ 400 ไม่ใช่ 404 เหมือนที่คิดไว้ตอนแรก) ทั้งสองกรณีแปลว่าตามต่อไม่ได้
+   * เหมือนกัน ไม่ควรโยน error ขึ้นไปทุกครั้งที่มีคนเปิดหน้ารอบบิลนั้น
+   */
+  async findSentMessage(threadId: string | null): Promise<{ messageId: string; to: string | null; subject: string | null; sentAt: string | null } | null> {
+    if (!threadId) return null;
+
+    let thread: any;
+    try {
+      thread = await this.call(`/threads/${encodeURIComponent(threadId)}?format=metadata`);
+    } catch (error) {
+      if (error instanceof GmailError && (error.status === 404 || error.status === 400)) return null;
+      throw error;
+    }
+
+    const sent = (thread.messages ?? []).find((m: any) => m.labelIds?.includes('SENT'));
+    if (!sent) return null;
+
+    const headers = sent.payload?.headers ?? [];
+    const header = (name: string) => headers.find((h: any) => h.name?.toLowerCase() === name)?.value ?? null;
+
+    return {
+      messageId: sent.id,
+      to: header('to'),
+      subject: header('subject'),
+      // internalDate เป็นมิลลิวินาทีในรูปสตริง — เวลาที่ Gmail รับฉบับนั้นเข้าระบบจริง
+      sentAt: sent.internalDate ? new Date(Number(sent.internalDate)).toISOString() : null,
+    };
   }
 }
 
