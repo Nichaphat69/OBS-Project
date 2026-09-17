@@ -14,6 +14,7 @@ import { ManualSheetError } from '@obs/domain';
 import { readTimesheetFile, confirmTimesheet, logAiRead, UploadError } from '../lib/uploadService.js';
 import { ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
+import { getActiveContract } from '../lib/dashboardService.js';
 import { SpreadsheetExtractionError } from '../lib/spreadsheetExtractionService.js';
 import { checkTimesheetAgainstHrdd, HrddCompareError } from '../lib/hrddCompareService.js';
 
@@ -25,10 +26,30 @@ timesheetsRouter.use(requireAuth);
 // (พนักงาน) เรียกดู Manday/เรท/ไฟล์ต้นฉบับของพนักงานคนอื่นได้หมด (เจอจริง 15 ก.ย. 69 ตามที่ user
 // ชี้แจงเพิ่มเติมว่าพนักงานต้องเห็นแค่ของตัวเองผ่านหน้า "ความคืบหน้าของฉัน" เท่านั้น) ใช้ requireAdmin
 // (admin/accounting เท่านั้น ไม่รวม executive) ตรงกับหน้า "ตรวจ Manday" ใน nav ที่จำกัด role เท่านี้แล้ว
+/**
+ * ⚠️ ไม่ส่ง contractId มา = ใช้สัญญาที่กำลังดำเนินการอยู่ (ตัวสลับบริษัทบนแถบบน) ไม่ใช่ "เอาทุกบริษัท"
+ *
+ * เดิมไม่ส่งมาแล้วคืนของทุกบริษัท — หน้า "ตรวจ Manday" ดึงสัญญาที่ active มาเองก่อนแล้วค่อยส่งมาเป็น
+ * query ถ้าขั้นนั้นพลาด (เรียกไม่สำเร็จ / ยังไม่ได้ตั้ง active / หน้าไม่ได้โหลดใหม่ตอนสลับบริษัท)
+ * query จะว่าง แล้วหน้าจอจะโชว์พนักงานข้ามบริษัทเงียบๆ โดยไม่มีอะไรบอก — **พลาดแล้วขอบเขตกว้างขึ้น
+ * ไม่ใช่แคบลง** ซึ่งเป็นทิศที่ผิดสำหรับข้อมูลค่าจ้างรายคน (เจอจริง 17 ก.ย. 69: เลือก ปตท. อยู่
+ * แต่รายการขึ้นพนักงานของไทยประกันชีวิตมาด้วย)
+ *
+ * ตั้งค่าเริ่มต้นที่ฝั่งเซิร์ฟเวอร์แทน เพื่อให้ client ที่ลืมส่ง/ส่งไม่ทันไม่ทำให้ขอบเขตกว้างขึ้นเอง
+ * ต้องการดูข้ามบริษัทจริงๆ ให้ส่ง `?all=1` มาอย่างชัดเจน — ตั้งใจให้เป็นการกระทำที่ต้องเขียนออกมา
+ */
 timesheetsRouter.get('/', requireAdmin, async (req, res) => {
-  const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
+  const explicit = typeof req.query.contractId === 'string' && req.query.contractId ? req.query.contractId : null;
+  const wantsAll = req.query.all === '1' || req.query.all === 'true';
+
+  let contractId = explicit ?? undefined;
+  if (!explicit && !wantsAll) {
+    const active = await getActiveContract();
+    contractId = active?.id;
+  }
+
   const result = await listTimesheets({ contractId });
-  res.json(result);
+  res.json({ ...result, scope: { contractId: contractId ?? null, allCompanies: !contractId } });
 });
 
 timesheetsRouter.get('/:id', requireAdmin, async (req, res) => {
