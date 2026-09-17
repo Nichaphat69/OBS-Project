@@ -7,7 +7,7 @@
  * See the original file's header comment for the full verification history (real sandbox calls,
  * Swagger UI, ABBYY docs) — endpoint names and field names here are not guesses.
  */
-import { classifyDayKind, classifyLeaveType, monthFromWord, normalizeYear, type TimesheetFieldMap } from '@obs/domain';
+import { classifyDayKind, classifyLeaveType, monthFromWord, normalizeDate, normalizeYear, type TimesheetFieldMap } from '@obs/domain';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 1_500;
@@ -514,6 +514,14 @@ function resolveRowDate(cols: Record<string, any>, detail: Record<string, string
     if (mapped) {
       const parsed = parseTableRowDate({ mapped }, expectedYear);
       if (parsed) return parsed;
+      /* รู้แน่ว่าคอลัมน์ไหนคือวันที่แล้ว จึงใช้ตัวแปลงกลางได้เต็มที่ — มันรับได้ทั้งชื่อเดือนอังกฤษ/ไทย
+         และปี พ.ศ. ต่างจาก parseTableRowDate() ที่รับแค่ DD/MM/YY ตัวเลขล้วน
+         เจอจริงกับฟอร์ม CP Axtra ที่เขียนวันที่เป็น "1 Jul 26" — แถวถูกทิ้งไป 14 จาก 16 แถว
+         ผลคืออ่านได้ 0 วันทำงานทั้งใบ
+         ⚠️ ใช้เฉพาะตอนที่ผู้ใช้ตั้ง mapping ไว้แล้วเท่านั้น ถ้าไม่รู้ว่าคอลัมน์ไหนคือวันที่ ยังต้องใช้
+         regex เข้มเหมือนเดิม ไม่งั้นค่าอย่าง "8.00" ในคอลัมน์อื่นอาจถูกตีความเป็นวันที่ */
+      const normalized = normalizeDate(String(mapped), expectedYear != null ? String(expectedYear) : undefined);
+      if (normalized) return normalized;
     }
   }
   return parseTableRowDate(cols, expectedYear);
@@ -766,7 +774,27 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
   // เตือนเฉพาะตอนหาไม่ได้จริงๆทั้งสองทาง (ไม่มีฟิลด์สรุป และนับจากตารางได้ 0 วัน) — ถ้า Skill นี้ไม่มี
   // ฟิลด์สรุปจำนวนวันทำงาน แต่นับจากตารางได้ค่าจริง ไม่ต้องเตือนอะไรเลย ถือว่าได้ค่าที่เชื่อถือได้แล้ว
   if (totalWorkDays === 0) missingFieldNotes.push('ABBYY ยังไม่ส่งจำนวนวันทำงานมา (ทั้งฟิลด์สรุปและตารางรายวัน) — ต้องกรอกเพิ่มเอง');
-  if (!period) missingFieldNotes.push('ABBYY ยังไม่ส่งรอบเดือนมา — ต้องเลือก "รอบเดือน" เอง');
+  /* ฟอร์มที่ไม่มีช่อง "เดือน/ปี" เลย แต่ตารางรายวันมีวันที่ครบ — อนุมานรอบเดือนจากเดือนที่แถวส่วนใหญ่
+     ตกอยู่ (เจอจริงกับฟอร์ม CP Axtra ที่มีแต่คอลัมน์ Date รายแถว) นับจากของที่อ่านมาได้จริงเท่านั้น
+     ไม่ได้เดาจากวันที่ปัจจุบันหรือจากชื่อไฟล์
+     ยังคงเตือนไว้ให้คนตรวจเห็นว่าเลขนี้มาจากการอนุมาน ไม่ใช่ที่เอกสารเขียนไว้เอง — ต่างจากกรณีที่
+     เอกสารพิมพ์รอบเดือนมาตรงๆ ซึ่งเชื่อได้มากกว่า */
+  let resolvedPeriod = period;
+  if (!resolvedPeriod && days.length > 0) {
+    const tally = new Map<string, number>();
+    for (const d of days) {
+      const ym = String(d.date ?? '').slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(ym)) tally.set(ym, (tally.get(ym) ?? 0) + 1);
+    }
+    const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (best) {
+      resolvedPeriod = best[0];
+      missingFieldNotes.push(
+        `เอกสารไม่มีช่องรอบเดือน — ระบบอนุมานเป็น ${best[0]} จากวันที่ในตารางรายวัน (${best[1]} จาก ${days.length} แถว) ตรวจสอบก่อนยืนยัน`,
+      );
+    }
+  }
+  if (!resolvedPeriod) missingFieldNotes.push('ABBYY ยังไม่ส่งรอบเดือนมา — ต้องเลือก "รอบเดือน" เอง');
 
   return {
     vendor: pick(fields, fm.header.vendorName),
@@ -774,7 +802,7 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
     projectName: pick(fields, fm.header.projectName),
     employeeName,
     position,
-    period,
+    period: resolvedPeriod,
     // คีย์ระดับเอกสารที่เหลือตามสารบัญกลาง — ยังไม่มี Skill ไหนตั้ง mapping ไว้ (ไม่มี default) จึงเป็น
     // null จนกว่า admin จะตั้งค่าให้ Skill นั้น เพิ่มแบบ additive ไม่กระทบคีย์เดิมที่ ingest ใช้อยู่
     employeeId: pick(fields, fm.header.employeeId),
