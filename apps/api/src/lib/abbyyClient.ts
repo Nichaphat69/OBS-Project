@@ -373,6 +373,22 @@ function dedupeRepeatedText(text: unknown): string | null {
   return first.toLowerCase() === second.toLowerCase() ? first : s;
 }
 
+/** ป้ายชื่อ (label) ในเอกสารต้นฉบับที่อยู่ติดกับช่องกรอกจริง — ถ้ากรอบฟิลด์ของ Skill ใน ABBYY กินพื้นที่
+ * เผื่อไปโดนป้ายด้วย OCR จะอ่านติดป้ายมาก่อนค่าจริงเสมอ (เจอจริง 17 ก.ย. 69: field "Employee Name"
+ * อ่านได้ "-สกุล : Pitikorn Chumphuchanapai" — หลุดมาจากป้าย "ชื่อ-สกุล :" ที่อยู่ก่อนช่องกรอก)
+ *
+ * แก้ที่ต้นตอ (ปรับกรอบฟิลด์ใน ABBYY Vantage) ตรงกว่า แต่ต้องเข้า UI ของ ABBYY ไปแก้ทีละ Skill และ
+ * ไม่ครอบคลุมเอกสารที่เทรนไว้แล้ว ตัดป้ายที่รู้จักไว้ที่นี่ครอบคลุมทันทีทั้งฟิลด์ชื่อ/ตำแหน่งของทุก Skill
+ * โดยไม่ต้องรอ — เผื่อพลาดไว้แค่ pattern ไม่ตัดคำแรกของชื่อจริงถ้าไม่ตรงป้ายที่รู้จักเป๊ะ */
+const LABEL_PREFIX_RE = /^[-\s]*(?:ชื่อ[-\s]*สกุล|ชื่อ[-\s]*นามสกุล|นามสกุล|สกุล|ชื่อ|ตำแหน่ง|position|surname|name)\s*[:.\-]+\s*/i;
+
+function stripLabelPrefix(text: unknown): string | null {
+  const s = String(text ?? '').trim();
+  if (!s) return text as null;
+  const stripped = s.replace(LABEL_PREFIX_RE, '').trim();
+  return stripped || s;
+}
+
 const DOW_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 function dayOfWeekFromDate(dateStr: string): string | null {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -729,9 +745,9 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
   const fields = fieldMap(rootObject);
 
   const period = resolvePeriod(fields, fm);
-  const employeeName = pick(fields, fm.header.employeeName);
-  const position = pick(fields, fm.header.position);
-  const projectManagerSignatureName = pick(fields, fm.header.approvedByName);
+  const employeeName = stripLabelPrefix(pick(fields, fm.header.employeeName));
+  const position = stripLabelPrefix(pick(fields, fm.header.position));
+  const projectManagerSignatureName = stripLabelPrefix(pick(fields, fm.header.approvedByName));
   const rawTotalWorkDays = pick(fields, fm.header.totalWorkDays);
   const rawTotalHours = pick(fields, fm.header.monthlyTotalHours);
   const totalHours = rawTotalHours ? Number(rawTotalHours) : null;
@@ -809,7 +825,7 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
     role: pick(fields, fm.header.role),
     department: pick(fields, fm.header.department),
     reportingPeriod: pick(fields, fm.header.reportingPeriod),
-    supervisorName: pick(fields, fm.header.supervisorName),
+    supervisorName: stripLabelPrefix(pick(fields, fm.header.supervisorName)),
     site: pick(fields, fm.header.documentSite),
     projectTeam: pick(fields, fm.header.projectTeam),
     documentNo: null,

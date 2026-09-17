@@ -675,3 +675,35 @@ test('fieldMap: ช่องเวลาที่เป็นช่วง "13.00
   assert.equal(plain.timeIn, '9:00');
   assert.equal(plain.timeOut, '18:00');
 });
+
+/** บั๊กจริง 17 ก.ย. 69: user ส่งภาพหน้าตรวจ Manday เจอ "-สกุล : Pitikorn Chumphuchanapai" ในช่องชื่อ —
+ * กรอบฟิลด์ "Employee Name" ใน Skill กินพื้นที่เผื่อไปโดนป้าย "ชื่อ-สกุล :" ที่อยู่ก่อนช่องกรอกในเอกสาร
+ * ทำให้ OCR อ่านติดป้ายมาด้วย */
+test('mapAbbyyResult: ตัดป้าย "-สกุล :"/"ชื่อ-สกุล :" ที่หลุดติดมาก่อนชื่อพนักงานออก', () => {
+  const cases: Array<[string, string]> = [
+    ['-สกุล : Pitikorn Chumphuchanapai', 'Pitikorn Chumphuchanapai'], // เคสจริงที่ user ส่งภาพมา
+    ['ชื่อ-สกุล : Somchai Jaidee', 'Somchai Jaidee'],
+    ['ชื่อ-นามสกุล: Somchai Jaidee', 'Somchai Jaidee'],
+    ['Name: Somchai Jaidee', 'Somchai Jaidee'],
+    ['Pitikorn Chumphuchanapai', 'Pitikorn Chumphuchanapai'], // ไม่มีป้ายหลุดมา ต้องไม่ถูกแตะ
+  ];
+  for (const [raw, expected] of cases) {
+    const data = mapAbbyyResult(docFields([{ Name: 'Employee Name', Value: raw }]));
+    assert.equal(data.employeeName, expected, `input: ${JSON.stringify(raw)}`);
+  }
+});
+
+test('mapAbbyyResult: ตัดป้ายเดียวกันจากตำแหน่งและชื่อผู้อนุมัติ/หัวหน้างานด้วย', () => {
+  const data = mapAbbyyResult(docFields([
+    { Name: 'Position', Value: 'ตำแหน่ง: Senior Developer' },
+    { Name: 'Approver', Value: 'ชื่อ-สกุล : Nichaphat Chokrak' },
+  ]));
+  assert.equal(data.position, 'Senior Developer');
+  assert.equal(data.projectManagerSignatureName, 'Nichaphat Chokrak');
+});
+
+test('mapAbbyyResult: ป้ายไม่ตรงรูปแบบที่รู้จัก ต้องไม่ถูกตัดทิ้งแบบผิดๆ', () => {
+  // "นามสง่า" ไม่ใช่คำในป้ายที่รู้จัก (สกุล/นามสกุล เต็มคำเท่านั้น) — regex ต้องไม่ไปตัดคำแรกของชื่อจริง
+  const data = mapAbbyyResult(docFields([{ Name: 'Employee Name', Value: 'นามสง่า ใจดี' }]));
+  assert.equal(data.employeeName, 'นามสง่า ใจดี');
+});
