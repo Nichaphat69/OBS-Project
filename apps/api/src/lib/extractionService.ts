@@ -17,6 +17,7 @@
 import { toInternalDetailKey, type TimesheetFieldMap } from '@obs/domain';
 import { AbbyyClient, hasAbbyyCredentials, mapAbbyyResult } from './abbyyClient.js';
 import { getFieldMapForSkill } from './abbyySkillsService.js';
+import { hasPythonExtractor, extractTimesheetViaPython } from './pythonExtractionService.js';
 import type { Extractor, ExtractorResult } from './ingestService.js';
 
 export class ExtractionError extends Error {
@@ -78,6 +79,21 @@ const abbyyReader: TimesheetReader = {
   },
 };
 
+/**
+ * ⚠️ ทดลอง (17 ก.ย. 69 ตามที่ user ขอ) — ใช้สคริปต์ python/timesheet_extractor.py แทน ABBYY Vantage
+ * ชั่วคราว เพื่อทดสอบว่าตัวอ่านนี้ใช้แทนได้จริงไหมก่อนตัดสินใจย้ายถาวร ดู pythonExtractionService.ts
+ * สำหรับรายละเอียดการรวมหน้า/แปลงคีย์ ตัดออกจาก READERS ได้ทันทีถ้าไม่ผ่านการทดสอบ (แค่คืน abbyyReader
+ * เข้ารายการ READERS ด้านล่าง ไม่ต้องแก้อะไรในนี้)
+ */
+const pythonReader: TimesheetReader = {
+  id: 'python-script',
+  label: 'สคริปต์ Python (timesheet_extractor.py) — ทดลอง',
+  isConfigured: hasPythonExtractor,
+  async read(source, { expectedPeriod }) {
+    return extractTimesheetViaPython(source, { expectedPeriod }) as unknown as Promise<ExtractorResult>;
+  },
+};
+
 const localLlmReader: TimesheetReader = {
   id: 'local-llm',
   label: 'โมเดลในเครื่อง (LM Studio/Ollama)',
@@ -91,8 +107,10 @@ const localLlmReader: TimesheetReader = {
   },
 };
 
-/** เรียงตามลำดับที่อยากให้ลอง — ตัวแรกที่ตั้งค่าครบได้ใช้งาน เพิ่ม Clear Read ที่นี่เมื่อพร้อม */
-export const READERS: TimesheetReader[] = [abbyyReader, localLlmReader];
+/** เรียงตามลำดับที่อยากให้ลอง — ตัวแรกที่ตั้งค่าครบได้ใช้งาน เพิ่ม Clear Read ที่นี่เมื่อพร้อม
+ * ⚠️ ตัด abbyyReader ออกชั่วคราว (17 ก.ย. 69 ตามที่ user ขอ) เพื่อทดสอบ pythonReader แทน — โค้ด ABBYY
+ * ยังอยู่ครบ ต่อกลับเข้ารายการนี้ได้ทันทีถ้าทดสอบแล้วอยากย้อนกลับ */
+export const READERS: TimesheetReader[] = [pythonReader, localLlmReader];
 
 export function pickReader(): TimesheetReader {
   const reader = READERS.find((r) => r.isConfigured());

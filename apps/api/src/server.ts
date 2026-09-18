@@ -101,7 +101,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(status).json({ error: err?.message || 'เกิดข้อผิดพลาดที่ไม่คาดคิด' });
 });
 
-const port = Number(process.env.PORT ?? 4301);
+// ใช้ API_PORT ไม่ใช่ PORT ทั่วไป — ไฟล์ .env ใช้ร่วมกับสแต็กเก่า (src/server.js) ที่อ่าน PORT=4300
+// เดิมเอง ถ้าอ่าน PORT ตรงๆ ที่นี่จะชนกับค่านั้นทันทีเมื่อรันด้วย --env-file (docker-compose.yml ตั้งค่า
+// ตัวแปรนี้ให้ container ตรงๆ อยู่แล้ว ไม่ผ่าน .env ร่วม จึงไม่เจอปัญหานี้)
+const port = Number(process.env.API_PORT ?? 4301);
 app.listen(port, () => {
   console.log(`[obs-api] listening on :${port}`);
 });
