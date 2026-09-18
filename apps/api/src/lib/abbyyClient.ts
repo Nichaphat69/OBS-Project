@@ -798,7 +798,15 @@ export function mapAbbyyResult(rawResult: any, fieldMapOverride?: AbbyySkillFiel
     if (days.length === 0) {
       missingFieldNotes.push(`ABBYY ยังไม่ได้ตารางรายวันมาเลย (ตาราง "${fm.tableName}" ว่างเปล่าหรือหาวันที่ในแถวไม่เจอสักแถว) — ต้องกรอกเพิ่มเอง`);
     } else {
-      missingFieldNotes.push('เวลาเข้า-ออก/รายละเอียดงานด้านล่างนี้ดึงมาจากตารางที่คอลัมน์เคยสลับตำแหน่งมาก่อน — ตรวจสอบกับ PDF ต้นฉบับก่อนยืนยัน');
+      // เดิม note นี้ขึ้นทุกครั้งที่มีตารางแล้วมีแถว ไม่ได้เช็คว่าใบนี้เคยสลับคอลัมน์จริงหรือเปล่า —
+      // เตือนเหมารวมทุกใบทั้งที่ระบบอ่านตรงคอลัมน์อยู่แล้ว ตอนนี้ใช้เงื่อนไขเดียวกับ mappedTimes ใน
+      // buildDayRowsFromStructuredTable() (บรรทัด 440): ขึ้นเฉพาะตอนที่ Skill นี้ยังไม่ได้ map
+      // timeIn/timeOut ไว้จริง ซึ่งเป็นตอนเดียวที่ระบบต้องเดาตำแหน่งคอลัมน์เอง ถ้า map ครบแล้วอ่านตรง
+      // คอลัมน์ ไม่มีอะไรต้องเตือน
+      const mappedTimes = fm.detail.timeIn !== undefined && fm.detail.timeOut !== undefined;
+      if (!mappedTimes) {
+        missingFieldNotes.push('เวลาเข้า-ออก/รายละเอียดงานด้านล่างนี้ดึงมาจากตารางที่ยังไม่ได้ตั้งชื่อคอลัมน์ไว้ ระบบเดาตำแหน่งเอาเอง — ตรวจสอบกับ PDF ต้นฉบับก่อนยืนยัน');
+      }
     }
     if (leaveDays.length > 0) {
       missingFieldNotes.push('วันลาด้านล่างนี้ตรวจจับมาจากตารางเดียวกันที่คอลัมน์ยังไม่แม่นยำ 100% — ตรวจสอบวันที่กับ PDF ต้นฉบับก่อนยืนยัน');
