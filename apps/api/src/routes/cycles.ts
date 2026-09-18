@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
-import { requireAdmin, requireNotUser, requireExecutiveWhenUnscoped } from '../lib/requireRole.js';
+import { requireAdmin, requireAdminIfSession, requireNotUser, requireExecutiveWhenUnscoped } from '../lib/requireRole.js';
 import { requireN8nSecret, requireAuthOrN8nSecret } from '../lib/n8nAuth.js';
 import {
   CycleActionError,
@@ -22,7 +22,11 @@ cyclesRouter.get('/ready', requireN8nSecret, async (_req, res) => {
   res.json(await readyCycles());
 });
 
-cyclesRouter.post('/:contractId/:period/request-approval', requireAuthOrN8nSecret, async (req, res) => {
+/** ⚠️ `requireAuthOrN8nSecret` ปล่อยผ่านทุก role ที่ล็อกอิน — ต้นฉบับใน server.js ทำ
+ * `if (session) requireAdmin(session)` ไว้ด้วย แต่ตกหล่นตอนพอร์ต ทำให้พนักงานทั่วไปสั่งส่งคำขออนุมัติ
+ * วางบิลเข้า LINE ของผู้อนุมัติได้ทุกสัญญา/ทุกรอบ (18 ก.ย. 69) — `requireAdminIfSession` เอาพฤติกรรม
+ * เดิมกลับมา โดยไม่กระทบเส้น n8n ที่ไม่มี session แต่ผ่าน shared secret มา */
+cyclesRouter.post('/:contractId/:period/request-approval', requireAuthOrN8nSecret, requireAdminIfSession, async (req, res) => {
   try {
     const actor = req.user?.nameTh ?? 'n8n';
     const result = await requestCycleApproval(req.params.contractId, req.params.period, { actor });

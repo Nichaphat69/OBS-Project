@@ -51,9 +51,6 @@ export default function EmployeesTab() {
   const { tx } = useLang();
 
   const [employees, setEmployees] = useState<EmployeeRow[] | null>(null);
-  const [activeContract, setActiveContract] = useState<ActiveContract | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
   const [editRowKey, setEditRowKey] = useState<string | null>(null);
 
   const [aliasEdit, setAliasEdit] = useState<AliasEditState>(null);
@@ -68,7 +65,6 @@ export default function EmployeesTab() {
     fetch('/api/contracts/active', { cache: 'no-store' })
       .then((r) => r.json())
       .then((c: ActiveContract | null) => {
-        setActiveContract(c);
         const qs = c ? `?shape=full&contractId=${encodeURIComponent(c.id)}` : '?shape=full';
         return fetch(`/api/employees${qs}`, { cache: 'no-store' });
       })
@@ -101,8 +97,15 @@ export default function EmployeesTab() {
         return;
       }
       // แก้ไข = เพิ่มใหม่ก่อนแล้วค่อยลบของเดิม (ล้มเหลวตอนเพิ่มก็ยังเหลือของเดิมไว้)
+      //
+      // ⚠️ ต้องเช็คผลของ DELETE ด้วย — เดิมทิ้งผลไปเฉยๆ ถ้าลบไม่สำเร็จ ผู้ใช้จะเห็นว่า "แก้ชื่อพ้องแล้ว"
+      // ทั้งที่จริงกลายเป็น **เพิ่มชื่อพ้องซ้ำอีกตัว** โดยของเดิมยังอยู่ และไม่มีอะไรบอกเลย
       if (aliasEdit.mode === 'edit' && aliasEdit.original && aliasEdit.original !== clean) {
-        await fetch(`/api/employees/${encodeURIComponent(aliasEdit.employeeId)}/aliases?kind=${encodeURIComponent(aliasEdit.kind)}&alias=${encodeURIComponent(aliasEdit.original)}`, { method: 'DELETE' });
+        const delRes = await fetch(`/api/employees/${encodeURIComponent(aliasEdit.employeeId)}/aliases?kind=${encodeURIComponent(aliasEdit.kind)}&alias=${encodeURIComponent(aliasEdit.original)}`, { method: 'DELETE' });
+        if (!delRes.ok) {
+          const delData = await delRes.json().catch(() => ({}));
+          toast(delData?.error ?? `${tx('ลบชื่อพ้องเดิมไม่สำเร็จ — ตอนนี้มีทั้งของเดิมและของใหม่')} "${aliasEdit.original}"`, true);
+        }
       }
       setAliasEdit(null);
       setAliasValue('');
@@ -304,48 +307,10 @@ export default function EmployeesTab() {
 
   return (
     <>
-      <div className="metabar">
-        <span className="ey">{activeContract ? `${employees.length} ${tx('คน')} — ${activeContract.customerName}` : `${employees.length} ${tx('คน')}`}</span>
-        <button
-          className="btn pri sm"
-          disabled={!activeContract}
-          title={activeContract ? undefined : tx('ยังไม่มีบริษัทที่กำลังดำเนินการอยู่')}
-          onClick={() => setAddOpen(true)}
-        >
-          <Icon name="grid" className="sm" /> {tx('เพิ่มพนักงาน')}
-        </button>
-        <button
-          className="btn sm"
-          disabled={!activeContract}
-          title={activeContract ? undefined : tx('ยังไม่มีบริษัทที่กำลังดำเนินการอยู่')}
-          onClick={() => setLinkOpen(true)}
-        >
-          <Icon name="users" className="sm" /> {tx('ผูกพนักงานที่มีอยู่แล้ว')}
-        </button>
-      </div>
-
-      {addOpen && activeContract && (
-        <EmployeeForm
-          mode="add"
-          activeContract={activeContract}
-          onCancel={() => setAddOpen(false)}
-          onSaved={() => {
-            setAddOpen(false);
-            load();
-          }}
-        />
-      )}
-
-      {linkOpen && activeContract && (
-        <LinkExistingEmployeeForm
-          activeContract={activeContract}
-          onCancel={() => setLinkOpen(false)}
-          onSaved={() => {
-            setLinkOpen(false);
-            load();
-          }}
-        />
-      )}
+      {/* ไม่มีปุ่มเพิ่ม/ผูกพนักงานแล้วโดยตั้งใจ (เจ้าของระบบยืนยัน 18 ก.ย. 69) — พนักงานเข้าระบบได้ทาง
+          เดียวคือผ่านการเพิ่มสัญญา/PO ที่ดึงจาก FlowAccount เท่านั้น ห้ามเพิ่มมือระหว่างสัญญา
+          ("มันต้องอิงจากสัญญาใบว่าจ้าง PO ที่เพิ่มใน FlowAccount เท่านั้น ไม่ควรเพิ่มเองได้") หน้านี้
+          จึงเหลือแค่แก้ไข/นำออกพนักงานที่มีอยู่แล้วในตารางด้านล่าง */}
 
       {editingEmployee && (
         <EmployeeForm
@@ -563,122 +528,3 @@ function EmployeeForm({
   );
 }
 
-/** "ผูกพนักงานที่มีอยู่แล้ว" — สำหรับพนักงานที่เคยถูก "นำออกจากโครงการ" (removeFromProject ลบ
- * assignment ทิ้งจริง ไม่ใช่แค่ซ่อน) กลับเข้าสัญญาใหม่/เดิมโดยไม่ต้องสร้างพนักงานซ้ำ — ต่างจาก
- * EmployeeForm mode="add" ที่สร้างพนักงาน**ใหม่ทั้งคน**เสมอ ใช้ POST /api/assignments (ใหม่)
- * รายชื่อที่เลือกได้มาจาก /api/employees?shape=full (ไม่ใส่ contractId) กรองเอาแค่คนที่ไม่มี
- * assignment ผูกอยู่เลย (assignmentId === null) เพราะคนที่มี assignment อยู่แล้วไม่ต้องผูกซ้ำ */
-function LinkExistingEmployeeForm({
-  activeContract,
-  onCancel,
-  onSaved,
-}: {
-  activeContract: ActiveContract;
-  onCancel: () => void;
-  onSaved: () => void;
-}) {
-  const toast = useToast();
-  const { tx } = useLang();
-  const [candidates, setCandidates] = useState<EmployeeRow[] | null>(null);
-  const [employeeId, setEmployeeId] = useState('');
-  const [quotationNo, setQuotationNo] = useState('');
-  const [monthlyRate, setMonthlyRate] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/employees?shape=full', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((rows: EmployeeRow[]) => setCandidates(rows.filter((r) => !r.assignmentId)))
-      .catch(() => setCandidates([]));
-  }, []);
-
-  async function save() {
-    if (!employeeId || !monthlyRate || !startDate) {
-      toast(tx('เลือกพนักงาน กรอกเรทต่อเดือน และวันเริ่มงานให้ครบก่อน'), true);
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/assignments', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          contractId: activeContract.id,
-          employeeId,
-          quotationNo: quotationNo || null,
-          monthlyRate: Number(monthlyRate),
-          startDate,
-          endDate: endDate || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast(data?.error ?? tx('ผูกพนักงานไม่สำเร็จ'), true);
-        setSaving(false);
-        return;
-      }
-      toast(`${tx('ผูกพนักงานกลับเข้าโครงการแล้ว')} "${data.nameTh ?? ''}"`);
-      onSaved();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card
-      title={tx('ผูกพนักงานที่มีอยู่แล้ว')}
-      right={
-        <span className="sub">
-          {tx('ผูกอัตราจ้างกับ')} &quot;{activeContract.customerName} — {activeContract.projectName}&quot;
-        </span>
-      }
-      footer={
-        <>
-          <button className="btn" onClick={onCancel}>
-            {tx('ยกเลิก')}
-          </button>
-          <button className="btn pri" disabled={saving || !candidates?.length} onClick={save}>
-            {tx('ผูกพนักงาน')}
-          </button>
-        </>
-      }
-    >
-      {candidates && candidates.length === 0 ? (
-        <div className="sub">{tx('ไม่มีพนักงานที่ยังไม่ได้ผูกโครงการให้เลือก')}</div>
-      ) : (
-        <div className="frm">
-          <label>
-            {tx('พนักงาน')}
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-              <option value="">— {tx('เลือกพนักงาน')} —</option>
-              {candidates?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nameTh} — {c.invoicePosition}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {tx('เลขที่ใบเสนอราคา (QT)')}
-            <input value={quotationNo} onChange={(e) => setQuotationNo(e.target.value)} />
-          </label>
-          <label>
-            {tx('เรทต่อเดือน (บาท)')}
-            <input type="number" min={0} step={0.01} value={monthlyRate} onChange={(e) => setMonthlyRate(e.target.value)} />
-          </label>
-          <label>
-            {tx('วันเริ่มงาน')}
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </label>
-          <label>
-            {tx('วันสิ้นสุด (ถ้าไม่ระบุ = ตามสัญญา)')}
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </label>
-        </div>
-      )}
-    </Card>
-  );
-}

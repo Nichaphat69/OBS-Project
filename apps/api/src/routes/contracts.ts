@@ -21,8 +21,19 @@ contractsRouter.get('/', requireNotUser, async (_req, res) => {
   res.json(await listContracts());
 });
 
-/** สัญญาที่กำลังดำเนินการอยู่ตอนนี้ — แถบบนใช้ตั้งค่าเริ่มต้นของตัวเลือกบริษัทตอนเปิดหน้าเว็บ */
-contractsRouter.get('/active', async (_req, res) => {
+/**
+ * สัญญาที่กำลังดำเนินการอยู่ตอนนี้ — แถบบนใช้ตั้งค่าเริ่มต้นของตัวเลือกบริษัทตอนเปิดหน้าเว็บ
+ *
+ * เส้นนี้**ตกหล่นตอนปิดสิทธิ์ role "user" เมื่อ 15 ก.ย. 69** — ตัว `GET /` บรรทัดบนถูกปิดไปแล้ว
+ * แต่ตัวนี้ไม่ได้ปิดตาม ทั้งที่คืน ContractSummary เต็มใบ (เลขผู้เสียภาษี ผู้ติดต่อ เรท VAT/หัก ณ ที่จ่าย
+ * และ `monthlyTotal` = มูลค่าสัญญาต่อเดือน) ซึ่งพนักงานไม่ควรเห็น
+ *
+ * ปิดได้ปลอดภัยแล้ว (18 ก.ย. 69) — ไล่ผู้เรียกครบทั้ง 5 จุด (dashboard, master, billing, manday,
+ * upload/GmailTab) เป็นหน้าของ admin/บัญชีล้วน ส่วน GmailTab ไม่ถูก render ให้ role "user" อีกแล้ว
+ * ตั้งแต่หน้าอัปโหลดแยกโหมดพนักงานออกมา (ดู UploadClient.tsx) และแถบบนของ role "user" ก็ไม่มี
+ * ตัวเลือกบริษัทให้เลือกอยู่แล้ว
+ */
+contractsRouter.get('/active', requireNotUser, async (_req, res) => {
   res.json(await getActiveContract());
 });
 

@@ -233,16 +233,32 @@ export function parseReadModel(model?: string | null) {
  * ui.tsx เป็น component ล้วนๆ ไม่ยิง fetch เอง — ไม่ส่งมาก็ยัง fallback ไปโชว์รหัสดิบเหมือนเดิมทุกจุด */
 export type ReadModelNameMap = Record<string, Record<string, string>>;
 
-export function ReadModelTag({ model, nameMap }: { model?: string | null; nameMap?: ReadModelNameMap }) {
+/**
+ * ป้ายนี้เปลี่ยนความหมายจาก "อ่านด้วยเครื่องมืออะไร" เป็น "ได้ไฟล์มาทางไหน" ตามที่เจ้าของระบบสั่ง
+ * 18 ก.ย. 69 — สามกรณีเรียงตามลำดับความสำคัญ (channel ชนะชื่อ engine):
+ *
+ * 1. มี `sourceEmailId` (ดึงมาจาก Gmail) → "ดึงจาก Gmail" ไม่ว่า AI เจ้าไหนจะเป็นคนอ่านก็ตาม
+ * 2. engine เป็น `manual` (พิมพ์เองจากแท็บ "กรอกเอง" — ไม่มีไฟล์เก็บเลยจริงๆ) → "อัปโหลด Timesheet"
+ *    ("อัปโหลด Timesheet" คือชื่อหน้าที่ทั้งอัปโหลดไฟล์และกรอกเองอยู่ด้วยกัน ไม่ได้แปลว่ามีไฟล์จริง
+ *    แต่บอกว่าเข้าระบบทางหน้านี้ ไม่ใช่ทาง Gmail)
+ * 3. นอกนั้น (อัปโหลดไฟล์จริงแล้วให้ ABBYY/Clear Read/โมเดลในเครื่องอ่าน) → คงชื่อ engine ไว้เหมือนเดิม
+ *
+ * จุดสี (`rm-dot`) ยังคงผูกกับ engine จริงเหมือนเดิมโดยตั้งใจ ไม่ผูกกับ channel — ใบที่ Gmail ดึงมาแล้ว
+ * ABBYY อ่าน จุดยังเป็นสีแดงของ ABBYY เพราะยังมีประโยชน์ตอนไล่ปัญหาว่าใครอ่านจริง แค่ตัวหนังสือเปลี่ยน
+ */
+export function ReadModelTag({ model, sourceEmailId, nameMap }: { model?: string | null; sourceEmailId?: string | null; nameMap?: ReadModelNameMap }) {
+  const { tx } = useLang();
   const parsed = parseReadModel(model);
   if (!parsed) return null;
+  const label = sourceEmailId ? tx('ดึงจาก Gmail') : parsed.engine === 'manual' ? tx('อัปโหลด Timesheet') : tx(parsed.label);
   // หา UUID ไม่เจอในสารบัญ (Skill ถูกลบไปแล้ว/ยังไม่ได้ซิงก์) — fallback เป็นรหัสดิบเดิม ไม่ใช่ซ่อนไปเฉยๆ
-  // เพราะรหัสดิบยังมีประโยชน์ตอนไล่ปัญหาว่าเอกสารนี้อ่านด้วย Skill ไหนกันแน่
+  // เพราะรหัสดิบยังมีประโยชน์ตอนไล่ปัญหาว่าเอกสารนี้อ่านด้วย Skill ไหนกันแน่ — ยังโชว์ต่อแม้ label
+  // ข้างหน้าจะเปลี่ยนเป็น channel แล้ว เพราะเป็นคนละคำถามกัน (มาทางไหน vs ใครอ่าน)
   const resolvedDetail = (parsed.detail && nameMap?.[parsed.engine]?.[parsed.detail]) || parsed.detail;
   return (
-    <span className="readmodel" title={resolvedDetail ? `${parsed.label} · ${resolvedDetail}` : parsed.label}>
+    <span className="readmodel" title={resolvedDetail ? `${label} · ${resolvedDetail}` : label}>
       <span className={`rm-dot ${parsed.engine}`} />
-      {parsed.label}
+      {label}
       {resolvedDetail && <span className="rm-id">{resolvedDetail}</span>}
     </span>
   );

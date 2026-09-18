@@ -190,12 +190,30 @@ export interface CycleStatus {
   missing: string[];
 }
 
-/** ported from service.js getCycleStatus() */
+/** การมอบหมายงานชิ้นนี้ครอบคลุมรอบบิลนี้ไหม — เทียบระดับเดือน ('YYYY-MM') เพราะรอบบิลเป็นรายเดือน
+ * คนที่เข้ากลางเดือน/ออกกลางเดือนยังถือว่าต้องส่ง Timesheet ของเดือนนั้น */
+function assignmentCoversPeriod(a: { startDate: string; endDate: string }, period: string): boolean {
+  return a.startDate.slice(0, 7) <= period && period <= a.endDate.slice(0, 7);
+}
+
+/**
+ * ported from service.js getCycleStatus()
+ *
+ * ⚠️ ต้องกรองด้วยช่วงวันที่ของการมอบหมายงานเสมอ (18 ก.ย. 69) — เดิมนับพนักงานทุกคนที่ผูกกับสัญญาอยู่
+ * ตอนนี้ โดยไม่ดู `assignments.start_date/end_date` เลย ทั้งที่แต่ละคนเข้า-ออกโครงการคนละเดือนกันได้
+ * คนที่เพิ่งเข้าเดือน มี.ค. จึงถูกนับว่า "ยังไม่ส่ง Timesheet" ของเดือน ม.ค.-ก.พ. ที่เขายังไม่ได้ทำงานด้วยซ้ำ
+ * → `complete` เป็น false ตลอดกาล → ติด blocker "ยังได้ Timesheet ไม่ครบ" ใน previewCycleInvoice()
+ * ทำให้วางบิลรอบเก่าไม่ได้เลยทั้งที่ข้อมูลครบแล้วจริง และรายชื่อ `missing` ก็ทวงผิดคน
+ *
+ * อีกสองจุดที่ถามคำถามเดียวกัน (`overdueTimesheets()` กับหน้า "บันทึกการส่ง") ดูช่วงวันที่อยู่แล้วผ่าน
+ * `enumeratePeriods(a.startDate, a.endDate)` — จุดนี้เป็นจุดเดียวที่ตอบไม่ตรงกับอีกสองจุด
+ */
 export async function getCycleStatus(contractId: string, period: string): Promise<CycleStatus> {
-  const expected = await prisma.assignment.findMany({
+  const active = await prisma.assignment.findMany({
     where: { contractId, status: 'active' },
     include: { employee: true },
   });
+  const expected = active.filter((a) => assignmentCoversPeriod(a, period));
   const received = await prisma.timesheet.findMany({
     where: { contractId, period, status: { not: 'rejected' } },
     select: { employeeId: true },

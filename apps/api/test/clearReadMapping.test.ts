@@ -265,3 +265,32 @@ test('Document_Site ที่เพิ่งเพิ่มในแม่แบ
   const d: any = mapClearReadResult(docFields({ Document_Site: 'สำนักงานใหญ่' }));
   assert.equal(d.site, 'สำนักงานใหญ่');
 });
+
+/* ── ชื่อเก่าระดับเอกสารต้องไม่ทับค่าของชื่อตามสเปก (18 ก.ย. 69) ─────────────────────────────────
+   แม่แบบ Master Template สะกด `Customer_Site` (S ใหญ่) ไว้ระดับเอกสาร แต่ alias เดิมมีแต่
+   `Customer_site` (s เล็ก) ซึ่งเป็นคนละคีย์ ค่าที่อ่านมาได้จึงถูกทิ้งทั้งหมด พอรับเข้ามาลงคีย์เดียวกับ
+   `Document_Site` แล้ว ต้องมีด่านกันทับด้วย ไม่งั้นช่องที่ว่างจะลบค่าที่อ่านมาได้ตามลำดับคีย์ใน JSON
+   ซึ่งควบคุมไม่ได้ — ฝั่งรายวันมีด่านนี้มาตั้งแต่แรก ระดับเอกสารเพิ่งมี */
+test('Customer_Site (S ใหญ่) ต้องอ่านเข้า site ได้ ไม่ใช่ถูกทิ้งเพราะตัวพิมพ์ไม่ตรง alias', () => {
+  const d: any = mapClearReadResult(docFields({ Customer_Site: 'สาขาลาดพร้าว' }));
+  assert.equal(d.site, 'สาขาลาดพร้าว');
+});
+
+test('มีทั้ง Document_Site และ Customer_Site — Document_Site ชนะเสมอ ไม่ว่าคีย์ไหนมาก่อน', () => {
+  const specFirst: any = mapClearReadResult(docFields({ Document_Site: 'สำนักงานใหญ่', Customer_Site: 'สาขาลาดพร้าว' }));
+  assert.equal(specFirst.site, 'สำนักงานใหญ่');
+  const legacyFirst: any = mapClearReadResult(docFields({ Customer_Site: 'สาขาลาดพร้าว', Document_Site: 'สำนักงานใหญ่' }));
+  assert.equal(legacyFirst.site, 'สำนักงานใหญ่', 'ลำดับคีย์ใน JSON ต้องไม่เปลี่ยนผลลัพธ์');
+});
+
+test('Customer_Site ที่ว่าง ต้องไม่ลบค่าที่ Document_Site อ่านมาได้แล้ว', () => {
+  const d: any = mapClearReadResult(docFields({ Document_Site: 'สำนักงานใหญ่', Customer_Site: '' }));
+  assert.equal(d.site, 'สำนักงานใหญ่');
+});
+
+test('Place ในตารางรายวันต้องอ่านเข้า dailySite และ Daily_Site ชนะเมื่อมีทั้งคู่', () => {
+  const only: any = mapClearReadResult(docFields({}, [workRow(2, { Place: 'ไซต์บางนา' })]));
+  assert.equal(only.days[0].dailySite, 'ไซต์บางนา');
+  const both: any = mapClearReadResult(docFields({}, [workRow(3, { Place: 'ไซต์บางนา', Daily_Site: 'ไซต์พระราม 9' })]));
+  assert.equal(both.days[0].dailySite, 'ไซต์พระราม 9');
+});

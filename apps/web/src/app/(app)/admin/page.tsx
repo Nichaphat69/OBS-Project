@@ -19,7 +19,7 @@ export default async function AdminPage() {
 
   return (
     <>
-      <TxPageHeader eyebrow="ผู้ดูแลระบบ" title="จัดการระบบ" subtitle="ผู้ใช้ · ผู้รับแจ้งเตือน · บันทึกระบบ · โดเมนอีเมลลูกค้า" />
+      <TxPageHeader eyebrow="ผู้ดูแลระบบ" title="จัดการระบบ" />
       <AdminTabs currentUsername={user.username} />
     </>
   );

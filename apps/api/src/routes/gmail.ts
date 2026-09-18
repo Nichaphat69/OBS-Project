@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
+import { requireAdmin } from '../lib/requireRole.js';
 import {
   gmailInbox,
   readTimesheetFromEmail,
@@ -18,6 +19,20 @@ import { GmailError } from '../lib/gmailClient.js';
 export const gmailRouter = Router();
 
 gmailRouter.use(requireAuth);
+/**
+ * ทั้งกลุ่มนี้เปิดให้ **admin กับแผนกบัญชีเท่านั้น** (เจ้าของระบบสั่ง 18 ก.ย. 69)
+ *
+ * เดิมมีแค่ `requireAuth` = ใครที่ล็อกอินก็เรียกได้ รวม role "user" ซึ่งแปลว่าพนักงานคนหนึ่ง
+ * อ่านกล่องเมลวางบิลรวมของทั้งบริษัทได้ (หัวข้อ ผู้ส่ง ไฟล์แนบ), ส่ง `?query=` เป็น Gmail search
+ * operator อะไรก็ได้, ยิง `/read` ดึง Timesheet ของเพื่อนร่วมงานออกมาทั้งใบได้ และ `/dismiss`
+ * ซ่อนอีเมลลูกค้าออกจากคิวได้ซึ่งเป็นการ **เขียน** ไม่ใช่แค่อ่าน
+ *
+ * `/read` ยังสั่งให้เครื่องอ่าน (ABBYY/Clear Read) ทำงานด้วย ซึ่ง **คิดเงินต่อการเรียกหนึ่งครั้ง** —
+ * ปล่อยไว้เท่ากับใครก็ได้กดเผาเครดิตได้ไม่จำกัด
+ *
+ * วางไว้ที่ระดับ router ไม่ใช่ไล่ใส่ทีละเส้น เพื่อไม่ให้เส้นที่เพิ่มทีหลังหลุดการป้องกันโดยลืม
+ */
+gmailRouter.use(requireAdmin);
 
 gmailRouter.get('/inbox', async (req, res) => {
   try {

@@ -1484,6 +1484,77 @@ td.sub {
   background: #525659;
 }
 
+/* ตัวอย่าง Excel/CSV ในป็อปอัปเดียวกับ PDF — โครงเหมือน .pdf-card ทุกอย่าง (หัว/ปุ่ม/overlay ใช้ร่วมกัน)
+   ต่างแค่เนื้อในเป็นตารางที่ parse มาแทน iframe ใช้โทนกระดาษของระบบ ไม่ใช่พื้นเทาแบบตัวเปิด PDF */
+.xlsx-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--sunk);
+}
+.xlsx-state {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--mut);
+  font-size: 13px;
+}
+.xlsx-state.err {
+  color: var(--cr);
+}
+.xlsx-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--hair);
+  background: var(--paper);
+}
+.xlsx-tab {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  background: var(--sunk);
+  border: 1px solid var(--rule);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 7px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+}
+.xlsx-tab.on {
+  color: var(--brand-d);
+  background: var(--tint);
+  border-color: var(--bline);
+}
+.xlsx-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+}
+.xlsx-table {
+  border-collapse: collapse;
+  background: var(--paper);
+  box-shadow: var(--sh1);
+  font-size: 12px;
+}
+.xlsx-table td {
+  border: 1px solid var(--rule);
+  padding: 5px 10px;
+  white-space: pre;
+  color: var(--ink);
+}
+/* แถวแรกเป็นแถวหัวกระดาษของไฟล์เสมอในเชิงตำแหน่ง ไม่ใช่ความหมาย (ไฟล์จริงมักมีโลโก้/ชื่อบริษัทเหนือ
+   หัวตารางจริงอีกหลายแถว) เน้นให้อ่านง่ายว่าเป็นแถวบนสุดเฉยๆ ไม่ได้อ้างว่าเป็นหัวตาราง */
+.xlsx-table tr:first-child td {
+  background: var(--hov);
+  font-weight: 600;
+}
+
 .btn.icon {
   width: var(--h-ctl-sm);
   padding: 0;
@@ -2179,6 +2250,139 @@ dl.kv dd {
   text-overflow: ellipsis;
 }
 
+/* แถบ filter ของตาราง — ใช้กับหน้าที่มีตัวกรองหลายตัวเรียงกันในหัวการ์ด (บันทึกการส่ง เป็นเจ้าแรก) */
+.subfilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* ═══ สรุปรอบส่ง Timesheet (หน้า "บันทึกการส่ง") ═══
+   แทนการ์ด KPI 5 ใบที่เรียงเท่ากันหมด ซึ่งบอกได้แค่ตัวเลขลอยๆ ต้องหารเองถึงจะรู้ว่ารอบนี้ครบหรือยัง
+   อันนี้ตอบคำถามเดียวของหน้านี้ตรงๆ ด้วยแถบความคืบหน้า แล้วแจกแจงที่เหลือเป็นชิปเล็กด้านล่าง */
+.subsum {
+  padding: 15px 18px 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-card);
+  background: var(--paper);
+}
+.subsum .ssh {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.subsum .ssl {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.subsum .ssv {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-inline-start: auto;
+}
+.subsum .ssv b {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+/* ยังไม่ส่งสักรอบ = ตัวเลข 0 ไม่ควรเป็นสีเขียวเหมือนตอนส่งครบ ไม่งั้นจอที่ยังไม่มีอะไรคืบหน้าเลย
+   จะดูเหมือนผ่านแล้ว — ใช้ :has() เช็คจากค่าจริงในแถบ ไม่ต้องส่งคลาสเพิ่มจากฝั่ง React */
+.subsum:has(.ssbar .fill[style*='width: 0%']) .ssv b,
+.subsum:has(.ssbar .fill[style*='width:0%']) .ssv b {
+  color: var(--fnt);
+}
+.subsum .ssv .of {
+  font-size: 13px;
+  color: var(--mut);
+  font-variant-numeric: tabular-nums;
+}
+.subsum .sspc {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink2);
+  background: var(--sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.subsum .ssbar {
+  height: 10px;
+  margin-top: 12px;
+  border-radius: var(--r-pill);
+  background: var(--sunk);
+  border: 1px solid var(--hair);
+  overflow: hidden;
+}
+.subsum .ssbar .fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 70%, white), var(--ok));
+  transition: width 0.3s var(--ease);
+}
+.subsum .sschips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+/* ชิปที่นับได้ 0 ทำให้จางลง แต่ยังอยู่ — ตำแหน่งชิปจะได้ไม่ขยับไปมาทุกครั้งที่ตัวเลขเปลี่ยน
+   และคนอ่านยังรู้ว่ามีหมวดนี้อยู่ ไม่ใช่หายไปจนนึกว่าระบบไม่ได้นับ */
+.subsum .ssc {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  padding: 4px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--rule);
+  background: var(--sunk);
+  color: var(--mut);
+}
+.subsum .ssc b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* ยืนยันหลังพนักงานกดส่งไฟล์สำเร็จ (หน้า "ส่ง Timesheet" ของ role user) */
+.subdone {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.subdone .ic {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ok);
+  background: var(--okb);
+  border: 1px solid var(--okl);
+}
+.subdone .tx {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.subdone .tx b {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.subsum .ssc.mu.on { color: var(--ink2); border-color: var(--rule); background: var(--paper); }
+.subsum .ssc.wn.on { color: var(--wn); border-color: var(--wnl); background: var(--wnb); }
+.subsum .ssc.cr.on { color: var(--red); border-color: var(--crl); background: var(--crb); }
+
 .rowacts {
   display: flex;
   align-items: center;
@@ -2313,6 +2517,18 @@ td .nm {
   color: var(--mut);
   cursor: default;
 }
+/* ช่องที่กดบันทึกแล้วยังว่าง/ไม่ครบ — เดิมบอกแค่ toast ลอยๆ ต้องเลื่อนหาเองว่าช่องไหน
+   (เจ้าของระบบสั่ง 18 ก.ย. 69: ต้องมีกรอบแดงชี้ตรงช่องที่ยังไม่กรอกด้วย) */
+.frm input.err,
+.frm select.err {
+  border-color: var(--cr);
+  background: var(--crb);
+}
+.frm input.err:focus,
+.frm select.err:focus {
+  outline-color: var(--cr);
+  border-color: var(--cr);
+}
 .frm select {
   font: inherit;
   font-size: 13.5px;
@@ -2381,13 +2597,57 @@ td .nm {
   color: var(--ink);
 }
 
-/* ═══ แถววันลาที่แก้ไขได้ (อัปโหลด Timesheet) ═══ */
+/* ═══ แถววันลาที่แก้ไขได้ (อัปโหลด Timesheet) ═══ ยกเครื่องให้ดูเป็นการ์ดแยกแต่ละแถว พร้อมไอคอน+สี
+   ตามประเภทลา (ชุดสีเดียวกับปฏิทินในหน้าตรวจ Manday's .cl.lv-* — เพื่อให้เป็นภาษาสีเดียวกันทั้งระบบ)
+   แทนกริดเรียบๆ 3 ช่องเดิม (เจ้าของระบบสั่ง 18 ก.ย. 69: ทำให้สวยและดูดีกว่านี้) */
 .leave-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
   margin-bottom: 8px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  border-radius: var(--r-ctl);
+  background: var(--paper);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.leave-row:hover {
+  box-shadow: 0 3px 10px -6px rgba(20, 32, 47, 0.25);
+}
+.leave-row .lv-ic {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--mut);
+  background: var(--sunk);
+}
+.leave-row.lv-sick { border-left-color: var(--cal-sick); }
+.leave-row.lv-sick .lv-ic { color: var(--cal-sick); background: color-mix(in srgb, var(--cal-sick) 14%, white); }
+.leave-row.lv-personal { border-left-color: var(--cal-personal); }
+.leave-row.lv-personal .lv-ic { color: var(--cal-personal); background: color-mix(in srgb, var(--cal-personal) 14%, white); }
+.leave-row.lv-vacation { border-left-color: var(--cal-vacation); }
+.leave-row.lv-vacation .lv-ic { color: var(--cal-vacation); background: color-mix(in srgb, var(--cal-vacation) 14%, white); }
+.leave-row input[type='date'] {
+  flex: 1 1 165px;
+  min-width: 0;
+}
+.leave-row select {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.leave-row .btn {
+  flex: none;
+}
+@media (max-width: 480px) {
+  .leave-row input[type='date'],
+  .leave-row select {
+    flex-basis: 100%;
+  }
 }
 .leave-empty {
   font-size: 13px;
@@ -3313,84 +3573,75 @@ button.file:hover {
   margin-top: -2px;
 }
 
-/* แถบข้อมูลย่อยของแม่แบบที่เปิดดูอยู่ — ชื่ออยู่ใน dropdown แล้ว เหลือแต่เวอร์ชัน/รหัส/จำนวนช่อง */
-.crfields .tpl {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 11px 14px;
-  margin-bottom: 13px;
-  border: 1px solid var(--cr-line);
+/* แถบสรุปแม่แบบ — กล่องเดียวจบ รวมเวอร์ชัน/รหัส/จำนวนช่อง เข้ากับผลตรวจเทียบสารบัญกลาง
+   เดิมแยกเป็นสามกล่องซ้อนกันคนละพื้นหลัง (แถบเขียวไล่สี → กล่องเทา → กล่องย่อยข้างในอีกชั้น)
+   ซึ่งอ่านแล้วไม่รู้ว่าต้องดูตรงไหนก่อน และจำนวนช่องก็ซ้ำกับ dropdown ด้านบนอยู่แล้ว
+   สีขอบ+หัวแถบเป็นตัวบอกสถานะตัวเดียว: เขียว = ตรงสเปก, เหลือง = มีเรื่องต้องดู */
+.crfields .crsum {
+  margin-bottom: 14px;
+  border: 1px solid var(--rule);
   border-radius: var(--r-ctl);
-  background: linear-gradient(180deg, var(--cr-tint), var(--paper));
+  background: var(--paper);
+  overflow: hidden;
 }
-.crfields .tl {
+.crfields .crsum.ok { border-color: var(--okl); }
+.crfields .crsum.warn { border-color: var(--wnl); }
+.crfields .sh {
   display: flex;
   align-items: center;
   gap: 9px;
   flex-wrap: wrap;
-  min-width: 0;
+  padding: 9px 13px;
+  background: var(--sunk);
 }
-.crfields .tv {
+.crfields .crsum.ok .sh { background: var(--okb); }
+.crfields .crsum.warn .sh { background: var(--wnb); }
+.crfields .sh .si {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--mut);
+}
+.crfields .crsum.ok .sh .si { color: var(--ok); }
+.crfields .crsum.warn .sh .si { color: var(--wn); }
+.crfields .st {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+/* ตัวดันให้ของฝั่งขวาไปชิดขวา — ยุบเป็น 0 ตอนขึ้นบรรทัดใหม่ จะได้ไม่เหลือช่องว่างประหลาดกลางแถว */
+.crfields .sg { flex: 1 1 0; min-width: 0; }
+.crfields .sc {
+  font-size: 11.5px;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+.crfields .sv {
+  flex: none;
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--cr-d);
+  color: var(--ink2);
   background: var(--paper);
-  border: 1px solid var(--cr-line);
+  border: 1px solid var(--rule);
   border-radius: var(--r-pill);
   padding: 2px 8px;
 }
-.crfields .tid {
+.crfields .sid {
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10.5px;
-  color: var(--mut);
-  word-break: break-all;
+  color: var(--fnt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.crfields .cnt {
-  font-size: 11.5px;
-  color: var(--ink2);
-}
-
-/* ผลตรวจเทียบสารบัญกลาง */
-.crfields .chk {
-  padding: 12px 14px;
-  margin-bottom: 15px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
-  background: var(--sunk);
-}
-.crfields .chk.ok {
-  border-color: var(--okl);
-  background: var(--okb);
-}
-.crfields .ch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--ink);
-}
-.crfields .ch .i {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  color: var(--mut);
-}
-.crfields .chk.ok .ch .i {
-  color: var(--ok);
-}
-.crfields .cm {
-  margin: 6px 0 0 23px;
-  font-size: 12px;
-  color: var(--ink2);
-}
-.crfields .cl {
+.crfields .crsum .cl {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 11px;
+  padding: 12px 13px;
+  border-top: 1px solid var(--rule);
 }
 .crfields .ci {
   display: flex;
@@ -3471,15 +3722,21 @@ button.file:hover {
 }
 
 .crfields .grp + .grp {
-  margin-top: 22px;
+  margin-top: 20px;
 }
+/* หัวกลุ่มเกาะบนขณะเลื่อน — รายการยาว 40+ แถว พอเลื่อนลงไปกลางๆ จะไม่รู้แล้วว่ากำลังดูช่องระดับเอกสาร
+   หรือคอลัมน์รายวันอยู่ ซึ่งเป็นความต่างที่ทั้งหน้านี้พยายามบอก */
 .crfields .ghd {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: baseline;
   gap: 9px;
   flex-wrap: wrap;
-  padding-bottom: 8px;
-  margin-bottom: 9px;
+  padding: 7px 0 7px;
+  margin-bottom: 4px;
+  background: var(--paper);
   border-bottom: 2px solid var(--cr-line);
 }
 .crfields .gt {
@@ -3503,30 +3760,38 @@ button.file:hover {
 }
 .crfields .rows {
   list-style: none;
-  margin: 0;
+  /* ดึงออกนอกระยะขอบของแผงเท่ากับ padding ในแถว เพื่อให้ชื่อฟิลด์ตรงแนวกับหัวกลุ่มพอดี
+     และพื้นหลังตอนชี้/กางกินเต็มความกว้างแถว ไม่ลอยเป็นกล่องแคบๆ กลางแผง */
+  margin: 0 -11px 0 -13px;
   padding: 0;
 }
+/* แถวฟิลด์ — เดิมเป็นบรรทัดโล่งๆ คั่นด้วยเส้นบาง ชื่ออยู่ซ้ายสุด ป้ายชนิดลอยไปขวาสุด ระหว่างกลางว่างยาว
+   จนดูไม่เป็นรายการเดียวกัน ขยับเป็นแถวที่มีพื้นหลังตอบตอนชี้/กาง และดึงป้ายชนิดมาเกาะกลุ่มกับลูกศร */
 .crfields .fr {
-  padding: 10px 0 11px;
   border-bottom: 1px solid var(--hair);
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--r-ctl) var(--r-ctl) 0;
+  transition: background 0.14s var(--ease), border-color 0.14s var(--ease);
 }
 .crfields .fr:last-child {
   border-bottom: 0;
 }
+.crfields .fr:hover {
+  background: var(--sunk);
+}
 .crfields .fr.open {
   /* เส้นเขียวซ้ายมือบอกว่าแถวไหนกำลังกางอยู่ เวลากางหลายแถวพร้อมกันจะไม่หลงว่าคำอธิบายยาวๆ เป็นของฟิลด์ไหน */
-  border-left: 2px solid var(--cr-g);
-  padding-left: 11px;
-  margin-left: -13px;
-  background: linear-gradient(90deg, var(--cr-tint), transparent 40%);
+  border-left-color: var(--cr-g);
+  background: linear-gradient(90deg, var(--cr-tint), transparent 55%);
 }
+/* padding อยู่ที่ปุ่ม ไม่ใช่ที่ .fr — พื้นที่กดจะได้เต็มแถวจริง ไม่ใช่แค่ตรงตัวอักษร */
 .crfields .hd {
   font: inherit;
   width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0;
+  padding: 9px 11px 10px;
   border: 0;
   background: none;
   text-align: left;
@@ -3580,17 +3845,11 @@ button.file:hover {
   color: var(--cr-g);
 }
 .crfields .ds {
-  margin: 5px 0 0;
-  padding-right: 25px;
+  margin: 0;
+  padding: 0 36px 11px 11px;
   font-size: 12px;
   line-height: 1.65;
   color: var(--ink2);
-}
-.crfields .ds.clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .crfields .ds.nodesc {
   color: var(--wn);
@@ -3615,7 +3874,8 @@ button.file:hover {
   border: 1px solid var(--wnl);
 }
 .crfields .hint {
-  margin: 5px 0 0;
+  margin: 0;
+  padding: 0 11px 6px;
   font-size: 11.5px;
   color: var(--wn);
 }
@@ -3705,6 +3965,30 @@ button.file:hover {
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* กรอบไล่สีแยกแยะ ABBYY (แดง) กับ Clear Read (เขียว) ให้เห็นชัดตั้งแต่ยังไม่กด — ใช้ชุดสีเดียวกับ
+   การ์ดในหน้า "ตัวอ่าน Timesheet" (.rd.ab / .rd.cr) เพื่อให้เป็นภาษาสีเดียวกันทั้งระบบ
+   (18 ก.ย. 69 ตามที่เจ้าของระบบขอ) — border โปร่งใส + สองพื้นหลังซ้อน (padding-box/border-box)
+   คือวิธีทำกรอบไล่สีที่ border-color ธรรมดาทำไม่ได้ */
+.readerpick .rp.ab {
+  border-color: transparent;
+  background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-ab) border-box;
+  color: var(--ab-d);
+}
+.readerpick .rp.ab:hover:not(:disabled),
+.readerpick .rp.ab.on {
+  background: linear-gradient(var(--ab-tint), var(--ab-tint)) padding-box, var(--grad-ab) border-box;
+  color: var(--ab-d);
+}
+.readerpick .rp.cr {
+  border-color: transparent;
+  background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-cr) border-box;
+  color: var(--cr-d);
+}
+.readerpick .rp.cr:hover:not(:disabled),
+.readerpick .rp.cr.on {
+  background: linear-gradient(var(--cr-tint), var(--cr-tint)) padding-box, var(--grad-cr) border-box;
+  color: var(--cr-d);
+}
 /* ตัวเลือกย่อยของเครื่องอ่านที่เลือกไว้ (ตอนนี้มีแค่ Skill ฝั่ง ABBYY) — อยู่ใต้ปุ่มเลือกเครื่องอ่านทันที
    เพราะเป็นการตั้งค่าของ "รอบนี้" ชุดเดียวกัน ไม่ใช่ค่าถาวรของระบบ */
 .readeropt {
@@ -3735,27 +4019,32 @@ button.file:hover {
 .readeropt select:disabled {
   opacity: 0.55;
 }
-/* คำเตือนความช้าอยู่ติดปุ่มที่เพิ่งกด ไม่ใช่ไปซ่อนอยู่ในหน้าตั้งค่า — คนจะได้รู้ก่อนกดอ่าน ไม่ใช่รู้ตอนรอ */
-.readerwarn {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--wnl);
-  border-radius: var(--r-ctl);
-  background: var(--wnb);
-  color: var(--wn);
-  font-size: 12px;
-  line-height: 1.55;
+/* ตัวเลือกย่อยของ ABBYY — ใช้กรอบไล่สีแดงชุดเดียวกับปุ่มเลือกเครื่องอ่านด้านบน แทนกรอบโฟกัสสีน้ำเงิน
+   ของเบราว์เซอร์ซึ่งไม่ได้บอกว่าตัวเลือกนี้เป็นของใคร (เจ้าของระบบสั่ง 18 ก.ย. 69)
+   วิธีเดียวกับ .readerpick .rp.ab — border โปร่งใส + สองพื้นหลังซ้อน (padding-box/border-box) */
+.readeropt.ab .lbl {
+  color: var(--ab-d);
 }
-.readerwarn .i {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  margin-top: 1px;
+.readeropt.ab select {
+  border-color: transparent;
+  border-width: 1.5px;
+  font-weight: 600;
+  color: var(--ab-d);
+  background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-ab) border-box;
 }
-
+.readeropt.ab select:focus-visible {
+  outline: 2px solid var(--ab);
+  outline-offset: 1px;
+}
+/* วงโฟกัสของปุ่มเลือกเครื่องอ่านก็ต้องเป็นสีประจำตัวนั้น ไม่ใช่สีน้ำเงินของเบราว์เซอร์ */
+.readerpick .rp.ab:focus-visible {
+  outline: 2px solid var(--ab);
+  outline-offset: 1px;
+}
+.readerpick .rp.cr:focus-visible {
+  outline: 2px solid var(--cr-g);
+  outline-offset: 1px;
+}
 /* ═══ แถบบอกขอบเขตข้อมูลที่กำลังดู ═══
    หน้าที่แสดงข้อมูลค่าจ้างรายคนต้องบอกเองว่ากรองอยู่ที่บริษัทไหน ไม่ใช่ให้คนเดาจากรายชื่อที่เห็น —
    ตอนที่รายการรั่วข้ามบริษัท ไม่มีใครจับได้อยู่นานเพราะหน้าจอไม่เคยบอกขอบเขตของตัวเอง */
@@ -3824,4 +4113,316 @@ button.file:hover {
   max-width: 16ch;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ═══ หน้า "ความคืบหน้าของฉัน" (role พนักงาน) — เลย์เอาต์ใหม่ 18 ก.ย. 69 ═══
+   ของเดิมใช้ .cardgrid/.rec/.minitab ร่วมกับหน้าวางบิล ซึ่งเป็นการ์ดสูงๆ ใบหนึ่งต่อรอบ — เห็นได้ทีละ
+   1-2 รอบต่อจอ และอ่านไม่ออกว่าค้างขั้นไหน คลาสชุดนี้จึงแยก namespace ของตัวเอง (.mypg-*) ไม่ไปแก้
+   .rec/.minitab ที่หน้าวางบิลยังใช้อยู่ — แก้ตรงนั้นจะพังอีกหน้าโดยไม่รู้ตัว */
+.mypg-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--okl);
+  border-radius: var(--r-ctl);
+  background: var(--okb);
+  color: var(--ink2);
+  font-size: 13px;
+}
+.mypg-banner > svg.i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ok);
+}
+.mypg-banner > span {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.mypg-banner b {
+  color: var(--ink);
+}
+/* มีรอบค้าง = เปลี่ยนเป็นโทนเตือน ให้สะดุดตาตั้งแต่ยังไม่ทันเลื่อนจอ */
+.mypg-banner.act {
+  border-color: var(--wnl);
+  background: var(--wnb);
+}
+.mypg-banner.act > svg.i {
+  color: var(--wn);
+}
+
+.mypg-list {
+  display: flex;
+  flex-direction: column;
+}
+.mypg-empty {
+  padding: 26px;
+  text-align: center;
+  color: var(--mut);
+  font-size: 13px;
+}
+.mypg-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--hair);
+}
+.mypg-row:first-child {
+  border-top: none;
+}
+/* รอบที่ต้องลงมือ — แถบสีซ้ายมือ + พื้นจางๆ ให้ตาไปหยุดที่แถวนี้ก่อนแถวอื่นเสมอ */
+.mypg-row.action {
+  background: linear-gradient(90deg, var(--wnb), transparent 55%);
+  box-shadow: inset 3px 0 0 var(--wn);
+}
+.mypg-row.done {
+  opacity: 0.72;
+}
+.mypg-row.future {
+  opacity: 0.6;
+}
+.mypg-when {
+  flex: 1 1 180px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mypg-month {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.mypg-sub {
+  font-size: 11.5px;
+  color: var(--mut);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mypg-act {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+/* ไทม์ไลน์ย่อสามขั้น — วงกลมเล็กต่อกันด้วยเส้น บอกลำดับ (ส่ง → ตรวจ → วางบิล) ในพื้นที่แถวเดียว
+   แทนสามแถวเท่ากันแบบเดิมที่ไม่ได้สื่อว่าเป็นลำดับขั้น */
+.mypg-steps {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.mypg-stepwrap {
+  display: inline-flex;
+  align-items: center;
+}
+.mypg-bar {
+  width: 26px;
+  height: 2px;
+  background: var(--rule);
+}
+.mypg-bar.dn {
+  background: var(--ok);
+}
+.mypg-step {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--fnt);
+  cursor: default;
+}
+.mypg-step svg.i {
+  width: 13px;
+  height: 13px;
+}
+.mypg-step.dn {
+  border-color: var(--ok);
+  background: var(--okb);
+  color: var(--ok);
+}
+.mypg-step.cu {
+  border-color: var(--brand);
+  background: var(--tint);
+  color: var(--brand-d);
+}
+.mypg-step.wn {
+  border-color: var(--wn);
+  background: var(--wnb);
+  color: var(--wn);
+}
+.mypg-step.off {
+  border-style: dashed;
+}
+
+.mypg-future {
+  border-top: 1px solid var(--hair);
+}
+.mypg-futuretoggle {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink2);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  padding: 11px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mypg-futuretoggle:hover {
+  background: var(--hov);
+}
+.mypg-chev {
+  width: 14px;
+  height: 14px;
+  color: var(--mut);
+  transition: transform 0.15s var(--ease);
+}
+.mypg-chev.on {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 720px) {
+  .mypg-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .mypg-when {
+    flex: 1 1 100%;
+  }
+}
+
+/* ═══ แผงรายละเอียดผลการอ่าน ในแท็บ "ประวัติ" ของหน้าอัปโหลด ═══
+   เปิดใต้แถวที่กด — บอกว่าไฟล์นั้นระบบอ่านอะไรออกมาได้บ้าง (วันทำงาน/วันลา/OT/ตารางรายวัน/โน้ตเตือน)
+   namespace .rdx-* แยกของตัวเอง ไม่ยุ่งกับบล็อกที่ session อื่นถืออยู่ */
+.rdx {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+.rdx-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.rdx-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  font-size: 12.5px;
+}
+.rdx-chip .k {
+  color: var(--mut);
+  font-size: 11px;
+}
+.rdx-chip .v {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.rdx-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rdx-h {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink2);
+}
+.rdx-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.rdx-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--wnl);
+  border-radius: var(--r-ctl);
+  background: var(--wnb);
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.rdx-note svg.i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--wn);
+}
+.rdx-note.bad {
+  border-color: var(--crl);
+  background: var(--crb);
+}
+.rdx-note.bad svg.i {
+  color: var(--cr);
+}
+/* วันลา/OT อยู่คู่กันเพราะเป็นคำถามเดียวกัน ("เดือนนี้ขาดไปกี่วัน เพิ่มมากี่วัน") */
+.rdx-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  .rdx-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.rdx-toggle {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink2);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+}
+.rdx-chev {
+  width: 13px;
+  height: 13px;
+  color: var(--mut);
+  transition: transform 0.15s var(--ease);
+}
+.rdx-chev.on {
+  transform: rotate(180deg);
+}
+.rdx-table {
+  min-width: 520px;
+  font-size: 12px;
+  background: var(--paper);
+}
+.rdx-table th {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rdx-table td {
+  padding: 5px 10px;
 }

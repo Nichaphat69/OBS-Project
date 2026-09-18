@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { PageHeader, PoTag, ReadModelTag, StatusPill } from '../../../../components/ui';
+import { PageHeader, PoTag, ReadModelTag, StatusPill, parseReadModel } from '../../../../components/ui';
 import { useReadModelNameMap } from '../../../../components/readModelNames';
 import { Icon } from '../../../../components/Icon';
-import { usePdfPreview } from '../../../../components/Overlays';
+import { usePdfPreview, useToast } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
 
 interface CalendarDay {
@@ -166,11 +166,27 @@ export default function ManadyDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
+  /**
+   * ⚠️ เดิมทิ้งผลลัพธ์ของ fetch ทั้งก้อน (ไม่เช็ค `res.ok`) — ปุ่มจึงขึ้น "กำลังคำนวณ…" แล้วจบเงียบๆ
+   * เหมือนสำเร็จทุกครั้ง **ต่อให้เส้นนั้นไม่มีอยู่จริง** ซึ่งเป็นสถานะจริงตอนนี้: ไล่ดูแล้วไม่มีทั้ง
+   * proxy ฝั่ง Next (`/api/timesheets/[id]/recompute`) และ route ฝั่ง Express — มีแต่ฟังก์ชัน
+   * `recomputeTimesheet()` ใน timesheetsService.ts ที่ไม่มีใครเปิดเส้นให้เรียก (ยืนยันด้วย curl:
+   * เส้นนี้ได้ 404 จาก Next ส่วนเส้นที่มีจริงอย่าง /check ได้ 401) จนกว่าฝั่ง backend จะเปิดเส้นให้
+   * ปุ่มนี้จะแจ้ง error ตรงๆ แทนที่จะแกล้งทำเป็นสำเร็จ
+   */
   async function doRecompute() {
     setRecomputing(true);
+    setError(null);
     try {
-      await fetch(`/api/timesheets/${params.id}/recompute`, { method: 'POST' });
+      const res = await fetch(`/api/timesheets/${params.id}/recompute`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error ?? tx('คำนวณใหม่ไม่สำเร็จ — ระบบยังไม่เปิดเส้นทางนี้ให้ใช้งาน'));
+        return;
+      }
       await load();
+    } catch {
+      setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
     } finally {
       setRecomputing(false);
     }
@@ -214,6 +230,11 @@ export default function ManadyDetailPage() {
   }
 
   const m = sheet?.manday ?? null;
+  // `sourceFile` ของรายการที่ป้อนด้วยมือเป็นข้อความปลอมของฝั่งเซิร์ฟเวอร์ ("ป้อนด้วยมือ · 2026-08")
+  // ไม่ใช่ชื่อไฟล์จริง — เดิมโค้ดเช็คแค่ว่า sourceFile มีค่าไหมแล้วทำเป็นปุ่มเปิด/ดาวน์โหลด PDF ให้
+  // กดแล้วไปเจอ `{"error":"ไม่พบไฟล์ต้นฉบับ"}` ดิบๆ เพราะไม่มีไฟล์จริงเก็บไว้เลย (บั๊กที่เจอจริง
+  // 18 ก.ย. 69 กับ OBS202675) เช็ค engine จาก extraction.model แทนการเดาจากรูปข้อความ
+  const isManualEntry = parseReadModel(sheet?.extraction?.model)?.engine === 'manual';
   const failures = (m?.checks ?? []).filter((c) => c.severity === 'fail');
   const step = !sheet ? 1 : sheet.status === 'billed' ? 4 : failures.length || !sheet.check?.checked ? 2 : 3;
 
@@ -252,7 +273,7 @@ export default function ManadyDetailPage() {
             {sheet.extraction?.model && (
               <>
                 {' '}
-                <ReadModelTag model={sheet.extraction.model} nameMap={readModelNames} />
+                <ReadModelTag model={sheet.extraction.model} sourceEmailId={sheet.sourceEmailId} nameMap={readModelNames} />
               </>
             )}
           </p>
@@ -389,7 +410,7 @@ export default function ManadyDetailPage() {
                   <dt>{tx('เลขผู้เสียภาษี')}</dt>
                   <dd className="n">{sheet.contractDetail.taxId ?? '—'}</dd>
                   <dt>{tx('อ่านด้วย')}</dt>
-                  <dd>{sheet.extraction?.model ? <ReadModelTag model={sheet.extraction.model} nameMap={readModelNames} /> : '—'}</dd>
+                  <dd>{sheet.extraction?.model ? <ReadModelTag model={sheet.extraction.model} sourceEmailId={sheet.sourceEmailId} nameMap={readModelNames} /> : '—'}</dd>
                   <dt>{tx('ใบว่าจ้าง')}</dt>
                   <dd className="n"><PoTag>{sheet.contract.poNo}</PoTag></dd>
                   <dt>{tx('สัญญา')}</dt>
@@ -404,6 +425,10 @@ export default function ManadyDetailPage() {
                   <dd>{int(sheet.contractDetail.creditDays)} {tx('วัน')}</dd>
                   <dt>{tx('ตัวหารอัตราต่อวัน')}</dt>
                   <dd>{sheet.contractDetail.divisorMode === 'fixed' ? `${tx('คงที่')} ${int(sheet.contractDetail.divisorValue)}` : tx('วันทำงานจริงของเดือน')}</dd>
+                  <dt>{tx('หัก ณ ที่จ่าย')}</dt>
+                  <dd>
+                    <WhtRateInline contractId={sheet.contract.id} whtRate={sheet.contractDetail.whtRate} onSaved={load} />
+                  </dd>
                   <dt>{tx('ผู้ประสานงาน')}</dt>
                   <dd>{sheet.contractDetail.contactName ?? '—'}</dd>
                 </dl>
@@ -469,7 +494,7 @@ export default function ManadyDetailPage() {
                 <dd className="n">{int(sheet.reportedLeave)}</dd>
               </dl>
               <div className="attrow" style={{ marginTop: 12 }}>
-                {sheet.sourceFile ? (
+                {sheet.sourceFile && !isManualEntry ? (
                   <>
                     <button
                       type="button"
@@ -485,7 +510,8 @@ export default function ManadyDetailPage() {
                   </>
                 ) : (
                   <span className="file">
-                    <span className="pd">PDF</span> {tx('ไม่มีไฟล์ต้นฉบับเก็บไว้')}
+                    <span className="pd">PDF</span>{' '}
+                    {isManualEntry ? tx('ป้อนข้อมูลด้วยมือ — ไม่มีไฟล์ต้นฉบับ') : tx('ไม่มีไฟล์ต้นฉบับเก็บไว้')}
                   </span>
                 )}
               </div>
@@ -495,7 +521,6 @@ export default function ManadyDetailPage() {
           <div className="card">
             <div className="hd">
               <h3>{tx('รายละเอียด')}</h3>
-              <span className="rt">{tx('ตามคอลัมน์ที่ ABBYY อ่านได้ — ชั่วโมงคำนวณเองอัตโนมัติถ้าตารางต้นฉบับไม่ได้สรุปมาให้')}</span>
             </div>
             <div className="bd flush">
               <div className="tw">
@@ -781,9 +806,103 @@ export default function ManadyDetailPage() {
   );
 }
 
+/** ปัดเป็นทศนิยม 2 ตำแหน่งไม่ให้เพี้ยนจาก floating point แต่ไม่บังคับโชว์ทศนิยมท้ายที่ไม่มีนัยสำคัญ —
+ * ตัดมาจากตัวเดียวกับที่ใช้ในหน้าสัญญา (CustomersContractsTab.tsx's pctPrecise) */
+function pctPrecise(rate: number) {
+  return Math.round(rate * 10000) / 100;
+}
+
+/**
+ * ไอคอนดินสอแก้อัตราหัก ณ ที่จ่ายในหน้าตรวจ/ยืนยัน Timesheet — คนละจุดกับใน CustomersContractsTab.tsx
+ * (หน้าสัญญา) ตามที่เจ้าของระบบขอ 18 ก.ย. 69 แต่ยิงเข้า endpoint เดียวกัน (`PATCH /:id/wht-rate`)
+ * เพราะเป็นค่าเดียวกันของสัญญาเดียวกัน แก้จากที่ไหนก็ต้องได้ผลเดียวกัน validation 0–30% อยู่ฝั่ง
+ * server แล้ว (updateContractWhtRate) จึงเช็คซ้ำแค่ฝั่ง UI พอกันกดส่งค่าที่ผิดชัดๆ ไปเปล่าๆ
+ */
+function WhtRateInline({ contractId, whtRate, onSaved }: { contractId: string; whtRate: number; onSaved: () => void }) {
+  const { tx } = useLang();
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(pctPrecise(whtRate)));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const pct = Number(value);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 30) {
+      toast(tx('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%'), true);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/contracts/${encodeURIComponent(contractId)}/wht-rate`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ whtRate: pct / 100 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data?.error ?? tx('บันทึกไม่สำเร็จ'), true);
+        return;
+      }
+      toast(tx('บันทึกอัตราหัก ณ ที่จ่ายแล้ว'));
+      setEditing(false);
+      onSaved();
+    } catch {
+      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {pctPrecise(whtRate)}%
+        <button
+          type="button"
+          className="btn sm icon"
+          title={tx('แก้อัตราหัก ณ ที่จ่าย')}
+          aria-label={tx('แก้ไข')}
+          onClick={() => {
+            setValue(String(pctPrecise(whtRate)));
+            setEditing(true);
+          }}
+        >
+          <Icon name="edit" />
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <input
+        type="number"
+        min={0}
+        max={30}
+        step={0.01}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        autoFocus
+        style={{ width: 64, height: 30, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 8px' }}
+      />
+      %
+      <button type="button" className="btn sm icon" disabled={saving} title={tx('บันทึก')} onClick={save}>
+        <Icon name="chk" />
+      </button>
+      <button type="button" className="btn sm icon" disabled={saving} title={tx('ยกเลิก')} onClick={() => setEditing(false)}>
+        <Icon name="x" />
+      </button>
+    </span>
+  );
+}
+
 function CalendarView({ manday, calDay, onSelect }: { manday: Manday | null; calDay: string | null; onSelect: (d: string | null) => void }) {
   const { tx } = useLang();
-  if (!manday?.calendar) return <div className="empty">{tx('ยังไม่ได้คำนวณ')}</div>;
+  // ⚠️ เช็ค days ว่าง ไม่ใช่แค่ว่ามี calendar — `buildMonth()` วนลูปจาก `daysInMonth()` ซึ่งคืน NaN
+  // ถ้า period ของใบนั้น parse ไม่ออก ลูปจึงไม่ทำงานเลยและได้ days เป็น [] (ไม่ใช่เคสสมมติ: ตัวอ่าน
+  // มีโน้ต "ABBYY ยังไม่ส่งรอบเดือนมา" / "เอกสารไม่มีช่องรอบเดือน" อยู่จริง) เดิม `days[0].dayOfWeek`
+  // จะโยน TypeError ทำให้แท็บ "ปฏิทิน" จอขาวทั้งหน้า แทนที่จะบอกว่าคำนวณไม่ได้
+  if (!manday?.calendar?.days?.length) return <div className="empty">{tx('ยังไม่ได้คำนวณ')}</div>;
   const { days } = manday.calendar;
   const firstCol = days[0].dayOfWeek;
   const leaveByDate = new Map((manday.leaveDays ?? []).map((l) => [l.date, l.type]));

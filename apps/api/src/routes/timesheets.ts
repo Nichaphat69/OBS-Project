@@ -6,6 +6,7 @@ import {
   getTimesheet,
   listTimesheets,
   markTimesheetChecked,
+  recomputeTimesheet,
   rejectTimesheet,
   TimesheetActionError,
 } from '../lib/timesheetsService.js';
@@ -210,6 +211,29 @@ timesheetsRouter.get('/:id/hrdd-compare', requireAdmin, async (req, res) => {
     res.json(await checkTimesheetAgainstHrdd(req.params.id));
   } catch (error) {
     if (error instanceof HrddCompareError) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+});
+
+/**
+ * คำนวณ Manday ใหม่จากข้อมูลที่เก็บไว้ — เส้นนี้**ไม่เคยมีอยู่เลย** ทั้งที่หน้าตรวจ Manday มีปุ่ม
+ * "คำนวณใหม่" ยิงมาหาตั้งแต่แรก และฟังก์ชัน `recomputeTimesheet()` ก็เขียนรออยู่ครบแล้ว
+ *
+ * อาการที่เกิดจริง: กดปุ่มแล้วขึ้น "กำลังคำนวณ…" แล้วจบเงียบเหมือนสำเร็จ เพราะฝั่งหน้าเว็บไม่ได้เช็ค
+ * `res.ok` ด้วย — คนกดเชื่อว่าคำนวณใหม่แล้วทั้งที่ไม่มีอะไรเกิดขึ้นสักอย่าง (เจอ 18 ก.ย. 69 ตอนไล่บั๊ก
+ * ทั้งระบบ ยืนยันด้วย curl ว่าได้ 404 จริง ไม่ใช่ 401 แบบเส้นที่มีอยู่)
+ *
+ * ใช้ requireAdmin เหมือน /:id/check และ /:id/reject — การคำนวณใหม่ทับค่าที่เคยยืนยันไว้ได้
+ * จึงไม่ใช่สิ่งที่พนักงานทั่วไปควรสั่งได้
+ */
+timesheetsRouter.post('/:id/recompute', requireAdmin, async (req, res) => {
+  try {
+    const sheet = await recomputeTimesheet(req.params.id, { actor: req.user!.nameTh });
+    res.json(sheet);
+  } catch (error) {
+    if (error instanceof TimesheetActionError) {
+      return res.status(error.status).json({ error: error.message, blockers: error.blockers });
+    }
     throw error;
   }
 });

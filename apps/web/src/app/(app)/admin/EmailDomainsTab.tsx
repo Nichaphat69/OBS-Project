@@ -62,10 +62,6 @@ export default function EmailDomainsTab() {
 
   return (
     <Card title={tx('โดเมนอีเมลลูกค้า')} flush>
-      <div className="sub" style={{ padding: '16px 20px 0' }}>
-        {tx('ตั้งครั้งเดียวต่อบริษัท — ใช้กรองกล่อง Gmail ตอนดึง Timesheet ให้เห็นแค่เมลของบริษัทที่เลือกอยู่บนแถบบนเท่านั้น บริษัทที่ยังไม่ได้ตั้งไว้จะเห็นทุกฉบับเหมือนเดิม')}
-      </div>
-
       {error ? (
         <ErrorState message={error} onRetry={load} />
       ) : (

@@ -1,97 +1,29 @@
-'use client';
+import { requireUser } from '../../../lib/session';
+import { Card } from '../../../components/ui';
+import { TxPageHeader, TxEmptyState } from '../../../components/TxPageHeader';
+import InvoicesClient from './InvoicesClient';
 
-import { useEffect, useState } from 'react';
-import { Card, PageHeader, PoTag, StatusPill } from '../../../components/ui';
-import { useLang } from '../../../lib/language';
+/**
+ * เดิมหน้านี้เป็น client component ล้วน ไม่มีอะไรกันที่ตัวหน้าเลย — พนักงานพิมพ์ URL ตรงๆ เข้ามาได้
+ * แล้วเจอหน้าเปล่า/error เพราะ API ปฏิเสธทุกคำขอ (ข้อมูลไม่เคยรั่ว แต่ดูเหมือนระบบพัง)
+ *
+ * แยกเป็น server wrapper + client child แบบเดียวกับหน้า "ข้อมูลหลัก"/"ตัวอ่าน Timesheet" เพื่อบอก
+ * ตรงๆ ว่าไม่มีสิทธิ์ แทนที่จะปล่อยให้เข้ามาเจอหน้าที่ใช้อะไรไม่ได้ (เจ้าของระบบสั่ง 18 ก.ย. 69)
+ * ด่านจริงยังอยู่ฝั่ง API เหมือนเดิม ตรงนี้เป็นเรื่องความเรียบร้อยของหน้าจอ ไม่ใช่ตัวกันความปลอดภัย
+ */
+export default async function InvoicesPage() {
+  const { user } = await requireUser();
 
-interface InvoiceRow {
-  id: string;
-  poNo: string;
-  customerName: string;
-  periodLabel: string;
-  documentNo: string | null;
-  documentDate: string;
-  paymentAmount: number;
-  status: string;
-  shareLink: string | null;
-}
+  if (user.role !== 'admin' && user.role !== 'accounting') {
+    return (
+      <>
+        <TxPageHeader eyebrow="อ้างอิง" title="ใบแจ้งหนี้" />
+        <Card>
+          <TxEmptyState label="ต้องเป็น admin หรือแผนกบัญชีเท่านั้นถึงจะเข้าหน้านี้ได้" />
+        </Card>
+      </>
+    );
+  }
 
-function money(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-const STATUS_TONE: Record<string, 'ok' | 'wn' | 'mu'> = {
-  sent_to_flowaccount: 'ok',
-  draft: 'wn',
-};
-
-export default function InvoicesPage() {
-  const { tx } = useLang();
-  const [rows, setRows] = useState<InvoiceRow[] | null>(null);
-
-  // ไม่ส่ง contractId ขึ้นไปแล้ว — เซิร์ฟเวอร์เลือกสัญญาที่กำลังดำเนินการอยู่ให้เอง เหตุผลเดียวกับหน้า
-  // ตรวจ Manday: ถ้าหน้าเว็บดึงสัญญา active มาไม่ได้ query จะว่าง แล้วกลายเป็น "ขอทุกบริษัท" คือพลาด
-  // แล้วขอบเขตกว้างขึ้น ซึ่งผิดทิศสำหรับยอดเงินของลูกค้าแต่ละราย
-  useEffect(() => {
-    fetch('/api/invoices', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then(setRows);
-  }, []);
-
-  return (
-    <>
-      <PageHeader eyebrow={tx('เอกสาร')} title={tx('ใบแจ้งหนี้')} subtitle={tx('เอกสารที่ระบบสร้างเข้า FlowAccount')} />
-
-      <Card flush>
-        <div className="tw">
-          <table>
-            <thead>
-              <tr>
-                <th>{tx('เลขที่เอกสาร')}</th>
-                <th>{tx('ลูกค้า')}</th>
-                <th>{tx('รอบบิล')}</th>
-                <th>{tx('วันที่เอกสาร')}</th>
-                <th className="r">{tx('ยอดรับชำระ')}</th>
-                <th>{tx('สถานะ')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows?.map((r) => (
-                <tr key={r.id}>
-                  <td className="docid">
-                    {r.shareLink ? (
-                      <a href={r.shareLink} target="_blank" rel="noreferrer">
-                        {r.documentNo ?? r.id}
-                      </a>
-                    ) : (
-                      r.documentNo ?? r.id
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                      <span className="nm">{r.customerName}</span>
-                      <PoTag>{r.poNo}</PoTag>
-                    </div>
-                  </td>
-                  <td>{r.periodLabel}</td>
-                  <td>{r.documentDate}</td>
-                  <td className="r n">{money(r.paymentAmount)}</td>
-                  <td>
-                    <StatusPill tone={STATUS_TONE[r.status] ?? 'mu'}>{r.status}</StatusPill>
-                  </td>
-                </tr>
-              ))}
-              {rows && rows.length === 0 && (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--mut)' }}>
-                    {tx('ยังไม่มีใบแจ้งหนี้')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </>
-  );
+  return <InvoicesClient />;
 }

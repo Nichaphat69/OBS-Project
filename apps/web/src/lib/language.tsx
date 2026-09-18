@@ -136,7 +136,6 @@ const TX: Record<string, string> = {
   'ตั๋วที่พนักงานแจ้งเข้ามาผ่าน LINE': 'Tickets employees reported via LINE',
   'สารบัญ Skill ABBYY Vantage ที่เทรนไว้แล้ว — ตั้งชื่อให้จำง่ายแล้วนำ Skill ID ไปเลือกตอนแก้ไขสัญญา':
     'Directory of trained ABBYY Vantage skills — name them memorably, then pick the Skill ID when editing a contract',
-  'ผู้ใช้ · ผู้รับแจ้งเตือน · บันทึกระบบ · โดเมนอีเมลลูกค้า': 'Users · Notification recipients · Audit log · Customer email domains',
   'ต้องเป็น admin หรือแผนกบัญชีเท่านั้นถึงจะเข้าหน้านี้ได้': 'Only admins or Accounting can access this page',
   บัญชีของฉัน: 'My Account',
   'มีแค่ role พนักงานเท่านั้นที่ผูกไลน์ได้': 'Only the Employee role can link LINE',
@@ -146,16 +145,25 @@ const TX: Record<string, string> = {
 
   // ── my-progress/MyProgressClient.tsx ──
   เลขที่เอกสาร: 'Document no.',
-  ยังไม่มีเลขที่เอกสาร: 'No document number yet',
   'ส่ง Timesheet': 'Timesheet submitted',
   ยังไม่มีคนตรวจ: 'Not yet reviewed',
   อนุมัติวางบิล: 'Billing approved',
-  ยังไม่วางบิล: 'Not billed yet',
   'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหน — แจ้ง admin ให้ผูกบัญชีกับชื่อพนักงานก่อน':
     'This account isn’t linked to any employee — ask an admin to link it first',
   เชื่อมต่อไลน์แล้ว: 'LINE connected',
   เชื่อมต่อไลน์: 'Connect LINE',
   ยังไม่มีสัญญาที่ผูกกับตัวเอง: 'No contracts linked to you yet',
+  // ปุ่ม/แถบสรุปของเลย์เอาต์ใหม่ — "ส่งไฟล์ Timesheet" เป็นคำสั่งบนปุ่ม จงใจใช้คนละคีย์กับ "ส่ง Timesheet"
+  // ที่เป็นชื่อขั้นตอน (แปลอังกฤษคนละความหมาย: Submit… vs Timesheet submitted)
+  'ส่งไฟล์ Timesheet': 'Submit timesheet',
+  ส่งใหม่อีกครั้ง: 'Submit again',
+  'ต้องส่ง Timesheet': 'Timesheets to submit:',
+  กดปุ่มในแถวที่ไฮไลต์ไว้เพื่อส่งไฟล์: 'use the button on the highlighted row to send the file',
+  ส่งครบทุกรอบที่ถึงกำหนดแล้ว: 'Every period that has come due has been submitted',
+  ยังไม่ถึงกำหนดส่ง: 'Not due yet',
+  ยังไม่ถึงรอบ: 'Not due',
+  รอบที่ยังไม่ถึงกำหนด: 'Periods not due yet',
+  ยังไม่มีรอบบิลในสัญญานี้: 'No billing periods in this contract yet',
 
   // ── tickets/TicketsClient.tsx ──
   บันทึกไม่สำเร็จ: 'Save failed',
@@ -222,30 +230,20 @@ const TX: Record<string, string> = {
   อ่านด้วย: 'Read with',
   'Skill ที่ใช้อ่าน': 'Skill to read with',
   'ตาม Skill ที่ผูกกับสัญญานี้': "Use this contract's Skill",
-  'Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า ไฟล์หลายหน้าอาจถึงสิบนาที':
-    'Clear Read is far slower than ABBYY — around 3 minutes per page, and up to ten for a multi-page file.',
+  'Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า':
+    'Clear Read is far slower than ABBYY — around 3 minutes per page.',
 
   // ── readers/ReadersClient.tsx ──
   'ตั้งค่า Skill ของ ABBYY และแม่แบบของ Clear Read — เลือกว่าจะอ่านไฟล์ด้วยตัวไหนทำที่หน้าอัปโหลด Timesheet ตอนอ่านแต่ละครั้ง':
     "Configure ABBYY's Skills and Clear Read's templates here. Choosing which one reads a file happens on the upload screen, per read.",
   พร้อมใช้งาน: 'Ready to use',
-  ข้อควรรู้: 'Worth knowing',
-  'หน้านี้ใช้ตั้งค่าอย่างเดียว การเลือกว่าจะอ่านไฟล์ด้วยตัวไหนทำที่หน้าอัปโหลด Timesheet ตอนอ่านแต่ละครั้ง':
-    'This page is for configuration only — which engine reads a file is chosen on the upload screen, per read.',
-  'ตัวที่ยังตั้งค่าไม่ครบจะเลือกตอนอ่านไม่ได้ ต้องตั้งค่าที่หน้านี้ให้ครบก่อน':
-    'An engine that is not fully configured cannot be picked at read time — finish setting it up here first.',
   'ตัวอ่าน Timesheet': 'Timesheet reader',
-  'อ่านด้วย Skill ที่เทรนไว้ต่อฟอร์มลูกค้า': 'Reads using a Skill trained per customer form',
-  'อ่านด้วยแม่แบบฟิลด์ พร้อมตาราง TimesheetDetails': 'Reads using a field template with a TimesheetDetails table',
   ยังตั้งค่าไม่ครบ: 'Not fully configured',
-  'ช้ากว่า ABBYY มาก (หลักนาทีต่อหน้า)': 'Much slower than ABBYY (minutes per page)',
   'Skill ของ ABBYY': 'ABBYY Skills',
   'จัดการ Skill': 'Manage Skills',
   การจับคู่ฟิลด์: 'Field mapping',
   ใช้ค่าเริ่มต้น: 'Using defaults',
   'แม่แบบของ Clear Read': 'Clear Read templates',
-  'Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า และถึงสิบนาทีกว่าถ้าไฟล์หลายหน้า ส่วน ABBYY ใช้เวลาไม่กี่วินาที':
-    'Clear Read is far slower than ABBYY — around 3 minutes for a single page and over ten for a multi-page file, where ABBYY takes seconds.',
 
   // ── components/ClearReadFieldCatalog.tsx ──
   ระดับเอกสาร: 'Document level',
@@ -376,7 +374,8 @@ const TX: Record<string, string> = {
   // ── invoices/page.tsx ──
   เอกสาร: 'Documents',
   'เอกสารที่ระบบสร้างเข้า FlowAccount': 'Documents the system created in FlowAccount',
-  วันที่เอกสาร: 'Document date',
+  'เลขที่สัญญา/PO': 'Contract no. / PO',
+  วันที่วางบิล: 'Billed on',
   ยอดรับชำระ: 'Amount received',
   ยังไม่มีใบแจ้งหนี้: 'No invoices yet',
 
@@ -418,10 +417,8 @@ const TX: Record<string, string> = {
   หัวข้อ: 'Subject',
   ข้อสังเกตก่อนกดส่ง: 'Things to check before sending',
   ยังไม่มีรายการที่วางบิลได้ในรอบนี้: 'Nothing billable in this cycle yet',
-  'การอนุมัติผ่าน LINE': 'LINE approval',
-  'ยังไม่มีการขออนุมัติผ่าน LINE': 'No LINE approval request yet',
-  ขออนุมัติเมื่อ: 'Requested',
-  ตัดสินใจเมื่อ: 'Decided',
+  พนักงานในสัญญา: 'Employees in the contract',
+  รอวางบิล: 'Awaiting billing',
   รายการในรอบบิล: 'Line items this cycle',
   'ดู Timesheet': 'View timesheet',
   'ข้อมูลที่ส่งเข้า FlowAccount': 'Data sent to FlowAccount',
@@ -471,14 +468,11 @@ const TX: Record<string, string> = {
   สถานะการตรวจสอบ: 'Review status',
   ผู้ดำเนินการ: 'Handled by',
   ขอเลื่อน: 'Deferred',
-  'ยังไม่ผูก LINE — ระบบไม่มีทางรู้สถานะจริง': 'Not linked to LINE yet — the system has no way to know the real status',
+  'ยังไม่ผูก LINE OA': 'LINE OA not linked',
   พนักงานอาจไม่เห็นข้อความตอบกลับ: 'The employee may not have seen the reply',
-  ยืนยัน: 'Confirm',
-  'ทำเครื่องหมายว่ามีปัญหา?': 'Mark as having a problem?',
-  ทำเครื่องหมาย: 'Mark',
-  ทำเครื่องหมายว่ามีปัญหาแล้ว: 'Marked as having a problem',
   'รายการยังไม่ทราบสถานะจริง เพราะพนักงานยังไม่ได้ผูกบัญชี LINE — ไม่ใช่ยืนยันแล้วว่าไม่ส่ง':
     'items have unknown status because the employee has not linked LINE yet — this is not a confirmed non-submission',
+  ทุกรอบที่ครบกำหนดส่ง: 'Every period that has come due',
 
   // ── manday/page.tsx ──
   กำลังดูข้ามทุกบริษัท: 'Viewing across all companies',
@@ -577,11 +571,26 @@ const TX: Record<string, string> = {
   'ประวัติ AI อ่านไฟล์': 'AI file-reading history',
   ที่มา: 'Source',
   ลาไม่รับค่าจ้าง: 'Unpaid leave',
-  คลิกเพื่อดูวันลาที่อ่านได้: 'Click to view the leave days read from this file',
+  คลิกเพื่อดูรายละเอียดที่ระบบอ่านได้: 'Click to see what the system read from this file',
   โหลดรายละเอียดไม่สำเร็จ: 'Failed to load details',
-  ไม่มีข้อมูลวันลาสำหรับรายการนี้: 'No leave-day data for this record',
+  ไม่มีผลการอ่านเก็บไว้สำหรับรายการนี้: 'No read result stored for this record',
   ไม่มีวันลาที่อ่านได้ในรอบนี้: 'No leave days read for this cycle',
   ทิ้งไม่สำเร็จ: 'Failed to discard',
+  รอบเดือน: 'Period',
+  วันลา: 'Leave days',
+  'วัน OT': 'Overtime days',
+  ตำแหน่งที่อ่านได้: 'Position read',
+  ติดปัญหาตอนอ่าน: 'Problems while reading',
+  สิ่งที่ระบบเตือนไว้: 'What the system flagged',
+  'วัน OT ที่อ่านได้': 'Overtime days read',
+  'ไม่มี OT ที่อ่านได้ในรอบนี้': 'No overtime read for this cycle',
+  ตารางรายวันที่อ่านได้: 'Daily table read',
+  เครื่องอ่านไม่ได้ส่งตารางรายวันมาสำหรับใบนี้: 'The reader returned no daily table for this document',
+  'ชม.': 'hrs',
+  เข้า: 'In',
+  ออก: 'Out',
+  รวม: 'Total',
+  ประเภทลา: 'Leave type',
 
   // ── upload/ReviewCard.tsx ──
   จับคู่: 'Matched',
@@ -602,14 +611,12 @@ const TX: Record<string, string> = {
   อ่านเมื่อ: 'Read at',
   ทิ้ง: 'Discard',
   ยังไม่มีประวัติ: 'No history yet',
-  ตามที่ฝ่ายบัญชีกำหนด: 'As set by Accounting',
   'จับคู่ชื่อพนักงานกับคนในระบบก่อน ถึงจะเลือกประเภทหัก ณ ที่จ่ายได้': 'Match the employee name to someone in the system first to choose a withholding tax type',
   ค่าบริการขนส่งสินค้า: 'Freight services',
   ค่าโฆษณา: 'Advertising',
   'ค่าจ้างทำของ / ค่าบริการ': 'Contract work / services',
   ค่าเช่าทรัพย์สิน: 'Property rental',
   'อัตราหัก ณ ที่จ่าย': 'Withholding tax rate',
-  ปรับได้เองถ้าเงื่อนไขต่างจากค่ามาตรฐานของประเภทที่เลือก: 'Adjustable if conditions differ from the selected type’s standard rate',
   จากยอดประมาณ: 'from the estimated amount of',
 
   // ── upload/HrddCompare.tsx ──
@@ -684,8 +691,7 @@ const TX: Record<string, string> = {
   เปิดดูไฟล์ต้นฉบับ: 'Open the source file',
   ดาวน์โหลดไฟล์ต้นฉบับ: 'Download the source file',
   ไม่มีไฟล์ต้นฉบับเก็บไว้: 'No source file on file',
-  'ตามคอลัมน์ที่ ABBYY อ่านได้ — ชั่วโมงคำนวณเองอัตโนมัติถ้าตารางต้นฉบับไม่ได้สรุปมาให้':
-    'Based on the columns ABBYY read — hours are auto-calculated if the source table didn’t already total them',
+  'ป้อนข้อมูลด้วยมือ — ไม่มีไฟล์ต้นฉบับ': 'Entered manually — no source file',
   วันในสัปดาห์: 'Day of week',
   'เวลาเข้า–ออก': 'Time in–out',
   'เวลา OT': 'OT time',
@@ -720,6 +726,10 @@ const TX: Record<string, string> = {
   'ไปขั้น 3 วางบิล': 'Go to step 3: Billing',
   ยืนยันว่าตรวจแล้ว: 'Confirm reviewed',
   ยังไม่ได้คำนวณ: 'Not yet calculated',
+  'คำนวณใหม่ไม่สำเร็จ — ระบบยังไม่เปิดเส้นทางนี้ให้ใช้งาน':
+    'Recalculation failed — this endpoint is not available yet',
+  'ลบชื่อพ้องเดิมไม่สำเร็จ — ตอนนี้มีทั้งของเดิมและของใหม่':
+    'Could not delete the old alias — both the old and new one now exist:',
   ทำงาน: 'Work',
   'เสาร์–อาทิตย์ไม่มีป้าย': 'Weekends carry no label',
   คลิกวันที่ในปฏิทินเพื่อดูรายละเอียดวันนั้น: 'Click a date on the calendar to see that day’s details',
@@ -764,7 +774,6 @@ const TX: Record<string, string> = {
   'ใบวางบิลดึงจาก FlowAccount มาเก็บให้เองตอนกดอนุมัติ': 'The invoice is automatically fetched from FlowAccount and stored on approval',
   ปิดรอบเมื่อส่งเมล: 'Close cycle on email send',
   อัตโนมัติ: 'Automatic',
-  'ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งแล้วหรือยัง': 'The system checks the Gmail inbox itself to see if the draft has been sent',
 
   // ── admin/AuditLogTab.tsx ──
   'บันทึกระบบ (Audit log)': 'System log (Audit log)',
@@ -777,8 +786,6 @@ const TX: Record<string, string> = {
 
   // ── admin/EmailDomainsTab.tsx ──
   โดเมนอีเมลลูกค้า: 'Customer email domains',
-  'ตั้งครั้งเดียวต่อบริษัท — ใช้กรองกล่อง Gmail ตอนดึง Timesheet ให้เห็นแค่เมลของบริษัทที่เลือกอยู่บนแถบบนเท่านั้น บริษัทที่ยังไม่ได้ตั้งไว้จะเห็นทุกฉบับเหมือนเดิม':
-    'Set once per company — used to filter the Gmail inbox when fetching timesheets, showing only mail from the company currently selected in the top bar. Companies without this set will see every message as before.',
   ตั้งโดเมน: 'Set domain',
   'ล้างโดเมนแล้ว — กลับไปแสดงทุกฉบับเหมือนเดิม': 'Domain cleared — back to showing every message as before',
   ยังไม่ได้ตั้ง: 'Not set yet',
@@ -867,13 +874,6 @@ const TX: Record<string, string> = {
   นำออก: 'Remove',
   นำออกไม่สำเร็จ: 'Failed to remove',
   นำออกจากโครงการแล้ว: 'Removed from the project',
-  ผูกพนักงานที่มีอยู่แล้ว: 'Link existing employee',
-  'เลือกพนักงาน กรอกเรทต่อเดือน และวันเริ่มงานให้ครบก่อน': 'Choose an employee and fill in the monthly rate and start date first',
-  ผูกพนักงานไม่สำเร็จ: 'Failed to link employee',
-  ผูกพนักงานกลับเข้าโครงการแล้ว: 'Employee linked back into the project',
-  ไม่มีพนักงานที่ยังไม่ได้ผูกโครงการให้เลือก: 'No unlinked employees available to choose from',
-  เลือกพนักงาน: 'Choose an employee',
-  ยังไม่มีบริษัทที่กำลังดำเนินการอยู่: 'No active company yet',
   เพิ่มพนักงาน: 'Add employee',
   รหัส: 'ID',
   ตำแหน่งบนใบแจ้งหนี้: 'Position on invoice',
@@ -921,11 +921,14 @@ const TX: Record<string, string> = {
   จำนวนคน: 'Headcount',
   ยอดต่อเดือน: 'Monthly total',
   'หัก ณ ที่จ่าย': 'Withholding tax',
+  'อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%': 'The withholding tax rate must be between 0–30%',
+  'บันทึกอัตราหัก ณ ที่จ่ายแล้ว': 'Withholding tax rate saved',
+  'แก้อัตราหัก ณ ที่จ่าย': 'Edit the withholding tax rate',
   สถานที่วางบิล: 'Billing location',
   ดึงพนักงาน: 'Fetched',
   'คน + เรทต่อเดือนจากใบเสนอราคานี้มาให้อัตโนมัติ': 'employee(s) + monthly rates automatically from this quotation',
-  'ใบเสนอราคานี้ไม่มีรายชื่อพนักงานให้ดึง — เพิ่มพนักงานเองทีหลังได้จากแท็บ "พนักงาน & ชื่อพ้อง"':
-    'This quotation has no employee list to fetch — add employees later from the "Employees & aliases" tab',
+  'ใบเสนอราคานี้ไม่มีรายชื่อพนักงานให้ดึง — เพิ่มรายชื่อในใบเสนอราคาที่ FlowAccount ก่อน':
+    'This quotation has no employee list to fetch — add the names to the quotation in FlowAccount first',
   สร้างลูกค้าไม่สำเร็จ: 'Failed to create customer',
   สร้างสัญญาไม่สำเร็จ: 'Failed to create contract',
   ไม่สำเร็จ: 'failed',

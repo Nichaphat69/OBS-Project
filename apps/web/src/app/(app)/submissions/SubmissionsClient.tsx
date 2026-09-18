@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Card, ErrorState, Kpi, PageHeader, StatusPill, Tag } from '../../../components/ui';
+import { useEffect, useState } from 'react';
+import { Card, ErrorState, PageHeader, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useConfirm, useToast } from '../../../components/Overlays';
 import SupportTicketsPanel from './SupportTicketsPanel';
 import { useLang } from '../../../lib/language';
 
@@ -20,6 +19,11 @@ import { useLang } from '../../../lib/language';
  *
  * แถวมาจากฝั่งเซิร์ฟเวอร์ครบทุกคนในรอบ (หนึ่งคน-หนึ่งรอบ = หนึ่งแถวเสมอ) รวมคนที่ยังไม่กดอะไรเลยด้วย —
  * หน้านี้ห้าม filter คนที่ไม่มีข้อมูลออกไปเอง เพราะคนที่ยังเงียบคือคนที่ต้องตามมากที่สุด
+ *
+ * ⚠️ หน้านี้เป็นหน้า "ดู" ล้วนๆ ไม่ใช่หน้าอนุมัติ/รีวิว (เจ้าของระบบยืนยันตรงๆ 18 ก.ย. 69) — admin/
+ * accounting เปิดมาเพื่อรู้ว่าใครจะส่งทางไหน ไม่ได้มากดยืนยัน/ตีกลับจากหน้านี้ จึงไม่มีปุ่ม action
+ * ใดๆ ในตาราง แม้แต่ในแท็บ "รอตรวจสอบ" — เส้น PATCH .../review ฝั่ง API ยังอยู่เผื่อมีที่ใช้ทีหลัง
+ * แค่หน้านี้ไม่เรียกมันแล้ว
  */
 
 type Status = 'not_submitted' | 'submitted' | 'pending_review' | 'confirmed' | 'problem';
@@ -77,10 +81,12 @@ interface ListResult {
   unknownDueToNoLineLink: number;
 }
 
+/* เหลือสองแท็บตามที่เจ้าของระบบสั่ง 18 ก.ย. 69 — "ภาพรวม" กับ "รายการส่ง" วาดตารางชุดเดียวกันเป๊ะ
+   จึงเป็นแท็บซ้ำที่ไม่ได้ให้อะไรเพิ่ม ส่วน "รอตรวจสอบ" เป็นซากของตอนที่หน้านี้ยังมีปุ่มยืนยัน/ตีกลับ
+   ซึ่งถูกถอดออกไปแล้ว (ดูหมายเหตุหัวไฟล์: หน้านี้เป็นหน้า "ดู" ล้วนๆ) — สถานะรอตรวจสอบยังกรองได้จาก
+   ตัวกรอง "ทุกสถานะ" อยู่แล้ว ไม่ต้องมีแท็บของตัวเอง */
 const TABS = [
-  { key: 'overview', label: 'ภาพรวม' },
   { key: 'list', label: 'รายการส่ง' },
-  { key: 'review', label: 'รอตรวจสอบ' },
   { key: 'tickets', label: 'แจ้งปัญหา' },
 ] as const;
 
@@ -90,19 +96,24 @@ function dt(s: string | null) {
   return s ? s.replace('T', ' ').slice(0, 16) : '—';
 }
 
+function pct(n: number, total: number): string {
+  if (total === 0) return '0%';
+  return `${Math.round((n / total) * 100)}%`;
+}
+
 export default function SubmissionsClient({ role }: { role: string }) {
   const { tx } = useLang();
-  const toast = useToast();
-  const confirm = useConfirm();
   const isStaff = role === 'admin' || role === 'accounting';
 
-  const [tab, setTab] = useState<TabKey>('overview');
+  const [tab, setTab] = useState<TabKey>('list');
   const [period, setPeriod] = useState('');
   const [status, setStatus] = useState('');
   const [method, setMethod] = useState('');
   const [data, setData] = useState<ListResult | null>(null);
+  /* รอบบิลที่มีอยู่จริง เก็บไว้ตอนที่ยังไม่ได้กรองรอบ — พอกรองรอบแล้วผลลัพธ์จะเหลือรอบเดียว ถ้าสร้าง
+     ตัวเลือกจากผลลัพธ์ที่กรองแล้วจะเหลือให้เลือกแค่รอบที่เลือกอยู่ กลับไปรอบอื่นไม่ได้อีกเลย */
+  const [periodOptions, setPeriodOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [error, setError] = useState<string | null>(null);
-  const [reviewing, setReviewing] = useState<string | null>(null);
 
   // แท็บแจ้งปัญหายังเป็นของ admin เท่านั้นเหมือนเดิม — หน้านี้เปิดกว้างขึ้น แต่ไม่ได้แปลว่าฟังก์ชันเดิม
   // ต้องเปิดตามไปด้วย ตัวกันจริงอยู่ที่ /api/support-tickets ซึ่ง requireAdmin อยู่แล้ว
@@ -125,56 +136,29 @@ export default function SubmissionsClient({ role }: { role: string }) {
           setError(body?.error ?? tx('โหลดข้อมูลไม่สำเร็จ'));
           return;
         }
-        setData(await r.json());
+        const body: ListResult = await r.json();
+        setData(body);
+        if (!period) {
+          const seen = new Map<string, string>();
+          for (const row of body.rows) seen.set(row.period, row.periodLabel);
+          setPeriodOptions(
+            [...seen]
+              .sort((a, b) => b[0].localeCompare(a[0]))
+              .map(([value, label]) => ({ value, label })),
+          );
+        }
       })
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
   }
 
   useEffect(load, [period, status, method, isStaff]);
 
-  async function review(row: SubmissionRow, next: 'confirmed' | 'problem') {
-    if (next === 'problem') {
-      const ok = await confirm({
-        danger: true,
-        title: tx('ทำเครื่องหมายว่ามีปัญหา?'),
-        message: `${row.employeeName} · ${row.periodLabel}`,
-        confirmLabel: tx('ทำเครื่องหมาย'),
-      });
-      if (!ok) return;
-    }
-    const key = `${row.employeeId}|${row.period}`;
-    setReviewing(key);
-    try {
-      const res = await fetch(`/api/timesheet-submissions/${encodeURIComponent(row.employeeId)}/${encodeURIComponent(row.period)}/review`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ status: next }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(body?.error ?? tx('บันทึกไม่สำเร็จ'), true);
-        return;
-      }
-      toast(next === 'confirmed' ? tx('ยืนยันแล้ว') : tx('ทำเครื่องหมายว่ามีปัญหาแล้ว'));
-      load();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    } finally {
-      setReviewing(null);
-    }
-  }
-
   const rows = data?.rows ?? [];
-  const reviewRows = useMemo(() => rows.filter((r) => r.status === 'pending_review'), [rows]);
-  const listRows = tab === 'review' ? reviewRows : rows;
+  const submitted = data ? data.summary.submitted + data.summary.confirmed : 0;
 
   return (
     <>
-      <PageHeader
-        eyebrow={tx('อ้างอิง')}
-        title={tx('บันทึกการส่ง')}
-        subtitle={tx('ติดตามและบันทึกสถานะการส่ง Timesheet ตามรอบบิล')}
-      />
+      <PageHeader eyebrow={tx('อ้างอิง')} title={tx('บันทึกการส่ง')} />
 
       {data?.scope.mine && (
         <div className="scopebar">
@@ -183,28 +167,49 @@ export default function SubmissionsClient({ role }: { role: string }) {
         </div>
       )}
 
-      {data && data.unknownDueToNoLineLink > 0 && (
-        <div className="scopebar all">
-          <Icon name="info" />
-          <span>
-            {data.unknownDueToNoLineLink} {tx('รายการยังไม่ทราบสถานะจริง เพราะพนักงานยังไม่ได้ผูกบัญชี LINE — ไม่ใช่ยืนยันแล้วว่าไม่ส่ง')}
-          </span>
+      {/* สรุปรอบนี้ — เดิมเป็นการ์ดขนาดเท่ากัน 5 ใบเรียงกัน ซึ่งบอกได้แค่ตัวเลขลอยๆ คนอ่านต้องเอา
+          "ส่งแล้ว" ไปหารกับ "ทั้งหมด" เองถึงจะรู้คำตอบของคำถามเดียวที่หน้านี้มีอยู่ว่า "รอบนี้ครบหรือยัง"
+          เปลี่ยนเป็นแถบความคืบหน้าอันเดียวที่ตอบตรงๆ แล้วแจกแจงส่วนที่เหลือเป็นชิปเล็กด้านล่าง
+          (เจ้าของระบบสั่ง 18 ก.ย. 69: ให้ดูเข้าใจง่ายกว่านี้) */}
+      {data && (
+        <div className="subsum">
+          <div className="ssh">
+            {/* หน่วยนับต้องตรงกับสิ่งที่แถวหนึ่งแถวหมายถึงจริงๆ — เดิมเขียน "คน" ทั้งสองมุมมองซึ่งผิดทั้งคู่
+                มุมพนักงาน: ทุกแถวเป็นของตัวเองคนเดียว ต่างกันแค่รอบเดือน → นับเป็น "รอบ"
+                มุม admin/บัญชี: หนึ่งแถว = พนักงานหนึ่งคนต่อหนึ่งรอบ คนเดียวกันโผล่ได้หลายแถว จึงไม่ใช่
+                จำนวนคนเช่นกัน → นับเป็น "รายการ" (เจ้าของระบบทักมา 18 ก.ย. 69) */}
+            <span className="ssl">
+              {data.scope.mine ? tx('รอบที่ส่ง Timesheet แล้ว') : tx('ส่ง Timesheet แล้ว')}
+            </span>
+            <span className="ssv">
+              <b>{submitted}</b>
+              <span className="of">
+                / {rows.length} {data.scope.mine ? tx('รอบ') : tx('รายการ')}
+              </span>
+            </span>
+            <span className="sspc">{pct(submitted, rows.length)}</span>
+          </div>
+          <div className="ssbar">
+            <span className="fill" style={{ width: rows.length ? `${(submitted / rows.length) * 100}%` : '0%' }} />
+          </div>
+          <div className="sschips">
+            <span className={`ssc mu${data.summary.not_submitted ? ' on' : ''}`}>
+              {tx('ยังไม่ส่ง')} <b>{data.summary.not_submitted}</b>
+            </span>
+            <span className={`ssc wn${data.summary.pending_review ? ' on' : ''}`}>
+              {tx('รอตรวจสอบ')} <b>{data.summary.pending_review}</b>
+            </span>
+            <span className={`ssc cr${data.summary.problem ? ' on' : ''}`}>
+              {tx('มีปัญหา')} <b>{data.summary.problem}</b>
+            </span>
+          </div>
         </div>
       )}
-
-      <div className="kpis k5">
-        <Kpi icon="list-chk" label={tx('ทั้งหมด')} value={data ? rows.length : '—'} />
-        <Kpi icon="chk" label={tx('ส่งแล้ว')} value={data ? data.summary.submitted + data.summary.confirmed : '—'} tone="g" />
-        <Kpi icon="clock" label={tx('ยังไม่ส่ง')} value={data ? data.summary.not_submitted : '—'} tone="c" />
-        <Kpi icon="eye" label={tx('รอตรวจสอบ')} value={data ? data.summary.pending_review : '—'} tone="w" />
-        <Kpi icon="alt" label={tx('มีปัญหา')} value={data ? data.summary.problem : '—'} tone="c" />
-      </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         {visibleTabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`btn sm${tab === t.key ? ' pri' : ''}`}>
             {tx(t.label)}
-            {t.key === 'review' && data && ` (${reviewRows.length})`}
           </button>
         ))}
       </div>
@@ -216,35 +221,38 @@ export default function SubmissionsClient({ role }: { role: string }) {
         <Card
           title={tx(TABS.find((t) => t.key === tab)?.label ?? '')}
           right={
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input
-                type="month"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                style={{ font: 'inherit', fontSize: 12.5, height: 'var(--h-ctl-sm)', padding: '0 8px', border: '1px solid var(--rule)', borderRadius: 'var(--r-ctl)' }}
-              />
-              {tab !== 'review' && (
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  style={{ font: 'inherit', fontSize: 12.5, height: 'var(--h-ctl-sm)', padding: '0 8px', border: '1px solid var(--rule)', borderRadius: 'var(--r-ctl)' }}
-                >
+            <div className="subfilters">
+              {/* เลิกใช้ <input type="month"> แล้ว — ปฏิทินที่กางออกมาเป็นของเบราว์เซอร์ หน้าตาคนละภาษา
+                  กับทั้งระบบและแก้ไม่ได้ (เจ้าของระบบสั่ง 18 ก.ย. 69) เปลี่ยนเป็นชิปเลือกแบบเดียวกับอีก
+                  สองตัวข้างๆ แล้วให้เลือกจาก "รอบบิลที่มีอยู่จริง" แทนที่จะเปิดปฏิทินทั้งปีให้เลือกเดือน
+                  ที่ไม่มีข้อมูลสักแถว */}
+              <span className="selectchip">
+                <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+                  <option value="">{tx('ทุกรอบบิล')}</option>
+                  {periodOptions.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+                <Icon name="chev" />
+              </span>
+              <span className="selectchip">
+                <select value={status} onChange={(e) => setStatus(e.target.value)}>
                   <option value="">{tx('ทุกสถานะ')}</option>
                   {(Object.keys(STATUS_LABEL) as Status[]).map((s) => (
                     <option key={s} value={s}>{tx(STATUS_LABEL[s])}</option>
                   ))}
                 </select>
-              )}
-              <select
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                style={{ font: 'inherit', fontSize: 12.5, height: 'var(--h-ctl-sm)', padding: '0 8px', border: '1px solid var(--rule)', borderRadius: 'var(--r-ctl)' }}
-              >
-                <option value="">{tx('ทุกช่องทาง')}</option>
-                {(Object.keys(METHOD_LABEL) as Method[]).map((m) => (
-                  <option key={m} value={m}>{tx(METHOD_LABEL[m])}</option>
-                ))}
-              </select>
+                <Icon name="chev" />
+              </span>
+              <span className="selectchip">
+                <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                  <option value="">{tx('ทุกช่องทาง')}</option>
+                  {(Object.keys(METHOD_LABEL) as Method[]).map((m) => (
+                    <option key={m} value={m}>{tx(METHOD_LABEL[m])}</option>
+                  ))}
+                </select>
+                <Icon name="chev" />
+              </span>
             </div>
           }
         >
@@ -262,14 +270,14 @@ export default function SubmissionsClient({ role }: { role: string }) {
                     <th>{tx('รอบบิล')}</th>
                     <th>{tx('สถานะการส่ง')}</th>
                     <th>{tx('ช่องทางการส่ง')}</th>
-                    <th>{tx('วันที่/เวลาที่ส่ง')}</th>
-                    <th>{tx('สถานะการตรวจสอบ')}</th>
-                    <th>{tx('ผู้ดำเนินการ')}</th>
-                    {isStaff && <th />}
+                    {/* คอลัมน์ "สถานะการตรวจสอบ" กับ "ผู้ดำเนินการ" ถูกเอาออก 18 ก.ย. 69 — เป็นซากจาก
+                        ตอนที่หน้านี้ยังมีปุ่มยืนยัน/ตีกลับ พอถอดปุ่มออกแล้วสองคอลัมน์นี้ขึ้น "ยังไม่มีคนตรวจ"
+                        กับ "—" ทุกแถวตลอดไป กินที่โดยไม่บอกอะไรเลย */}
+                    <th>{tx('วันและเวลาที่ส่ง')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {listRows.map((r, i) => (
+                  {rows.map((r, i) => (
                     <tr key={`${r.employeeId}|${r.period}`}>
                       <td className="sub">{i + 1}</td>
                       <td>
@@ -282,8 +290,11 @@ export default function SubmissionsClient({ role }: { role: string }) {
                         {r.deferredAt && (
                           <div className="sub">{tx('ขอเลื่อน')} · {dt(r.deferredAt)}</div>
                         )}
+                        {/* ป้ายสั้น ไม่ใช่ประโยคอธิบาย — แต่ยังแยกจาก "ยังไม่ส่ง" เดิมอยู่ เพราะเป็นคนละความจริง:
+                            อันนี้คือระบบไม่มีทางรู้ ไม่ใช่ยืนยันแล้วว่าเงียบจริง เอาป้ายออกจะทำให้สองเคสนี้
+                            กลืนกันจนดูเหมือนยืนยันแล้วว่าไม่ส่งทั้งคู่ */}
                         {!r.canReceiveLineUpdates && r.status === 'not_submitted' && (
-                          <div className="sub">{tx('ยังไม่ผูก LINE — ระบบไม่มีทางรู้สถานะจริง')}</div>
+                          <Tag tone="mu">{tx('ยังไม่ผูก LINE OA')}</Tag>
                         )}
                       </td>
                       <td>
@@ -293,44 +304,11 @@ export default function SubmissionsClient({ role }: { role: string }) {
                         )}
                       </td>
                       <td className="sub">{dt(r.methodChosenAt)}</td>
-                      <td>
-                        {r.reviewedBy ? (
-                          <>
-                            {tx(r.status === 'problem' ? STATUS_LABEL.problem : STATUS_LABEL.confirmed)}
-                            <div className="sub">{r.reviewedBy} · {dt(r.reviewedAt)}</div>
-                          </>
-                        ) : (
-                          <span className="sub">{tx('ยังไม่มีคนตรวจ')}</span>
-                        )}
-                      </td>
-                      <td className="sub">{r.actedBy ?? '—'}</td>
-                      {isStaff && (
-                        <td>
-                          {r.status === 'pending_review' && (
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button
-                                className="btn sm"
-                                disabled={reviewing === `${r.employeeId}|${r.period}`}
-                                onClick={() => review(r, 'confirmed')}
-                              >
-                                {tx('ยืนยัน')}
-                              </button>
-                              <button
-                                className="btn sm"
-                                disabled={reviewing === `${r.employeeId}|${r.period}`}
-                                onClick={() => review(r, 'problem')}
-                              >
-                                {tx('มีปัญหา')}
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      )}
                     </tr>
                   ))}
-                  {listRows.length === 0 && (
+                  {rows.length === 0 && (
                     <tr>
-                      <td colSpan={isStaff ? 9 : 8} style={{ textAlign: 'center', color: 'var(--mut)' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', color: 'var(--mut)' }}>
                         {tx('ไม่มีรายการในหมวดนี้')}
                       </td>
                     </tr>

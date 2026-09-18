@@ -281,6 +281,41 @@ test('mapAbbyyResult ตัดข้อความ Description/Type ที่ A
   assert.equal(data.days[0].type, 'Leave');
 });
 
+test('mapAbbyyResult ไม่เอาวันที่รูป "1-Mar-26" ไปโผล่ในคอลัมน์ "ประเภท" เมื่อ Skill ไม่มีคอลัมน์ Type '
+  + '(เจอจริงกับฟอร์ม ThaiLife/OBS202621 — 18 ก.ย. 69: ทั้งตารางแสดงวันที่แทน Weekend/Holiday)', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        // ไม่มีคอลัมน์ "Type" เลย → ค่าประเภทต้องตกไปใช้ label ซึ่งเดิมกวาดเอาคอลัมน์วันที่มาด้วย
+        tableRow({ Date: '1-Mar-26', Description: 'Weekend' }),
+        tableRow({ Date: '6-Mar-26', 'Time In': '8:30', 'Time Out': '- 17:00', Description: 'Architecture Review' }),
+      ] },
+    ] } } }] },
+  }, { detail: { date: 'Date', timeIn: 'Time In', timeOut: 'Time Out', jobDescription: 'Description' } });
+
+  assert.equal(data.days[0].date, '2026-03-01');
+  assert.equal(data.days[0].type, null, 'วันที่ต้องไม่กลายเป็นค่าของคอลัมน์ประเภท');
+  assert.equal(data.days[1].date, '2026-03-06');
+  assert.equal(data.days[1].type, null, 'ทั้งวันที่และเวลาต้องถูกคัดออกจาก label');
+});
+
+test('Skill ที่ไม่ได้ map คอลัมน์ "ประเภท" ต้องได้ type = null ห้ามเอาเศษคอลัมน์อื่นมาต่อกันแทน '
+  + '(เจอจริงกับฟอร์ม Lotus — 18 ก.ย. 69: ช่องประเภทขึ้น "1-Jul-26 grooming - 08.30 and")', () => {
+  const data = mapAbbyyResult({
+    Transaction: { Documents: [{ ExtractedData: { RootObject: { Fields: [
+      { Name: 'New Table', List: [
+        // ไม่มีคอลัมน์ Type และมีเศษคำอธิบายงานหลุดไปอยู่คอลัมน์อื่น — เคสจริงของ Lotus
+        tableRow({ Date: '01/07/26', Grooming: 'grooming', Extra: 'and', Description: 'Sprint planning and backlog' }),
+      ] },
+    ] } } }] },
+  });
+
+  assert.equal(data.days[0].date, '2026-07-01');
+  assert.equal(data.days[0].type, null, 'ต้องเป็น null ไม่ใช่ "grooming and"');
+  // label ยังถูกเก็บไว้เหมือนเดิม — แค่ไม่ถูกเอามาสวมเป็น "ประเภท" อีกแล้ว
+  assert.ok(data.days[0].label, 'label ต้องยังมีค่าอยู่ ไม่ได้ถูกลบทิ้งไปด้วย');
+});
+
 /** สร้าง row ของ "New Table" ให้ทดสอบง่ายๆ — cols เป็น { ชื่อคอลัมน์: ค่า } */
 function tableRow(cols: Record<string, string>) {
   return { Value: { Fields: Object.entries(cols).map(([name, value]) => ({

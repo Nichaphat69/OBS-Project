@@ -386,6 +386,14 @@ const LEGACY_NAME_ALIASES: Record<string, string> = {
   Approver_Name: 'Approved_By_Name',
   Site: 'Document_Site',
   Customer_site: 'Daily_Site',
+  // แม่แบบ Master Template สะกด `Customer_Site` (S ใหญ่) และวางไว้**ระดับเอกสาร** ส่วนบรรทัดบนเป็น
+  // `Customer_site` (s เล็ก) ระดับรายวัน — คนละคีย์กันเพราะการค้นหาแยกตัวพิมพ์ ตัวบนจึงไม่เคยรับตัวนี้ได้เลย
+  // ค่าที่อ่านมาได้จึงถูกทิ้งทั้งหมด (เจ้าของระบบสั่งแก้ 18 ก.ย. 69 — เลือกให้ลง Document_Site)
+  // เก็บทั้งสองบรรทัดไว้ เพราะบัญชีนี้มีแม่แบบ 13 ตัว ตัวอื่นอาจสะกดแบบ s เล็กที่ระดับรายวันอยู่จริง
+  Customer_Site: 'Document_Site',
+  // V4 สั่งไว้ตรงๆ ใน prompt ว่า "Place -> Daily_Site when it is a physical location in a daily row"
+  // — เป็นคำที่เอกสารต้นทางใช้ ไม่ใช่ชื่อฟิลด์ของตัวเอง
+  Place: 'Daily_Site',
   Total_Hours: 'Daily_Total_Hours',
   // Working_Time เป็นชื่อของฟอร์ม Fujitsu/Virtual Link — **ยืนยันจากเอกสารจริง 2 ใบ** (17 ก.ย. 69)
   // ว่าค่าข้างในคือ "ชั่วโมงทำงานปกติ" เป็นตัวเลขล้วน ("8.00") ไม่ใช่ช่วงเวลา และในแถวเดียวกันนั้น
@@ -482,11 +490,22 @@ export function mapClearReadResult(detail: any, { expectedPeriod }: { expectedPe
     // ช่องสรุปท้ายเอกสารต้องลง summary.* เท่านั้น ห้ามไปทับค่าระดับบนที่ชื่อพ้องกัน — โดยเฉพาะ
     // `totalWorkDays` ที่ระดับบนแปลว่า "ค่าที่ระบบใช้ตั้งบิล" ส่วนใน summary แปลว่า "เลขที่เอกสารพิมพ์ไว้"
     // ถ้าปล่อยให้ทับกัน จะเทียบสองค่านี้ไม่ได้อีกเลย ซึ่งเป็นตัวจับบั๊กที่ตั้งใจสร้างไว้
+    /* ชื่อตามสเปกชนะชื่อเก่าเสมอเมื่อแม่แบบมีทั้งสองช่อง — ตรรกะเดียวกับฝั่งรายวันด้านล่าง
+       ระดับเอกสารเดิม**ไม่มี**ด่านนี้ ค่าจึงทับกันตามลำดับคีย์ใน JSON ที่ควบคุมไม่ได้ ตราบใดที่ยังไม่มี
+       ชื่อเก่าคู่ไหน map ลงคีย์เดียวกับชื่อสเปกก็ยังไม่มีใครเห็นปัญหา แต่พอรับ `Customer_Site` เข้ามาลง
+       `documentSite` คีย์เดียวกับ `Document_Site` ช่องที่ว่างจะทับค่าที่อ่านมาได้แล้วทันที (18 ก.ย. 69)
+       ช่องว่าง ('') นับเป็น "ไม่มีค่า" เหมือนฝั่งรายวัน ไม่งั้นช่องสเปกที่ว่างจะไปกันไม่ให้ชื่อเก่าเติมค่าให้ */
+    const fromLegacy = f.key_field in LEGACY_NAME_ALIASES;
     if (SUMMARY_KEYS.has(specKey)) {
-      summary[key] = toNumber(f.value);
+      const parsedSummary = toNumber(f.value);
+      if (fromLegacy && summary[key] !== undefined && summary[key] !== null) continue;
+      if (!fromLegacy || parsedSummary !== null) summary[key] = parsedSummary;
       continue;
     }
-    header[key] = f.value === null || f.value === undefined ? null : String(f.value);
+    const raw = f.value === null || f.value === undefined ? null : String(f.value);
+    const parsed = raw === '' ? null : raw;
+    if (fromLegacy && header[key] !== undefined && header[key] !== null) continue;
+    if (!fromLegacy || parsed !== null) header[key] = parsed;
   }
 
   const period = resolvePeriod(header.monthYear ?? null) ?? expectedPeriod ?? '';
@@ -958,6 +977,11 @@ export async function planTemplateUpgrade(templateId?: string | null): Promise<T
  * Adjust/Adjustment_Value→Total_OT_Adjust) มีช่องปลายทางอยู่แล้วในแม่แบบและ**ถูกต้องอยู่แล้ว** — การ
  * เปลี่ยนชื่อจะไปทับข้อมูลที่ทำงานได้อยู่ (ดู planTemplateUpgrade() สำหรับรายละเอียดทั้งหมด) มีแค่
  * `Document_Site` ตัวเดียวที่สเปกมีแต่แม่แบบไม่มี จึงเป็นการเพิ่มล้วน ไม่มีความเสี่ยงทับข้อมูล
+ *
+ * อัปเดต 18 ก.ย. 69 — เจ้าของระบบสั่งเคลียร์ 5 ช่องนั้นแล้ว จบไปคนละทาง ไม่ต้องรอฟังก์ชันเปลี่ยนชื่ออีก:
+ * `Total_Base_Duration`/`Adjust`/`Adjustment_Value` ถูก**ลบออกจากแม่แบบ**ด้วยมือ (สเปกไม่เคยนิยามไว้
+ * จึงอ่านค่าไม่ได้อยู่แล้ว) ส่วน `Customer_Site`/`Place` เก็บช่องไว้ตามเดิมแต่ให้ LEGACY_NAME_ALIASES
+ * รับเข้ามาลง `Document_Site`/`Daily_Site` แทน เหลือ `Site` ตัวเดียวที่ยังเป็นชื่อที่ V4 เลิกใช้
  *
  * ขั้นตอน: อ่าน schema_json ดิบมาทั้งชุด (ไม่ผ่านชั้นสรุปที่ตัดรายละเอียดออก) → เติมฟิลด์ใหม่ต่อท้าย
  * โดยไม่แตะฟิลด์เดิมแม้แต่ตัวเดียว → เขียนกลับ → **อ่านกลับมาตรวจซ้ำว่ามีจริง** ไม่เชื่อแค่ response

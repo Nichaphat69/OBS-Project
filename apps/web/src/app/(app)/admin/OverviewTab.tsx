@@ -76,13 +76,7 @@ export default function OverviewTab() {
 
           <dt>LINE</dt>
           <dd>
-            {settings.env.hasLine ? (
-              <>
-                <Tag tone="ok">{tx('เชื่อมต่อแล้ว')}</Tag> <small>{tx('ผู้รับแจ้งเตือน')} {settings.env.lineRecipientCount} {tx('ราย')}</small>
-              </>
-            ) : (
-              <Tag tone="wn">{tx('ยังไม่เชื่อม')}</Tag>
-            )}
+            <Tag tone={settings.env.hasLine ? 'ok' : 'wn'}>{settings.env.hasLine ? tx('เชื่อมต่อแล้ว') : tx('ยังไม่เชื่อม')}</Tag>
           </dd>
 
           <dt>{tx('ลิงก์ในข้อความ LINE')}</dt>
@@ -145,7 +139,6 @@ export default function OverviewTab() {
           <dt>{tx('ปิดรอบเมื่อส่งเมล')}</dt>
           <dd>
             <Tag tone="ok">{tx('อัตโนมัติ')}</Tag>
-            <small style={{ display: 'block' }}>{tx('ระบบดูจากกล่อง Gmail เองว่าร่างถูกกดส่งแล้วหรือยัง')}</small>
           </dd>
         </dl>
       </Card>

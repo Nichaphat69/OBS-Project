@@ -15,6 +15,7 @@ import { prisma } from '@obs/db';
 import { addDays, nextPeriod, thaiMonth, thaiDate } from '@obs/domain';
 import { isoToday, enumeratePeriods } from './dashboardService.js';
 import { logAudit } from './audit.js';
+import { recordSubmissionResponse } from './submissionRecordService.js';
 import { LineClient, buildOverdueReminderFlex, EMPLOYEE_QUICK_REPLY } from './lineClient.js';
 
 /** ported from service.js appBase()/uploadLink() — WEB_BASE_URL คือของสแต็กใหม่ (Next.js web app)
@@ -78,6 +79,117 @@ export async function pendingSubmissionFor(employeeId: string): Promise<PendingS
     }
   }
   return null;
+}
+
+/** 8 MB — ให้ต่ำกว่าเพดาน express.json ('15mb') อย่างมีระยะ เพราะ base64 พองขึ้นราว 1 ใน 3
+ * ไฟล์ 8 MB จะกลายเป็น payload ~10.7 MB ซึ่งยังผ่าน ถ้าปล่อยถึง 15 MB จะโดนตัดตั้งแต่ชั้น body parser
+ * แล้วคนกดส่งจะเห็นแค่ error ดิบๆ ที่ไม่ได้บอกว่าไฟล์ใหญ่เกิน */
+const MAX_SUBMIT_BYTES = 8 * 1024 * 1024;
+
+export class SubmitOwnFileError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export interface SubmitOwnFileResult {
+  period: string;
+  periodLabel: string;
+  customerName: string;
+  projectName: string;
+  fileName: string;
+  fileId: number;
+}
+
+/**
+ * พนักงานส่งไฟล์ Timesheet ของตัวเองเข้าระบบ — **เก็บไฟล์ + บันทึกว่าส่งแล้วเท่านั้น ไม่อ่านด้วย OCR**
+ *
+ * ต่างจากเส้นของฝั่งที่ทำบิล (`POST /api/timesheets/read`) ตรงที่ไม่แตะ ABBYY/Clear Read เลย และ
+ * ไม่สร้างแถว `timesheets` — พนักงานมีหน้าที่ "ส่ง" อย่างเดียว ส่วนการอ่านไฟล์/ตรวจ Manday ยังเป็น
+ * งานของ admin เหมือนเดิม (เจ้าของระบบสั่ง 18 ก.ย. 69: "เวลาที่ user เพิ่มไฟล์ Timesheet แล้ว
+ * จะเป็นการส่งอย่างเดียว")
+ *
+ * ผลที่ตามมาโดยตั้งใจ: หน้า "บันทึกการส่ง" จะขึ้นสถานะ "ส่งแล้ว" ช่องทาง "ส่งผ่านระบบ OBS" ทันที
+ * แต่ยังไม่เข้าคิวตรวจ Manday จนกว่า admin จะเอาไฟล์ไปอ่าน — ตรงกับความจริงว่ามีแค่ไฟล์ ยังไม่มีตัวเลข
+ *
+ * ไฟล์ไปอยู่ที่ `ai_reads.file_bytes` (ไม่ใช่ `timesheets.source_file_bytes`) เพราะแถว `timesheets`
+ * ต้องมีการจับคู่ชื่อพนักงาน/รอบ/สัญญาครบก่อน ซึ่งยังไม่มีข้อมูลพวกนั้นเลยตอนนี้ — และเส้นดาวน์โหลด
+ * `GET /api/ai-reads/:id/file` กันสิทธิ์ตาม employeeId ให้อยู่แล้ว พนักงานจึงเปิดดูของตัวเองได้ทันที
+ */
+export async function submitOwnTimesheetFile({
+  employeeId,
+  actor,
+  fileName,
+  fileBase64,
+}: {
+  employeeId: string;
+  actor: string;
+  fileName: string;
+  fileBase64: string;
+}): Promise<SubmitOwnFileResult> {
+  const cleanName = String(fileName ?? '').trim();
+  if (!cleanName) throw new SubmitOwnFileError('ไม่พบชื่อไฟล์');
+
+  const bytes = Buffer.from(String(fileBase64 ?? ''), 'base64');
+  if (bytes.length === 0) throw new SubmitOwnFileError('ไฟล์ว่างหรืออ่านไม่ได้ ลองเลือกไฟล์ใหม่');
+  if (bytes.length > MAX_SUBMIT_BYTES) throw new SubmitOwnFileError('ไฟล์ใหญ่เกิน 8 MB');
+
+  const pending = await pendingSubmissionFor(employeeId);
+  if (!pending) throw new SubmitOwnFileError('ตอนนี้ไม่มีรอบบิลที่ต้องส่ง', 409);
+
+  const now = new Date().toISOString();
+  const saved = await prisma.aiRead.create({
+    data: {
+      // แยกจาก 'upload'/'gmail' ให้ชัด — สองค่านั้นแปลว่า "ผ่านเครื่องอ่านมาแล้ว" ส่วนค่านี้คือไฟล์ดิบ
+      // ที่ยังไม่มีใครอ่าน ถ้าใช้ค่าเดิมปนกัน จะแยกไม่ออกว่าแถวไหนอ่านแล้วแถวไหนแค่ส่งมา
+      source: 'employee_submit',
+      fileName: cleanName,
+      employeeId,
+      period: pending.period,
+      fileBytes: bytes,
+      readAt: now,
+      readBy: actor,
+    },
+    select: { id: true },
+  });
+
+  await recordSubmissionResponse({
+    employeeId,
+    period: pending.period,
+    contractId: pending.contractId,
+    method: 'self_obs',
+  });
+
+  /* recordSubmissionResponse() กลืน error ไว้โดยตั้งใจ เพราะออกแบบมาให้เส้น LINE ห้ามล้ม (ดูหัวไฟล์
+     submissionRecordService.ts) — แต่ที่นี่เป็นการตอบกลับคนที่เพิ่งกดส่ง ถ้าปล่อยตามนั้นจะกลายเป็น
+     "จอขึ้นว่าส่งแล้ว แต่ไม่มีอะไรถูกบันทึก" ซึ่งเป็นบั๊กเงียบแบบที่ระบบนี้โดนมาหลายรอบ จึงอ่านกลับมา
+     ยืนยันว่าเขียนลงจริง ไม่เชื่อแค่ว่าเรียกผ่าน */
+  const written = await prisma.timesheetSubmission.findUnique({
+    where: { employeeId_period: { employeeId, period: pending.period } },
+    select: { method: true },
+  });
+  if (written?.method !== 'self_obs') {
+    throw new SubmitOwnFileError('เก็บไฟล์ได้แล้วแต่บันทึกสถานะการส่งไม่สำเร็จ — แจ้งผู้ดูแลระบบ', 500);
+  }
+
+  await logAudit({
+    actor,
+    action: 'employee_submitted_timesheet_file',
+    entityType: 'employee',
+    entityId: employeeId,
+    detail: { period: pending.period, fileName: cleanName, bytes: bytes.length, aiReadId: saved.id },
+  });
+
+  return {
+    period: pending.period,
+    periodLabel: pending.periodLabel,
+    customerName: pending.customerName,
+    projectName: pending.projectName,
+    fileName: cleanName,
+    fileId: saved.id,
+  };
 }
 
 export interface OverdueItem {

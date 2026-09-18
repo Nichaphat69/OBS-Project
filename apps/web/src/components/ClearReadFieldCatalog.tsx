@@ -383,67 +383,66 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
       {picker}
       {notices}
 
-      {/* ชื่อแม่แบบอยู่ใน dropdown แล้ว แถบนี้จึงเหลือแต่ของที่ dropdown ใส่ไม่ได้ —
-          รหัสแม่แบบไว้เทียบกับหน้า Clear Read ตรงๆ ตอนไล่ปัญหา */}
-      <div className="tpl">
-        <div className="tl">
-          {t.version !== null && <span className="tv">v{t.version}</span>}
-          {t.isDefault && <span className="tv">{tx('ค่าเริ่มต้น')}</span>}
-          <span className="tid" title={t.id}>{t.id}</span>
-        </div>
-        <span className="cnt">
-          {t.fields.length} {tx('ช่องระดับเอกสาร')} · {t.detailColumns.length} {tx('คอลัมน์รายวัน')}
-        </span>
-      </div>
+      {/* แถบสรุปแม่แบบ — กล่องเดียวจบ รวม "เวอร์ชัน/รหัส/จำนวนช่อง" เข้ากับ "ผลตรวจเทียบสารบัญกลาง"
+          เดิมเป็นสามกล่องซ้อนกัน (แถบเขียวบอกรหัส → กล่องผลตรวจ → กล่องย่อยข้างในอีกชั้น) ทั้งที่จำนวนช่อง
+          ก็ซ้ำกับ dropdown ด้านบนอยู่แล้ว อ่านแล้วไม่รู้ว่าต้องดูตรงไหนก่อน (เจ้าของระบบสั่งแก้ 18 ก.ย. 69)
 
-      {/* ผลตรวจเทียบสารบัญกลาง — ตอบคำถามที่ค้างมานานว่าแม่แบบฝั่ง Clear Read ตามสเปก V4 ทันหรือยัง
-          เรียงตามความเสียหาย: "ระบบอ่านค่าไม่ได้" อยู่บนสุด เพราะแปลว่าตั้งช่องไว้แล้วแต่ข้อมูลไม่ไหลเข้า */}
-      {reg && (
-        <div className={clean ? 'chk ok' : 'chk'}>
-          <div className="ch">
-            <Icon name={clean ? 'chk' : 'info'} />
-            <b>{tx('เทียบกับสารบัญฟิลด์กลาง')} {reg.promptVersion}</b>
-          </div>
-          {clean ? (
-            <p className="cm">{tx('แม่แบบตรงตามสเปกครบทุกช่อง ไม่มีชื่อที่เลิกใช้ ไม่มีช่องที่ระบบอ่านไม่ได้')}</p>
-          ) : (
-            <div className="cl">
-              {unknownCount > 0 && (
-                <div className="ci bad">
-                  <span className="cn">{tx('ระบบอ่านค่าจากช่องเหล่านี้ไม่ได้')} ({unknownCount})</span>
-                  <span className="cd">{tx('ตั้งไว้ในแม่แบบแล้ว แต่ระบบไม่รู้จักชื่อนี้ ข้อมูลจึงไม่ไหลเข้ามา')}</span>
-                  {/* ชื่อเดียวกันอาจไม่รู้จักทั้งสองระดับ — รวมเป็นเซ็ตก่อนวาด กันไม่ให้ขึ้นซ้ำสองชิป */}
-                  <span className="cvs">
-                    {[...new Set([...unknownDoc, ...unknownDetail])].map((n) => <code key={n}>{n}</code>)}
-                  </span>
-                </div>
-              )}
-              {forbidden.size > 0 && (
-                <div className="ci warn">
-                  <span className="cn">{tx('ชื่อที่ V4 เลิกใช้แล้ว')} ({forbidden.size})</span>
-                  <span className="cd">{tx('สเปกห้ามใช้ชื่อซ้ำข้ามระดับ จึงแยกเป็นชื่อใหม่แทน')}</span>
-                  <span className="cvs">
-                    {[...forbidden].map(([n, use]) => (
-                      <code key={n}>{n} → {use}</code>
-                    ))}
-                  </span>
-                </div>
-              )}
-              {(reg.documentMissing.length > 0 || reg.detailMissing.length > 0) && (
-                <div className="ci mu">
-                  <span className="cn">
-                    {tx('สเปกมีแต่แม่แบบยังไม่มี')} ({reg.documentMissing.length + reg.detailMissing.length})
-                  </span>
-                  <span className="cd">{tx('ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มลูกค้าไม่มีช่องนี้จริงก็ไม่ต้องมี')}</span>
-                  <span className="cvs">
-                    {[...new Set([...reg.documentMissing, ...reg.detailMissing])].map((n) => <code key={n}>{n}</code>)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+          ผลตรวจเรียงตามความเสียหาย: "ระบบอ่านค่าไม่ได้" อยู่บนสุด เพราะแปลว่าตั้งช่องไว้แล้วแต่ข้อมูลไม่ไหลเข้า */}
+      <div className={`crsum${reg ? (clean ? ' ok' : ' warn') : ''}`}>
+        <div className="sh">
+          {reg && <Icon name={clean ? 'chk' : 'info'} className="si" />}
+          <span className="st">
+            {reg
+              ? `${clean ? tx('ตรงตามสารบัญฟิลด์กลาง') : tx('เทียบกับสารบัญฟิลด์กลาง')} ${reg.promptVersion}`
+              : tx('แม่แบบที่เปิดดู')}
+          </span>
+          <span className="sg" />
+          <span className="sc">
+            {t.fields.length} {tx('ช่องระดับเอกสาร')} · {t.detailColumns.length} {tx('คอลัมน์รายวัน')}
+          </span>
+          {t.version !== null && <span className="sv">v{t.version}</span>}
+          {t.isDefault && <span className="sv">{tx('ค่าเริ่มต้น')}</span>}
+          {/* รหัสแม่แบบไว้เทียบกับหน้า Clear Read ตรงๆ ตอนไล่ปัญหา — เก็บไว้แต่ทำให้เงียบที่สุด */}
+          <span className="sid" title={t.id}>{t.id}</span>
         </div>
-      )}
+
+        {reg && !clean && (
+          <div className="cl">
+            {unknownCount > 0 && (
+              <div className="ci bad">
+                <span className="cn">{tx('ระบบอ่านค่าจากช่องเหล่านี้ไม่ได้')} ({unknownCount})</span>
+                <span className="cd">{tx('ตั้งไว้ในแม่แบบแล้ว แต่ระบบไม่รู้จักชื่อนี้ ข้อมูลจึงไม่ไหลเข้ามา')}</span>
+                {/* ชื่อเดียวกันอาจไม่รู้จักทั้งสองระดับ — รวมเป็นเซ็ตก่อนวาด กันไม่ให้ขึ้นซ้ำสองชิป */}
+                <span className="cvs">
+                  {[...new Set([...unknownDoc, ...unknownDetail])].map((n) => <code key={n}>{n}</code>)}
+                </span>
+              </div>
+            )}
+            {forbidden.size > 0 && (
+              <div className="ci warn">
+                <span className="cn">{tx('ชื่อที่ V4 เลิกใช้แล้ว')} ({forbidden.size})</span>
+                <span className="cd">{tx('สเปกห้ามใช้ชื่อซ้ำข้ามระดับ จึงแยกเป็นชื่อใหม่แทน')}</span>
+                <span className="cvs">
+                  {[...forbidden].map(([n, use]) => (
+                    <code key={n}>{n} → {use}</code>
+                  ))}
+                </span>
+              </div>
+            )}
+            {(reg.documentMissing.length > 0 || reg.detailMissing.length > 0) && (
+              <div className="ci mu">
+                <span className="cn">
+                  {tx('สเปกมีแต่แม่แบบยังไม่มี')} ({reg.documentMissing.length + reg.detailMissing.length})
+                </span>
+                <span className="cd">{tx('ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มลูกค้าไม่มีช่องนี้จริงก็ไม่ต้องมี')}</span>
+                <span className="cvs">
+                  {[...new Set([...reg.documentMissing, ...reg.detailMissing])].map((n) => <code key={n}>{n}</code>)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="bar">
         <div className="find">
@@ -491,13 +490,17 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
                         )}
                         <Icon name="chev" className="cv" />
                       </button>
-                      {useInstead && isOpen && (
-                        <p className="hint">{tx('ใช้แทนด้วย')} {useInstead}</p>
-                      )}
-                      {f.description ? (
-                        <p className={isOpen ? 'ds' : 'ds clamp'}>{f.description}</p>
-                      ) : (
-                        <p className="ds nodesc">{tx('ช่องนี้ไม่มีคำอธิบายในแม่แบบ — เครื่องอ่านจะเดาจากชื่อช่องอย่างเดียว')}</p>
+                      {/* ค่าเริ่มต้นโชว์แค่ชื่อช่อง ไม่มีคำอธิบายโผล่ค้างเลยแม้แต่บรรทัดเดียว — กดขยายแล้วค่อยเห็น
+                          เต็ม (18 ก.ย. 69 ตามที่เจ้าของระบบสั่ง: ฟิลด์เยอะเกินไปถ้าคำอธิบายค้างอยู่ทุกแถว) */}
+                      {isOpen && (
+                        <>
+                          {useInstead && <p className="hint">{tx('ใช้แทนด้วย')} {useInstead}</p>}
+                          {f.description ? (
+                            <p className="ds">{f.description}</p>
+                          ) : (
+                            <p className="ds nodesc">{tx('ช่องนี้ไม่มีคำอธิบายในแม่แบบ — เครื่องอ่านจะเดาจากชื่อช่องอย่างเดียว')}</p>
+                          )}
+                        </>
                       )}
                     </li>
                   );

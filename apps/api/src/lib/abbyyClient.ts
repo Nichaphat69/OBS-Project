@@ -399,6 +399,26 @@ function minusBreak(hours: number | null, brk: number | null): number | null {
   return hours === null ? null : Math.max(0, Math.round((hours - (brk ?? 0)) * 100) / 100);
 }
 
+/** เวลาเดี่ยวหรือช่วงเวลา เผื่อมีขีด/ช่องว่างติดหัวท้ายจากการตัดคอลัมน์ ("17:00", "- 17:00", "08.00-17.00") */
+const TIME_CELL_RE = /^[\s\-–—]*\d{1,2}[.:]\d{2}\s*(?:[-–—]|ถึง|to)?\s*(?:\d{1,2}[.:]\d{2})?[\s\-–—]*$/i;
+
+/**
+ * ช่องนี้เป็นวันที่หรือเวลาหรือเปล่า — ใช้คัดช่องที่ "ไม่ใช่ป้ายกำกับ" ออกก่อนจะเอาช่องที่เหลือมาต่อกันเป็น
+ * `label` (ซึ่งเป็นค่าสำรองของคอลัมน์ "ประเภท" เมื่อ Skill ไม่ได้ระบุคอลัมน์ประเภทไว้)
+ *
+ * เดิมรู้จักวันที่แค่รูป DD/MM/YY ตัวเลขล้วนเท่านั้น ฟอร์มที่เขียนวันที่เป็นชื่อเดือน ("1-Mar-26" แบบ
+ * ThaiLife) จึงรอดตัวกรองมาได้ แล้วไปโผล่เป็นค่าของคอลัมน์ "ประเภท" ทั้งตาราง — หน้าตรวจ Manday
+ * แสดง "1-Mar-26" / "2-Mar-26 3-Mar-26" ในช่องที่ควรเป็น Weekend/Holiday/Working
+ * (เจอจริง 18 ก.ย. 69 กับ OBS202621) ใช้ normalizeDate() ตัวเดียวกับที่ resolveRowDate() ใช้
+ * จะได้รู้จักทุกรูปแบบวันที่ที่ระบบรองรับอยู่แล้ว ไม่ต้องไล่เพิ่ม regex ทีละแบบอีก
+ */
+function isDateOrTimeCell(value: unknown): boolean {
+  const s = String(value ?? '').trim();
+  if (!s) return false;
+  if (parseTimeToMinutes(s) !== null || TIME_CELL_RE.test(s)) return true;
+  return normalizeDate(s) !== null;
+}
+
 /**
  * ชั่วโมง OT ของแถวหนึ่ง — ใช้ร่วมกันระหว่าง `buildDayRowsFromStructuredTable()` (หน้าตรวจ Manday) และ
  * `extractOtHoursFromTable()` (รายการที่ใบแจ้งหนี้ใช้คิดเงิน) เพราะชั่วโมง OT คูณเป็นเงินตรงๆ
@@ -446,16 +466,26 @@ function buildDayRowsFromStructuredTable(rootObject: any, tableName: string | nu
     const rawDescription = recovered ? descriptionOverride : pick(cols, descriptionCol);
     const jobDescription = rawDescription ? dedupeRepeatedText(rawDescription) : null;
 
-    const isDateOrTimeLike = (v: unknown) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(v ?? '')) || parseTimeToMinutes(v) !== null;
     const labelParts = Object.entries(cols)
-      .filter(([name, value]) => name !== descriptionCol && !isDateOrTimeLike(value))
+      .filter(([name, value]) => name !== descriptionCol && !isDateOrTimeCell(value))
       .map(([, value]) => value)
       .filter(Boolean);
     const label = labelParts.length ? dedupeRepeatedText(labelParts.join(' ')) : null;
 
     const project = pick(cols, detail.project);
     const rawType = pick(cols, detail.workType);
-    const type = rawType ? dedupeRepeatedText(rawType) : label;
+    /**
+     * ไม่มีคอลัมน์ "ประเภท" ที่ตั้งค่าไว้ = ไม่รู้ว่าวันนั้นเป็นประเภทอะไร ต้องเป็น null ไปตรงๆ
+     *
+     * เดิมตกไปใช้ `label` ซึ่งคือ "ทุกคอลัมน์ที่เหลือในแถวต่อกันเป็นข้อความเดียว" — เป็นค่าสำรองที่เดา
+     * จากของที่ไม่รู้ว่าคืออะไร ผลคือช่องประเภทของฟอร์มที่ไม่ได้ map คอลัมน์นี้ไว้ (ThaiLife, Lotus)
+     * กลายเป็นขยะทั้งตาราง เช่น "1-Jul-26 grooming - 08.30 and" — ปนทั้งวันที่ เวลา และเศษคำอธิบายงาน
+     * (เจ้าของระบบเจอจริงทั้งสองฟอร์ม 18 ก.ย. 69)
+     *
+     * "—" บอกความจริงว่าไม่รู้ ส่วนข้อความมั่วๆ ดูเหมือนระบบอ่านได้แล้วซึ่งแย่กว่า และ `label` ยังถูก
+     * เก็บลงคอลัมน์ของตัวเองตามเดิม ไม่มีข้อมูลไหนหายไป — แค่เลิกเอามาสวมเป็น "ประเภท"
+     */
+    const type = rawType ? dedupeRepeatedText(rawType) : null;
 
     const breakHours = parsedOrNull(pick(cols, detail.breakHours));
     const otBreakHours = parsedOrNull(pick(cols, detail.otBreakHours));

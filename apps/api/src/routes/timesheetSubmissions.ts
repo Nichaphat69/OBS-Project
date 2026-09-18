@@ -23,6 +23,7 @@ import {
   type SubmissionStatus,
 } from '../lib/submissionLogService.js';
 import { confirmSubmission, SubmissionReviewError } from '../lib/submissionRecordService.js';
+import { submitOwnTimesheetFile, SubmitOwnFileError } from '../lib/timesheetSubmissionService.js';
 
 export const timesheetSubmissionsRouter = Router();
 timesheetSubmissionsRouter.use(requireAuth);
@@ -51,6 +52,35 @@ timesheetSubmissionsRouter.get('/mine', async (req, res) => {
   }
   const result = await listTimesheetSubmissions({ ...filtersFrom(req.query), restrictToEmployeeId: employeeId });
   res.json({ scope: { restrictedToEmployeeId: employeeId, mine: true }, ...result });
+});
+
+/**
+ * พนักงานส่งไฟล์ Timesheet ของตัวเอง — เก็บไฟล์ + บันทึกว่าส่งแล้ว ไม่อ่านด้วย OCR
+ * (ดูเหตุผลเต็มที่ submitOwnTimesheetFile ใน timesheetSubmissionService.ts)
+ *
+ * เส้นเขียนเส้นแรกที่ role 'user' เรียกได้ — ยึดกติกาเดียวกับ GET /mine ด้านบน คือ **ไม่อ่าน
+ * employeeId จาก body เลยแม้แต่บรรทัดเดียว** ยึดจาก session อย่างเดียว ส่งพารามิเตอร์ข้ามคนมาก็ไม่มีผล
+ *
+ * ไม่กัน role อื่นออก เพราะ admin/accounting ที่ผูกพนักงานไว้ก็ส่งของตัวเองได้ตามปกติ — ตัวกันจริงคือ
+ * ต้องมี employeeId ผูกบัญชีอยู่ บัญชีที่ยังไม่ผูกจะส่งไม่ได้และต้องบอกเหตุผลให้ชัด ไม่ใช่เงียบ
+ */
+timesheetSubmissionsRouter.post('/mine/upload', async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) {
+    return res.status(403).json({ error: 'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหน ส่ง Timesheet ไม่ได้ — แจ้งผู้ดูแลระบบให้ผูกบัญชีให้ก่อน' });
+  }
+  try {
+    const result = await submitOwnTimesheetFile({
+      employeeId,
+      actor: req.user!.nameTh,
+      fileName: String(req.body?.fileName ?? ''),
+      fileBase64: String(req.body?.fileBase64 ?? ''),
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof SubmitOwnFileError) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
 });
 
 /** ภาพรวมทุกคน — admin/แผนกบัญชีเท่านั้น (role 'user' ไปไม่ถึงโค้ดนี้เลย ถูกกันที่ requireAdmin) */

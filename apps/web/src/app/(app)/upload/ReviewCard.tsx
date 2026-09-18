@@ -1,7 +1,9 @@
 'use client';
 
-import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useRouter } from 'next/navigation';
 import { StatusPill, Tag } from '../../../components/ui';
+import { Icon } from '../../../components/Icon';
 import HrddCompare from './HrddCompare';
 import { useLang } from '../../../lib/language';
 
@@ -28,6 +30,9 @@ export interface ReadResultShape {
 }
 
 const LEAVE_TYPE_LABEL: Record<string, string> = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง', unknown: 'อื่นๆ', other: 'อื่นๆ' };
+/** ไอคอนต่อประเภทลา — ชุดเดียวกับ LEAVE_ICON ในหน้าตรวจ Manday's [id]/page.tsx เพื่อให้เห็นภาพเดียวกัน
+ * ตั้งแต่ตอนกรอกจนถึงตอนตรวจ */
+const LEAVE_TYPE_ICON: Record<string, string> = { sick: 'sickface', personal: 'idcard', vacation: 'plane', unpaid: 'cal', unknown: 'cal', other: 'cal' };
 
 /** ประเภทหัก ณ ที่จ่ายที่พบบ่อย — ported from public/app.js's WHT_TYPES */
 const WHT_TYPES = [
@@ -46,17 +51,23 @@ function money(n: number) {
  * editable employee/position/period, confirm-or-discard. */
 export default function ReviewCard({ result, onDone }: { result: ReadResultShape; onDone: () => void }) {
   const { tx } = useLang();
-  const [employeeName, setEmployeeName] = useState(result.data.employeeName ?? '');
-  const [position, setPosition] = useState(result.data.position ?? '');
-  const [period, setPeriod] = useState(result.data.period ?? '');
-  const [workDays, setWorkDays] = useState(String(result.data.totalWorkDays ?? ''));
+  const router = useRouter();
+  const [employeeName, setEmployeeName] = useState(result.data?.employeeName ?? '');
+  const [position, setPosition] = useState(result.data?.position ?? '');
+  const [period, setPeriod] = useState(result.data?.period ?? '');
+  const [workDays, setWorkDays] = useState(String(result.data?.totalWorkDays ?? ''));
+  /* ทุกช่องที่อ่านจากผลของเครื่องอ่านต้องกันค่าว่างไว้หมด — ผลที่ส่งกลับมาไม่ได้การันตีว่าครบทุกฟิลด์
+     (เครื่องอ่านคนละเจ้า/เอกสารคนละแบบ ให้ผลไม่เท่ากัน) ถ้าพลาดแม้ช่องเดียว การ์ดนี้จะ throw ตอน
+     render แล้ว **ทั้งหน้าอัปโหลดกลายเป็นจอขาว** ("Application error") ซึ่งแย่กว่าแสดงค่าว่างมาก
+     เพราะไฟล์ถูกอ่านไปแล้ว (เสียเวลา/เสียเครดิต) แต่คนกดไม่เหลืออะไรให้ดูเลย (18 ก.ย. 69) */
   const [leaveDays, setLeaveDays] = useState<Array<{ date: string; type: string }>>(
-    result.data.leaveDays.map((l) => ({ date: l.date, type: l.type })),
+    (result.data?.leaveDays ?? []).map((l) => ({ date: l.date, type: l.type })),
   );
   const [whtPct, setWhtPct] = useState(pctRound((result.contract?.whtRate ?? 0.03) * 100));
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmResult, setConfirmResult] = useState<any>(null);
+  const { period: periodNotes, data: dataNotes } = splitNotesByTopic(result.data?.notes ?? []);
 
   function addLeaveDay() {
     setLeaveDays((d) => [...d, { date: '', type: 'sick' }]);
@@ -94,7 +105,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
         body: JSON.stringify({
           documentNo: result.documentNo,
           extraction: {
-            ...result.data,
+            ...(result.data ?? {}),
             employeeName,
             position,
             period,
@@ -125,6 +136,16 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
     }
   }
 
+  // บันทึกเสร็จ = จบขั้นตอนที่ 1 แล้ว ขั้นต่อไปของ flow คือ "ตรวจ Manday" เสมอ — เดิมค้างอยู่หน้านี้
+  // ให้กดเข้าเมนูเองต่อ ซึ่งไม่ใช่ next step ที่ระบบตั้งใจให้ไป (เจ้าของระบบสั่ง 18 ก.ย. 69: ทุกปุ่ม
+  // ทุกฟีเจอร์ต้องพาไปหน้าถัดไปของ flow เอง ไม่ใช่ค้างหน้าเดิม) โชว์ผลไว้ครู่หนึ่งให้ทันอ่านตัวเลข
+  // ก่อนพาไปต่ออัตโนมัติ
+  useEffect(() => {
+    if (!confirmResult) return;
+    const t = setTimeout(() => router.push('/manday'), 1400);
+    return () => clearTimeout(t);
+  }, [confirmResult, router]);
+
   if (confirmResult) {
     return (
       <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 18 }}>
@@ -133,6 +154,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
           {tx('เลขที่')} {confirmResult.timesheetId} · {tx('สถานะ')} {confirmResult.status} ·{' '}
           {confirmResult.manday ? `${tx('ยอด')} ${confirmResult.manday.lineAmount?.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${tx('บาท')}` : ''}
         </div>
+        <div className="sub" style={{ marginTop: 10 }}>{tx('กำลังพาไปหน้า "ตรวจ Manday"…')}</div>
       </div>
     );
   }
@@ -142,8 +164,8 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <Tag tone="mu">{tx('เลขที่')} {result.documentNo}</Tag>
         <Tag tone="mu">{tx('โมเดล')} {result.model}</Tag>
-        {result.matching.employee ? (
-          <StatusPill tone="ok">{tx('จับคู่')}: {result.matching.employee.nameTh}</StatusPill>
+        {result.matching?.employee ? (
+          <StatusPill tone="ok">{tx('จับคู่')}: {result.matching.employee!.nameTh}</StatusPill>
         ) : (
           <StatusPill tone="cr">{tx('จับคู่พนักงานไม่ได้')}</StatusPill>
         )}
@@ -159,6 +181,8 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
             พิมพ์ได้ด้วยจะขัดกันเองทันทีที่สองค่าไม่ตรง จึงโชว์เป็นช่องอ่านอย่างเดียวให้รูปแบบเหมือนกัน */}
         <Field label={tx('วันลา (นับอัตโนมัติ)')} value={String(leaveDays.length)} readOnly />
       </div>
+      {/* โน้ตเรื่องรอบเดือนอยู่ติดช่อง "รอบเดือน" ด้านบนทันที แทนที่จะลอยรวมอยู่ท้ายฟอร์ม */}
+      <NoteList notes={periodNotes} />
 
       <div style={{ marginBottom: 18 }}>
         <div className="section-head" style={{ marginTop: 0 }}>
@@ -170,12 +194,18 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
             + {tx('เพิ่มวันลา')}
           </button>
         </div>
+        {/* โน้ตเรื่องตารางรายวัน/วันลา/OT/วันทำงาน — เกี่ยวกับข้อมูลรายวันทั้งหมด จึงมาก่อนรายการวันลา
+            ที่เป็นข้อมูลรายวันส่วนเดียวที่มีอยู่จริงในฟอร์มนี้ */}
+        <NoteList notes={dataNotes} />
         {leaveDays.length === 0 ? (
           <div className="leave-empty">{tx('ไม่มีวันลา')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {leaveDays.map((l, i) => (
-              <div key={i} className="leave-row">
+              <div key={i} className={`leave-row lv-${l.type}`}>
+                <span className="lv-ic">
+                  <Icon name={LEAVE_TYPE_ICON[l.type] ?? 'cal'} className="sm" />
+                </span>
                 <input
                   type="date"
                   value={l.date}
@@ -191,15 +221,15 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
                       </option>
                     ))}
                 </select>
-                <button className="btn ghost sm" type="button" onClick={() => removeLeaveDay(i)}>
-                  {tx('ลบ')}
+                <button className="btn ghost sm icon" type="button" title={tx('ลบ')} aria-label={tx('ลบ')} onClick={() => removeLeaveDay(i)}>
+                  <Icon name="x" />
                 </button>
               </div>
             ))}
           </div>
         )}
         <HrddCompare
-          employeeId={result.matching.employee?.id ?? null}
+          employeeId={result.matching?.employee?.id ?? null}
           period={period}
           leaveDays={leaveDays}
           onLeaveDaysChange={setLeaveDays}
@@ -208,21 +238,11 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
 
       <WhtSection contract={result.contract} pct={whtPct} onChange={setWhtPct} />
 
-      {result.data.notes.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-          {result.data.notes.map((n, i) => (
-            <div key={i} className="sub">
-              ⓘ {n}
-            </div>
-          ))}
-        </div>
-      )}
-
       {error && <div style={{ color: 'var(--cr)', marginBottom: 14 }}>{error}</div>}
 
-      {result.blockers.length > 0 && (
+      {(result.blockers ?? []).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-          {result.blockers.map((b, i) => (
+          {(result.blockers ?? []).map((b, i) => (
             <div key={i} style={{ display: 'flex', gap: 10 }}>
               <StatusPill tone="cr">{tx('ติดปัญหา (ตอนอ่านไฟล์)')}</StatusPill>
               <span className="sub" style={{ marginTop: 4 }}>
@@ -244,6 +264,34 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
           {confirming ? tx('กำลังบันทึก…') : tx('ยืนยันและบันทึกเข้าระบบ')}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * เดิม `result.data.notes` ทั้งหมดไม่ว่าจะพูดเรื่องอะไรถูกโยนรวมเป็นก้อนเดียวลอยไว้ท้ายฟอร์ม —
+ * อ่านไม่รู้เรื่องว่าโน้ตไหนเตือนเรื่องอะไร เพราะไกลจากช่องที่พูดถึงเกินไป (เจ้าของระบบสั่ง 18 ก.ย. 69)
+ *
+ * โน้ตเป็น string ดิบจากฝั่งเซิร์ฟเวอร์ ไม่มีแท็กบอกว่าเกี่ยวกับส่วนไหน จึงแยกด้วยการจับคำในเนื้อความ
+ * เอง — แยกแค่สองกลุ่มพอ ไม่ทำละเอียดเกินไปจนเปราะ เพราะเนื้อความมาจาก abbyyClient.ts และเปลี่ยนคำ
+ * ได้ทุกเมื่อ: กลุ่ม "รอบเดือน" ไปอยู่ติดช่องกรอกรอบเดือน ที่เหลือ (ตาราง/วันลา/OT/วันทำงาน) ไปอยู่ติด
+ * ส่วน "วันลาที่อ่านได้" เพราะเป็นส่วนข้อมูลรายวันส่วนเดียวที่มีอยู่จริงในฟอร์มนี้
+ */
+function splitNotesByTopic(notes: string[]): { period: string[]; data: string[] } {
+  const period = notes.filter((n) => n.includes('รอบเดือน'));
+  const data = notes.filter((n) => !n.includes('รอบเดือน'));
+  return { period, data };
+}
+
+function NoteList({ notes }: { notes: string[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, marginBottom: 8 }}>
+      {notes.map((n, i) => (
+        <div key={i} className="sub">
+          ⓘ {n}
+        </div>
+      ))}
     </div>
   );
 }
@@ -339,7 +387,6 @@ function WhtSection({
     <div className="fsec">
       <div className="fsec-h">
         <b>{tx('หัก ณ ที่จ่าย')}</b>
-        <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('ตามที่ฝ่ายบัญชีกำหนด')}</span>
       </div>
       <div className="wht-types">
         {WHT_TYPES.map((w) => (
@@ -349,10 +396,7 @@ function WhtSection({
         ))}
       </div>
       <div className="stepper-row">
-        <div className="lbl">
-          {tx('อัตราหัก ณ ที่จ่าย')}
-          <small>{tx('ปรับได้เองถ้าเงื่อนไขต่างจากค่ามาตรฐานของประเภทที่เลือก')}</small>
-        </div>
+        <div className="lbl">{tx('อัตราหัก ณ ที่จ่าย')}</div>
         <div className="stepper">
           <button type="button" {...minus}>
             −

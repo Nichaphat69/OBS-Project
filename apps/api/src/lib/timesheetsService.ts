@@ -64,6 +64,9 @@ export interface TimesheetListItem {
   standardWorkingDays: number | null;
   dailyRate: number | null;
   leaveDatesText: string;
+  /** เหมือน leaveDatesText แต่แยกเป็นรายวัน — หน้ารายการโชว์เป็นกล่องข้อความแยกทีละวันแทนที่จะ
+   * รวมเป็นบรรทัดเดียวคั่นด้วยจุลภาค (18 ก.ย. 69 ตามที่เจ้าของระบบขอ: อ่านยากเมื่อลาหลายวันในเดือนเดียว) */
+  leaveDates: Array<{ date: string; type: string; label: string }>;
   approvedByLabel: string | null;
   /** เครื่องอ่านที่ผลิตตัวเลขในแถวนี้ รูปแบบ `<engine>[:<skill/แม่แบบ>][ · คนยืนยัน]`
    * อยู่ในก้อน extraction อยู่แล้ว ดึงขึ้นมาเป็นฟิลด์เดี่ยวเพราะหน้ารายการต้องกวาดดูทั้งตารางว่า
@@ -124,6 +127,11 @@ async function shapeTimesheetRow(row: any): Promise<TimesheetListItem> {
     leaveDatesText: (computed?.leaveDays ?? [])
       .map((l: any) => `${thaiDate(l.date)}${LEAVE_TH[l.type] ? ` (${LEAVE_TH[l.type]})` : ''}`)
       .join(', '),
+    leaveDates: (computed?.leaveDays ?? []).map((l: any) => ({
+      date: l.date,
+      type: l.type,
+      label: LEAVE_TH[l.type] ?? l.type,
+    })),
     approvedByLabel: row.approvedBy ?? null,
     readModel: (row.extraction as any)?.model ?? null,
   };

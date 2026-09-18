@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, PageHeader, StatusPill, Tag } from '../../../../../components/ui';
 import { Icon } from '../../../../../components/Icon';
-import { useToast } from '../../../../../components/Overlays';
+import { useToast, usePdfPreview } from '../../../../../components/Overlays';
 import { useLang } from '../../../../../lib/language';
 
 interface InvoiceItem {
@@ -91,24 +91,19 @@ interface PeriodEmployee {
   statusLabel: string;
 }
 
-interface ApprovalGate {
-  status: string;
-  requestedAt: string | null;
-  requestedBy: string | null;
-  decidedAt: string | null;
-  decidedBy: string | null;
-}
-
-const APPROVAL_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu'> = {
-  approved: 'ok',
-  rejected: 'cr',
-  pending: 'wn',
-  requested: 'wn',
-};
-
 function money(n: number | null | undefined) {
   if (n === null || n === undefined) return '—';
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * ป้ายสถานะ Timesheet เฉพาะหน้ารายละเอียดรอบบิลนี้เท่านั้น — เจ้าของระบบชี้ 18 ก.ย. 69 ว่า "ตรวจผ่าน"
+ * (มาจาก statusLabel ฝั่งเซิร์ฟเวอร์ ใช้คำเดียวกับหน้าตรวจ Manday) ไม่สื่อความในบริบทนี้ เพราะมาถึง
+ * หน้านี้แล้วแปลว่าผ่านการตรวจมาแล้วเสมอ สิ่งที่ยังไม่รู้คือ "วางบิลหรือยัง" จึงเขียนทับเฉพาะสถานะ
+ * 'verified' เป็น "รอวางบิล" — สถานะอื่น (เช่น billed) ยังใช้คำจากเซิร์ฟเวอร์เหมือนเดิม
+ */
+function cycleStatusLabel(e: { status: string; statusLabel: string }): string {
+  return e.status === 'verified' ? 'รอวางบิล' : e.statusLabel;
 }
 
 function initials(name: string) {
@@ -120,10 +115,10 @@ function initials(name: string) {
 export default function CycleDetailPage() {
   const { tx } = useLang();
   const toast = useToast();
+  const openPdfPreview = usePdfPreview();
   const params = useParams<{ contractId: string; period: string }>();
   const [data, setData] = useState<CyclePreview | null>(null);
   const [employees, setEmployees] = useState<PeriodEmployee[] | null>(null);
-  const [approval, setApproval] = useState<ApprovalGate | null | undefined>(undefined);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approveResult, setApproveResult] = useState<{ documentNo: string | null; shareLink: string | null; mode: string; note: string | null } | null>(
@@ -140,9 +135,6 @@ export default function CycleDetailPage() {
     fetch(`/api/cycles/${params.contractId}/${params.period}/employees`, { cache: 'no-store' })
       .then((r) => r.json())
       .then(setEmployees);
-    fetch(`/api/cycles/${params.contractId}/${params.period}/approval`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then(setApproval);
   }
 
   useEffect(load, [params.contractId, params.period]);
@@ -240,33 +232,6 @@ export default function CycleDetailPage() {
         </div>
       )}
 
-      {approval !== undefined && (
-        <div className="card">
-          <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div className="ey">{tx('การอนุมัติผ่าน LINE')}</div>
-            {approval === null ? (
-              <span className="sub">{tx('ยังไม่มีการขออนุมัติผ่าน LINE')}</span>
-            ) : (
-              <>
-                <StatusPill tone={APPROVAL_TONE[approval.status] ?? 'mu'}>{approval.status}</StatusPill>
-                {approval.requestedAt && (
-                  <span className="sub">
-                    {tx('ขออนุมัติเมื่อ')} {approval.requestedAt.slice(0, 19).replace('T', ' ')}
-                    {approval.requestedBy ? ` · ${approval.requestedBy}` : ''}
-                  </span>
-                )}
-                {approval.decidedAt && (
-                  <span className="sub">
-                    {tx('ตัดสินใจเมื่อ')} {approval.decidedAt.slice(0, 19).replace('T', ' ')}
-                    {approval.decidedBy ? ` · ${approval.decidedBy}` : ''}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {data.blockers.length > 0 && (
         <div className="card">
           <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -282,23 +247,8 @@ export default function CycleDetailPage() {
         </div>
       )}
 
-      {data.warnings.length > 0 && (
-        <div className="card">
-          <div className="bd" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {data.warnings.map((w, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10 }}>
-                <StatusPill tone="wn">{w.employee}</StatusPill>
-                <span className="sub" style={{ marginTop: 4 }}>
-                  {w.title}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {employees && (
-        <Card title={tx('พนักงานในรอบนี้')} flush>
+        <Card title={tx('พนักงานในสัญญา')} flush>
           <div className="tw">
             <table>
               <thead>
@@ -315,7 +265,7 @@ export default function CycleDetailPage() {
                     <td>{e.position}</td>
                     <td>
                       <Tag tone={e.status === 'not_submitted' ? 'mu' : e.status === 'billed' ? 'ok' : 'wn'}>
-                        {tx(e.statusLabel)}
+                        {tx(cycleStatusLabel(e))}
                       </Tag>
                     </td>
                   </tr>
@@ -467,9 +417,9 @@ export default function CycleDetailPage() {
                                 ? `/api/timesheets/${encodeURIComponent(a.timesheetId)}/file`
                                 : null;
                             return href ? (
-                              <a key={i} className="file" href={href} target="_blank" rel="noreferrer" title={tx('เปิดดูไฟล์นี้')}>
+                              <button key={i} type="button" className="file" onClick={() => openPdfPreview(href, a.label)} title={tx('เปิดดูไฟล์นี้')}>
                                 <span className="pd">PDF</span> {a.label}
-                              </a>
+                              </button>
                             ) : (
                               <span key={i} className="file">
                                 <span className="pd">PDF</span> {a.label}

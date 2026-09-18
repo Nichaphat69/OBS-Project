@@ -443,7 +443,12 @@ async function handleTicketPostback({
   const line = client ?? new LineClient();
 
   if (action === 'start') {
-    const linked = await prisma.employee.findFirst({ where: { lineUserId: userId ?? undefined }, select: { id: true } });
+    // ไม่มี userId = ไม่รู้ว่าใครกด ต้องแปลว่า "ไม่เจอใคร" ไม่ใช่ "ใครก็ได้" — `lineUserId: undefined`
+    // ทำให้ where กลายเป็น {} แล้วคืนพนักงานคนแรกในตารางมาเฉยๆ ด่าน !linked ข้างล่างจึงไม่เคยทำงาน
+    // และตั๋วแจ้งปัญหาจะถูกเปิดใส่ชื่อคนที่ไม่เกี่ยวข้องเงียบๆ (18 ก.ย. 69 — ดู lineWebhookNoUserId.test.ts)
+    const linked = userId
+      ? await prisma.employee.findFirst({ where: { lineUserId: userId }, select: { id: true } })
+      : null;
     if (!linked) return { outcome: 'not_linked' };
     await startSupportTicket(linked.id, value);
     if (replyToken) {
@@ -497,7 +502,11 @@ async function handleTimesheetMethodPostback({
 }): Promise<unknown> {
   const line = client ?? new LineClient();
 
-  const employee = await prisma.employee.findFirst({ where: { lineUserId: userId ?? undefined }, select: { id: true, nameTh: true } });
+  // เหตุผลเดียวกับใน handleTicketPostback — ไม่มี userId ต้องแปลว่าไม่เจอใคร ไม่ใช่ใครก็ได้ ไม่งั้น
+  // "เลือกวิธีส่ง Timesheet" จะถูกบันทึกใส่พนักงานคนแรกในตาราง แล้วไหลเข้าหน้า "บันทึกการส่ง" ผิดคน
+  const employee = userId
+    ? await prisma.employee.findFirst({ where: { lineUserId: userId }, select: { id: true, nameTh: true } })
+    : null;
   if (!employee) return { outcome: 'not_linked' };
 
   // เก็บว่าพนักงาน "ได้รับข้อความตอบกลับไหม" เพื่อบันทึกลง timesheet_submissions — ไม่เปลี่ยนพฤติกรรม

@@ -318,7 +318,6 @@ export default function CustomersContractsTab() {
   return (
     <>
       <div className="metabar">
-        <span className="ey">{contracts.length} {tx('บริษัท')}</span>
         <FlowAccountToggle />
         <button className="btn pri sm" onClick={() => setAddOpen(true)}>
           <Icon name="grid" className="sm" /> {tx('เพิ่มลูกค้าใหม่')}
@@ -476,6 +475,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
   const [vat, setVat] = useState('7');
   const [wht, setWht] = useState('3');
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch('/api/flowaccount/companies', { cache: 'no-store' })
@@ -497,7 +497,10 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     setContactEmail(c.contactEmail ?? '');
     if (c.projectName) setProjectName(c.projectName);
     setFaContactId(c.flowaccountContactId);
-    setFaHint(c.employees?.length ? `${tx('ดึงพนักงาน')} ${c.employees.length} ${tx('คน + เรทต่อเดือนจากใบเสนอราคานี้มาให้อัตโนมัติ')}` : tx('ใบเสนอราคานี้ไม่มีรายชื่อพนักงานให้ดึง — เพิ่มพนักงานเองทีหลังได้จากแท็บ "พนักงาน & ชื่อพ้อง"'));
+    // ข้อความหลังนี้เคยชวนไปเพิ่มพนักงานเองทีหลังจากแท็บ "พนักงาน" — ตัดออกแล้วเพราะแท็บนั้นไม่มีปุ่ม
+    // เพิ่มพนักงานอีก (18 ก.ย. 69 ตามกติกาที่เจ้าของระบบยืนยัน: พนักงานเข้าระบบได้ทางเดียวคือผ่าน
+    // ใบเสนอราคาที่ผูกกับสัญญาเท่านั้น) ถ้าใบเสนอราคาไม่มีรายชื่อ ทางแก้คือไปเพิ่มที่ต้นทางใน FlowAccount
+    setFaHint(c.employees?.length ? `${tx('ดึงพนักงาน')} ${c.employees.length} ${tx('คน + เรทต่อเดือนจากใบเสนอราคานี้มาให้อัตโนมัติ')}` : tx('ใบเสนอราคานี้ไม่มีรายชื่อพนักงานให้ดึง — เพิ่มรายชื่อในใบเสนอราคาที่ FlowAccount ก่อน'));
   }
 
   async function save() {
@@ -506,6 +509,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     const po = poNo.trim();
     const pn = projectName.trim();
     if (!nt || !ti) {
+      setFieldErrors(new Set([!nt && 'nameTh', !ti && 'taxId'].filter(Boolean) as string[]));
       toast(tx('กรอกชื่อบริษัทและเลขผู้เสียภาษีให้ครบก่อน'), true);
       return;
     }
@@ -515,9 +519,13 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     const hasAnyContractField = Boolean(po || pn || startDate || endDate);
     const hasAllContractFields = Boolean(po && pn && startDate && endDate);
     if (hasAnyContractField && !hasAllContractFields) {
+      setFieldErrors(
+        new Set([!po && 'poNo', !pn && 'projectName', !startDate && 'startDate', !endDate && 'endDate'].filter(Boolean) as string[]),
+      );
       toast(tx('ถ้าจะเพิ่มสัญญาด้วยเลย ต้องกรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบ — หรือเว้นว่างทั้งหมดไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้'), true);
       return;
     }
+    setFieldErrors(new Set());
     setSaving(true);
     try {
       const customerRes = await fetch('/api/customers', {
@@ -650,11 +658,16 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
       <div className="frm">
         <label>
           {tx('ชื่อบริษัท')}
-          <input value={nameTh} onChange={(e) => setNameTh(e.target.value)} placeholder="เช่น บริษัท ทดสอบ จำกัด" />
+          <input
+            className={fieldErrors.has('nameTh') ? 'err' : undefined}
+            value={nameTh}
+            onChange={(e) => setNameTh(e.target.value)}
+            placeholder="เช่น บริษัท ทดสอบ จำกัด"
+          />
         </label>
         <label>
           {tx('เลขผู้เสียภาษี')}
-          <input value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+          <input className={fieldErrors.has('taxId') ? 'err' : undefined} value={taxId} onChange={(e) => setTaxId(e.target.value)} />
         </label>
         <label>
           {tx('สาขา')}
@@ -694,7 +707,12 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
         <div className="frm">
           <label>
             {tx('เลขที่ใบว่าจ้าง (PO)')}
-            <input value={poNo} onChange={(e) => setPoNo(e.target.value)} placeholder="เช่น 26/B0200" />
+            <input
+              className={fieldErrors.has('poNo') ? 'err' : undefined}
+              value={poNo}
+              onChange={(e) => setPoNo(e.target.value)}
+              placeholder="เช่น 26/B0200"
+            />
           </label>
           <label>
             {tx('เลขที่สัญญา')}
@@ -702,7 +720,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           </label>
           <label>
             {tx('ชื่อโครงการ')}
-            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+            <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} />
           </label>
           <label>
             {tx('ตัวหารอัตราต่อวัน')}
@@ -719,11 +737,21 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           </label>
           <label>
             {tx('วันเริ่มสัญญา')}
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input
+              type="date"
+              className={fieldErrors.has('startDate') ? 'err' : undefined}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
           </label>
           <label>
             {tx('วันสิ้นสุดสัญญา')}
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input
+              type="date"
+              className={fieldErrors.has('endDate') ? 'err' : undefined}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
           </label>
           <label>
             VAT (%)
@@ -734,7 +762,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
           </label>
         </div>
-        <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"')}</small>
+        <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
       </div>
 
     </Card>
@@ -757,14 +785,19 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
   const [vat, setVat] = useState('7');
   const [wht, setWht] = useState('3');
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
 
   async function save() {
     const po = poNo.trim();
     const pn = projectName.trim();
     if (!po || !pn || !startDate || !endDate) {
+      setFieldErrors(
+        new Set([!po && 'poNo', !pn && 'projectName', !startDate && 'startDate', !endDate && 'endDate'].filter(Boolean) as string[]),
+      );
       toast(tx('กรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน'), true);
       return;
     }
+    setFieldErrors(new Set());
     setSaving(true);
     try {
       const res = await fetch('/api/contracts', {
@@ -815,7 +848,12 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
       <div className="frm">
         <label>
           {tx('เลขที่ใบว่าจ้าง (PO)')}
-          <input value={poNo} onChange={(e) => setPoNo(e.target.value)} placeholder="เช่น 26/B0200" />
+          <input
+            className={fieldErrors.has('poNo') ? 'err' : undefined}
+            value={poNo}
+            onChange={(e) => setPoNo(e.target.value)}
+            placeholder="เช่น 26/B0200"
+          />
         </label>
         <label>
           {tx('เลขที่สัญญา')}
@@ -823,7 +861,7 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
         </label>
         <label>
           {tx('ชื่อโครงการ')}
-          <input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+          <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} />
         </label>
         <label>
           {tx('ตัวหารอัตราต่อวัน')}
@@ -840,11 +878,21 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
         </label>
         <label>
           {tx('วันเริ่มสัญญา')}
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input
+            type="date"
+            className={fieldErrors.has('startDate') ? 'err' : undefined}
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
         </label>
         <label>
           {tx('วันสิ้นสุดสัญญา')}
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <input
+            type="date"
+            className={fieldErrors.has('endDate') ? 'err' : undefined}
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
         </label>
         <label>
           VAT (%)
@@ -855,7 +903,7 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
           <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
         </label>
       </div>
-      <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"')}</small>
+      <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
     </Card>
   );
 }
@@ -881,6 +929,7 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
   const [wht, setWht] = useState(String(Math.round(contract.whtRate * 100)));
   const [creditDays, setCreditDays] = useState(String(contract.creditDays));
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
 
   async function save() {
     const cnt = customerNameTh.trim();
@@ -888,9 +937,17 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
     const po = poNo.trim();
     const pn = projectName.trim();
     if (!cnt || !ti || !po || !pn || !startDate || !endDate) {
+      setFieldErrors(
+        new Set(
+          [!cnt && 'customerNameTh', !ti && 'taxId', !po && 'poNo', !pn && 'projectName', !startDate && 'startDate', !endDate && 'endDate'].filter(
+            Boolean,
+          ) as string[],
+        ),
+      );
       toast(tx('กรอกชื่อบริษัท เลขผู้เสียภาษี เลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน'), true);
       return;
     }
+    setFieldErrors(new Set());
     setSaving(true);
     try {
       const res = await fetch(`/api/contracts/${encodeURIComponent(contract.id)}`, {
@@ -950,11 +1007,11 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
       <div className="frm">
         <label>
           {tx('ชื่อบริษัท')}
-          <input value={customerNameTh} onChange={(e) => setCustomerNameTh(e.target.value)} />
+          <input className={fieldErrors.has('customerNameTh') ? 'err' : undefined} value={customerNameTh} onChange={(e) => setCustomerNameTh(e.target.value)} />
         </label>
         <label>
           {tx('เลขผู้เสียภาษี')}
-          <input value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+          <input className={fieldErrors.has('taxId') ? 'err' : undefined} value={taxId} onChange={(e) => setTaxId(e.target.value)} />
         </label>
         <label>
           {tx('ผู้ประสานงาน')}
@@ -977,7 +1034,7 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
         <div className="frm">
           <label>
             {tx('เลขที่ใบว่าจ้าง (PO)')}
-            <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
+            <input className={fieldErrors.has('poNo') ? 'err' : undefined} value={poNo} onChange={(e) => setPoNo(e.target.value)} />
           </label>
           <label>
             {tx('เลขที่สัญญา')}
@@ -985,7 +1042,7 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
           </label>
           <label>
             {tx('ชื่อโครงการ')}
-            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+            <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} />
           </label>
           <label>
             {tx('ตัวหารอัตราต่อวัน')}
@@ -1002,11 +1059,21 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
           </label>
           <label>
             {tx('วันเริ่มสัญญา')}
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input
+              type="date"
+              className={fieldErrors.has('startDate') ? 'err' : undefined}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
           </label>
           <label>
             {tx('วันสิ้นสุดสัญญา')}
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input
+              type="date"
+              className={fieldErrors.has('endDate') ? 'err' : undefined}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
           </label>
           <label>
             VAT (%)
