@@ -39,6 +39,23 @@ export async function startEmployeeLineLink(employeeId: string): Promise<StartLi
   return { alreadyLinked: false, code };
 }
 
+/** ผูกไลน์ทางลัดผ่าน LINE Login (ดู lineLoginClient.ts) — sub ที่ได้มาจาก ID token ตรงกับ Messaging
+ * userId อยู่แล้วเพราะ Account Link ผูกสอง channel ไว้ในหน้า Console เลยข้ามขั้นตอนรหัส 6 หลักได้
+ * เช็คก่อนว่า lineUserId นี้ไม่ได้ผูกกับพนักงานคนอื่นอยู่แล้ว — ป้องกันกรณีพนักงานคนหนึ่งเผลอกดยืนยันด้วย
+ * บัญชีไลน์ที่เพื่อนร่วมงานผูกไว้ก่อนหน้า (เช่น ใช้เครื่องเดียวกัน/แอดมินตั้งค่าไลน์ผิดคน) ไม่ให้ทับเงียบๆ */
+export async function linkEmployeeLineViaLogin(employeeId: string, lineUserId: string): Promise<void> {
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
+  if (!employee) throw new EmployeeLineLinkError('ไม่พบพนักงาน', 404);
+
+  const takenBy = await prisma.employee.findFirst({ where: { lineUserId, id: { not: employeeId } }, select: { id: true } });
+  if (takenBy) throw new EmployeeLineLinkError('บัญชีไลน์นี้ถูกผูกกับพนักงานคนอื่นไปแล้ว — ให้คนนั้นเลิกเชื่อมต่อก่อน', 409);
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { lineUserId, lineLinkCode: null, lineLinkCodeExpiresAt: null },
+  });
+}
+
 /** เลิกผูกบัญชีไลน์ — เผื่อผูกผิดคน/พนักงานเปลี่ยนเครื่อง ต้องผูกใหม่ */
 export async function unlinkEmployeeLine(employeeId: string): Promise<{ unlinked: true }> {
   const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });

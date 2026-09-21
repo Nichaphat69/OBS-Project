@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, Kpi, PageHeader, PoTag, ProgressCell, TaskList, type TaskLink } from '../../../components/ui';
+import { Card, EmptyState, Kpi, PageHeader, PoTag, ProgressCell, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 
@@ -66,44 +66,44 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         }
       />
 
-      <Card title={tx('สัญญา')} flush>
-        <div className="tw">
-          <table>
-            <thead>
-              <tr>
-                <th>PO</th>
-                <th>{tx('ลูกค้า')}</th>
-                <th>{tx('โครงการ')}</th>
-                <th>{tx('คน')}</th>
-                <th>{tx('ความคืบหน้า')}</th>
-                <th className="r">{tx('มูลค่าคงเหลือ')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.contracts.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <PoTag>{c.poNo}</PoTag>
-                  </td>
-                  <td className="nm">{c.customerName}</td>
-                  <td>{c.projectName}</td>
-                  <td>{c.headcount}</td>
-                  <td>
-                    <ProgressCell percent={c.progress} fraction={`${c.monthsBilled}/${c.monthsTotal} (${c.progress}%)`} />
-                  </td>
-                  <td className="r n">{money(c.remainingValue)}</td>
-                </tr>
-              ))}
-              {data.contracts.length === 0 && (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--mut)' }}>
-                    {tx('ไม่มีสัญญา')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <Card title={tx('สัญญา')}>
+        {data.contracts.length === 0 ? (
+          <EmptyState label={tx('ไม่มีสัญญา')} />
+        ) : (
+          <div className="constrips">
+            {data.contracts.map((c) => (
+              <div key={c.id} className="constrip">
+                <div className="cf">
+                  <span className="lbl">&nbsp;</span>
+                  <PoTag>{c.poNo}</PoTag>
+                </div>
+                <div className="cf">
+                  <span className="lbl">{tx('ลูกค้า')}</span>
+                  <Tag tone="mu">{c.customerName}</Tag>
+                </div>
+                <div className="cf grow">
+                  <span className="lbl">{tx('โครงการ')}</span>
+                  <b>{c.projectName}</b>
+                </div>
+                <div className="cf">
+                  <span className="lbl">&nbsp;</span>
+                  <span className="hc">
+                    <Icon name="users" className="sm" />
+                    {c.headcount} {tx('คน')}
+                  </span>
+                </div>
+                <div className="cf">
+                  <span className="lbl">{tx('ความคืบหน้า')}</span>
+                  <ProgressCell percent={c.progress} fraction={`${c.monthsBilled}/${c.monthsTotal} (${c.progress}%)`} />
+                </div>
+                <div className="cf end">
+                  <span className="lbl">{tx('มูลค่าคงเหลือ')}</span>
+                  <b className="n cv">{money(c.remainingValue)}</b>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <div className="kpis">
@@ -139,10 +139,10 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
 
         <Card title={tx('สรุปสถานะ Timesheet')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <StatRow label={tx('ทั้งหมด')} value={data.counts.total} />
-            <StatRow label={tx('ข้อมูลไม่ตรง')} value={data.counts.mismatch} />
-            <StatRow label={tx('วางบิลแล้ว')} value={data.counts.billed} />
-            <StatRow label={tx('ตีกลับ')} value={data.counts.rejected} />
+            <StatRow dot="a" label={tx('ทั้งหมด')} value={data.counts.total} />
+            <StatRow dot="wn" label={tx('ข้อมูลไม่ตรง')} value={data.counts.mismatch} />
+            <StatRow dot="ok" label={tx('วางบิลแล้ว')} value={data.counts.billed} />
+            <StatRow dot="cr" label={tx('ตีกลับ')} value={data.counts.rejected} />
           </div>
         </Card>
       </div>
@@ -163,7 +163,9 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                   <tr key={`${c.contractId}-${c.period}-${i}`}>
                     <td>{c.customerName}</td>
                     <td>{c.periodLabel}</td>
-                    <td>{tx(c.stateLabel)}</td>
+                    <td>
+                      <StatusPill tone={CYCLE_STATE_TONE[c.state] ?? 'mu'}>{tx(c.stateLabel)}</StatusPill>
+                    </td>
                   </tr>
                 ))}
                 {data.cycles.length === 0 && (
@@ -194,10 +196,39 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
   );
 }
 
-function StatRow({ label, value }: { label: string; value: number }) {
+/** ใช้ tone เดียวกับ CYCLE_STATE_TONE ใน CompanyDetailClient.tsx (ไม่ได้ใช้ enum เดียวกันเป๊ะ — ที่นี่แค่ไล่สี
+ * ตามความหมาย: ฟ้า=รวม, เหลือง=ต้องแก้, เขียว=เสร็จแล้ว, แดง=มีปัญหา) เพื่อให้จุดสีตรงกับ StatusPill ด้านล่าง */
+const CYCLE_STATE_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu' | 'pr'> = {
+  awaiting: 'mu',
+  partial: 'wn',
+  mismatch: 'cr',
+  checking: 'wn',
+  ready: 'ok',
+  billed: 'ok',
+};
+
+const DOT_COLOR: Record<string, string> = {
+  a: 'var(--brand)',
+  wn: 'var(--wn)',
+  ok: 'var(--ok)',
+  cr: 'var(--cr)',
+};
+
+function StatRow({ label, value, dot }: { label: string; value: number; dot: 'a' | 'wn' | 'ok' | 'cr' }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
-      <span style={{ color: 'var(--mut)' }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13.5 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'var(--mut)' }}>
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: DOT_COLOR[dot],
+            flex: 'none',
+          }}
+        />
+        {label}
+      </span>
       <span style={{ fontWeight: 600 }} className="n">
         {value}
       </span>

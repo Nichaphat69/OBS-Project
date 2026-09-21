@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader } from '../../../components/ui';
+import { PageHeader, TabStrip } from '../../../components/ui';
 import EmployeesTab from './EmployeesTab';
 import CustomersContractsTab from './CustomersContractsTab';
 import HolidaysTab from './HolidaysTab';
@@ -27,13 +27,7 @@ export default function MasterDataClient() {
     <>
       <PageHeader eyebrow={tx('อ้างอิง')} title={tx('ข้อมูลหลัก')} />
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`btn sm${tab === t.key ? ' pri' : ''}`}>
-            {tx(t.label)}
-          </button>
-        ))}
-      </div>
+      <TabStrip tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === 'employees' && <EmployeesTab />}
       {tab === 'customers' && <CustomersContractsTab />}

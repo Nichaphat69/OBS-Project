@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import QRCode from 'qrcode';
 import { Card, ErrorState, StatusPill } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
 
 export default function MyLineLinkClient() {
   const { tx } = useLang();
+  const searchParams = useSearchParams();
   const [linked, setLinked] = useState<boolean | null>(null);
+  const [loginEnabled, setLoginEnabled] = useState(false);
+  const [showCodeFlow, setShowCodeFlow] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
@@ -29,11 +33,23 @@ export default function MyLineLinkClient() {
           return;
         }
         setLinked(Boolean(data.linked));
+        setLoginEnabled(Boolean(data.loginEnabled));
       })
       .catch(() => setLoadError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
   }
 
   useEffect(load, []);
+
+  // callback ของ LINE Login พากลับมาที่หน้านี้พร้อม query param บอกผล (ดู
+  // apps/api/src/routes/myLineLink.ts's /oauth/callback) — วิธีเดียวกับที่ login/page.tsx อ่าน
+  // googlePending/loginError จาก Google callback
+  useEffect(() => {
+    const lineLinked = searchParams.get('lineLinked');
+    const lineLinkError = searchParams.get('lineLinkError');
+    if (lineLinked) setLinked(true);
+    if (lineLinkError) setError(lineLinkError);
+    if (lineLinked || lineLinkError) window.history.replaceState(null, '', '/my-line-link');
+  }, [searchParams]);
 
   // ลิงก์แอดเพื่อน OA ไว้ล่วงหน้าก่อน user กด "เชื่อมต่อไลน์" — พนักงานใหม่ที่ยังไม่เคยแอด LINE บริษัท
   // จะได้รู้ว่าต้องแอดก่อนถึงจะพิมพ์รหัสได้ (ของเดิมมีแค่คำอธิบายเฉยๆ ไม่มีลิงก์/QR ให้กดจริง)
@@ -125,40 +141,68 @@ export default function MyLineLinkClient() {
         </div>
       ) : (
         <div>
-          <div style={{ marginBottom: 18 }}>
-            <div className="sub" style={{ marginBottom: 10 }}>
-              {tx('ขั้นตอนที่ 1: แอดไลน์บริษัทก่อน (ข้ามได้ถ้าแอดไว้แล้ว)')}
+          {loginEnabled && !showCodeFlow ? (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <StatusPill tone="wn">{tx('ยังไม่ได้เชื่อมต่อ')}</StatusPill>
+              </div>
+              <div className="sub" style={{ marginBottom: 14 }}>
+                {tx('กดปุ่มด้านล่างแล้วยืนยันตัวตนในแอป LINE — ระบบจะรู้จักบัญชีไลน์ของคุณอัตโนมัติ ไม่ต้องพิมพ์รหัสเอง (ถ้ายังไม่เคยแอดไลน์บริษัท จะมีหน้าชวนแอดโผล่ขึ้นมาให้ระหว่างทาง)')}
+              </div>
+              <a className="btn pri sm" href="/api/my-line-link/oauth/start">
+                {tx('เชื่อมต่อด้วย LINE')}
+              </a>
+              <div style={{ marginTop: 12 }}>
+                <button type="button" className="btn ghost sm" onClick={() => setShowCodeFlow(true)}>
+                  {tx('เชื่อมต่อด้วยไลน์ไม่ได้? ใช้วิธีพิมพ์รหัสแทน')}
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              {qrDataUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={qrDataUrl} alt={tx('QR แอดไลน์บริษัท')} width={140} height={140} style={{ borderRadius: 8, border: '1px solid var(--hair)' }} />
-              )}
-              {addFriendUrl && (
-                <a className="btn ghost sm" href={addFriendUrl} target="_blank" rel="noopener noreferrer">
-                  {tx('เพิ่มเพื่อนไลน์')} ↗
-                </a>
-              )}
-              {oaFailed && !addFriendUrl && (
-                <div className="sub">
-                  {tx('ดึงลิงก์แอดไลน์อัตโนมัติไม่สำเร็จ — ค้นหา LINE OA ของบริษัทในแอป LINE แล้วแอดเป็นเพื่อนเอง หรือโหลดหน้านี้ใหม่อีกครั้ง')}
+          ) : (
+            <div>
+              <div style={{ marginBottom: 18 }}>
+                <div className="sub" style={{ marginBottom: 10 }}>
+                  {tx('ขั้นตอนที่ 1: แอดไลน์บริษัทก่อน (ข้ามได้ถ้าแอดไว้แล้ว)')}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  {qrDataUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={qrDataUrl} alt={tx('QR แอดไลน์บริษัท')} width={140} height={140} style={{ borderRadius: 8, border: '1px solid var(--hair)' }} />
+                  )}
+                  {addFriendUrl && (
+                    <a className="btn ghost sm" href={addFriendUrl} target="_blank" rel="noopener noreferrer">
+                      {tx('เพิ่มเพื่อนไลน์')} ↗
+                    </a>
+                  )}
+                  {oaFailed && !addFriendUrl && (
+                    <div className="sub">
+                      {tx('ดึงลิงก์แอดไลน์อัตโนมัติไม่สำเร็จ — ค้นหา LINE OA ของบริษัทในแอป LINE แล้วแอดเป็นเพื่อนเอง หรือโหลดหน้านี้ใหม่อีกครั้ง')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 14, display: 'flex', alignItems: 'center', gap: 12, marginBottom: code ? 18 : 0 }}>
+                <StatusPill tone="wn">{tx('ยังไม่ได้เชื่อมต่อ')}</StatusPill>
+                <button className="btn pri sm" disabled={starting} onClick={start}>
+                  {starting ? tx('กำลังออกรหัส…') : tx('ขั้นตอนที่ 2: ขอรหัสเชื่อมต่อ')}
+                </button>
+              </div>
+              {code && (
+                <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 14 }}>
+                  <div className="sub" style={{ marginBottom: 8 }}>
+                    {tx('ขั้นตอนที่ 3: พิมพ์รหัสนี้ส่งไปในแชทไลน์ที่แอดไว้ (หมดอายุใน 10 นาที)')}
+                  </div>
+                  <b style={{ fontSize: '1.3em', letterSpacing: '.05em' }}>{code}</b>
                 </div>
               )}
-            </div>
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 14, display: 'flex', alignItems: 'center', gap: 12, marginBottom: code ? 18 : 0 }}>
-            <StatusPill tone="wn">{tx('ยังไม่ได้เชื่อมต่อ')}</StatusPill>
-            <button className="btn pri sm" disabled={starting} onClick={start}>
-              {starting ? tx('กำลังออกรหัส…') : tx('ขั้นตอนที่ 2: ขอรหัสเชื่อมต่อ')}
-            </button>
-          </div>
-          {code && (
-            <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 14 }}>
-              <div className="sub" style={{ marginBottom: 8 }}>
-                {tx('ขั้นตอนที่ 3: พิมพ์รหัสนี้ส่งไปในแชทไลน์ที่แอดไว้ (หมดอายุใน 10 นาที)')}
-              </div>
-              <b style={{ fontSize: '1.3em', letterSpacing: '.05em' }}>{code}</b>
+              {loginEnabled && (
+                <div style={{ marginTop: 14 }}>
+                  <button type="button" className="btn ghost sm" onClick={() => setShowCodeFlow(false)}>
+                    {tx('← กลับไปใช้วิธีเชื่อมต่อด้วย LINE (คลิกเดียว)')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

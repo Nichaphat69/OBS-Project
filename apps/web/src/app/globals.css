@@ -246,14 +246,29 @@ svg.i.solid { stroke: none; fill: currentColor; }
 .mtab:hover svg.i {
   color: var(--mut);
 }
+/* เมนูที่กำลังเลือกอยู่ — รอบ 5 (21 ก.ย. 69): ตัดแสงมุมขวาล่างออกทั้งหมดตามสั่ง เหลือแค่ "กรอบ" (เส้นขอบ)
+   ที่ไล่สีฟ้าอ่อน→เข้ม พื้นข้างในเป็นสีขาวล้วน — ทำด้วยเทคนิค double background: ชั้นในสุดทาสีขาวเต็ม
+   padding-box ชั้นนอกไล่เฉดเต็ม border-box ให้เห็นเฉพาะแถบ border (2px) เป็นไล่สี ตัวอักษร/ไอคอนยังไล่สี
+   เหมือนรอบก่อนหน้า (ไม่ได้ถูกสั่งเปลี่ยน) */
 .mtab.on {
-  color: #fff;
-  font-weight: 600;
-  background: var(--grad-brand);
-  box-shadow: 0 8px 20px -6px rgba(10, 120, 212, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  color: var(--brand-d);
+  font-weight: 700;
+  border: 2px solid transparent;
+  background-image: linear-gradient(#fff, #fff), linear-gradient(135deg, var(--tint2) 0%, var(--brand-l) 60%, var(--brand) 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow: 0 4px 12px -8px rgba(10, 120, 212, 0.25);
+  position: relative;
+}
+.mtab.on > span:first-of-type {
+  background: linear-gradient(90deg, var(--brand-l) 0%, var(--brand-d) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 .mtab.on svg.i {
-  color: #fff;
+  stroke: url(#navicon-grad);
 }
 .mtab .bdg {
   font-size: 10.5px;
@@ -272,7 +287,9 @@ svg.i.solid { stroke: none; fill: currentColor; }
   color: var(--fnt);
 }
 .mtab.on .bdg {
-  box-shadow: 0 0 0 2px var(--brand);
+  /* เดิมใช้ห่วงสีฟ้าตัดกับพื้นน้ำเงินเข้มเดิม — ตอนนี้พื้นข้างในเป็นขาว/ฟ้าอ่อน เปลี่ยนห่วงเป็นขาวโปร่ง
+     แทน จะได้กลืนกับโทนใหม่และยังแยก badge สีแดงออกจากพื้นหลังได้ชัดเหมือนเดิม */
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
 }
 
 /* ── ท้ายเมนูข้าง — ย่อ/กางเมนู (ported from public/styles.css) ── */
@@ -348,7 +365,9 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   color: var(--ink);
 }
 .topbar .brand .mark {
-  background: var(--grad-brand);
+  /* ไล่สีทั้งคำ "iPassion OBS" (เดิมไล่สีแค่ "Passion" ตรงกลาง ส่วน "i"/"OBS" เป็นสีดำธรรมดา — เจ้าของระบบ
+     สั่ง 21 ก.ย. 69 ให้ไล่สีทั้งคำ โทนฟ้าอ่อนไปฟ้ากลางๆ ไม่เอาเข้มมาก จึงจบที่ --brand ไม่ใช่ --brand-d/-h) */
+  background: linear-gradient(120deg, var(--brand-l) 0%, var(--brand) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -535,6 +554,47 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* ═══ แถบสลับแท็บทรงเส้นใต้ (TabStrip component) ═══ — เจ้าของระบบสั่ง 21 ก.ย. 69: ไม่เอากรอบเทารอบแถบ
+   ลอยอยู่บนพื้นหลังเฉยๆ ไม่มีเส้นแบ่งระหว่างแท็บ และเส้นใต้ไล่สีให้อ่อนลง (จบที่ --brand ไม่ใช่ --brand-d) */
+.tabstrip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 22px;
+}
+.tsi {
+  position: relative;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--mut);
+  background: none;
+  border: none;
+  border-radius: var(--r-ctl);
+  padding: 11px 18px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.tsi:hover {
+  color: var(--ink);
+  background: var(--hov);
+}
+.tsi.on {
+  color: var(--brand-d);
+  font-weight: 700;
+}
+.tsi.on::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 4px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand-l), var(--brand) 100%);
 }
 
 /* ═══ dropzone (อัปโหลด Timesheet) ═══ */
@@ -729,6 +789,9 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
     grid-template-columns: 1fr;
   }
 }
+/* การ์ด KPI — พื้นขาวเรียบ + แถบสีบางด้านบนบอกโทน (w/g/a/c) เจ้าของระบบลองแบบไล่สีเต็มใบสดใสไปสองรอบ
+   (21 ก.ย. 69) ทั้งคู่โดนตีกลับว่า "เน้นเกิน"/"ไม่สวย เอาแบบเดิม" เลยยึดพื้นขาวเป็นค่าสุดท้าย — ถ้าจะลองไล่สี
+   เต็มใบอีกต้องถามยืนยันก่อน ไม่ใช่เดาเอง */
 .kpi {
   background: var(--paper);
   border: 1px solid var(--rule);
@@ -791,6 +854,18 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 .kpi .ic svg {
   width: 17px;
   height: 17px;
+}
+.kpi .kt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.kpi .ke {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--mut);
 }
 .kpi .kl {
   font-size: 13px;
@@ -1010,12 +1085,69 @@ td.sub {
   font-weight: 400;
 }
 
+/* ═══ สัญญา — แถบสรุปแนวนอนต่อ 1 สัญญา (เดิมเป็นตาราง) ═══
+   เปลี่ยนตามภาพ mock 21 ก.ย. 69: ยังใช้ field เดิมทั้งหมด (PO/ลูกค้า/โครงการ/คน/ความคืบหน้า/มูลค่าคงเหลือ)
+   แค่จัดเป็นแถบแนวนอนแทนแถวตาราง — สัญญาหลายใบซ้อนกันเป็นหลายแถบ */
+.constrips {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.constrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 26px;
+  padding: 16px 20px;
+  border-radius: var(--r-ctl);
+  background: var(--sunk);
+  border: 1px solid var(--hair);
+}
+.constrip .cf {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.constrip .cf.grow {
+  flex: 1;
+  min-width: 160px;
+}
+.constrip .cf.end {
+  margin-left: auto;
+  align-items: flex-end;
+  text-align: right;
+}
+.constrip .cf .lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--mut);
+}
+.constrip .cf b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.constrip .cf .hc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--mut);
+}
+.constrip .cf .cv {
+  font-size: 21px;
+  font-weight: 700;
+}
+
 /* ═══ task list (งานที่ต้องทำ) ═══ */
 .tasklist {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+/* กลับไปแบบพื้นเรียบ + เส้นซ้ายบอกระดับ (เจ้าของระบบสั่งกลับ 21 ก.ย. 69 หลังลองเวอร์ชันพื้นแต้มสีเต็มแถว
+   แล้วบอกว่า "ไม่สวย") — ไอคอนวงกลมสียังคงไว้ (TaskList component ยังใส่ .ic มาให้ ลบทิ้งไปกระทบ markup
+   เปล่าๆ) แต่ย่อเล็กลงและใช้สีทึบธรรมดาแทนไล่เฉด ให้เข้ากับโทนเรียบของแถว */
 .taskrow {
   display: flex;
   align-items: flex-start;
@@ -1035,6 +1167,23 @@ td.sub {
 .taskrow.info {
   border-left-color: var(--brand);
 }
+.taskrow .ic {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  margin-top: 1px;
+}
+.taskrow .ic svg {
+  width: 13px;
+  height: 13px;
+}
+.taskrow.critical .ic { background: var(--cr); }
+.taskrow.warn .ic { background: var(--wn); }
+.taskrow.info .ic { background: var(--brand); }
 .taskrow .tt {
   flex: 1;
   min-width: 0;
@@ -1050,6 +1199,9 @@ td.sub {
   font-size: 12.5px;
   color: var(--mut);
   margin-top: 2px;
+}
+.taskrow a.btn {
+  flex: none;
 }
 
 /* ═══ progress bar ═══ */
@@ -1777,23 +1929,27 @@ td.sub {
 }
 
 /* ═══ ป้ายเลข PO/ใบว่าจ้าง — ไล่สีให้เด่นกว่า plain text (แทนที่ "ใบว่าจ้าง 12345" ธรรมดา) ═══ */
+/* เลข PO ทุกจุดในระบบ — ไม่มีกรอบ/พื้นหลังแล้ว เหลือแค่ป้าย "PO" ตัวธรรมดา + ตัวเลขไล่สีฟ้าอ่อน→เข้ม
+   (เจ้าของระบบสั่ง 21 ก.ย. 69 "ทุกหน้าทุกตำแหน่งเลย") ยังคงคำว่า "PO" กำกับไว้เสมอ ไม่ให้ดูเป็นตัวเลข
+   ลอยๆ ไม่รู้ความหมาย */
 .po-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: var(--fs-sm);
-  font-weight: 700;
-  color: #fff;
-  background: var(--grad-brand);
-  border-radius: var(--r-pill);
-  padding: 4px 12px;
-  line-height: 1.5;
   white-space: nowrap;
-  box-shadow: 0 2px 6px -1px rgba(10, 120, 212, 0.4);
 }
 .po-badge .lbl {
-  font-weight: 500;
-  opacity: 0.85;
+  font-weight: 600;
+  color: var(--mut);
+}
+.po-badge .num {
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--brand-l) 0%, var(--brand) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* ═══ ป้ายวันที่แบบอ่านอย่างเดียว (ไม่ใช่ปุ่ม) ═══ */
@@ -3965,30 +4121,6 @@ button.file:hover {
   opacity: 0.45;
   cursor: not-allowed;
 }
-/* กรอบไล่สีแยกแยะ ABBYY (แดง) กับ Clear Read (เขียว) ให้เห็นชัดตั้งแต่ยังไม่กด — ใช้ชุดสีเดียวกับ
-   การ์ดในหน้า "ตัวอ่าน Timesheet" (.rd.ab / .rd.cr) เพื่อให้เป็นภาษาสีเดียวกันทั้งระบบ
-   (18 ก.ย. 69 ตามที่เจ้าของระบบขอ) — border โปร่งใส + สองพื้นหลังซ้อน (padding-box/border-box)
-   คือวิธีทำกรอบไล่สีที่ border-color ธรรมดาทำไม่ได้ */
-.readerpick .rp.ab {
-  border-color: transparent;
-  background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-ab) border-box;
-  color: var(--ab-d);
-}
-.readerpick .rp.ab:hover:not(:disabled),
-.readerpick .rp.ab.on {
-  background: linear-gradient(var(--ab-tint), var(--ab-tint)) padding-box, var(--grad-ab) border-box;
-  color: var(--ab-d);
-}
-.readerpick .rp.cr {
-  border-color: transparent;
-  background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-cr) border-box;
-  color: var(--cr-d);
-}
-.readerpick .rp.cr:hover:not(:disabled),
-.readerpick .rp.cr.on {
-  background: linear-gradient(var(--cr-tint), var(--cr-tint)) padding-box, var(--grad-cr) border-box;
-  color: var(--cr-d);
-}
 /* ตัวเลือกย่อยของเครื่องอ่านที่เลือกไว้ (ตอนนี้มีแค่ Skill ฝั่ง ABBYY) — อยู่ใต้ปุ่มเลือกเครื่องอ่านทันที
    เพราะเป็นการตั้งค่าของ "รอบนี้" ชุดเดียวกัน ไม่ใช่ค่าถาวรของระบบ */
 .readeropt {
@@ -4018,32 +4150,6 @@ button.file:hover {
 }
 .readeropt select:disabled {
   opacity: 0.55;
-}
-/* ตัวเลือกย่อยของ ABBYY — ใช้กรอบไล่สีแดงชุดเดียวกับปุ่มเลือกเครื่องอ่านด้านบน แทนกรอบโฟกัสสีน้ำเงิน
-   ของเบราว์เซอร์ซึ่งไม่ได้บอกว่าตัวเลือกนี้เป็นของใคร (เจ้าของระบบสั่ง 18 ก.ย. 69)
-   วิธีเดียวกับ .readerpick .rp.ab — border โปร่งใส + สองพื้นหลังซ้อน (padding-box/border-box) */
-.readeropt.ab .lbl {
-  color: var(--ab-d);
-}
-.readeropt.ab select {
-  border-color: transparent;
-  border-width: 1.5px;
-  font-weight: 600;
-  color: var(--ab-d);
-  background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-ab) border-box;
-}
-.readeropt.ab select:focus-visible {
-  outline: 2px solid var(--ab);
-  outline-offset: 1px;
-}
-/* วงโฟกัสของปุ่มเลือกเครื่องอ่านก็ต้องเป็นสีประจำตัวนั้น ไม่ใช่สีน้ำเงินของเบราว์เซอร์ */
-.readerpick .rp.ab:focus-visible {
-  outline: 2px solid var(--ab);
-  outline-offset: 1px;
-}
-.readerpick .rp.cr:focus-visible {
-  outline: 2px solid var(--cr-g);
-  outline-offset: 1px;
 }
 /* ═══ แถบบอกขอบเขตข้อมูลที่กำลังดู ═══
    หน้าที่แสดงข้อมูลค่าจ้างรายคนต้องบอกเองว่ากรองอยู่ที่บริษัทไหน ไม่ใช่ให้คนเดาจากรายชื่อที่เห็น —

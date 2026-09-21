@@ -213,12 +213,11 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
               // เดิมมีกล่องเตือนเต็มแถบใต้ปุ่มตอนเลือก Clear Read — เจ้าของระบบสั่งเอาออก 18 ก.ย. 69
               // เก็บข้อมูลไว้เป็น tooltip สั้นๆ ที่ปุ่มแทน ไม่ให้ข้อมูลนี้หายไปเงียบๆ ทั้งที่ยังมีประโยชน์
               const slowHint = r.id === 'clear-read' ? tx('Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า') : undefined;
-              const cls = r.id === 'abbyy' ? 'ab' : r.id === 'clear-read' ? 'cr' : '';
               return (
                 <button
                   key={r.id}
                   type="button"
-                  className={`rp ${cls}${chosenReaderId === r.id ? ' on' : ''}`}
+                  className={`rp${chosenReaderId === r.id ? ' on' : ''}`}
                   disabled={!r.configured || reading}
                   title={!r.configured ? tx('ยังตั้งค่าไม่ครบ') : slowHint}
                   onClick={() => setReaderId(r.id)}
@@ -233,9 +232,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
         {/* Skill เลือกได้เฉพาะฝั่ง ABBYY — ฝั่ง Clear Read ระบบปักแม่แบบเดียวทั้งระบบ จึงไม่มีอะไรให้เลือก
             ไม่เลือก = ใช้ Skill ที่ผูกกับสัญญานี้ไว้ ซึ่งเป็นทางที่เส้น Gmail (ไม่มีคนกด) ใช้อยู่ */}
         {chosenReaderId === 'abbyy' && skills.length > 0 && (
-          // `ab` = ใช้ชุดสีของ ABBYY กับกรอบ/ป้ายของตัวเลือกนี้ — ตัวเลือกย่อยเป็นของเครื่องอ่านตัวไหน
-          // ต้องดูออกตั้งแต่ตาแรก ไม่ใช่กรอบโฟกัสสีน้ำเงินของเบราว์เซอร์ที่ไม่ได้สื่ออะไรเลย
-          <div className="readeropt ab">
+          <div className="readeropt">
             <label className="lbl" htmlFor="abbyy-skill">{tx('Skill ที่ใช้อ่าน')}</label>
             <select
               id="abbyy-skill"

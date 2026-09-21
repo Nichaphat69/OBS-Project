@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { PageHeader, ReadModelTag, StatusPill, Tag } from '../../../components/ui';
+import { PageHeader, ReadModelTag, StatusPill, Tag, TabStrip } from '../../../components/ui';
 import { useReadModelNameMap } from '../../../components/readModelNames';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
@@ -173,13 +173,11 @@ export default function MandayClient() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 22 }}>
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`btn sm${tab === t.key ? ' pri' : ''}`}>
-            {tx(t.label)} <span className="n">{data.counts[t.key]}</span>
-          </button>
-        ))}
-      </div>
+      <TabStrip
+        tabs={TABS.map((t) => ({ key: t.key, label: t.label, count: data.counts[t.key] }))}
+        active={tab}
+        onChange={setTab}
+      />
 
       {items.length === 0 && (
         <div className="card">

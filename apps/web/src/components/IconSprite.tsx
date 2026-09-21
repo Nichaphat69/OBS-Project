@@ -6,6 +6,14 @@
 export default function IconSprite() {
   return (
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+      <defs>
+        {/* ไล่สีฟ้าอ่อน→เข้ม ใช้กับไอคอนเมนูที่กำลังเลือกอยู่ (.mtab.on svg.i { stroke: url(#navicon-grad) })
+            ต้องประกาศแบบ SVG paint server เพราะ CSS gradient ธรรมดาใส่ตรง stroke ไม่ได้ */}
+        <linearGradient id="navicon-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" style={{ stopColor: 'var(--brand-l)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--brand-d)' }} />
+        </linearGradient>
+      </defs>
       <symbol id="i-grid" viewBox="0 0 24 24">
         <rect x="3" y="3" width="7" height="7" rx="1.5" />
         <rect x="14" y="3" width="7" height="7" rx="1.5" />

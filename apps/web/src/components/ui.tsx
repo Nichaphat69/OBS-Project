@@ -2,6 +2,37 @@ import Link from 'next/link';
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
 
+/** แถบสลับแท็บทรงเส้นใต้ (ไม่ใช่ปุ่ม) — ใช้แทน `.btn.sm`/`.btn.pri` ที่แต่ละหน้า (ตรวจ Manday/บันทึกการส่ง/
+ * ข้อมูลหลัก/จัดการระบบ/อัปโหลด Timesheet) เคยประกอบเองซ้ำๆ กันมาก่อน (เจ้าของระบบสั่ง 21 ก.ย. 69 "อยากได้
+ * แบบนี้" — ตัวหนังสือแท็บที่เลือกอยู่เป็นสีฟ้าหนา มีแถบไล่สีฟ้าบางๆ ใต้ตัวหนังสือ ไม่ใช่ปุ่มพื้นสีเต็ม)
+ * ทำเป็นคอมโพเนนต์กลางแทนแก้ 5 จุดแยกกัน จะได้แก้ที่เดียวถ้ามีรอบต่อไป */
+export function TabStrip<K extends string>({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: ReadonlyArray<{ key: K; label: string; count?: number }>;
+  active: K;
+  onChange: (key: K) => void;
+}) {
+  const { tx } = useLang();
+  return (
+    <div className="tabstrip">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={`tsi${active === t.key ? ' on' : ''}`}
+        >
+          {tx(t.label)}
+          {typeof t.count === 'number' && <span className="n"> {t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PageHeader({
   eyebrow,
   title,
@@ -56,12 +87,16 @@ type KpiTone = 'w' | 'g' | 'c' | 'a' | undefined;
 
 export function Kpi({
   icon,
+  eyebrow,
   label,
   value,
   caption,
   tone,
 }: {
   icon: string;
+  /** ป้ายอังกฤษตัวพิมพ์ใหญ่เหนือ label (เช่น "PENDING") — แค่ของตกแต่ง ไม่ใช่ข้อมูลใหม่ ผู้เรียกกำหนดเอง
+   * ต่อการ์ดไป ไม่ผูกกับ tone อัตโนมัติ เพราะ tone เดียวกันความหมายไม่เหมือนกันทุกหน้าที่ใช้ Kpi ร่วมกัน */
+  eyebrow?: string;
   label: string;
   value: React.ReactNode;
   caption?: string;
@@ -73,7 +108,10 @@ export function Kpi({
         <span className="ic">
           <Icon name={icon} />
         </span>
-        <span className="kl">{label}</span>
+        <div className="kt">
+          {eyebrow && <span className="ke">{eyebrow}</span>}
+          <span className="kl">{label}</span>
+        </div>
       </div>
       <span className="kv">{value}</span>
       {caption && <span className="kf">{caption}</span>}
@@ -96,7 +134,8 @@ export function Tag({ tone, children }: { tone: PillTone; children: React.ReactN
 export function PoTag({ children }: { children: React.ReactNode }) {
   return (
     <span className="po-badge">
-      <span className="lbl">PO</span> {children}
+      <span className="lbl">PO</span>
+      <b className="num">{children}</b>
     </span>
   );
 }
@@ -130,6 +169,10 @@ function taskHref(link?: TaskLink | null): string | null {
   return null;
 }
 
+/** ไอคอนต่อระดับความด่วน (level มาจาก backend เดิม ไม่ได้เพิ่ม field ใหม่) — ใช้แค่เลือกหน้าตา
+ * ไม่เกี่ยวกับข้อมูล: วิกฤต=สามเหลี่ยมเตือน, รอดำเนินการ=นาฬิกา, ข้อมูลทั่วไป=ส่ง */
+const TASK_ICON: Record<string, string> = { critical: 'alt', warn: 'clock', info: 'send' };
+
 export function TaskList({
   tasks,
 }: {
@@ -145,6 +188,9 @@ export function TaskList({
         const href = taskHref(t.link);
         return (
           <div key={i} className={`taskrow ${t.level}`}>
+            <div className="ic">
+              <Icon name={TASK_ICON[t.level] ?? 'info'} />
+            </div>
             <div className="tt">
               <b>{t.title}</b>
               <span>{t.detail}</span>

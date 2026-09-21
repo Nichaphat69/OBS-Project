@@ -51,13 +51,13 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/upload', label: 'อัปโหลด Timesheet', icon: 'up', roles: ['admin', 'accounting', 'user'] },
       { href: '/manday', label: 'ตรวจ Manday', icon: 'list-chk', badgeKey: 'queue', roles: ['admin', 'accounting'] },
-      { href: '/billing', label: 'วางบิล & ร่างอีเมล', icon: 'envelope-plus', badgeKey: 'cycle', roles: ['admin', 'accounting'] },
+      { href: '/billing', label: 'วางบิล & ร่างอีเมล', icon: 'mail', badgeKey: 'cycle', roles: ['admin', 'accounting'] },
     ],
   },
   {
     label: 'อ้างอิง',
     items: [
-      { href: '/invoices', label: 'ใบแจ้งหนี้', icon: 'invoice', roles: ['admin', 'accounting'] },
+      { href: '/invoices', label: 'ใบแจ้งหนี้', icon: 'money', roles: ['admin', 'accounting'] },
       // เดิมชื่อ "แจ้งปัญหา" และเป็น adminOnly — ตอนนี้กลายเป็นหน้ารวมบันทึกการส่ง Timesheet ตามรอบบิล
       // โดยมีแจ้งปัญหาเป็นแท็บหนึ่งข้างใน พนักงานจึงเข้าได้ด้วย แต่เห็นเฉพาะของตัวเอง — การกัน "เห็นของ
       // คนอื่น" อยู่ที่ API (เส้น /mine ผูก employeeId จาก session) ไม่ใช่ที่การซ่อนเมนูตรงนี้
@@ -297,9 +297,7 @@ export function AppShell({
     <>
       <header className="topbar">
         <div className="brand">
-          <span>
-            i<span className="mark">Passion</span> OBS
-          </span>
+          <span className="mark">iPassion OBS</span>
         </div>
         <div className="gap" />
 

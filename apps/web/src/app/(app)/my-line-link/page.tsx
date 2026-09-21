@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { requireUser } from '../../../lib/session';
 import { Card } from '../../../components/ui';
 import { TxPageHeader, TxEmptyState } from '../../../components/TxPageHeader';
@@ -31,7 +32,9 @@ export default async function MyLineLinkPage() {
   return (
     <>
       <TxPageHeader eyebrow="บัญชีของฉัน" title="เชื่อมต่อ LINE" subtitle="ผูกบัญชี LINE ส่วนตัวเพื่อรับแจ้งเตือนและแจ้งปัญหาผ่านแชท" />
-      <MyLineLinkClient />
+      <Suspense fallback={null}>
+        <MyLineLinkClient />
+      </Suspense>
     </>
   );
 }

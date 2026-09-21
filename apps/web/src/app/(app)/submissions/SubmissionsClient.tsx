@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, PageHeader, StatusPill, Tag } from '../../../components/ui';
+import { Card, ErrorState, PageHeader, StatusPill, Tag, TabStrip } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import SupportTicketsPanel from './SupportTicketsPanel';
 import { useLang } from '../../../lib/language';
@@ -206,13 +206,7 @@ export default function SubmissionsClient({ role }: { role: string }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        {visibleTabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`btn sm${tab === t.key ? ' pri' : ''}`}>
-            {tx(t.label)}
-          </button>
-        ))}
-      </div>
+      <TabStrip tabs={visibleTabs} active={tab} onChange={setTab} />
 
       {tab === 'tickets' ? (
         // ฟังก์ชันแจ้งปัญหาเดิมยกมาทั้งก้อน ไม่แตะตรรกะเลย — เจ้าของระบบสั่งว่าอย่าทิ้งของเดิม
