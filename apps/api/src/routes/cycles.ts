@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin, requireAdminIfSession, requireNotUser, requireExecutiveWhenUnscoped } from '../lib/requireRole.js';
 import { requireN8nSecret, requireAuthOrN8nSecret } from '../lib/n8nAuth.js';
+import { logExposedRequest } from '../lib/apiActivityLog.js';
 import {
   CycleActionError,
   approveCycle,
@@ -18,7 +19,7 @@ export const cyclesRouter = Router();
 
 // เรียกได้ทั้งจาก n8n (ไม่มี session — shared secret) และ admin ที่ล็อกอินอยู่ (session) — ต้อง mount
 // ก่อน .use(requireAuth) ด้านล่าง เหมือน timesheetReminders.ts's /ingest (ดูคอมเมนต์ที่นั่น)
-cyclesRouter.get('/ready', requireN8nSecret, async (_req, res) => {
+cyclesRouter.get('/ready', logExposedRequest('n8n'), requireN8nSecret, async (_req, res) => {
   res.json(await readyCycles());
 });
 
@@ -26,18 +27,24 @@ cyclesRouter.get('/ready', requireN8nSecret, async (_req, res) => {
  * `if (session) requireAdmin(session)` ไว้ด้วย แต่ตกหล่นตอนพอร์ต ทำให้พนักงานทั่วไปสั่งส่งคำขออนุมัติ
  * วางบิลเข้า LINE ของผู้อนุมัติได้ทุกสัญญา/ทุกรอบ (18 ก.ย. 69) — `requireAdminIfSession` เอาพฤติกรรม
  * เดิมกลับมา โดยไม่กระทบเส้น n8n ที่ไม่มี session แต่ผ่าน shared secret มา */
-cyclesRouter.post('/:contractId/:period/request-approval', requireAuthOrN8nSecret, requireAdminIfSession, async (req, res) => {
-  try {
-    const actor = req.user?.nameTh ?? 'n8n';
-    const result = await requestCycleApproval(req.params.contractId, req.params.period, { actor });
-    res.json(result);
-  } catch (error) {
-    if (error instanceof CycleActionError) {
-      return res.status(error.status).json({ error: error.message, blockers: error.blockers });
+cyclesRouter.post(
+  '/:contractId/:period/request-approval',
+  logExposedRequest('n8n', (req) => Boolean(req.user)),
+  requireAuthOrN8nSecret,
+  requireAdminIfSession,
+  async (req, res) => {
+    try {
+      const actor = req.user?.nameTh ?? 'n8n';
+      const result = await requestCycleApproval(req.params.contractId, req.params.period, { actor });
+      res.json(result);
+    } catch (error) {
+      if (error instanceof CycleActionError) {
+        return res.status(error.status).json({ error: error.message, blockers: error.blockers });
+      }
+      throw error;
     }
-    throw error;
-  }
-});
+  },
+);
 
 cyclesRouter.use(requireAuth);
 

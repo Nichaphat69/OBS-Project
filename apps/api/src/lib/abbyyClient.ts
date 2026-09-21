@@ -8,6 +8,7 @@
  * Swagger UI, ABBYY docs) — endpoint names and field names here are not guesses.
  */
 import { classifyDayKind, classifyLeaveType, monthFromWord, normalizeDate, normalizeYear, type TimesheetFieldMap } from '@obs/domain';
+import { loggedFetch } from './apiActivityLog.js';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 1_500;
@@ -107,7 +108,7 @@ export class AbbyyClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     try {
-      return await fetch(`${this.baseUrl}${path}`, {
+      return await loggedFetch('abbyy', `${this.baseUrl}${path}`, {
         ...options,
         signal: controller.signal,
         headers: { ...options.headers, Authorization: `Bearer ${token}` },

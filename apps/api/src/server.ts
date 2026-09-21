@@ -36,6 +36,7 @@ import { assignmentsRouter } from './routes/assignments.js';
 import { holidaysRouter } from './routes/holidays.js';
 import { flowAccountCompaniesRouter } from './routes/flowaccountCompanies.js';
 import { hrddRouter } from './routes/hrdd.js';
+import { apiActivityLogRouter } from './routes/apiActivityLog.js';
 import { keepModelWarm } from './lib/localLlmClient.js';
 
 const app = express();
@@ -90,6 +91,7 @@ app.use('/api/assignments', assignmentsRouter);
 app.use('/api/holidays', holidaysRouter);
 app.use('/api/flowaccount', flowAccountCompaniesRouter);
 app.use('/api', hrddRouter);
+app.use('/api/api-activity-log', apiActivityLogRouter);
 
 // ตัวจับ error สุดท้าย (ไม่มีมาก่อนเลยในระบบใหม่ — เจอจริง 15 ก.ย. 69) — ต้องมี 4 พารามิเตอร์ตรงตาม
 // สเปกของ Express ถึงจะถูกจดจำเป็น error-handling middleware (ไม่ใช่ middleware ปกติ) ต้อง mount

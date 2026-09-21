@@ -9,6 +9,7 @@
  * ไม่ใช้ JWT_SECRET ที่ปรากฏใน .env ของ HRDD มาปลอม token เอง — ยืนยันตัวตนด้วยการล็อกอินจริงผ่าน
  * /auth/login เหมือนไคลเอนต์อื่นๆของ HRDD ทุกตัว
  */
+import { loggedFetch } from './apiActivityLog.js';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -73,7 +74,7 @@ export class HrddClient {
     const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await this.fetch(`${this.baseUrl}${path}`, {
+      response = await loggedFetch('hrdd', `${this.baseUrl}${path}`, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +82,7 @@ export class HrddClient {
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal,
-      });
+      }, this.fetch);
     } catch (error: any) {
       throw new HrddError(`เชื่อมต่อ HRDD ไม่สำเร็จ (${error.message})`, { status: null });
     } finally {

@@ -13,6 +13,7 @@
  * ที่เรียกใช้ — รวบไฟล์แนบ ผูก threadId กับใบแจ้งหนี้ และ syncEmailSent() ที่คอยดูว่าร่างถูกกดส่งแล้ว
  * หรือยัง — ยังไม่ได้พอร์ต ดู MIGRATION_PLAN.md
  */
+import { loggedFetch } from './apiActivityLog.js';
 
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -200,7 +201,7 @@ export class GmailClient {
 
     let response: Response;
     try {
-      response = await fetch(`${API}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers ?? {}) } });
+      response = await loggedFetch('gmail', `${API}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers ?? {}) } });
     } catch (networkError: any) {
       if (attempt < MAX_ATTEMPTS) return this.retry(path, options, attempt);
       throw new GmailError(`ต่อ Gmail ไม่ได้ (${path}) — ${networkError.message}`, { status: null });

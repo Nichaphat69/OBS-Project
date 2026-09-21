@@ -531,3 +531,31 @@ model TimesheetSubmission {
   @@index([period])
   @@map("timesheet_submissions")
 }
+
+// ── API Activity Log — หน้า "จัดการระบบ" แท็บใหม่ (เฉพาะ admin) เจ้าของระบบสั่ง 21 ก.ย. 69 ตาม
+// design brief (7.3) — 1 แถว = การเรียก HTTP ครั้งหนึ่ง แยก 2 ทิศทาง:
+//   'consume' = OBS เรียกออกไปหาระบบอื่น (ABBYY/Clear Read/FlowAccount/Gmail/LINE/Google/HRDD)
+//   'expose'  = ระบบอื่นเรียกเข้ามาหา OBS (n8n/LINE webhook) — ไม่นับ browser ของผู้ใช้ทั่วไป
+// requestBody/responseBody ผ่าน redact() ตัด token/secret ออกก่อนบันทึกเสมอ (ดู apiActivityLog.ts)
+// และถูกตัดความยาวไว้ไม่ให้ log บวมจากไฟล์แนบ/PDF base64 — เก็บไว้แค่พอเห็นโครงข้อมูลตอน debug
+model ApiActivityLog {
+  id           Int     @id @default(autoincrement())
+  at           String  @map("at")
+  /// 'consume' | 'expose'
+  direction    String
+  /// ชื่อระบบอีกฝั่ง — 'abbyy' | 'clear-read' | 'flowaccount' | 'gmail' | 'line' | 'line-login' |
+  /// 'google' | 'hrdd' | 'n8n' | 'line-webhook'
+  service      String
+  method       String
+  path         String
+  durationMs   Int     @map("duration_ms")
+  statusCode   Int?    @map("status_code")
+  ok           Boolean
+  requestBody  String? @map("request_body")
+  responseBody String? @map("response_body")
+  errorMessage String? @map("error_message")
+
+  @@index([at])
+  @@index([direction, service])
+  @@map("api_activity_log")
+}

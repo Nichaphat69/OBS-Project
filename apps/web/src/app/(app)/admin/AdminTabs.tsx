@@ -6,6 +6,7 @@ import UsersTab from './UsersTab';
 import NotificationRecipientsTab from './NotificationRecipientsTab';
 import AuditLogTab from './AuditLogTab';
 import EmailDomainsTab from './EmailDomainsTab';
+import ApiActivityLogTab from './ApiActivityLogTab';
 import { TabStrip } from '../../../components/ui';
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   { key: 'recipients', label: 'ผู้รับแจ้งเตือน' },
   { key: 'auditLog', label: 'บันทึกระบบ' },
   { key: 'domains', label: 'โดเมนอีเมล' },
+  { key: 'apiActivityLog', label: 'API Activity Log' },
 ] as const;
 
 export default function AdminTabs({ currentUsername }: { currentUsername: string }) {
@@ -28,6 +30,7 @@ export default function AdminTabs({ currentUsername }: { currentUsername: string
       {tab === 'recipients' && <NotificationRecipientsTab />}
       {tab === 'auditLog' && <AuditLogTab />}
       {tab === 'domains' && <EmailDomainsTab />}
+      {tab === 'apiActivityLog' && <ApiActivityLogTab />}
     </>
   );
 }

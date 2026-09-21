@@ -4,6 +4,7 @@ import { sendOverdueTimesheetReminders } from '../lib/timesheetSubmissionService
 import { ingestTimesheet, IngestError } from '../lib/ingestService.js';
 import { extractTimesheet, ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
+import { logExposedRequest } from '../lib/apiActivityLog.js';
 
 /** เส้นทางที่ n8n เรียกตรงเข้ามาโดยไม่มี session ใดๆ — เดิม (`src/server.js`'s `PUBLIC_API_PATTERNS`)
  * ไม่มี auth เลย ตอนพอร์ตมาสแต็กใหม่ปิดช่องนั้นด้วย shared secret (`requireN8nSecret`, ดู
@@ -13,14 +14,14 @@ import { AbbyyError } from '../lib/abbyyClient.js';
  * `/api/timesheets/*` แต่ต้องไม่ผ่าน requireAuth เลย */
 export const timesheetRemindersRouter = Router();
 
-timesheetRemindersRouter.post('/send-overdue-reminders', requireN8nSecret, async (_req, res) => {
+timesheetRemindersRouter.post('/send-overdue-reminders', logExposedRequest('n8n'), requireN8nSecret, async (_req, res) => {
   res.json(await sendOverdueTimesheetReminders({}));
 });
 
 // ported from service.js's n8n entrypoint for ingestTimesheet() — ดู n8n/README.md's
 // `POST /api/timesheets/ingest`. รับเฉพาะ fileBase64 (ไม่รับ filePath เหมือนต้นฉบับ — n8n กับสแต็ก
 // Docker นี้ไม่ได้แชร์ filesystem เดียวกัน)
-timesheetRemindersRouter.post('/ingest', requireN8nSecret, async (req, res) => {
+timesheetRemindersRouter.post('/ingest', logExposedRequest('n8n'), requireN8nSecret, async (req, res) => {
   try {
     const body = req.body ?? {};
     const result = await ingestTimesheet({

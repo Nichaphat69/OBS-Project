@@ -8,6 +8,7 @@
  * "ตรวจ Manday" queue notification (`buildNeedsCheckFlex`/`pushNeedsCheck`, Phase 5.6).
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { loggedFetch } from './apiActivityLog.js';
 
 const API = 'https://api.line.me/v2/bot';
 
@@ -131,14 +132,19 @@ export class LineClient {
     if (!this.token) {
       throw new LineError('ยังไม่ได้เชื่อมต่อ LINE — ใส่ LINE_CHANNEL_ACCESS_TOKEN ใน .env', { status: 400 });
     }
-    const response = await this.fetchImpl(`${API}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        ...(method === 'GET' ? {} : { 'Content-Type': 'application/json' }),
+    const response = await loggedFetch(
+      'line',
+      `${API}${path}`,
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          ...(method === 'GET' ? {} : { 'Content-Type': 'application/json' }),
+        },
+        ...(method === 'GET' ? {} : { body: JSON.stringify(body) }),
       },
-      ...(method === 'GET' ? {} : { body: JSON.stringify(body) }),
-    });
+      this.fetchImpl,
+    );
     const text = await response.text();
     const parsed = text ? safeJson(text) : null;
     if (!response.ok) {

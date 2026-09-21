@@ -15,6 +15,7 @@
  * Callback URL ที่ต้องใส่ในหน้า Console: <origin ของเว็บ>/api/my-line-link/oauth/callback
  */
 import type { Request } from 'express';
+import { loggedFetch } from './apiActivityLog.js';
 
 const AUTH_URL = 'https://access.line.me/oauth2/v2.1/authorize';
 const TOKEN_URL = 'https://api.line.me/oauth2/v2.1/token';
@@ -59,7 +60,7 @@ export class LineLoginError extends Error {
 /** แลก code เป็น id_token แล้วตรวจสอบผ่าน /verify (คืน sub = LINE userId) — ไม่ใช้ JWKS ตรวจเองเพราะ
  * endpoint /verify ของ LINE ตรวจลายเซ็น+aud+exp ให้ครบในคำขอเดียว ง่ายกว่าและพลาดยากกว่า verify เอง */
 export async function fetchLineLoginUserId({ code, redirectUri }: { code: string; redirectUri: string }): Promise<string> {
-  const tokenRes = await fetch(TOKEN_URL, {
+  const tokenRes = await loggedFetch('line-login', TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -75,7 +76,7 @@ export async function fetchLineLoginUserId({ code, redirectUri }: { code: string
     throw new LineLoginError(`แลก token กับ LINE ไม่สำเร็จ: ${tokenBody.error_description ?? tokenBody.error ?? tokenRes.status}`);
   }
 
-  const verifyRes = await fetch(VERIFY_URL, {
+  const verifyRes = await loggedFetch('line-login', VERIFY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

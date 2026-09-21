@@ -30,6 +30,7 @@ import {
   normalizeDate,
   normalizePeriod,
 } from '@obs/domain';
+import { loggedFetch } from './apiActivityLog.js';
 
 const BASE_URL = () => process.env.CLEAR_READ_BASE_URL ?? 'https://ai.prior-dev.app/prior-clear-read';
 
@@ -183,7 +184,7 @@ export class ClearReadClient {
    * (เผื่อฝั่งโน้นเพิกถอน token ก่อนหมดอายุจริง) */
   private async post(path: string, init: { json?: unknown; form?: FormData }, retryOn401 = true): Promise<any> {
     const token = await this.getAccessToken();
-    const res = await fetch(`${BASE_URL()}${path}`, {
+    const res = await loggedFetch('clear-read', `${BASE_URL()}${path}`, {
       method: 'POST',
       headers: init.form ? { Authorization: `Bearer ${token}` } : { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: init.form ?? JSON.stringify(init.json ?? {}),

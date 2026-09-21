@@ -6,6 +6,7 @@
  * deleteDocument is used by cyclesService.ts's deleteInvoice(); listDocuments by
  * contractsMasterService.ts's listFlowAccountCompanies().
  */
+import { loggedFetch } from './apiActivityLog.js';
 
 const BASE_URL = process.env.FLOWACCOUNT_BASE_URL ?? 'https://openapi.flowaccount.com/test';
 const AUTH_PATH = '/token';
@@ -133,7 +134,7 @@ export class FlowAccountClient {
       throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
     }
     const token = await this.getAccessToken();
-    const response = await fetch(`${BASE_URL}${path}`, {
+    const response = await loggedFetch('flowaccount', `${BASE_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
@@ -168,7 +169,7 @@ export class FlowAccountClient {
       throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
     }
     const token = await this.getAccessToken();
-    const response = await fetch(`${BASE_URL}${path}`, {
+    const response = await loggedFetch('flowaccount', `${BASE_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ documentId, culture }),
@@ -187,7 +188,7 @@ export class FlowAccountClient {
    * โดยไม่ต้องมี token (ใครถือลิงก์ก็เปิดได้) จึงไม่ต้องขอ access token ก่อนเรียก */
   async fetchSharedPdf(shareLink: string | null | undefined): Promise<{ mode: string; ok: true; bytes: Buffer }> {
     if (!shareLink) throw new FlowAccountError('ต้องมีลิงก์ดูเอกสารก่อนจึงจะดึงไฟล์ PDF ได้');
-    const response = await fetch(shareLink, { headers: { Accept: 'text/html' } });
+    const response = await loggedFetch('flowaccount', shareLink, { headers: { Accept: 'text/html' } });
     if (!response.ok) {
       throw new FlowAccountError('เปิดหน้าเอกสารของ FlowAccount เพื่อดึงไฟล์ PDF ไม่สำเร็จ', { status: response.status });
     }
@@ -213,7 +214,7 @@ export class FlowAccountClient {
     if (from) params.set('fromDate', from);
     if (to) params.set('toDate', to);
 
-    const response = await fetch(`${BASE_URL}/${type}?${params}`, {
+    const response = await loggedFetch('flowaccount', `${BASE_URL}/${type}?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const body: any = await safeJson(response);
@@ -233,7 +234,7 @@ export class FlowAccountClient {
       throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
     }
     const token = await this.getAccessToken();
-    const response = await fetch(`${BASE_URL}${path}/${documentId}`, {
+    const response = await loggedFetch('flowaccount', `${BASE_URL}${path}/${documentId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });

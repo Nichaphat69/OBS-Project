@@ -17,6 +17,7 @@
  * ไม่ใช้ googleapis SDK เหมือนกับ gmailClient.ts — เรียก REST ตรงด้วย fetch
  */
 import type { Request } from 'express';
+import { loggedFetch } from './apiActivityLog.js';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -56,7 +57,7 @@ export class GoogleOAuthError extends Error {
 
 /** แลก authorization code เป็น access token แล้วดึงโปรไฟล์ (sub/email/name) มาให้เลย */
 export async function fetchGoogleProfile({ code, redirectUri }: { code: string; redirectUri: string }): Promise<{ sub: string; email: string; name: string }> {
-  const tokenRes = await fetch(TOKEN_URL, {
+  const tokenRes = await loggedFetch('google', TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -72,7 +73,7 @@ export async function fetchGoogleProfile({ code, redirectUri }: { code: string; 
     throw new GoogleOAuthError(`แลก token กับ Google ไม่สำเร็จ: ${tokenBody.error_description ?? tokenBody.error ?? tokenRes.status}`);
   }
 
-  const infoRes = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokenBody.access_token}` } });
+  const infoRes = await loggedFetch('google', USERINFO_URL, { headers: { Authorization: `Bearer ${tokenBody.access_token}` } });
   const info: any = await infoRes.json().catch(() => ({}));
   if (!infoRes.ok || !info.sub || !info.email) {
     throw new GoogleOAuthError('ดึงข้อมูลบัญชี Google ไม่สำเร็จ');
