@@ -36,14 +36,20 @@ export function lineLoginRedirectUri(req: Request): string {
 
 /** bot_prompt=aggressive แปลว่าถ้ายังไม่เคยแอดเพื่อน OA จะเด้งหน้าชวนแอดให้ในตัวเลย (ไม่ต้องแยกขั้นตอน
  * QR "ขั้นตอนที่ 1" แบบ flow รหัส 6 หลักเดิมอีก) — ต้องตั้งค่า "Linked OA" ในหน้า Console ของ LINE
- * Login channel ก่อน ไม่งั้น LINE จะเมิน parameter นี้เฉยๆ ไม่ error */
+ * Login channel ก่อน ไม่งั้น LINE จะเมิน parameter นี้เฉยๆ ไม่ error
+ *
+ * ⚠️ scope ต้องมี "profile" ด้วย ไม่ใช่ "openid" เฉยๆ — เจอจริง 22 ก.ย. 69: ตั้ง Linked OA ถูกต้องแล้ว
+ * แต่หน้าชวนแอดเพื่อนยังไม่ขึ้นให้เห็นเลยสักครั้ง เพราะ LINE มีฟีเจอร์ "Channel consent simplification"
+ * ที่ถ้า scope มีแค่ openid ตัวเดียว จะข้ามทั้งหน้า verify และหน้า consent ไปเลย (ล็อกอินเงียบๆ ไม่มี
+ * popup ใดๆ ให้เห็น) ซึ่งข้ามหน้า bot_prompt ไปด้วยโดยปริยาย — เพิ่ม profile scope เข้าไปเพื่อบังคับให้
+ * หน้า consent (ที่ bot_prompt ต่อท้ายได้) ยังโชว์อยู่เสมอ ไม่ถูกข้ามไปเงียบๆ */
 export function buildLineLoginUrl({ redirectUri, state }: { redirectUri: string; state: string }): string {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.LINE_LOGIN_CHANNEL_ID!,
     redirect_uri: redirectUri,
     state,
-    scope: 'openid',
+    scope: 'openid profile',
     bot_prompt: 'aggressive',
   });
   return `${AUTH_URL}?${params}`;
