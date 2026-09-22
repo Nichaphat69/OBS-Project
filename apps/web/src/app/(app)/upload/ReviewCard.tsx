@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import { useRouter } from 'next/navigation';
 import { StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
+import { DatePicker } from '../../../components/DatePicker';
 import HrddCompare from './HrddCompare';
 import { useLang } from '../../../lib/language';
 
@@ -206,12 +207,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
                 <span className="lv-ic">
                   <Icon name={LEAVE_TYPE_ICON[l.type] ?? 'cal'} className="sm" />
                 </span>
-                <input
-                  type="date"
-                  value={l.date}
-                  onChange={(e) => updateLeaveDay(i, { date: e.target.value })}
-                  style={{ height: 36, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 10px' }}
-                />
+                <DatePicker value={l.date} onChange={(v) => updateLeaveDay(i, { date: v })} />
                 <select value={l.type} onChange={(e) => updateLeaveDay(i, { type: e.target.value })} style={{ height: 36 }}>
                   {Object.entries(LEAVE_TYPE_LABEL)
                     .filter(([v]) => !['unpaid', 'unknown'].includes(v))

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, ErrorState } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
+import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
@@ -517,11 +518,11 @@ function EmployeeForm({
         </label>
         <label>
           {tx('วันเริ่มงาน')}
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <DatePicker value={startDate} onChange={setStartDate} />
         </label>
         <label>
           {tx(mode === 'add' ? 'วันสิ้นสุด (ถ้าไม่ระบุ = ตามสัญญา)' : 'วันสิ้นสุด')}
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <DatePicker value={endDate} onChange={setEndDate} />
         </label>
       </div>
     </Card>

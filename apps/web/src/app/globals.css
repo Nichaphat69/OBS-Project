@@ -387,15 +387,6 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   letter-spacing: -0.02em;
   color: var(--ink);
 }
-.topbar .brand .mark {
-  /* ไล่สีทั้งคำ "iPassion OBS" (เดิมไล่สีแค่ "Passion" ตรงกลาง ส่วน "i"/"OBS" เป็นสีดำธรรมดา — เจ้าของระบบ
-     สั่ง 21 ก.ย. 69 ให้ไล่สีทั้งคำ โทนฟ้าอ่อนไปฟ้ากลางๆ ไม่เอาเข้มมาก จึงจบที่ --brand ไม่ใช่ --brand-d/-h) */
-  background: linear-gradient(120deg, var(--brand-l) 0%, var(--brand) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: var(--brand);
-}
 
 .who {
   position: relative;
@@ -2708,6 +2699,17 @@ td .nm {
   outline-color: var(--cr);
   border-color: var(--cr);
 }
+/* DatePicker แทนที่ input[type=date] เดิม — ต้องเลี้ยง class .err ไว้ให้ยังใช้ต่อได้ (บาง field เช็ค
+   error แล้วขึ้นกรอบแดงแบบเดียวกับ input/select ปกติ) */
+.frm .dpk.err .dpk-trigger {
+  border-color: var(--cr);
+  background: var(--crb);
+}
+/* .clash = ใช้นอกบริบท .frm (เช่นแถวกรอก OT ที่วันชนกับวันลา) เอฟเฟกต์เดียวกับ .err แค่ชื่อ class ต่างกัน
+   เพราะจุดเดิมเทียบ "วันชนกัน" ไม่ใช่ "ค่าไม่ผ่าน validation" */
+.dpk.clash .dpk-trigger {
+  border-color: var(--cr);
+}
 .frm select {
   font: inherit;
   font-size: 13.5px;
@@ -4645,4 +4647,174 @@ button.file:hover {
   /* ตัวเลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่ — ซ่อนบนจอเล็กมาก (ไม่พอที่จะอ่าน label ได้จริง) เข้าไปสลับ
      บริษัทในหน้าที่เกี่ยวข้องแทนได้ (เช่นหน้ารายชื่อสัญญา) */
   .ctxwrap { display: none; }
+}
+
+/* ═══ DatePicker (M3-style) — แทนที่ <input type="date"> เดิมทุกจุด (เจ้าของระบบสั่ง 22 ก.ย. 69) ═══
+   อ้างอิงหน้าตาจาก m3.material.io/components/date-pickers แต่ใช้โทนฟ้าไล่อ่อน→เข้มของระบบเองแทนสีม่วง
+   ต้นแบบ — วงกลมวันที่เลือกอยู่ไล่สี ที่เหลือขาวสะอาดตามที่เจ้าของระบบขอ ไม่ใช่ทั้งการ์ดไล่สีแบบภาพต้นแบบ */
+.dpk {
+  position: relative;
+  display: inline-block;
+}
+.dpk-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  height: var(--h-ctl);
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-ctl);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  min-width: 150px;
+  transition: border-color 0.14s var(--ease), background 0.14s var(--ease);
+}
+.dpk-trigger:hover:not(:disabled) {
+  border-color: var(--brand);
+  background: var(--tint);
+}
+.dpk-trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.dpk-trigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.dpk-trigger svg.i {
+  color: var(--brand);
+  flex: none;
+}
+.dpk-trigger .dpk-placeholder {
+  color: var(--mut);
+}
+
+.dpk-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 70;
+  width: 300px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  box-shadow: var(--sh3);
+  padding: 14px;
+}
+/* พื้นที่ใต้ปุ่มไม่พอ (ฟอร์มยาว ปุ่มอยู่ใกล้ขอบล่างจอ) — เปิดขึ้นด้านบนแทนลงล่าง (DatePicker.tsx คำนวณ
+   เองว่าจะใช้คลาสนี้เมื่อไหร่ ดูคอมเมนต์ที่นั่น) */
+.dpk-panel.up {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+.dpk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.dpk-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.dpk-nav {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--ink2);
+}
+.dpk-nav:hover {
+  background: var(--hov);
+}
+.dpk-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 34px);
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.dpk-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mut);
+  padding: 4px 0;
+}
+.dpk-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 34px);
+  grid-auto-rows: 34px;
+  justify-content: space-between;
+  gap: 2px 0;
+}
+/* ใช้ width/height ตายตัวแทน aspect-ratio + width:100% เดิม — เจอจริง 22 ก.ย. 69: บางเบราว์เซอร์เรนเดอร์
+   ปุ่มบางช่องในกริดใหญ่ผิดปกติ (aspect-ratio ผสมกับ display:grid บน <button> ในบาง engine ยังไม่นิ่งพอ)
+   ตัวเลขตายตัวตัดปัญหานี้ทิ้งไปเลย ไม่ต้องเดาสาเหตุแม่นยำอีก */
+.dpk-cell {
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.dpk-cell.empty {
+  cursor: default;
+  visibility: hidden;
+}
+.dpk-cell:hover:not(:disabled):not(.on) {
+  background: var(--hov);
+}
+.dpk-cell:disabled {
+  color: var(--fnt);
+  cursor: default;
+}
+.dpk-cell.today {
+  border-color: var(--brand);
+  color: var(--brand-d);
+  font-weight: 700;
+}
+/* วันที่เลือกอยู่ — เดิมพื้นทึบไล่สีเต็มวง เจ้าของระบบสั่ง 22 ก.ย. 69 ให้เอาแค่เส้นกรอบวงกลม มินิมอลกว่าเดิม
+   (ไม่ต้องพื้นหลังทึบ) ใช้สีเดียวกับปุ่ม trigger/ไอคอนปฏิทินให้เป็นภาษาเดียวกัน */
+.dpk-cell.on {
+  background: var(--tint);
+  color: var(--brand-d);
+  font-weight: 700;
+  border: 2px solid var(--brand);
+}
+.dpk-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hair);
+}
+.dpk-link-btn {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  color: var(--brand-d);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.dpk-link-btn:hover {
+  background: var(--tint);
 }

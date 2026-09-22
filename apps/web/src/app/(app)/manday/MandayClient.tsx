@@ -74,6 +74,8 @@ export default function MandayClient() {
   const [data, setData] = useState<ListResult | null>(null);
   const [scopeName, setScopeName] = useState<string | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('needsReview');
+  const [search, setSearch] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -150,7 +152,22 @@ export default function MandayClient() {
     );
   }
 
-  const items = data.items.filter((i) => matchesTab(i, tab));
+  // รายชื่อปี (พ.ศ.) ที่มีจริงในรายการตอนนี้ — เอาจาก period ("YYYY-MM" ค.ศ.) ของแต่ละแถว ไม่ hardcode
+  // ไว้ล่วงหน้า ปีไหนไม่มีรายการก็จะไม่โผล่ในตัวเลือกให้เลือกเปล่าๆ
+  const years = Array.from(new Set(data.items.map((i) => i.period.slice(0, 4))))
+    .sort()
+    .reverse();
+
+  const q = search.trim().toLowerCase();
+  const items = data.items.filter((i) => {
+    if (!matchesTab(i, tab)) return false;
+    if (yearFilter && i.period.slice(0, 4) !== yearFilter) return false;
+    if (q) {
+      const name = (i.employee.nameTh ?? i.rawEmployeeName ?? '').toLowerCase();
+      if (!name.includes(q)) return false;
+    }
+    return true;
+  });
 
   return (
     <>
@@ -178,6 +195,31 @@ export default function MandayClient() {
         active={tab}
         onChange={setTab}
       />
+
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 320 }}>
+          <Icon
+            name="search"
+            className="sm"
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)' }}
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={tx('ค้นหาชื่อพนักงาน')}
+            style={{ width: '100%', paddingLeft: 36 }}
+          />
+        </div>
+        <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
+          <option value="">{tx('ทุกปี')}</option>
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {Number(y) + 543}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {items.length === 0 && (
         <div className="card">

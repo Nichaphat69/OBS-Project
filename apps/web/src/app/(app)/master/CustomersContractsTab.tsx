@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, ErrorState } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
+import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 import { SETTINGS_CHANGED_EVENT } from '../../../lib/settingsChanged';
@@ -737,21 +738,19 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           </label>
           <label>
             {tx('วันเริ่มสัญญา')}
-            <input
-              type="date"
-              className={fieldErrors.has('startDate') ? 'err' : undefined}
+            <DatePicker
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+              onChange={setStartDate}
+              className={fieldErrors.has('startDate') ? 'err' : undefined}
+              />
           </label>
           <label>
             {tx('วันสิ้นสุดสัญญา')}
-            <input
-              type="date"
-              className={fieldErrors.has('endDate') ? 'err' : undefined}
+            <DatePicker
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
+              onChange={setEndDate}
+              className={fieldErrors.has('endDate') ? 'err' : undefined}
+              />
           </label>
           <label>
             VAT (%)
@@ -878,21 +877,19 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
         </label>
         <label>
           {tx('วันเริ่มสัญญา')}
-          <input
-            type="date"
-            className={fieldErrors.has('startDate') ? 'err' : undefined}
+          <DatePicker
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
+            onChange={setStartDate}
+            className={fieldErrors.has('startDate') ? 'err' : undefined}
+            />
         </label>
         <label>
           {tx('วันสิ้นสุดสัญญา')}
-          <input
-            type="date"
-            className={fieldErrors.has('endDate') ? 'err' : undefined}
+          <DatePicker
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
+            onChange={setEndDate}
+            className={fieldErrors.has('endDate') ? 'err' : undefined}
+            />
         </label>
         <label>
           VAT (%)
@@ -1059,21 +1056,19 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
           </label>
           <label>
             {tx('วันเริ่มสัญญา')}
-            <input
-              type="date"
-              className={fieldErrors.has('startDate') ? 'err' : undefined}
+            <DatePicker
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+              onChange={setStartDate}
+              className={fieldErrors.has('startDate') ? 'err' : undefined}
+              />
           </label>
           <label>
             {tx('วันสิ้นสุดสัญญา')}
-            <input
-              type="date"
-              className={fieldErrors.has('endDate') ? 'err' : undefined}
+            <DatePicker
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
+              onChange={setEndDate}
+              className={fieldErrors.has('endDate') ? 'err' : undefined}
+              />
           </label>
           <label>
             VAT (%)

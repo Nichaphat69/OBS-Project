@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Card, StatusPill } from '../../../components/ui';
+import { DatePicker } from '../../../components/DatePicker';
 import { useLang } from '../../../lib/language';
 
 const LEAVE_TYPES = [
@@ -98,12 +99,7 @@ export default function ManualEntryTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {leaveDays.map((l, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                type="date"
-                value={l.date}
-                onChange={(e) => updateLeaveDay(i, { date: e.target.value })}
-                style={{ height: 36, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 10px' }}
-              />
+              <DatePicker value={l.date} onChange={(v) => updateLeaveDay(i, { date: v })} />
               <select
                 value={l.type}
                 onChange={(e) => updateLeaveDay(i, { type: e.target.value })}
@@ -138,17 +134,7 @@ export default function ManualEntryTab() {
             const clash = !!o.date && leaveDateSet.has(o.date);
             return (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  type="date"
-                  value={o.date}
-                  onChange={(e) => updateOtDay(i, { date: e.target.value })}
-                  style={{
-                    height: 36,
-                    borderRadius: 'var(--r-ctl)',
-                    border: `1px solid ${clash ? 'var(--cr)' : 'var(--rule)'}`,
-                    padding: '0 10px',
-                  }}
-                />
+                <DatePicker value={o.date} onChange={(v) => updateOtDay(i, { date: v })} className={clash ? 'clash' : undefined} />
                 <input
                   type="number"
                   step="0.5"

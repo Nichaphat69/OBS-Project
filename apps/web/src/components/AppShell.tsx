@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { AnimatedLogo } from './AnimatedLogo';
 import { unreadCount, NOTIF_READ_EVENT } from '../lib/notifRead';
 import { useToast } from './Overlays';
 import { useLang } from '../lib/language';
@@ -317,7 +318,7 @@ export function AppShell({
           <Icon name="panel" />
         </button>
         <div className="brand">
-          <span className="mark">iPassion OBS</span>
+          <AnimatedLogo height={30} />
         </div>
         <div className="gap" />
 

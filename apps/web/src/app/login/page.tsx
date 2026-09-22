@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '../../components/Icon';
 import GoogleButton from '../../components/GoogleButton';
+import { AnimatedLogo } from '../../components/AnimatedLogo';
 
 export default function LoginPage() {
   return (
@@ -64,8 +65,11 @@ function LoginForm() {
   return (
     <main className="login-wrap">
       <form onSubmit={onSubmit} className="login-card">
-        <h1>
-          เข้าสู่ระบบ <span style={{ color: 'var(--brand)' }}>OBS</span>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
+          <AnimatedLogo height={56} />
+        </div>
+        <h1 style={{ fontSize: 19 }}>
+          เข้าสู่ระบบ <span style={{ color: 'var(--brand)' }}>Outsource Billing System</span>
         </h1>
         <p>ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
 

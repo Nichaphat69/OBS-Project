@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Card, ErrorState, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
+import { DatePicker } from '../../../components/DatePicker';
 import { useLang } from '../../../lib/language';
 
 interface ApiActivityRow {
@@ -184,9 +185,9 @@ export default function ApiActivityLogTab() {
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
         <span className="sub">{tx('วันที่เรียกใช้')}</span>
-        <input type="date" value={from} onChange={(e) => { setPage(1); setFrom(e.target.value); }} aria-label={tx('ตั้งแต่วันที่')} />
+        <DatePicker value={from} onChange={(v) => { setPage(1); setFrom(v); }} ariaLabel={tx('ตั้งแต่วันที่')} />
         <span className="sub">–</span>
-        <input type="date" value={to} onChange={(e) => { setPage(1); setTo(e.target.value); }} aria-label={tx('ถึงวันที่')} />
+        <DatePicker value={to} onChange={(v) => { setPage(1); setTo(v); }} ariaLabel={tx('ถึงวันที่')} />
 
         <details className="ddwrap">
           <summary className="ddbtn">
