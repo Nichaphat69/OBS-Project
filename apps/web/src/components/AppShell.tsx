@@ -110,6 +110,9 @@ export function AppShell({
   const [loggingOut, setLoggingOut] = useState(false);
   const whoWrapRef = useRef<HTMLDivElement>(null);
   const [sideCollapsed, setSideCollapsed] = useState(false);
+  /** เมนูข้างบนมือถือ — พับเป็น overlay ลอยแทนอยู่ในแนวเดียวกับเนื้อหา (ต่างจาก sideCollapsed ที่ย่อ
+   * เหลือไอคอนบนจอใหญ่) ปิดเองทุกครั้งที่เปลี่ยนหน้า กันเมนูค้างเปิดบังเนื้อหาหลังกดลิงก์ไปแล้ว */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [pulseData, setPulseData] = useState<PulseData | null>(null);
   const [contracts, setContracts] = useState<ContractOption[] | null>(null);
@@ -138,6 +141,12 @@ export function AppShell({
       /* localStorage อาจถูกบล็อก — กางเมนูไว้เป็นค่าเริ่มต้นไปเลย */
     }
   }, []);
+
+  // ปิดเมนูมือถืออัตโนมัติทุกครั้งที่เปลี่ยนหน้า (กดลิงก์ในเมนูก็ปิดผ่าน onClick ตรงๆ อยู่แล้ว แต่เผื่อ
+  // เปลี่ยนหน้าด้วยวิธีอื่น เช่น ปุ่ม back ของเบราว์เซอร์)
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   function toggleSideCollapsed() {
     const next = !sideCollapsed;
@@ -296,6 +305,17 @@ export function AppShell({
   return (
     <>
       <header className="topbar">
+        {/* ปุ่มกางเมนูข้าง — โผล่เฉพาะจอมือถือ (ดู CSS @media) เมนูข้างปกติอยู่ในแนวเดียวกับเนื้อหา
+         * แคบไปจนใช้ไม่ได้บนจอมือถือ (เจ้าของระบบสั่ง 22 ก.ย. 69) จึงพับเป็น overlay ลอยแทน */}
+        <button
+          type="button"
+          className="navtoggle"
+          aria-label={tx('เปิดเมนู')}
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((v) => !v)}
+        >
+          <Icon name="panel" />
+        </button>
         <div className="brand">
           <span className="mark">iPassion OBS</span>
         </div>
@@ -386,7 +406,8 @@ export function AppShell({
       </header>
 
       <div className="shell">
-        <aside className="side">
+        {mobileNavOpen && <div className="side-backdrop" onClick={() => setMobileNavOpen(false)} />}
+        <aside className={`side${mobileNavOpen ? ' open' : ''}`}>
           <nav className="snav" aria-label="เมนูหลัก">
             {NAV.map((group, gi) => {
               const visibleItems = group.items.filter((item) => {
@@ -404,7 +425,7 @@ export function AppShell({
                     const badgeAllowed = !item.badgeRoles || item.badgeRoles.includes(user.role);
                     const badge = item.badgeKey && badgeAllowed ? badgeValue[item.badgeKey] : undefined;
                     return (
-                      <Link key={item.href} href={item.href} className={`mtab${active ? ' on' : ''}`}>
+                      <Link key={item.href} href={item.href} className={`mtab${active ? ' on' : ''}`} onClick={() => setMobileNavOpen(false)}>
                         <Icon name={item.icon} />
                         <span>{tx(item.label)}</span>
                         {typeof badge === 'number' && badge > 0 && <span className="bdg">{item.badgeKey === 'bell' && badge > 9 ? '9+' : badge}</span>}

@@ -323,6 +323,29 @@ body.side-collapsed .sidetoggle { justify-content: center; padding-left: 0; padd
 body.side-collapsed .sidetoggle > span { display: none; }
 body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 
+/* ปุ่มกางเมนูข้างบนมือถือ — base style อยู่ตรงนี้ (คลาสใหม่ ไม่มีตัวชนกัน ไม่ต้องกังวลเรื่อง cascade)
+   ส่วน @media override (แสดงปุ่ม/ย้าย .side ไปลอยแบบ overlay ฯลฯ) รวมไว้ท้ายไฟล์ทั้งหมด — ดูหมายเหตุ
+   "MOBILE RESPONSIVE" ท้ายไฟล์นี้ เหตุผลที่แยกไปท้ายไฟล์: ต้อง override ../topbar/.ctxbtn/.who ที่ประกาศ
+   ทีหลังในไฟล์นี้อีกที (specificity เท่ากันทั้งคู่ กฎที่มาทีหลังใน cascade ชนะ ไม่ใช่กฎที่ "เจาะจงกว่า"
+   ตามสัญชาตญาณ) วางรวมท้ายไฟล์ที่เดียวชนะทุกอันแน่นอน ไม่ต้องไล่หาตำแหน่งของแต่ละ base rule ทีละตัว */
+.navtoggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  margin-right: 4px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-ctl);
+  background: var(--paper);
+  color: var(--ink2);
+  cursor: pointer;
+}
+.navtoggle:hover { background: var(--hov); }
+.navtoggle[aria-expanded="true"] svg.i { transform: rotate(90deg); }
+.navtoggle svg.i { transition: transform 0.15s var(--ease); }
+
 /* ── สลับภาษา ไทย/อังกฤษ (ported from public/styles.css) ── */
 .langswitch {
   display: flex; align-items: center; background: var(--sunk); border: 1px solid var(--rule);
@@ -3233,7 +3256,38 @@ pre.code {
   padding: 20px 22px; overflow-x: auto; color: #C6D6E6;
   font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px; line-height: 1.75;
+  white-space: pre-wrap; word-break: break-all;
 }
+
+/* ═══ API Activity Log — dropdown เลือกได้หลายอัน (ชนิด: Consume/Expose) ═══
+   ใช้ <details>/<summary> ของเบราว์เซอร์เอง ไม่ต้องเขียน JS คุม open/close */
+.ddwrap { position: relative; }
+.ddbtn {
+  display: inline-flex; align-items: center; gap: 6px; list-style: none; cursor: pointer;
+  font: inherit; font-size: 13.5px; height: var(--h-ctl); padding: 0 14px;
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); background: var(--paper); color: var(--ink2);
+}
+.ddbtn::-webkit-details-marker { display: none; }
+.ddbtn svg.i { width: 12px; height: 12px; }
+.ddpanel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 160px;
+  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-ctl);
+  box-shadow: var(--sh3); padding: 8px;
+}
+.ddopt {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+  font-size: 13.5px; cursor: pointer; white-space: nowrap;
+}
+.ddopt:hover { background: var(--hov); }
+
+/* กล่องรายละเอียดตอนกดขยายแถว — จัดเป็น grid label/value เหมือนภาพอ้างอิง (21 ก.ย. 69) */
+.actlog-detail { padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.actlog-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 20px;
+}
+.actlog-grid > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.actlog-grid .sub { font-size: 11.5px; }
+.actlog-grid b { font-size: 13.5px; word-break: break-all; }
 
 /* ป้ายประเภทวัน/วันลา — ต่อจาก .tg/.tg.ok/.wn/.cr/.mu ที่มีอยู่แล้ว */
 .tg.lv-sick { color: var(--cal-sick); background: color-mix(in srgb, var(--cal-sick) 12%, white); border-color: color-mix(in srgb, var(--cal-sick) 35%, white); }
@@ -4408,6 +4462,13 @@ button.file:hover {
   .mypg-when {
     flex: 1 1 100%;
   }
+  /* .mypg-when ขึ้นแถวเต็มแล้ว แต่ .mypg-steps (ไทม์ไลน์ 3 จุด) กับ .mypg-act (ปุ่ม) ยังเป็น flex:none
+     ทั้งคู่บนแถวเดียวกัน รวมกันยังกว้างเกินจอมือถือแคบ (375px) อยู่ดี — ให้ .mypg-act ขึ้นแถวเต็มด้วย ชิดขวา
+     (เจ้าของระบบสั่ง "ทำ mobile responsive" 22 ก.ย. 69 — หน้านี้เปิดจากลิงก์ใน LINE บนมือถือเป็นหลัก) */
+  .mypg-act {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
 }
 
 /* ═══ แผงรายละเอียดผลการอ่าน ในแท็บ "ประวัติ" ของหน้าอัปโหลด ═══
@@ -4531,4 +4592,57 @@ button.file:hover {
 }
 .rdx-table td {
   padding: 5px 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — เมนูซ้าย/แถบบน (เจ้าของระบบสั่ง 22 ก.ย. 69)
+   วางรวมไว้ท้ายไฟล์ทั้งก้อนโดยตั้งใจ (ไม่ใช่ไปแทรกไว้ข้าง .side/.topbar/.ctxbtn ตรงๆ) เพราะทุก selector
+   ที่ override ด้านล่างนี้ (.topbar .brand, .ctxbtn, .who .wt, body.side-collapsed .mtab ฯลฯ) มี base
+   rule ประกาศอยู่ "หลัง" จุดที่เคยลองแทรกไว้ก่อนหน้านี้ในไฟล์ — CSS specificity ของทั้งคู่เท่ากัน (คลาส
+   เดียวกัน) ตัดสินกันด้วยลำดับก่อนหลังใน cascade เท่านั้น ไม่ใช่ว่าอยู่ใน @media แล้วจะ "ชนะ" อัตโนมัติ
+   วางไว้ท้ายไฟล์สุดที่เดียวจบ ชนะทุก base rule แน่นอนโดยไม่ต้องไล่หาตำแหน่งทีละตัว (เจอปัญหานี้จริงตอนลอง
+   แทรกรอบแรกแล้ว .ctxbtn/.topbar .brand ไม่ขยับเลยเพราะโดน base rule ทับ) ═══════════════════════ */
+@media (max-width: 900px) {
+  .navtoggle { display: inline-flex; }
+  .topbar { padding-right: 12px; gap: 10px; }
+  .topbar .brand { width: auto; padding: 0 4px; font-size: 15px; }
+  .who .wt { display: none; }
+  .who { padding-left: 10px; }
+  .ctxbtn { min-width: 0; max-width: 150px; padding: 0 10px; font-size: 12px; }
+
+  /* เมนูข้างเดิมอยู่ในแนวเดียวกับเนื้อหาแบบ flex กว้างคงที่ (264px หรือ 72px ตอนย่อ) แคบเกินจะใช้จริงบนจอ
+     มือถือ — ย้ายไปเป็น overlay ลอยทับเนื้อหาแทน (position:fixed) เลื่อนเข้า/ออกด้วย transform */
+  .side {
+    position: fixed;
+    left: 0;
+    top: var(--top-h);
+    width: 280px !important;
+    height: calc(100vh - var(--top-h));
+    transform: translateX(-100%);
+    transition: transform 0.22s var(--ease);
+    z-index: 100;
+    box-shadow: 8px 0 32px -12px rgba(16, 24, 40, 0.35);
+  }
+  .side.open { transform: translateX(0); }
+  /* บังคับให้กางเต็มเสมอตอนเป็น overlay มือถือ ไม่ว่าจะเคยกด "ย่อเมนู" ไว้บนจอใหญ่หรือไม่ — เมนูหุบเหลือ
+     แต่ไอคอนไม่มีประโยชน์ตอนลอยเป็น drawer แคบๆ อยู่แล้ว */
+  body.side-collapsed .mtab { justify-content: flex-start; padding: 11px 14px; gap: 12px; }
+  body.side-collapsed .mtab > span { display: inline; }
+  body.side-collapsed .mtab .bdg { position: static; border: none; display: inline-flex; }
+  body.side-collapsed .sgrp { font-size: 11px; padding: 18px 14px 8px; }
+  .sidetoggle { display: none; }
+
+  .side-backdrop {
+    position: fixed;
+    inset: var(--top-h) 0 0 0;
+    background: rgba(15, 23, 32, 0.45);
+    z-index: 90;
+  }
+
+  .page { padding: 20px 16px 80px; }
+}
+@media (max-width: 480px) {
+  /* ตัวเลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่ — ซ่อนบนจอเล็กมาก (ไม่พอที่จะอ่าน label ได้จริง) เข้าไปสลับ
+     บริษัทในหน้าที่เกี่ยวข้องแทนได้ (เช่นหน้ารายชื่อสัญญา) */
+  .ctxwrap { display: none; }
 }
