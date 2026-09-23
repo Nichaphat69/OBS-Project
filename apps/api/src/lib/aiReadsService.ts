@@ -22,6 +22,12 @@ export interface AiReadListItem {
   model: string | null;
   readAt: string;
   readBy: string | null;
+  /** เหตุผลที่อ่านไม่สำเร็จ — มีค่าเฉพาะแถว status === 'failed' จากคิวอ่านหลายไฟล์ (23 ก.ย. 69) */
+  errorMessage: string | null;
+  /** เฉพาะแถว source === 'employee_submit' — สัญญา/บริษัทที่ไฟล์นี้น่าจะเป็นของ (หา assignment
+   * ที่ active ครอบ period ของ employeeId แถวนั้น เหมือน uploadService.ts's readTimesheetFile())
+   * แถวอื่นไม่คำนวณให้ เพื่อไม่ต้อง query เพิ่มโดยไม่จำเป็น — จึงเป็น undefined ไม่ใช่ null */
+  contract?: { id: string; poNo: string; projectName: string; customerName: string } | null;
 }
 
 /** ported from service.js listAiReads() — no contractId = every read; contractId = only reads
@@ -60,21 +66,51 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
     filtered = out;
   }
 
-  return filtered.map((r) => ({
-    id: r.id,
-    source: r.source,
-    sourceEmailId: r.sourceEmailId,
-    fileName: r.fileName,
-    employeeId: r.employeeId,
-    employeeName: r.employeeName,
-    period: r.period,
-    periodLabel: r.period ? thaiMonth(r.period) : null,
-    documentNo: r.documentNo,
-    status: r.status,
-    model: r.model,
-    readAt: r.readAt,
-    readBy: r.readBy,
-  }));
+  const items = await Promise.all(
+    filtered.map(async (r) => ({
+      id: r.id,
+      source: r.source,
+      sourceEmailId: r.sourceEmailId,
+      fileName: r.fileName,
+      employeeId: r.employeeId,
+      employeeName: r.employeeName,
+      period: r.period,
+      periodLabel: r.period ? thaiMonth(r.period) : null,
+      documentNo: r.documentNo,
+      status: r.status,
+      model: r.model,
+      readAt: r.readAt,
+      readBy: r.readBy,
+      errorMessage: r.errorMessage,
+      contract: r.source === 'employee_submit' ? await contractForEmployeeSubmit(r.employeeId, r.period) : undefined,
+    })),
+  );
+  return items;
+}
+
+/** สัญญา/บริษัทของไฟล์ที่พนักงานส่งเอง — หา assignment ที่ active ครอบ period ของพนักงานคนนั้น
+ * (โค้ดเดียวกับที่ uploadService.ts's readTimesheetFile() ใช้ตอน preview ไฟล์อัปโหลด) */
+async function contractForEmployeeSubmit(
+  employeeId: string | null,
+  period: string | null,
+): Promise<AiReadListItem['contract']> {
+  if (!employeeId || !period) return null;
+  const assignment = await prisma.assignment.findFirst({
+    where: {
+      employeeId,
+      status: 'active',
+      startDate: { lte: `${period}-01` },
+      endDate: { gte: `${period}-01` },
+    },
+    include: { contract: { include: { customer: true } } },
+  });
+  if (!assignment) return null;
+  return {
+    id: assignment.contract.id,
+    poNo: assignment.contract.poNo,
+    projectName: assignment.contract.projectName,
+    customerName: assignment.contract.customer.nameTh,
+  };
 }
 
 /** ported from service.js getAiRead() — deliberately excludes file_bytes (full PDF blob, not

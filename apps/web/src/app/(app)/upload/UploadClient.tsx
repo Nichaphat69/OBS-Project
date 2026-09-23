@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PageHeader, TabStrip } from '../../../components/ui';
 import UploadFileTab from './UploadFileTab';
 import ManualEntryTab from './ManualEntryTab';
 import GmailTab from './GmailTab';
 import HistoryTab from './HistoryTab';
+import EmployeeSubmissionsTab, { type EmployeeSubmissionItem } from './EmployeeSubmissionsTab';
 import { useLang } from '../../../lib/language';
 
 const TABS = [
+  { key: 'employee', label: 'รอจากพนักงาน' },
   { key: 'upload', label: 'อัปโหลดไฟล์' },
   { key: 'gmail', label: 'ดึงจาก Gmail' },
   { key: 'manual', label: 'กรอกเอง' },
@@ -25,9 +27,26 @@ const TABS = [
  * การกันจริงอยู่ที่ฝั่ง API เหมือนทุกหน้าในระบบนี้ ตรงนี้แค่ไม่ยื่นของที่ role นั้นใช้ไม่ได้ให้เปล่าๆ
  */
 export default function UploadClient({ role }: { role: string }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('upload');
+  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('employee');
   const { tx } = useLang();
   const isEmployee = role === 'user';
+
+  // คิว "รอจากพนักงาน" — โหลดไว้ที่นี่ (ไม่ใช่ในตัวแท็บเอง) เพราะต้องรู้จำนวนไว้ขึ้น badge บนแท็บแม้ยัง
+  // ไม่ได้กดเข้าแท็บนั้นเลย (เจ้าของระบบสั่ง 22 ก.ย. 69 — ให้เห็นงานค้างทันทีตั้งแต่เปิดหน้า เหมือน badge
+  // แจ้งเตือนจุดอื่นในระบบ) พนักงาน (role user) ไม่ต้องโหลดเลย เพราะมองไม่เห็นแท็บนี้อยู่แล้ว
+  const [pending, setPending] = useState<EmployeeSubmissionItem[] | null>(null);
+
+  function loadPending() {
+    if (isEmployee) return;
+    fetch('/api/ai-reads', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: EmployeeSubmissionItem[]) =>
+        setPending(Array.isArray(rows) ? rows.filter((r) => r.source === 'employee_submit' && r.status === 'pending') : []),
+      )
+      .catch(() => setPending([]));
+  }
+
+  useEffect(loadPending, [isEmployee]);
 
   if (isEmployee) {
     return (
@@ -42,8 +61,13 @@ export default function UploadClient({ role }: { role: string }) {
     <>
       <PageHeader eyebrow={tx('ขั้นตอน 1 · อัปโหลด Timesheet')} title={tx('อัปโหลด Timesheet')} subtitle={tx('อ่านไฟล์ด้วย ABBYY OCR, ดึงจาก Gmail หรือกรอกเองแล้วบันทึกเข้าระบบ')} />
 
-      <TabStrip tabs={TABS} active={tab} onChange={setTab} />
+      <TabStrip
+        tabs={TABS.map((t) => (t.key === 'employee' ? { ...t, count: pending?.length } : t))}
+        active={tab}
+        onChange={setTab}
+      />
 
+      {tab === 'employee' && <EmployeeSubmissionsTab items={pending} onReload={loadPending} />}
       {tab === 'upload' && <UploadFileTab />}
       {tab === 'gmail' && <GmailTab />}
       {tab === 'manual' && <ManualEntryTab />}

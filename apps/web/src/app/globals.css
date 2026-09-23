@@ -108,6 +108,32 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
+
+  /* ═══ M3 (Material Design 3) foundation tokens — เจ้าของระบบสั่ง 22 ก.ย. 69 ให้ปรับสไตล์ทั้งระบบเป็น
+     M3 (ตกลงกันแล้วว่าทำแบบ token-level reskin บนโครงเดิม ไม่ใช่เปลี่ยนไปใช้ M3 component library จริง
+     เพื่อไม่แตะฟีเจอร์/ตำแหน่งปุ่ม) — คงโทนสีฟ้าเดิมของระบบ (--brand ฯลฯ) แค่จัดเข้าโครง M3:
+     shape scale, elevation, outline แยกระดับจากเส้นแบ่งบางเดิม (--rule/--hair) */
+  --m3-shape-xs: 4px;
+  --m3-shape-sm: 8px;
+  --m3-shape-md: var(--r-ctl);
+  --m3-shape-lg: 16px;
+  --m3-shape-full: var(--r-pill);
+
+  /* กรอบที่ต้องเห็นชัด (ปุ่ม outlined, input, การ์ด) — เข้มกว่า --rule/--hair ที่ใช้เป็นเส้นแบ่งบางๆ */
+  --m3-outline: #b7c2d4;
+  --m3-outline-variant: var(--rule);
+
+  /* Elevation แบบ M3 — เงาจาง กระจายกว้างกว่าเดิม (tonal shadow) แทนเงาทึบแบบเดิม
+     ตัวเลขระดับ (0-3) อิงตามคอนเซปต์ M3 elevation levels: 0 = แบน (ไม่มีเงา), 1 = การ์ด/ปุ่มพัก,
+     2 = ลอยตอน hover, 3 = เมนู/ป็อปอัป/โมดัล */
+  --m3-elev-0: none;
+  --m3-elev-1: 0 1px 3px rgba(20, 32, 47, 0.08), 0 1px 1px rgba(20, 32, 47, 0.05);
+  --m3-elev-2: 0 2px 6px rgba(20, 32, 47, 0.1), 0 1px 3px rgba(20, 32, 47, 0.06);
+  --m3-elev-3: 0 8px 20px rgba(20, 32, 47, 0.14), 0 2px 6px rgba(20, 32, 47, 0.07);
+
+  /* State layer — ใช้กลไกพื้นหลังที่มีอยู่แล้ว (--hov/--tint) ไม่สร้าง element ใหม่ */
+  --m3-state-hover: var(--hov);
+  --m3-state-hover-brand: var(--tint);
 }
 
 * {
@@ -336,8 +362,8 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   height: 38px;
   flex: none;
   margin-right: 4px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
   background: var(--paper);
   color: var(--ink2);
   cursor: pointer;
@@ -486,20 +512,21 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   padding-top: 2px;
 }
 
-/* ═══ buttons ═══ */
+/* ═══ buttons — M3 (filled/outlined/text button conventions) ═══ ทรงแคปซูล/pill คือเอกลักษณ์ภาพหลัก
+   ของปุ่มแบบ M3 (เจ้าของระบบสั่ง 22 ก.ย. 69 ปรับสไตล์ทั้งระบบเป็น M3 — ตำแหน่ง/ฟังก์ชันปุ่มไม่เปลี่ยน) */
 .btn {
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
-  border-radius: var(--r-ctl);
+  border-radius: var(--m3-shape-full);
   min-height: var(--h-ctl);
-  padding: 0 20px;
+  padding: 0 22px;
   cursor: pointer;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--m3-outline);
   background: var(--paper);
   color: var(--ink2);
   text-decoration: none;
-  box-shadow: var(--sh1);
+  box-shadow: var(--m3-elev-0);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -508,29 +535,27 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
     transform 0.16s var(--ease), color 0.16s var(--ease);
 }
 .btn:hover:not(:disabled) {
-  background: var(--hov);
-  border-color: #d2d7e0;
+  background: var(--m3-state-hover);
+  border-color: var(--brand);
   color: var(--ink);
-  box-shadow: var(--sh2);
-  transform: translateY(-1px);
+  box-shadow: var(--m3-elev-1);
 }
 .btn:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--sh1);
+  transform: scale(0.98);
+  box-shadow: var(--m3-elev-0);
 }
 .btn.pri {
   background: var(--grad-brand);
   border: none;
   color: #fff;
   font-weight: 600;
-  box-shadow: var(--sh-brand), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: var(--m3-elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
 }
 .btn.pri:hover:not(:disabled) {
   background: linear-gradient(135deg, var(--brand-l) 0%, var(--brand-h) 55%, var(--brand-d) 100%);
   color: #fff;
-  box-shadow: 0 14px 30px -8px rgba(10, 120, 212, 0.6), 0 3px 8px -1px rgba(10, 120, 212, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  transform: translateY(-2px);
+  box-shadow: var(--m3-elev-3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: none;
 }
 .btn.dgr {
   color: var(--cr);
@@ -606,8 +631,8 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   left: 18px;
   right: 18px;
   bottom: 4px;
-  height: 2.5px;
-  border-radius: 2px;
+  height: 3px;
+  border-radius: var(--m3-shape-full);
   background: linear-gradient(90deg, var(--brand-l), var(--brand) 100%);
 }
 
@@ -620,7 +645,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   gap: var(--sp-2);
   padding: var(--sp-6) var(--sp-4);
   border: 2px dashed var(--bline);
-  border-radius: var(--r-card);
+  border-radius: var(--m3-shape-lg);
   background: var(--tint);
   cursor: pointer;
   color: var(--brand-d);
@@ -691,15 +716,18 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   color: var(--ink2);
 }
 
-/* ═══ cards ═══ */
+/* ═══ cards — M3 outlined card (พื้นขาว + กรอบชัด แทน filled tonal card) เพื่อคงพื้นขาวตามที่เจ้าของ
+   ระบบยุติไว้แล้วสำหรับ .kpi ด้านล่าง ให้การ์ดทั้งระบบเป็นชุดเดียวกัน ═══ */
 .card {
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
-  box-shadow: var(--sh1);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  box-shadow: var(--m3-elev-1);
   margin-bottom: 26px;
   overflow: hidden;
   transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease);
+  display: flex;
+  flex-direction: column;
 }
 .card > .hd {
   display: flex;
@@ -735,6 +763,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 }
 .card > .bd {
   padding: 26px 24px;
+  flex: 1;
 }
 .card > .bd.flush {
   padding: 0;
@@ -808,10 +837,10 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
    เต็มใบอีกต้องถามยืนยันก่อน ไม่ใช่เดาเอง */
 .kpi {
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
   padding: 22px 24px 24px;
-  box-shadow: var(--sh1);
+  box-shadow: var(--m3-elev-1);
   position: relative;
   overflow: hidden;
   transition: box-shadow 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
@@ -844,8 +873,8 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   cursor: pointer;
 }
 .kpi.act:hover {
-  box-shadow: var(--sh3);
-  border-color: #d2d7e0;
+  box-shadow: var(--m3-elev-2);
+  border-color: var(--brand);
   transform: translateY(-3px);
 }
 .kpi .kh {
@@ -856,7 +885,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 .kpi .ic {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--m3-shape-sm);
   display: grid;
   place-items: center;
   flex: none;
@@ -1266,9 +1295,9 @@ td.sub {
 }
 .login-card {
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
-  box-shadow: var(--sh3);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  box-shadow: var(--m3-elev-2);
   width: 100%;
   max-width: 380px;
   padding: 36px 32px 32px;
@@ -1300,8 +1329,8 @@ td.sub {
   padding: 0 14px;
   font: inherit;
   font-size: 14px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
   background: var(--paper);
   color: var(--ink);
 }
@@ -1421,10 +1450,10 @@ td.sub {
   gap: 11px;
   color: var(--ink);
   padding: 13px 20px 13px 16px;
-  border-radius: var(--r-card);
+  border-radius: var(--m3-shape-lg);
   font-size: 13px;
   font-weight: 500;
-  box-shadow: 0 16px 40px -14px rgba(20, 32, 47, 0.35), var(--sh1);
+  box-shadow: var(--m3-elev-3);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.22s, transform 0.22s;
@@ -1432,7 +1461,7 @@ td.sub {
   max-width: min(580px, 90vw);
   line-height: 1.6;
   background: var(--paper);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--m3-outline);
 }
 .tst.on {
   opacity: 1;
@@ -1480,11 +1509,11 @@ td.sub {
 }
 .modal-card {
   background: var(--paper);
-  border-radius: 18px;
+  border-radius: var(--m3-shape-lg);
   overflow: hidden;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 24px 60px -12px rgba(16, 24, 40, 0.35);
+  box-shadow: var(--m3-elev-3);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1529,7 +1558,7 @@ td.sub {
 .modal-ic-badge {
   width: 68px;
   height: 68px;
-  border-radius: 18px;
+  border-radius: var(--m3-shape-lg);
   background: #eaecef;
   display: grid;
   place-items: center;
@@ -1616,7 +1645,7 @@ td.sub {
   width: 100%;
   height: min(90vh, 1100px);
   align-items: stretch;
-  border-radius: 14px;
+  border-radius: var(--m3-shape-lg);
 }
 .pdf-hd {
   flex: none;
@@ -1727,6 +1756,7 @@ td.sub {
   display: inline-grid;
   place-items: center;
   text-decoration: none;
+  border-radius: 50%;
 }
 
 /* ═══ ชิปโหมด FlowAccount (แถบบน) — ported verbatim from public/styles.css .env ═══ */
@@ -1860,9 +1890,9 @@ td.sub {
   width: 340px;
   max-width: calc(100vw - 32px);
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
-  box-shadow: var(--sh2);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  box-shadow: var(--m3-elev-3);
   overflow: hidden;
   padding: 6px;
   max-height: 60vh;
@@ -2006,10 +2036,16 @@ td.sub {
   color: var(--ok);
 }
 
+/* รายการแจ้งเตือน — เดิมแต่ละแถวไม่มีระยะห่าง/เส้นแบ่งเลย พอมีแถวพื้นสีทึบ (.unread) ติดกันหลายแถวจะดู
+   กลืนเป็นก้อนเดียว แยกไม่ออกว่าจบแถวไหนเริ่มแถวไหน (เจ้าของระบบสั่ง 23 ก.ย. 69) — เพิ่ม gap ระหว่างแถว
+   และกรอบบางๆ ให้แต่ละแถวเป็นก้อนของตัวเองชัดเจน */
 .bp-list {
   list-style: none;
   margin: 0;
-  padding: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .bp-list button {
   display: grid;
@@ -2021,10 +2057,10 @@ td.sub {
   text-align: left;
   cursor: pointer;
   background: none;
-  border: none;
-  padding: 12px 12px;
-  border-radius: var(--r-ctl);
-  transition: background 0.12s;
+  border: 1px solid var(--hair);
+  padding: 14px 14px;
+  border-radius: var(--m3-shape-md);
+  transition: background 0.12s, border-color 0.12s;
 }
 .bp-list button:hover:not(:disabled) {
   background: var(--hov);
@@ -2063,6 +2099,7 @@ td.sub {
 
 .bp-list button.unread {
   background: var(--tint);
+  border-color: var(--tint2);
 }
 .bp-list button.unread:hover {
   background: var(--tint2);
@@ -2095,8 +2132,8 @@ td.sub {
 }
 .rec {
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -2260,10 +2297,10 @@ td.sub {
 }
 .doc {
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
   overflow: hidden;
-  box-shadow: var(--sh2);
+  box-shadow: var(--m3-elev-1);
 }
 .doc .dh {
   padding: 26px 28px 24px;
@@ -2302,8 +2339,8 @@ td.sub {
   gap: 22px;
 }
 .cmp {
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
   overflow: hidden;
 }
 .cmp .f {
@@ -2376,9 +2413,9 @@ dl.kv dd {
   position: relative;
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--m3-outline);
   background: var(--paper);
-  border-radius: var(--r-ctl);
+  border-radius: var(--m3-shape-full);
   height: var(--h-ctl);
 }
 .selectchip:focus-within {
@@ -2420,6 +2457,54 @@ dl.kv dd {
   text-overflow: ellipsis;
 }
 
+/* ═══ ค่าเริ่มต้น input/select ที่ไม่ได้อยู่ใน .frm/.selectchip/.login-card — กันไม่ให้เหลือกรอบดีฟอลต์
+   ของเบราว์เซอร์ (เจ้าของระบบชี้จากหน้า "ตรวจ Manday" 22 ก.ย. 69 ว่ากรอบค้นหา/ตัวกรองปีไม่เข้าธีม M3 —
+   เจอจุดเดียวกันในตัวกรอง API Activity Log ด้วย แก้ที่ element เปล่าตรงนี้ทีเดียว จะครอบคลุมทุกจุดที่ลืมใส่
+   class ไปพร้อมกัน — specificity ต่ำกว่า .frm input/.selectchip select ที่มีอยู่แล้วเสมอ จึงไม่ทับของเดิม) */
+input[type='text'],
+input[type='search'] {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-full);
+  height: var(--h-ctl);
+  padding: 0 16px;
+}
+/* box-shadow ไม่ใช่ outline — outline เป็นรูปสี่เหลี่ยมเสมอไม่ว่า border-radius จะโค้งแค่ไหน (เบราว์เซอร์
+   ส่วนใหญ่ไม่ปัดมุม outline ตาม border-radius) พอ element เป็นทรง pill (--m3-shape-full) แล้ว focus ด้วย
+   outline จะเห็นเป็นกรอบเหลี่ยมซ้อนทับกรอบมนของตัว element เอง ดูเหมือนขอบซ้อนกัน (เจ้าของระบบชี้จากหน้า
+   FlowAccount/รายการส่ง 22 ก.ย. 69) — เปลี่ยนเป็น box-shadow ring แบบเดียวกับ .selectchip:focus-within
+   ที่ไล่ตามมุมโค้งของ element ได้ถูกต้อง */
+input[type='text']:focus,
+input[type='search']:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px rgba(10, 120, 212, 0.12);
+}
+/* ลูกศร dropdown ของ <select> เปล่า — ของเดิมใช้ลูกศรของเบราว์เซอร์เอง ซึ่งชิดขอบปุ่มมากเกินไปเทียบกับ
+   dropdown อื่นในระบบที่มีระยะห่างจากขอบ (เจ้าของระบบชี้จากหน้าการแจ้งเตือน/ตรวจ Manday 23 ก.ย. 69) —
+   ปิดลูกศรเดิม แล้ววาดลูกศรเองด้วย background-image ให้เว้นระยะจากขอบเท่ากับ dropdown อื่น (.selectchip) */
+select {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink2);
+  background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2377839a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center;
+  background-size: 15px 15px;
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-full);
+  height: var(--h-ctl);
+  padding: 0 38px 0 16px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px rgba(10, 120, 212, 0.12);
+}
+
 /* แถบ filter ของตาราง — ใช้กับหน้าที่มีตัวกรองหลายตัวเรียงกันในหัวการ์ด (บันทึกการส่ง เป็นเจ้าแรก) */
 .subfilters {
   display: flex;
@@ -2433,8 +2518,8 @@ dl.kv dd {
 .subsum {
   padding: 15px 18px 16px;
   margin-bottom: 20px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
   background: var(--paper);
 }
 .subsum .ssh {
@@ -2669,8 +2754,8 @@ td .nm {
   font-size: 13.5px;
   color: var(--ink);
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
   height: var(--h-ctl);
   padding: 0 11px;
   width: 100%;
@@ -2714,12 +2799,16 @@ td .nm {
   font: inherit;
   font-size: 13.5px;
   color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
+  background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2377839a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 12px center;
+  background-size: 15px 15px;
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
   height: var(--h-ctl);
-  padding: 0 11px;
+  padding: 0 34px 0 11px;
   width: 100%;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 .frm.auto {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -3170,16 +3259,16 @@ td .nm {
 
 .prog {
   display: flex; align-items: flex-start; padding: 28px 26px 24px; background: var(--paper);
-  border: 1px solid var(--rule); border-radius: var(--r-card); margin-bottom: 22px;
-  overflow-x: auto; box-shadow: var(--sh1);
+  border: 1px solid var(--m3-outline); border-radius: var(--m3-shape-lg); margin-bottom: 22px;
+  overflow-x: auto; box-shadow: var(--m3-elev-1);
 }
 .pstep {
   display: flex; flex-direction: column; align-items: center; text-align: center;
   gap: 8px; flex: none; width: 150px;
 }
 .pstep .cir {
-  width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
-  flex: none; background: var(--sunk); border: 1.5px solid var(--rule); color: var(--fnt);
+  width: 52px; height: 52px; border-radius: var(--m3-shape-md); display: grid; place-items: center;
+  flex: none; background: var(--sunk); border: 1.5px solid var(--m3-outline); color: var(--fnt);
 }
 .pstep .cir svg { width: 22px; height: 22px; }
 .pstep.dn .cir {
@@ -3235,7 +3324,7 @@ td .nm {
   grid-template-columns: 17px 1fr;
   gap: 13px;
   padding: 18px 20px;
-  border-radius: var(--r-card);
+  border-radius: var(--m3-shape-lg);
   font-size: 13px;
   line-height: 1.7;
   background: var(--tint);
@@ -3267,17 +3356,17 @@ pre.code {
 .ddbtn {
   display: inline-flex; align-items: center; gap: 6px; list-style: none; cursor: pointer;
   font: inherit; font-size: 13.5px; height: var(--h-ctl); padding: 0 14px;
-  border: 1px solid var(--rule); border-radius: var(--r-ctl); background: var(--paper); color: var(--ink2);
+  border: 1px solid var(--m3-outline); border-radius: var(--m3-shape-full); background: var(--paper); color: var(--ink2);
 }
 .ddbtn::-webkit-details-marker { display: none; }
 .ddbtn svg.i { width: 12px; height: 12px; }
 .ddpanel {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 160px;
-  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-ctl);
-  box-shadow: var(--sh3); padding: 8px;
+  background: var(--paper); border: 1px solid var(--m3-outline); border-radius: var(--m3-shape-md);
+  box-shadow: var(--m3-elev-3); padding: 8px;
 }
 .ddopt {
-  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--m3-shape-sm);
   font-size: 13.5px; cursor: pointer; white-space: nowrap;
 }
 .ddopt:hover { background: var(--hov); }
@@ -3475,7 +3564,7 @@ button.file:hover {
 .attrow .btn { flex: none; }
 .btn.icon {
   width: var(--h-ctl-sm); padding: 0; display: inline-grid; place-items: center;
-  text-decoration: none;
+  text-decoration: none; border-radius: 50%;
 }
 
 /* ── แถบปุ่มล่าง ── */
@@ -3519,12 +3608,12 @@ button.file:hover {
 }
 .rd {
   position: relative;
-  border-radius: var(--r-card);
+  border-radius: var(--m3-shape-lg);
   /* แถบไล่สีด้านบนเป็น ::after ที่วางชิดขอบ padding box ซึ่งอยู่ด้านในเส้นขอบ มุมของมันจึงไม่โค้ง
      ตามมุมนอกของการ์ด แล้วล้นออกนอกกรอบ — ตัดด้วย overflow ที่ตัวการ์ดให้โค้งตามการ์ดเสมอ */
   overflow: hidden;
   padding: 16px 17px;
-  border: 1.5px solid var(--rule);
+  border: 1.5px solid var(--m3-outline);
   background: var(--paper);
   cursor: pointer;
   text-align: start;
@@ -3650,8 +3739,8 @@ button.file:hover {
 }
 
 .rdpanel {
-  border: 1px solid var(--rule);
-  border-radius: var(--r-card);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
   background: var(--paper);
   overflow: hidden;
 }
@@ -3743,11 +3832,15 @@ button.file:hover {
   height: var(--h-ctl-sm);
   flex: 1 1 280px;
   min-width: 0;
-  padding: 0 11px;
+  padding: 0 32px 0 11px;
   border: 1px solid var(--cr-line);
   border-radius: var(--r-ctl);
-  background: var(--paper);
+  background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2377839a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  background-size: 14px 14px;
   color: var(--ink);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 .crfields .tplpick select:focus {
   outline: none;
@@ -4198,11 +4291,15 @@ button.file:hover {
   min-width: 0;
   flex: 1 1 220px;
   max-width: 340px;
-  padding: 0 11px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
-  background: var(--paper);
+  padding: 0 32px 0 11px;
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
+  background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2377839a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  background-size: 14px 14px;
   color: var(--ink);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 .readeropt select:disabled {
   opacity: 0.55;
@@ -4664,8 +4761,8 @@ button.file:hover {
   font-size: 13.5px;
   height: var(--h-ctl);
   padding: 0 14px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-ctl);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
   background: var(--paper);
   color: var(--ink);
   cursor: pointer;
@@ -4699,9 +4796,9 @@ button.file:hover {
   z-index: 70;
   width: 300px;
   background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 20px;
-  box-shadow: var(--sh3);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  box-shadow: var(--m3-elev-3);
   padding: 14px;
 }
 /* พื้นที่ใต้ปุ่มไม่พอ (ฟอร์มยาว ปุ่มอยู่ใกล้ขอบล่างจอ) — เปิดขึ้นด้านบนแทนลงล่าง (DatePicker.tsx คำนวณ
@@ -4817,4 +4914,78 @@ button.file:hover {
 }
 .dpk-link-btn:hover {
   background: var(--tint);
+}
+
+/* ═══ คิวอ่าน Timesheet หลายไฟล์ — แสดงสถานะสดของแต่ละไฟล์ทันทีหลังกด "Process Documents" (23 ก.ย. 69
+   อ้างอิงหน้าตาจาก Clear Read เอง) ═══ */
+.rq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rq-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--m3-outline-variant);
+  border-radius: var(--m3-shape-md);
+  background: var(--paper);
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.rq-row.running {
+  border-color: var(--bline);
+  background: var(--tint);
+}
+.rq-row.failed {
+  border-color: var(--crl);
+  background: var(--crb);
+}
+.rq-row .rq-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rq-row .rq-err {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--cr);
+  margin-top: 2px;
+}
+.rq-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  flex: none;
+}
+.rq-status.queued { color: var(--mut); }
+.rq-status.running { color: var(--brand-d); }
+.rq-status.pending { color: var(--ok); }
+.rq-status.failed { color: var(--cr); }
+
+/* วงหมุนสไตล์ M3 circular progress — ใช้ conic-gradient แทน border-trick ธรรมดา ให้ปลายเส้นมน/บางสม่ำเสมอ
+   กว่า border ตัดขอบ 90 องศาแบบเดิม (เจ้าของระบบขอ "ขอสวยๆ" 23 ก.ย. 69) */
+.rq-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  flex: none;
+  background: conic-gradient(var(--brand) 0deg, var(--brand) 270deg, transparent 270deg, transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.4px), #000 calc(100% - 2.4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.4px), #000 calc(100% - 2.4px));
+  animation: rq-spin 0.85s linear infinite;
+}
+@keyframes rq-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rq-spinner { animation-duration: 2.4s; }
 }

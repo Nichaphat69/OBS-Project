@@ -976,16 +976,38 @@ const TX: Record<string, string> = {
   'กำลังพัฒนาในเฟสถัดไป — เชื่อมข้อมูลจริงเร็ว ๆ นี้': 'Coming in a future phase — will connect to real data soon',
 };
 
+const MONTHS_TH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** จัด "รอบบิล" (period แบบ YYYY-MM ค.ศ. เสมอทั้งระบบ) ให้เป็นข้อความอ่านง่ายตามภาษาที่เลือกอยู่ — ไทย
+ * ใช้ชื่อเดือนไทย + ปี พ.ศ. (+543) เหมือนเดิม, อังกฤษใช้ชื่อเดือนอังกฤษ + ปี ค.ศ. ตรงๆ (เจ้าของระบบสั่ง
+ * 23 ก.ย. 69: สลับปีตามภาษาที่แถบบนด้วย ไม่ใช่ตรึงเป็น พ.ศ. เสมอไม่ว่าจะสลับภาษาเป็นอังกฤษหรือไม่)
+ *
+ * ใช้แทน `periodLabel` ที่หลายจุดฝั่งเซิร์ฟเวอร์ส่งมา (ซึ่งปั้นเป็นภาษาไทยตายตัวเสมอ ไม่รู้จักภาษาที่
+ * เลือกอยู่ฝั่งเว็บ) — เซิร์ฟเวอร์ยังส่ง periodLabel แบบเดิมไว้ให้จุดที่ยังไม่ได้ผูกภาษาใช้ต่อได้โดยไม่พัง
+ * แต่ทุกจุดที่โชว์ "เดือน/ปี" ควรเปลี่ยนมาใช้ตัวนี้กับ `period` ดิบ (YYYY-MM) แทน */
+export function formatPeriod(period: string | null | undefined, lang: Lang): string {
+  if (!period) return '—';
+  const m = /^(\d{4})-(\d{2})$/.exec(period);
+  if (!m) return period;
+  const y = Number(m[1]);
+  const mi = Number(m[2]) - 1;
+  if (mi < 0 || mi > 11) return period;
+  return lang === 'en' ? `${MONTHS_EN[mi]} ${y}` : `${MONTHS_TH[mi]} ${y + 543}`;
+}
+
 interface LanguageContextValue {
   lang: Lang;
   setLang: (lang: Lang) => void;
   tx: (th: string) => string;
+  formatPeriod: (period: string | null | undefined) => string;
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
   lang: 'th',
   setLang: () => {},
   tx: (th) => th,
+  formatPeriod: (period) => formatPeriod(period, 'th'),
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
@@ -1016,6 +1038,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       lang,
       setLang,
       tx: (th: string) => (lang === 'en' && TX[th] ? TX[th] : th),
+      formatPeriod: (period: string | null | undefined) => formatPeriod(period, lang),
     }),
     [lang],
   );

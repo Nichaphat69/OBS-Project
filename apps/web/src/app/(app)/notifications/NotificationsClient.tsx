@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageHeader, Card, ErrorState } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { readIds, markRead } from '../../../lib/notifRead';
+import { readIds, markRead, visibleNotifications } from '../../../lib/notifRead';
 import { useLang } from '../../../lib/language';
 
 interface FeedItem {
@@ -42,12 +42,16 @@ function ago(iso: string | null, tx: (th: string) => string): string {
   return iso.slice(0, 10);
 }
 
+const LEVEL_FILTER_LABEL: Record<string, string> = { critical: 'ผิดพลาด', warn: 'ตีกลับ', ok: 'สำเร็จ', info: 'ทั่วไป' };
+
 export default function NotificationsClient({ role }: { role: string }) {
   const router = useRouter();
   const { tx } = useLang();
   const [feed, setFeed] = useState<Feed | null>(null);
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
 
   function load() {
     setError(null);
@@ -77,7 +81,20 @@ export default function NotificationsClient({ role }: { role: string }) {
   }
   if (!feed) return null;
 
-  const unreadCount = feed.items.filter((i) => !readSet.has(String(i.id))).length;
+  // ตัดรายการที่ "อ่านแล้วเกิน 30 วัน" ออกก่อนเสมอ (เจ้าของระบบสั่ง 23 ก.ย. 69) — ยังไม่อ่านเลยไม่ว่า
+  // จะเก่าแค่ไหนก็ยังอยู่ ไม่กระทบตัวเลขนับที่ยังไม่อ่าน (visibleNotifications ไม่ตัดของที่ยังไม่อ่านออก)
+  const visibleItems = visibleNotifications(feed.items);
+  const unreadCount = visibleItems.filter((i) => !readSet.has(String(i.id))).length;
+
+  const q = search.trim().toLowerCase();
+  const shownItems = visibleItems.filter((n) => {
+    if (levelFilter && n.level !== levelFilter) return false;
+    if (q) {
+      const haystack = `${n.title} ${n.detail} ${n.by}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 
   function openNotification(item: FeedItem) {
     markRead([item.id]);
@@ -103,7 +120,10 @@ export default function NotificationsClient({ role }: { role: string }) {
 
   function markAll() {
     if (!feed) return;
-    markRead(feed.items.map((i) => i.id));
+    // มาร์คเฉพาะอันที่ยังไม่อ่าน — ถ้ามาร์คซ้ำอันที่อ่านแล้ว เวลาที่บันทึกไว้จะถูกเขียนทับเป็น "ตอนนี้"
+    // ทำให้นับอายุ 30 วันใหม่จากศูนย์โดยไม่ได้ตั้งใจ (ดู notifRead.ts's visibleNotifications())
+    const unreadIds = feed.items.filter((i) => !readSet.has(String(i.id))).map((i) => i.id);
+    markRead(unreadIds);
     setReadSet(readIds());
   }
 
@@ -121,12 +141,33 @@ export default function NotificationsClient({ role }: { role: string }) {
           ) : undefined
         }
       />
+      {feed.items.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={tx('ค้นหาชื่อพนักงาน / เลข PO / สัญญา / รอบบิล')}
+            style={{ flex: '1 1 280px', maxWidth: 420 }}
+          />
+          <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}>
+            <option value="">{tx('ทุกสถานะ')}</option>
+            {Object.entries(LEVEL_FILTER_LABEL).map(([key, label]) => (
+              <option key={key} value={key}>
+                {tx(label)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <Card flush>
         {feed.items.length === 0 ? (
           <div className="bp-empty">{tx('ยังไม่มีเหตุการณ์ในระบบ')}</div>
+        ) : shownItems.length === 0 ? (
+          <div className="bp-empty">{tx('ไม่พบรายการที่ตรงกับตัวกรอง')}</div>
         ) : (
           <ul className="bp-list">
-            {feed.items.map((n) => {
+            {shownItems.map((n) => {
               const unread = !readSet.has(String(n.id));
               const tone = LEVEL_TONE[n.level] ?? 'info';
               return (

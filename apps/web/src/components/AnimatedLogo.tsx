@@ -62,6 +62,8 @@ export function AnimatedLogo({ height = 32 }: { height?: number }) {
           WebkitTextFillColor: 'transparent',
           color: 'var(--brand)',
           whiteSpace: 'nowrap',
+          position: 'relative',
+          top: Math.round(height * 0.08),
         }}
       >
         iPassion OBS

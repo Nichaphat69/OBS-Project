@@ -209,19 +209,6 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
                 <Icon name={isSpreadsheetName(modal.filename) ? 'invoice' : 'file'} className="sm" /> {modal.filename ?? tx('เอกสาร PDF')}
               </span>
               <div className="pdf-actions">
-                <button
-                  className="btn sm icon"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(modal.url).then(
-                      () => toast(tx('คัดลอกลิงก์แล้ว')),
-                      () => toast(tx('คัดลอกลิงก์ไม่สำเร็จ'), true),
-                    );
-                  }}
-                  title={tx('แชร์ลิงก์')}
-                  aria-label={tx('แชร์')}
-                >
-                  <Icon name="send" />
-                </button>
                 <a
                   className="btn sm icon"
                   href={`${modal.url}${modal.url.includes('?') ? '&' : '?'}dl`}
@@ -229,7 +216,7 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
                   title={tx('ดาวน์โหลดไฟล์นี้')}
                   aria-label={tx('ดาวน์โหลด')}
                 >
-                  <Icon name="cd" />
+                  <Icon name="download" />
                 </a>
                 <button className="btn sm icon" onClick={closePdf} title={tx('ปิด')} aria-label={tx('ปิด')}>
                   <Icon name="x" />

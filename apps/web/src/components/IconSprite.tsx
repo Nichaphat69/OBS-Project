@@ -32,6 +32,12 @@ export default function IconSprite() {
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <path d="M12 3v13M7.5 7.5 12 3l4.5 4.5" />
       </symbol>
+      {/* ลูกศรลงเข้าถาด — คนละแบบกับ i-cd (ลูกศรชี้ลงเฉยๆ ใช้กับปุ่มขยาย/dropdown) ตั้งใจแยกไว้เพราะปุ่ม
+          "ดาวน์โหลด" ใช้ i-cd ผิดมาก่อน (23 ก.ย. 69) หน้าตาเหมือนปุ่ม dropdown ทำให้เข้าใจผิด */}
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <path d="M12 3v11M7.5 10l4.5 4.5L16.5 10" />
+      </symbol>
       <symbol id="i-list-chk" viewBox="0 0 24 24">
         <path d="M11 6h10M11 12h10M11 18h6" />
         <path d="m3 6 1.6 1.6L7.5 4.7M3 16.4 4.6 18l2.9-2.9" />

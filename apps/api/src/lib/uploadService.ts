@@ -81,16 +81,22 @@ export interface ReadResult {
   rawResponse?: unknown;
 }
 
-/** ported from service.js readTimesheetFile() — preview only, does NOT write to the DB. */
+/** ported from service.js readTimesheetFile() — preview only, does NOT write to the DB.
+ *
+ * รับ `fileBytes` ตรงๆ ได้ด้วย (เพิ่ม 23 ก.ย. 69 ให้ readQueueService.ts ใช้) — ตอน worker ของคิวอ่าน
+ * หลายไฟล์หยิบไบต์ที่เก็บไว้ในคอลัมน์ `ai_reads.file_bytes` มาอ่านต่อ ไม่ต้องแปลงเป็น base64 แล้วแปลง
+ * กลับมาเป็นไบต์อีกทีโดยไม่จำเป็น — ต้องส่งมาอย่างใดอย่างหนึ่งเท่านั้น */
 export async function readTimesheetFile({
   fileBase64,
+  fileBytes,
   fileName = null,
   expectedPeriod,
   contractId = null,
   readerId = null,
   abbyySkillId = null,
 }: {
-  fileBase64: string;
+  fileBase64?: string;
+  fileBytes?: Buffer;
   fileName?: string | null;
   expectedPeriod?: string;
   contractId?: string | null;
@@ -100,9 +106,9 @@ export async function readTimesheetFile({
    * (ฝั่ง Clear Read ไม่มีคู่กันเพราะใช้แม่แบบเดียวทั้งระบบ ดู resolveReaderTemplates) */
   abbyySkillId?: string | null;
 }): Promise<ReadResult & { fileBytes: Buffer | null }> {
-  if (!fileBase64) throw new UploadError('ยังไม่ได้เลือกไฟล์ Timesheet');
+  if (!fileBase64 && !fileBytes) throw new UploadError('ยังไม่ได้เลือกไฟล์ Timesheet');
 
-  const source = Buffer.from(fileBase64, 'base64');
+  const source = fileBytes ?? Buffer.from(fileBase64!, 'base64');
   // เดารูปแบบไฟล์จากเนื้อไฟล์เอง ไม่เชื่อชื่อไฟล์ (ไฟล์ตัวอย่างจริงที่เจอมาชื่อ "...pdf.xlsx" — ชื่อไฟล์
   // เชื่อไม่ได้) — PDF ขึ้นต้นด้วย "%PDF" เสมอ ที่เหลือ (xlsx/csv) ให้ spreadsheetExtractionService.ts
   // เดาต่อเอง (zip = xlsx, ไม่งั้นถือเป็นข้อความ CSV)
@@ -261,6 +267,7 @@ export async function confirmTimesheet({
   actor,
   submissionMethod = 'self_obs',
   restrictToEmployeeId = null,
+  sourceAiReadId = null,
 }: {
   documentNo: string;
   extraction: Partial<ExtractedData> & { employeeName?: string; period?: string };
@@ -275,6 +282,11 @@ export async function confirmTimesheet({
   /** ใส่ session.employeeId เมื่อ role เป็น 'user' เท่านั้น — ส่งต่อให้ ingestTimesheet() บังคับว่าชื่อ
    * ที่ยืนยันต้องเป็นพนักงานคนนี้เท่านั้น กัน 'user' ยืนยัน Timesheet แทนคนอื่น */
   restrictToEmployeeId?: string | null;
+  /** แถว ai_reads ดิบ (source: 'employee_submit') ที่ถูกหยิบมาอ่านรอบนี้ — ถ้ายืนยันสำเร็จจริง (มี
+   * timesheetId) ให้ปิดแถวต้นทางนั้นเป็น 'confirmed' ด้วย ไม่งั้นจะค้างโผล่ในแท็บ "รอจากพนักงาน" ต่อไป
+   * ทั้งที่จริงๆ ถูกอ่าน+ยืนยันเข้าระบบไปแล้ว (ผ่าน documentNo คนละอันกับแถวใหม่ที่ logAiRead() สร้าง
+   * ตอน /read — สองแถวคือคนละเอกสารในสายตาเดิม จึงต้องปิดเองตรงนี้ ไม่ได้ปิดให้อัตโนมัติ) */
+  sourceAiReadId?: number | null;
 }) {
   if (!documentNo) throw new UploadError('ต้องระบุเลขที่เอกสารจากใบ Timesheet');
   if (!extraction?.employeeName || !extraction?.period) {
@@ -317,7 +329,15 @@ export async function confirmTimesheet({
     }),
   });
 
-  if (result.timesheetId) await markAiReadConfirmed(documentNo);
+  if (result.timesheetId) {
+    await markAiReadConfirmed(documentNo);
+    if (sourceAiReadId) {
+      await prisma.aiRead.updateMany({
+        where: { id: sourceAiReadId, status: 'pending' },
+        data: { status: 'confirmed' },
+      });
+    }
+  }
 
   return result;
 }

@@ -121,8 +121,12 @@ export function Kpi({
 
 type PillTone = 'ok' | 'wn' | 'cr' | 'pr' | 'mu';
 
-export function StatusPill({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
-  return <span className={`st ${tone}`}>{children}</span>;
+export function StatusPill({ tone, children, title }: { tone: PillTone; children: React.ReactNode; title?: string }) {
+  return (
+    <span className={`st ${tone}`} title={title}>
+      {children}
+    </span>
+  );
 }
 
 export function Tag({ tone, children }: { tone: PillTone; children: React.ReactNode }) {

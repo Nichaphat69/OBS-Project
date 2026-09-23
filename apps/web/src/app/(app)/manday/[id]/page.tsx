@@ -505,7 +505,7 @@ export default function ManadyDetailPage() {
                       <span className="pd">PDF</span> {sheet.sourceFile}
                     </button>
                     <a className="btn sm icon" href={`/api/timesheets/${sheet.id}/file?dl`} title={tx('ดาวน์โหลดไฟล์ต้นฉบับ')}>
-                      <Icon name="cd" />
+                      <Icon name="download" />
                     </a>
                   </>
                 ) : (

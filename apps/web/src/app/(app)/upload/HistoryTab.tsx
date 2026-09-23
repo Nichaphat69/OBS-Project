@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { usePdfPreview, useToast } from '../../../components/Overlays';
+import ReviewCard, { type ReadResultShape } from './ReviewCard';
 import { useLang } from '../../../lib/language';
 
 interface AiReadItem {
@@ -18,6 +19,7 @@ interface AiReadItem {
   model: string | null;
   readAt: string;
   readBy: string | null;
+  errorMessage: string | null;
 }
 
 /**
@@ -62,15 +64,23 @@ interface AiReadDetail extends AiReadItem {
   } | null;
 }
 
-const STATUS_TONE: Record<string, 'ok' | 'wn' | 'mu'> = {
+// เพิ่ม queued/running/failed (23 ก.ย. 69) — สถานะใหม่จากคิวอ่านหลายไฟล์พร้อมกัน มาก่อนหน้า pending
+// เดิมเสมอ (queued → running → pending สำเร็จ หรือ failed พัง) ไม่กระทบความหมายเดิมของ pending/confirmed
+const STATUS_TONE: Record<string, 'ok' | 'wn' | 'mu' | 'cr'> = {
   confirmed: 'ok',
   pending: 'wn',
+  queued: 'mu',
+  running: 'wn',
+  failed: 'cr',
 };
 
 // เดิมโชว์ค่า enum ดิบ ('confirmed'/'pending') ตรงๆ — บั๊กชนิดเดียวกับที่เจอในหน้าใบแจ้งหนี้ 18 ก.ย. 69
 const STATUS_LABEL: Record<string, string> = {
   confirmed: 'ยืนยันแล้ว',
-  pending: 'รอดำเนินการ',
+  pending: 'พร้อมตรวจสอบ',
+  queued: 'รอคิว',
+  running: 'กำลังอ่าน Timesheet',
+  failed: 'อ่านไม่สำเร็จ',
 };
 
 const LEAVE_TYPE_LABEL: Record<string, string> = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง', unknown: 'อื่นๆ', other: 'อื่นๆ' };
@@ -249,6 +259,8 @@ export default function HistoryTab() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [details, setDetails] = useState<Record<number, AiReadDetail | 'loading' | 'error'>>({});
+  const [reviewResult, setReviewResult] = useState<ReadResultShape | null>(null);
+  const [reviewLoading, setReviewLoading] = useState<number | null>(null);
 
   function load() {
     setError(null);
@@ -265,6 +277,36 @@ export default function HistoryTab() {
   }
 
   useEffect(load, []);
+
+  // ฟังสัญญาณ SSE ที่มีอยู่แล้วในระบบ (events.ts/emitChange — ใช้กับกระดิ่งแจ้งเตือนอยู่ก่อนแล้ว) เพื่อรีเฟรช
+  // ตารางนี้อัตโนมัติตอนคิวอ่านหลายไฟล์เปลี่ยนสถานะ (23 ก.ย. 69) — ไม่ต้องกด refresh เองระหว่างรอผลอ่าน
+  useEffect(() => {
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource('/api/stream');
+      source.addEventListener('change', load);
+      // เจอจริง 23 ก.ย. 69 ที่หน้าคิวอัปโหลด: ช่วงสั้นๆ ก่อน SSE ต่อสำเร็จ อาจพลาด event ที่ยิงไปแล้ว —
+      // ต่อสำเร็จเมื่อไหร่โหลดซ้ำอีกทีให้ชัวร์ว่าไม่ค้างข้อมูลเก่า
+      source.addEventListener('open', load);
+    } catch {
+      /* SSE ต่อไม่ได้ (proxy บล็อก ฯลฯ) — หน้ายังใช้ได้ปกติ แค่ต้องกด refresh เองแทน */
+    }
+    return () => source?.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** เปิด ReviewCard ตัวเดียวกับที่แท็บอัปโหลดไฟล์/รอจากพนักงานใช้ — ให้แถวที่คิวอ่านสำเร็จแล้ว (status
+   * 'pending') ยืนยันเข้าระบบได้จากตารางนี้เลย ไม่ต้องมีหน้าแยกอีกจุด (23 ก.ย. 69) */
+  function openReview(id: number) {
+    setReviewLoading(id);
+    fetch(`/api/ai-reads/${id}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((row: any) => {
+        setReviewResult({ ...(row.extraction ?? {}), documentNo: row.documentNo, model: row.model });
+      })
+      .catch(() => toast(tx('โหลดรายละเอียดไม่สำเร็จ'), true))
+      .finally(() => setReviewLoading(null));
+  }
 
   function toggleExpand(id: number) {
     if (expandedId === id) {
@@ -302,6 +344,20 @@ export default function HistoryTab() {
     }
   }
 
+  if (reviewResult) {
+    return (
+      <Card title={tx('ตรวจสอบก่อนบันทึกเข้าระบบ')}>
+        <ReviewCard
+          result={reviewResult}
+          onDone={() => {
+            setReviewResult(null);
+            load();
+          }}
+        />
+      </Card>
+    );
+  }
+
   return (
     <Card title={tx('ประวัติ AI อ่านไฟล์')} flush>
       {error ? (
@@ -332,14 +388,36 @@ export default function HistoryTab() {
                     <td>{r.periodLabel ?? '—'}</td>
                     <td className="nm">{r.employeeName ?? '—'}</td>
                     <td>
-                      <Tag tone="mu">{r.source === 'upload' ? tx('อัปโหลดไฟล์') : 'Gmail'}</Tag>
+                      <Tag tone="mu">
+                        {r.source === 'upload'
+                          ? tx('อัปโหลดไฟล์')
+                          : r.source === 'employee_submit'
+                            ? tx('พนักงานส่งเอง')
+                            : r.source === 'batch_upload'
+                              ? tx('อัปโหลดหลายไฟล์')
+                              : 'Gmail'}
+                      </Tag>
                     </td>
                     <td>{r.model ?? '—'}</td>
                     <td>
-                      <StatusPill tone={STATUS_TONE[r.status] ?? 'mu'}>{tx(STATUS_LABEL[r.status] ?? r.status)}</StatusPill>
+                      <StatusPill tone={STATUS_TONE[r.status] ?? 'mu'} title={r.status === 'failed' ? (r.errorMessage ?? undefined) : undefined}>
+                        {tx(STATUS_LABEL[r.status] ?? r.status)}
+                      </StatusPill>
                     </td>
                     <td className="sub">{r.readAt?.slice(0, 19).replace('T', ' ')}</td>
-                    <td className="r">
+                    <td className="r" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      {r.status === 'pending' && (
+                        <button
+                          className="btn pri sm"
+                          disabled={reviewLoading === r.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openReview(r.id);
+                          }}
+                        >
+                          {reviewLoading === r.id ? tx('กำลังโหลด…') : tx('ตรวจสอบ')}
+                        </button>
+                      )}
                       <button
                         className="btn dgr sm"
                         disabled={busyId === r.id}

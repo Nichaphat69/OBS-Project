@@ -38,6 +38,7 @@ import { flowAccountCompaniesRouter } from './routes/flowaccountCompanies.js';
 import { hrddRouter } from './routes/hrdd.js';
 import { apiActivityLogRouter } from './routes/apiActivityLog.js';
 import { keepModelWarm } from './lib/localLlmClient.js';
+import { startQueueWorker } from './lib/readQueueService.js';
 
 const app = express();
 
@@ -116,3 +117,7 @@ app.listen(port, () => {
 setInterval(() => {
   keepModelWarm();
 }, 20 * 60_000).unref();
+
+// เริ่ม worker ของคิวอ่าน Timesheet หลายไฟล์พร้อมกัน (23 ก.ย. 69) — รีเซ็ตแถวที่ค้าง 'running' จาก
+// server restart กลางคันกลับเป็น 'queued' ก่อน แล้วเริ่ม poll หาแถว 'queued' ทุก 3 วิ ดู readQueueService.ts
+startQueueWorker().catch((error) => console.error('[readQueueService] เริ่ม worker ไม่สำเร็จ —', error));

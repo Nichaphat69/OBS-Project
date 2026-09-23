@@ -50,7 +50,7 @@ function money(n: number) {
 }
 
 export default function DashboardClient({ data, nameTh }: { data: DashboardData; nameTh: string }) {
-  const { tx } = useLang();
+  const { tx, formatPeriod } = useLang();
 
   return (
     <>
@@ -74,7 +74,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
             {data.contracts.map((c) => (
               <div key={c.id} className="constrip">
                 <div className="cf">
-                  <span className="lbl">&nbsp;</span>
+                  <span className="lbl">{tx('เลขที่ PO')}</span>
                   <PoTag>{c.poNo}</PoTag>
                 </div>
                 <div className="cf">
@@ -115,14 +115,14 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
           tone="w"
         />
         <Kpi
-          icon="invoice"
+          icon="doc"
           label={tx('พร้อมวางบิล')}
           value={data.counts.readyToBill}
           caption={`${tx('มูลค่า')} ${money(data.readyValue)} ${tx('บาท')}`}
           tone="g"
         />
         <Kpi
-          icon="envelope-plus"
+          icon="send"
           label={tx('ยอดวางบิลแล้ว')}
           value={money(data.billedAmount)}
           caption={`${data.invoiceCount} ${tx('ใบ')}`}
@@ -162,7 +162,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                 {data.cycles.slice(0, 20).map((c, i) => (
                   <tr key={`${c.contractId}-${c.period}-${i}`}>
                     <td>{c.customerName}</td>
-                    <td>{c.periodLabel}</td>
+                    <td>{formatPeriod(c.period)}</td>
                     <td>
                       <StatusPill tone={CYCLE_STATE_TONE[c.state] ?? 'mu'}>{tx(c.stateLabel)}</StatusPill>
                     </td>

@@ -18,6 +18,7 @@ import { AbbyyError } from '../lib/abbyyClient.js';
 import { getActiveContract } from '../lib/dashboardService.js';
 import { SpreadsheetExtractionError } from '../lib/spreadsheetExtractionService.js';
 import { checkTimesheetAgainstHrdd, HrddCompareError } from '../lib/hrddCompareService.js';
+import { enqueueFiles, enqueueExisting, ReadQueueError } from '../lib/readQueueService.js';
 
 export const timesheetsRouter = Router();
 
@@ -101,7 +102,10 @@ timesheetsRouter.post('/read', async (req, res) => {
     // rawResponse เก็บลง DB ผ่าน logAiRead() ด้านบนไปแล้ว (เพื่อ debug ย้อนหลัง) — ตัดออกก่อนตอบกลับ
     // client เสมอ ไม่ใช่ข้อมูลที่หน้าเว็บต้องใช้และอาจมีขนาดใหญ่โดยไม่จำเป็น
     const { rawResponse, ...clientResult } = result;
-    res.json({ ...clientResult, documentNo });
+    // sourceAiReadId = แถว ai_reads ต้นทางตอนอ่านไฟล์ที่พนักงานส่งเอง (แท็บ "รอจากพนักงาน") — แค่ส่งผ่าน
+    // ไป-กลับให้ client แนบกลับมาตอน /confirm เพื่อปิดแถวต้นทางนั้น ไม่ได้ใช้ในขั้นตอนอ่านนี้เลย
+    const sourceAiReadId = typeof body.sourceAiReadId === 'number' ? body.sourceAiReadId : null;
+    res.json({ ...clientResult, documentNo, sourceAiReadId });
   } catch (error) {
     if (
       error instanceof UploadError ||
@@ -111,6 +115,41 @@ timesheetsRouter.post('/read', async (req, res) => {
     ) {
       return res.status((error as any).status ?? 502).json({ error: error.message });
     }
+    throw error;
+  }
+});
+
+/** อ่านหลายไฟล์พร้อมกันแบบเข้าคิว (เจ้าของระบบสั่ง 23 ก.ย. 69) — admin/บัญชีเท่านั้น (เหมือน endpoint
+ * list ของหน้าอัปโหลด) ส่ง `files` (ไฟล์ใหม่) หรือ `aiReadIds` (ของที่มีอยู่แล้ว เช่นแท็บ "ส่งผ่านระบบ")
+ * มาอย่างใดอย่างหนึ่ง ไม่รอ OCR เสร็จก่อนตอบกลับ — แค่สร้าง/ปรับแถวเป็น 'queued' แล้ว worker
+ * (readQueueService.ts's startQueueWorker) จะหยิบไปอ่านเบื้องหลังเอง */
+timesheetsRouter.post('/read-queue', requireAdmin, async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const readerId = typeof body.readerId === 'string' && body.readerId ? body.readerId : null;
+    const abbyySkillId = typeof body.abbyySkillId === 'string' && body.abbyySkillId ? body.abbyySkillId : null;
+
+    if (Array.isArray(body.files) && body.files.length > 0) {
+      const ids = await enqueueFiles({
+        files: body.files.map((f: any) => ({
+          fileBase64: String(f?.fileBase64 ?? ''),
+          fileName: String(f?.fileName ?? 'ไม่ทราบชื่อไฟล์'),
+        })),
+        readerId,
+        abbyySkillId,
+        actor: req.user!.nameTh,
+      });
+      return res.json({ queued: ids.length, ids });
+    }
+
+    if (Array.isArray(body.aiReadIds) && body.aiReadIds.length > 0) {
+      const count = await enqueueExisting({ aiReadIds: body.aiReadIds.map(Number), readerId, abbyySkillId });
+      return res.json({ queued: count });
+    }
+
+    return res.status(400).json({ error: 'ต้องส่ง files หรือ aiReadIds มาอย่างใดอย่างหนึ่ง' });
+  } catch (error) {
+    if (error instanceof ReadQueueError) return res.status(error.status).json({ error: error.message });
     throw error;
   }
 });
@@ -138,6 +177,9 @@ timesheetsRouter.post('/confirm', async (req, res) => {
       // ⚠️ เดิมไม่มีการผูกเลย — role 'user' ยืนยันชื่อคนอื่นได้ (เจอจริง 15 ก.ย. 69 ตามที่ user ชี้แจง
       // เพิ่มเติม) role อื่น (admin/accounting) ไม่ผูก เพราะต้องยืนยันแทนพนักงานได้ตามงานปกติของฝ่ายบัญชี
       restrictToEmployeeId: req.user!.role === 'user' ? req.user!.employeeId : null,
+      // แถว ai_reads ต้นทางตอนหยิบไฟล์จากแท็บ "รอจากพนักงาน" มาอ่าน — ปิดแถวนั้นด้วยถ้ายืนยันสำเร็จจริง
+      // (ดูคอมเมนต์เต็มที่ confirmTimesheet())
+      sourceAiReadId: typeof body.sourceAiReadId === 'number' ? body.sourceAiReadId : null,
     });
     res.json(result);
   } catch (error) {

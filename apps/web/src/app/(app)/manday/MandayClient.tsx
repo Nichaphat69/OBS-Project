@@ -283,14 +283,14 @@ export default function MandayClient() {
                 </tbody>
               </table>
             </div>
-            <div className="ft" style={{ justifyContent: 'space-between' }}>
+            <div className="ft" style={{ justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 10 }}>
               <div>
                 <div className="sub">{tx('ยอดที่วางบิลได้')}</div>
                 <div className="amt" style={{ fontSize: 20 }}>
                   {money(item.lineAmount)}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {rejectingId === item.id ? (
                   <>
                     <input
@@ -303,7 +303,8 @@ export default function MandayClient() {
                         border: '1px solid var(--rule)',
                         padding: '0 10px',
                         fontSize: 12.5,
-                        width: 140,
+                        flex: '1 1 120px',
+                        minWidth: 100,
                       }}
                     />
                     <button className="btn dgr sm" disabled={busyId === item.id} onClick={() => doReject(item.id)}>

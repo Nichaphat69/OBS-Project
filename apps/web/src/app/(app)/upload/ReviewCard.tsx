@@ -28,6 +28,9 @@ export interface ReadResultShape {
   approvedBy?: string | null;
   approvedAt?: string | null;
   email?: { subject: string };
+  // มีเฉพาะตอนมาจากแท็บ "รอจากพนักงาน" — แถว ai_reads ดิบที่พนักงานส่งเข้ามา ต้องส่งกลับตอน /confirm
+  // เพื่อปิดแถวต้นทางนั้น ไม่งั้นจะค้างโผล่ในแท็บนั้นต่อไปทั้งที่ยืนยันเข้าระบบไปแล้ว
+  sourceAiReadId?: number | null;
 }
 
 const LEAVE_TYPE_LABEL: Record<string, string> = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', unpaid: 'ลาไม่รับค่าจ้าง', unknown: 'อื่นๆ', other: 'อื่นๆ' };
@@ -120,6 +123,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
           sourceEmailSubject: result.email?.subject,
           approvedBy: result.approvedBy,
           approvedAt: result.approvedAt,
+          sourceAiReadId: result.sourceAiReadId ?? null,
         }),
       });
       const data = await res.json();

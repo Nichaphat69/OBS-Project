@@ -242,7 +242,7 @@ model SupportTicket {
 // ── ประวัติที่ AI เคยอ่านแล้ว (ทั้งอัปโหลดไฟล์เองและดึงจาก Gmail) ──
 model AiRead {
   id            Int     @id @default(autoincrement())
-  source        String // 'upload' | 'gmail'
+  source        String // 'upload' | 'gmail' | 'employee_submit' | 'batch_upload'
   sourceEmailId String? @map("source_email_id")
   fileName      String? @map("file_name")
   // เพิ่มทีหลัง (15 ก.ย. 69) — ผูกกับพนักงานที่จับคู่ได้ตอนอ่าน (employeeName เดิมเป็น free-text เทียบ
@@ -253,17 +253,25 @@ model AiRead {
   employeeName  String? @map("employee_name")
   period        String?
   documentNo    String? @map("document_no")
+  // 'queued' → 'running' → 'pending' (อ่านสำเร็จ พร้อมรีวิว — ความหมายเดิมทุกอย่าง ไม่เปลี่ยน) หรือ
+  // 'failed' (อ่านไม่สำเร็จ) → 'confirmed'/'discarded' เหมือนเดิม (เพิ่ม 23 ก.ย. 69 สำหรับคิวอ่านหลายไฟล์
+  // พร้อมกัน — โค้ดเดิมที่กรอง status:'pending' ยังถูกต้อง 100% เพราะแถวจะถึง pending ก็ต่อเมื่ออ่านสำเร็จจริง)
   status        String  @default("pending")
   model         String?
   extraction    Json?
   fileBytes     Bytes?  @map("file_bytes")
   readAt        String  @map("read_at")
   readBy        String? @map("read_by")
+  errorMessage  String? @map("error_message")
+  // ตัวอ่าน/Skill ที่เลือกไว้ตอนเข้าคิว — worker ของคิวอ่านหลายไฟล์ใช้ตอนหยิบแถว 'queued' ไปประมวลผลจริง
+  requestedReaderId      String? @map("requested_reader_id")
+  requestedAbbyySkillId  String? @map("requested_abbyy_skill_id")
 
   employee Employee? @relation(fields: [employeeId], references: [id])
 
   @@index([period, status])
   @@index([employeeId])
+  @@index([status])
   @@map("ai_reads")
 }
 

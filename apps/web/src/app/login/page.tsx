@@ -68,10 +68,9 @@ function LoginForm() {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
           <AnimatedLogo height={56} />
         </div>
-        <h1 style={{ fontSize: 19 }}>
-          เข้าสู่ระบบ <span style={{ color: 'var(--brand)' }}>Outsource Billing System</span>
+        <h1 style={{ fontSize: 15 }}>
+          เข้าสู่ระบบ <span style={{ color: 'var(--mut)' }}>Outsource Billing System</span>
         </h1>
-        <p>ระบบวางบิล Outsource — ใช้ชื่อผู้ใช้/รหัสผ่านที่แอดมินสร้างให้</p>
 
         {info && <p className="lc-info">{info}</p>}
 
