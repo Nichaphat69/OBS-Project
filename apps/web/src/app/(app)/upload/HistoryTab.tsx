@@ -4,8 +4,9 @@ import { Fragment, useEffect, useState } from 'react';
 import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { usePdfPreview, useToast } from '../../../components/Overlays';
-import ReviewCard, { type ReadResultShape } from './ReviewCard';
+import ReviewCard, { formatModelLabel, type ReadResultShape } from './ReviewCard';
 import { useLang } from '../../../lib/language';
+import { useReadModelNameMap } from '../../../components/readModelNames';
 
 interface AiReadItem {
   id: number;
@@ -261,6 +262,8 @@ export default function HistoryTab() {
   const [details, setDetails] = useState<Record<number, AiReadDetail | 'loading' | 'error'>>({});
   const [reviewResult, setReviewResult] = useState<ReadResultShape | null>(null);
   const [reviewLoading, setReviewLoading] = useState<number | null>(null);
+  // ใช้แปลง skillId ดิบในคอลัมน์ "โมเดล" ให้เป็นชื่อ Skill/แม่แบบ (24 ก.ย. 69) — ตัวเดียวกับหน้าตรวจ Manday
+  const nameMap = useReadModelNameMap();
 
   function load() {
     setError(null);
@@ -398,7 +401,7 @@ export default function HistoryTab() {
                               : 'Gmail'}
                       </Tag>
                     </td>
-                    <td>{r.model ?? '—'}</td>
+                    <td>{r.model ? formatModelLabel(r.model, nameMap) : '—'}</td>
                     <td>
                       <StatusPill tone={STATUS_TONE[r.status] ?? 'mu'} title={r.status === 'failed' ? (r.errorMessage ?? undefined) : undefined}>
                         {tx(STATUS_LABEL[r.status] ?? r.status)}

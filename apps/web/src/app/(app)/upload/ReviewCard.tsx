@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
-import { StatusPill, Tag } from '../../../components/ui';
+import { StatusPill, Tag, parseReadModel, type ReadModelNameMap } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { DatePicker } from '../../../components/DatePicker';
 import HrddCompare from './HrddCompare';
 import { useLang } from '../../../lib/language';
+import { useReadModelNameMap } from '../../../components/readModelNames';
 
 export interface ReadResultShape {
   documentNo: string;
@@ -51,11 +52,24 @@ function money(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** แปลง model ดิบ (เช่น "abbyy:80da7c30-…") ให้เป็นชื่อ Skill/แม่แบบที่คนอ่านออก แทนที่จะโชว์ UUID
+ * ตรงๆ (24 ก.ย. 69 ตามที่ขอ) — ใช้สารบัญเดียวกับที่หน้าตรวจ Manday ใช้อยู่แล้ว (parseReadModel/
+ * useReadModelNameMap ใน components/ui.tsx, readModelNames.ts) ไม่เขียนตัวแปลงคู่ขนานใหม่เอง
+ * ค่าดิบใน DB ยังเก็บ skillId ไว้เหมือนเดิมทุกประการ แค่จุดแสดงผลนี้ที่ map เป็นชื่อ */
+export function formatModelLabel(model: string, nameMap: ReadModelNameMap): string {
+  const parsed = parseReadModel(model);
+  if (!parsed) return model;
+  const detailName = parsed.detail ? nameMap[parsed.engine]?.[parsed.detail] : null;
+  return detailName ? `${parsed.label} · ${detailName}` : parsed.label;
+}
+
 /** Shared review UI for both the upload-file and Gmail-intake tabs — one reviewed document,
  * editable employee/position/period, confirm-or-discard. */
 export default function ReviewCard({ result, onDone }: { result: ReadResultShape; onDone: () => void }) {
   const { tx } = useLang();
   const router = useRouter();
+  // ใช้ map ชื่อ Skill/แม่แบบมาแสดงแทน UUID ในป้าย "โมเดล" ด้านล่าง (ตัวเดียวกับหน้าตรวจ Manday)
+  const nameMap = useReadModelNameMap();
   const [employeeName, setEmployeeName] = useState(result.data?.employeeName ?? '');
   const [position, setPosition] = useState(result.data?.position ?? '');
   const [period, setPeriod] = useState(result.data?.period ?? '');
@@ -168,7 +182,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
     <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 18 }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <Tag tone="mu">{tx('เลขที่')} {result.documentNo}</Tag>
-        <Tag tone="mu">{tx('โมเดล')} {result.model}</Tag>
+        <Tag tone="mu">{tx('โมเดล')} {formatModelLabel(result.model, nameMap)}</Tag>
         {result.matching?.employee ? (
           <StatusPill tone="ok">{tx('จับคู่')}: {result.matching.employee!.nameTh}</StatusPill>
         ) : (

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Card } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
+import { useToast } from '../../../components/Overlays';
+import ReviewCard, { type ReadResultShape } from './ReviewCard';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -35,14 +37,6 @@ interface QueueItem {
   errorMessage: string | null;
 }
 
-// ป้าย/สีเดียวกับที่แท็บ "ประวัติ" ใช้ (HistoryTab.tsx) ให้เห็นสถานะเดียวกันไม่ว่าจะดูจากหน้าไหน
-const RQ_LABEL: Record<string, string> = {
-  queued: 'รอคิว',
-  running: 'กำลังอ่าน Timesheet',
-  pending: 'พร้อมตรวจสอบ',
-  failed: 'อ่านไม่สำเร็จ',
-};
-
 /**
  * `submitOnly` = โหมดของพนักงาน (role `user`) — เลือกไฟล์เดียวแล้วกดส่ง จบ ไม่มีคิว/ตัวอ่านเลย
  * (เจ้าของระบบสั่ง 18 ก.ย. 69: พนักงานมีหน้าที่ "ส่ง" อย่างเดียว) ยิงคนละเส้นกับโหมดฝั่งบัญชีด้านล่าง —
@@ -50,11 +44,14 @@ const RQ_LABEL: Record<string, string> = {
  *
  * โหมดฝั่งบัญชี (ไม่ใช่ submitOnly) — เปลี่ยนเป็นเลือกได้หลายไฟล์พร้อมกัน (23 ก.ย. 69 ตามที่เคยตกลงกันไว้
  * อ้างอิงหน้าตา/ขั้นตอนจาก Clear Read เอง) กด "Process Documents" ครั้งเดียวส่งทั้งหมดเข้าคิวอ่านเบื้องหลัง
- * (POST /api/timesheets/read-queue) ไม่ได้อ่านทันทีแล้วโชว์ ReviewCard ในหน้านี้อีกต่อไป — ผลอ่านไปโผล่ที่
- * แท็บ "ประวัติ" (สถานะ queued → running → พร้อมตรวจสอบ) กดตรวจสอบ/ยืนยันได้จากตรงนั้นแทน
+ * (POST /api/timesheets/read-queue) ไม่ได้อ่านทันทีแล้วโชว์ ReviewCard ในหน้านี้เองเหมือนเดิม — ผลอ่าน
+ * ไปโผล่ในรายการคิวด้านล่างนี้เลย (สถานะ queued → running → พร้อมตรวจสอบ) แถวไหน "พร้อมตรวจสอบ" แล้ว
+ * คลิกเปิด ReviewCard ตรงนี้ได้เลย (24 ก.ย. 69 ตามที่ขอ — ไม่ต้องไปกดเข้าแท็บ "ประวัติ" อีกที) แต่ก็ยัง
+ * ตรวจ/ยืนยันจากแท็บ "ประวัติ" ได้เหมือนเดิมด้วย (เข้าถึงแถวเดียวกัน คนละทางเข้า)
  */
 export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boolean } = {}) {
   const { tx } = useLang();
+  const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -63,6 +60,8 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   const [submitted, setSubmitted] = useState<SubmitResult | null>(null);
   const [queuedIds, setQueuedIds] = useState<number[] | null>(null);
   const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null);
+  const [reviewResult, setReviewResult] = useState<ReadResultShape | null>(null);
+  const [reviewLoadingId, setReviewLoadingId] = useState<number | null>(null);
   const [readers, setReaders] = useState<Array<{ id: string; label: string; configured: boolean; active: boolean }>>([]);
   // null = ใช้ตัวที่ระบบตั้งไว้ (พฤติกรรมเดิม) — ตั้งค่าเมื่อผู้ใช้เลือกเองเฉพาะรอบนี้เท่านั้น
   const [readerId, setReaderId] = useState<string | null>(null);
@@ -250,6 +249,19 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
     }
   }
 
+  /** เปิด ReviewCard ตัวเดียวกับที่แท็บ "ประวัติ" ใช้ — ให้แถวที่อ่านเสร็จแล้ว ("พร้อมตรวจสอบ") ในรายการ
+   * คิวด้านล่างนี้ ตรวจสอบ/ยืนยันเข้าระบบได้เลยโดยไม่ต้องสลับไปแท็บ "ประวัติ" (24 ก.ย. 69 ตามที่ขอ) */
+  function openReview(id: number) {
+    setReviewLoadingId(id);
+    fetch(`/api/ai-reads/${id}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((row: any) => {
+        setReviewResult({ ...(row.extraction ?? {}), documentNo: row.documentNo, model: row.model });
+      })
+      .catch(() => toast(tx('โหลดรายละเอียดไม่สำเร็จ'), true))
+      .finally(() => setReviewLoadingId(null));
+  }
+
   /* หน้ายืนยันหลังส่งสำเร็จ (โหมดพนักงาน) — บอกให้ชัดว่าส่งของรอบไหนไปแล้ว เพราะระบบเลือกรอบให้เอง
      จากรอบที่ค้างเก่าที่สุด ไม่ได้ให้พนักงานเลือก ถ้าไม่บอกกลับไปว่าเป็นรอบไหน คนส่งจะไม่มีทางรู้เลย */
   if (submitOnly && submitted) {
@@ -277,6 +289,16 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
     );
   }
 
+  /* เปิด ReviewCard ทับหน้ารายการคิว (24 ก.ย. 69 ตามที่ขอ) — ตรวจสอบ/ยืนยันแถวที่อ่านเสร็จแล้วได้ตรงนี้
+     เลย ไม่ต้องสลับไปแท็บ "ประวัติ" — ปิดแล้วกลับมาที่รายการคิวเดิม (ไม่รีเซ็ต queuedIds) */
+  if (!submitOnly && reviewResult) {
+    return (
+      <Card title={tx('ตรวจสอบก่อนบันทึกเข้าระบบ')}>
+        <ReviewCard result={reviewResult} onDone={() => setReviewResult(null)} />
+      </Card>
+    );
+  }
+
   /* หน้าแสดงสถานะสดหลังเข้าคิวสำเร็จ (โหมดบัญชี) — เห็นเลยว่าไฟล์ไหนกำลังอ่านอยู่ ไฟล์ไหนรอคิว อัปเดต
      อัตโนมัติผ่าน SSE ไม่ต้องกด refresh (23 ก.ย. 69 ตามภาพอ้างอิงจาก Clear Read — เจ้าของระบบขอให้เห็นว่า
      "กำลังอ่านไฟล์ไหนอยู่" ไม่ใช่แค่ข้อความสรุปจำนวนเฉยๆ) */
@@ -292,33 +314,44 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
                   <span className="rq-name">{tx('กำลังโหลด…')}</span>
                 </div>
               ))
-            : queueItems.map((it) => (
-                <div key={it.id} className={`rq-row ${it.status}`}>
-                  {it.status === 'running' ? (
-                    <span className="rq-spinner" />
-                  ) : (
-                    <Icon
-                      name={it.status === 'pending' ? 'chk' : it.status === 'failed' ? 'x' : 'clock'}
-                      className="sm"
-                      style={{
-                        color:
-                          it.status === 'pending' ? 'var(--ok)' : it.status === 'failed' ? 'var(--cr)' : 'var(--fnt)',
-                        flex: 'none',
-                      }}
-                    />
-                  )}
-                  <span className="rq-name">
-                    {it.fileName ?? tx('ไม่ทราบชื่อไฟล์')}
-                    {it.status === 'failed' && it.errorMessage && <span className="rq-err">{it.errorMessage}</span>}
-                  </span>
-                  <span className={`rq-status ${it.status}`}>{tx(RQ_LABEL[it.status] ?? it.status)}</span>
-                </div>
-              ))}
+            : queueItems.map((it) => {
+                // แถวที่พร้อมตรวจสอบแล้ว คลิกเปิด ReviewCard ได้เลย (24 ก.ย. 69 ตามที่ขอ — สัญลักษณ์/
+                // londing ด้านซ้ายบอกสถานะอยู่แล้ว จึงตัดป้ายข้อความสถานะด้านขวาที่ซ้ำซ้อนออก)
+                const clickable = it.status === 'pending';
+                return (
+                  <div
+                    key={it.id}
+                    className={`rq-row ${it.status}${clickable ? ' clickable' : ''}`}
+                    role={clickable ? 'button' : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onClick={clickable ? () => openReview(it.id) : undefined}
+                    onKeyDown={clickable ? (e) => { if (e.key === 'Enter') openReview(it.id); } : undefined}
+                  >
+                    {it.status === 'running' || reviewLoadingId === it.id ? (
+                      <span className="rq-spinner" />
+                    ) : (
+                      <Icon
+                        name={it.status === 'pending' ? 'chk' : it.status === 'failed' ? 'x' : 'clock'}
+                        className="sm"
+                        style={{
+                          color:
+                            it.status === 'pending' ? 'var(--ok)' : it.status === 'failed' ? 'var(--cr)' : 'var(--fnt)',
+                          flex: 'none',
+                        }}
+                      />
+                    )}
+                    <span className="rq-name">
+                      {it.fileName ?? tx('ไม่ทราบชื่อไฟล์')}
+                      {it.status === 'failed' && it.errorMessage && <span className="rq-err">{it.errorMessage}</span>}
+                    </span>
+                  </div>
+                );
+              })}
         </div>
         <div className="sub" style={{ marginTop: 14 }}>
           {allDone
-            ? tx('อ่านครบทุกไฟล์แล้ว — ไปที่แท็บ "ประวัติ" เพื่อตรวจสอบและยืนยันเข้าระบบ')
-            : tx('ระบบกำลังอ่านไฟล์เบื้องหลัง ไม่ต้องปิดหน้านี้ก็ได้ ติดตามสถานะและตรวจสอบผลได้ที่แท็บ "ประวัติ" เช่นกัน')}
+            ? tx('อ่านครบทุกไฟล์แล้ว — คลิกแถวไหนก็ได้เพื่อตรวจสอบและยืนยันเข้าระบบ')
+            : tx('ระบบกำลังอ่านไฟล์เบื้องหลัง ไม่ต้องปิดหน้านี้ก็ได้ — แถวไหนพร้อมแล้วคลิกเข้าไปตรวจสอบได้เลย')}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
           <button

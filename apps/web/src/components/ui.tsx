@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
+import { BackButton } from './BackButton';
 
 /** แถบสลับแท็บทรงเส้นใต้ (ไม่ใช่ปุ่ม) — ใช้แทน `.btn.sm`/`.btn.pri` ที่แต่ละหน้า (ตรวจ Manday/บันทึกการส่ง/
  * ข้อมูลหลัก/จัดการระบบ/อัปโหลด Timesheet) เคยประกอบเองซ้ำๆ กันมาก่อน (เจ้าของระบบสั่ง 21 ก.ย. 69 "อยากได้
@@ -51,7 +52,12 @@ export function PageHeader({
         <h1>{title}</h1>
         {subtitle && <p>{subtitle}</p>}
       </div>
-      {actions && <div className="acts">{actions}</div>}
+      {/* ปุ่มย้อนกลับอยู่มุมขวาบนของทุกหน้าเสมอ (เจ้าของระบบสั่ง 24 ก.ย. 69) — อยู่หน้าปุ่ม action
+          อื่นๆ ของแต่ละหน้า (ถ้ามี) ไม่ใช่แทนที่ */}
+      <div className="acts">
+        <BackButton />
+        {actions}
+      </div>
     </div>
   );
 }

@@ -82,6 +82,9 @@ export default function IconSprite() {
       <symbol id="i-cd" viewBox="0 0 24 24">
         <path d="m6 9 6 6 6-6" />
       </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24">
+        <path d="M19 12H5M11 18l-6-6 6-6" />
+      </symbol>
       <symbol id="i-panel" viewBox="0 0 24 24">
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M9.5 4v16" />

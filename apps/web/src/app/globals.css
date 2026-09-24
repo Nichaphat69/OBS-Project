@@ -4958,18 +4958,15 @@ button.file:hover {
   color: var(--cr);
   margin-top: 2px;
 }
-.rq-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  flex: none;
+/* แถวที่พร้อมตรวจสอบแล้ว คลิกเปิดได้เลย (24 ก.ย. 69) — ตัดป้ายข้อความสถานะออกไปแล้วเพราะไอคอน/londing
+   ด้านซ้ายบอกสถานะซ้ำกันอยู่แล้ว */
+.rq-row.clickable {
+  cursor: pointer;
 }
-.rq-status.queued { color: var(--mut); }
-.rq-status.running { color: var(--brand-d); }
-.rq-status.pending { color: var(--ok); }
-.rq-status.failed { color: var(--cr); }
+.rq-row.clickable:hover {
+  border-color: var(--bline);
+  background: var(--hov);
+}
 
 /* วงหมุนสไตล์ M3 circular progress — ใช้ conic-gradient แทน border-trick ธรรมดา ให้ปลายเส้นมน/บางสม่ำเสมอ
    กว่า border ตัดขอบ 90 องศาแบบเดิม (เจ้าของระบบขอ "ขอสวยๆ" 23 ก.ย. 69) */
