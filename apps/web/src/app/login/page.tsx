@@ -82,7 +82,6 @@ function LoginForm() {
             type="text"
             autoFocus
             required
-            placeholder="เช่น admin@ipassion.co.th หรือ ชื่อ-นามสกุล"
           />
         </label>
 
