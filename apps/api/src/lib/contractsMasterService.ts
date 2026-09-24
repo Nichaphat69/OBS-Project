@@ -404,7 +404,9 @@ export async function deleteContract(contractId: string, { actor }: { actor: str
 export async function updateContractWhtRate(contractId: string, whtRate: number, { actor }: { actor: string }): Promise<{ contractId: string; whtRate: number }> {
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) throw new ContractMasterError('ไม่พบสัญญานี้', 404);
-  const rate = Number(whtRate);
+  // ปัดเป็น % เต็มก่อนเก็บ — buildInvoice() ปัดแบบนี้ตอนคำนวณอยู่แล้ว เก็บ 0.035 ไว้ก็จะโชว์ 3.5% ในหน้าจอ
+  // แต่ใบแจ้งหนี้จริงคิด 4% ยอดไม่ตรงกัน
+  const rate = Math.round(Number(whtRate) * 100) / 100;
   if (!Number.isFinite(rate) || rate < 0 || rate > 0.3) {
     throw new ContractMasterError('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%');
   }

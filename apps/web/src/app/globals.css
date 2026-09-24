@@ -3090,24 +3090,40 @@ td .nm {
   font-weight: 800;
   color: var(--ink);
 }
-.wht-result {
+.wht-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--rule);
+  background: var(--sunk);
+}
+.wht-sum .r {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
-  background: var(--crb);
-  border-radius: var(--r-ctl);
-  border: 1px solid var(--crl);
-}
-.wht-result span:first-child {
-  color: var(--cr);
-  font-weight: 600;
   font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
 }
-.wht-result span:last-child {
+.wht-sum .r span:last-child {
+  font-weight: 600;
+}
+.wht-sum .r.cr {
   color: var(--cr);
-  font-weight: 800;
+}
+.wht-sum .r.tot {
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+  font-weight: 700;
+}
+.wht-sum .r.tot span:last-child {
   font-size: 18px;
+  font-weight: 800;
+}
+.wht-sum .note {
+  font-size: 12px;
+  color: var(--mut);
 }
 
 /* ปุ่ม "+ ชื่อพ้อง/ตำแหน่งพ้อง" กับ "แก้เรท" */

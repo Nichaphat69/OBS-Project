@@ -46,7 +46,9 @@ const WHT_TYPES = [
   { pct: 3, name: 'ค่าจ้างทำของ / ค่าบริการ' },
   { pct: 5, name: 'ค่าเช่าทรัพย์สิน' },
 ];
-const pctRound = (n: number) => Math.round(n * 100) / 100;
+/** อัตราหัก ณ ที่จ่ายเป็น % เต็มเสมอ — ตรงกับ buildInvoice() ใน @obs/domain ที่ปัดเรตเป็น % เต็มก่อนคำนวณ
+ * (และ FlowAccount ก็รับแค่เลขเต็ม) ถ้าหน้านี้ยอมให้ตั้ง 3.5% ยอดที่โชว์จะไม่ตรงกับใบแจ้งหนี้จริง */
+const pctRound = (n: number) => Math.round(n);
 
 function money(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -380,8 +382,8 @@ function WhtSection({
   // ใช้ functional update (onChange(p => ...)) แทนอ่านค่า pct จาก closure ตรงๆ — ตอนกดค้าง
   // useHoldRepeat ตั้ง callback ไว้ตัวเดียวครั้งแรกที่กด แล้วเรียกซ้ำผ่าน setInterval เดิมตลอด ถ้าอ่าน
   // pct จาก closure จะได้ค่าตอนเริ่มกดค้างซ้ำๆ ไม่ขยับ ต้องให้ React ส่งค่าล่าสุดให้ทุกครั้งแทน
-  const plus = useHoldRepeat(() => onChange((p) => pctRound(Math.min(30, p + 0.25))));
-  const minus = useHoldRepeat(() => onChange((p) => pctRound(Math.max(0, p - 0.25))));
+  const plus = useHoldRepeat(() => onChange((p) => pctRound(Math.min(30, p + 1))));
+  const minus = useHoldRepeat(() => onChange((p) => pctRound(Math.max(0, p - 1))));
 
   if (!contract) {
     return (
@@ -396,6 +398,7 @@ function WhtSection({
 
   const base = contract.monthlyRate || 0;
   const amount = Math.round(base * pct) / 100;
+  const net = Math.round((base - amount) * 100) / 100;
 
   return (
     <div className="fsec">
@@ -415,19 +418,19 @@ function WhtSection({
           <button type="button" {...minus}>
             −
           </button>
-          {/* พิมพ์เองได้ ไม่ต้องกด −/+ ทีละขั้น — ปุ่มยังอยู่สำหรับปรับละเอียดทีละ 0.1 */}
+          {/* พิมพ์เองได้ ไม่ต้องกด −/+ ทีละขั้น — ปัดเป็น % เต็มเสมอ */}
           <span className="valbox">
             <input
               className="val"
               type="number"
-              step="0.1"
+              step="1"
               min="0"
-              max="100"
+              max="30"
               value={pct}
               onChange={(e) => {
                 const n = Number(e.target.value);
                 if (e.target.value === '' || !Number.isFinite(n)) return;
-                onChange(pctRound(Math.min(100, Math.max(0, n))));
+                onChange(pctRound(Math.min(30, Math.max(0, n))));
               }}
             />
             <span className="pcs">%</span>
@@ -437,11 +440,24 @@ function WhtSection({
           </button>
         </div>
       </div>
-      <div className="wht-result">
-        <span>
-          {tx('หัก ณ ที่จ่าย')} {pct}% {tx('จากยอดประมาณ')} {money(base)}
-        </span>
-        <span>−{money(amount)}</span>
+      {/* ยอดประมาณจากอัตรารายเดือนของสัญญา (ยังไม่หักวันลา/ยังไม่รวม VAT) — ฐานเดียวกับที่ใบแจ้งหนี้ใช้
+          คิดหัก ณ ที่จ่าย คือยอดก่อน VAT */}
+      <div className="wht-sum">
+        <div className="r">
+          <span>{tx('ยอดรวมก่อนหัก (Subtotal)')}</span>
+          <span>{money(base)}</span>
+        </div>
+        <div className="r cr">
+          <span>
+            {tx('หัก ณ ที่จ่าย')} {pct}%
+          </span>
+          <span>−{money(amount)}</span>
+        </div>
+        <div className="r tot">
+          <span>{tx('ยอดหลังหัก ณ ที่จ่าย')}</span>
+          <span>{money(net)}</span>
+        </div>
+        <div className="note">{tx('ยอดประมาณจากอัตรารายเดือน ยังไม่หักวันลาและยังไม่รวม VAT')}</div>
       </div>
     </div>
   );

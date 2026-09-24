@@ -146,6 +146,11 @@ const TX: Record<string, string> = {
   // ── my-progress/MyProgressClient.tsx ──
   เลขที่เอกสาร: 'Document no.',
   'ส่ง Timesheet': 'Timesheet submitted',
+  'ส่ง Timesheet รอบ': 'submitted the Timesheet for',
+  'พนักงานส่งเองผ่านระบบ OBS': 'Submitted by employee via OBS',
+  'ระบบดึงจาก Gmail อัตโนมัติ': 'Auto-imported from Gmail',
+  'พนักงานส่งเองทางอีเมล': 'Submitted by employee via email',
+  'ผู้อื่นส่งแทนทางอีเมล': 'Submitted on their behalf via email',
   ยังไม่มีคนตรวจ: 'Not yet reviewed',
   อนุมัติวางบิล: 'Billing approved',
   'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหน — แจ้ง admin ให้ผูกบัญชีกับชื่อพนักงานก่อน':
@@ -617,7 +622,9 @@ const TX: Record<string, string> = {
   'ค่าจ้างทำของ / ค่าบริการ': 'Contract work / services',
   ค่าเช่าทรัพย์สิน: 'Property rental',
   'อัตราหัก ณ ที่จ่าย': 'Withholding tax rate',
-  จากยอดประมาณ: 'from the estimated amount of',
+  'ยอดรวมก่อนหัก (Subtotal)': 'Subtotal',
+  'ยอดหลังหัก ณ ที่จ่าย': 'Net after withholding tax',
+  'ยอดประมาณจากอัตรารายเดือน ยังไม่หักวันลาและยังไม่รวม VAT': 'Estimated from the monthly rate — before leave deductions and VAT',
 
   // ── upload/HrddCompare.tsx ──
   ตรงกัน: 'Matches',
@@ -707,7 +714,6 @@ const TX: Record<string, string> = {
   'ค่าจ้างวันนั้น (รวม OT)': 'That day’s pay (incl. OT)',
   'ค่า OT เพิ่ม': 'Extra OT pay',
   'รวมค่า OT ทั้งหมด': 'Total OT pay',
-  ผลการอ่านไฟล์ดิบ: 'Raw file-reading result',
   ปฏิทิน: 'Calendar',
   หมายเหตุที่จะขึ้นบนใบแจ้งหนี้: 'Notes that will appear on the invoice',
   'ไม่มีวันลา จึงไม่มีหมายเหตุ': 'No leave days, so no notes',
