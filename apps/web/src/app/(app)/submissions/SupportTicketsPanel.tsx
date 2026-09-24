@@ -1,11 +1,12 @@
 'use client';
 
 /* ยกมาจาก app/(app)/tickets/TicketsClient.tsx ทั้งก้อนตอนที่หน้า "แจ้งปัญหา" กลายเป็นแท็บหนึ่งของ
-   "บันทึกการส่ง" — **ตรรกะไม่ถูกแตะเลยแม้แต่บรรทัดเดียว** เปลี่ยนแค่ชื่อฟังก์ชันกับที่อยู่ของไฟล์
-   เจ้าของระบบสั่งไว้ว่าย้ายได้แต่ห้ามเปลี่ยนการทำงาน */
+   "บันทึกการส่ง" (ตอนนั้นเจ้าของระบบสั่งว่าย้ายได้แต่ห้ามเปลี่ยนการทำงาน) — 24 ก.ย. 69 เพิ่มรูปแนบ +
+   เปลี่ยนปุ่ม/สถานะเป็นไอคอนตามที่ขอเพิ่มเติม (ยังคงตรรกะ resolve เดิมทุกอย่าง แค่หน้าตาเปลี่ยน) */
 
 import { useEffect, useState } from 'react';
 import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
+import { Icon } from '../../../components/Icon';
 import { useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
@@ -127,8 +128,15 @@ export default function SupportTicketsPanel() {
                 </td>
                 <td>
                   {t.status !== 'resolved' && (
-                    <button className="btn sm" disabled={resolving === t.id} onClick={() => resolve(t.id)}>
-                      {resolving === t.id ? tx('กำลังบันทึก…') : tx('ทำเครื่องหมายว่าแก้แล้ว')}
+                    <button
+                      type="button"
+                      className="btn icon sm"
+                      disabled={resolving === t.id}
+                      onClick={() => resolve(t.id)}
+                      title={tx('ทำเครื่องหมายว่าแก้แล้ว')}
+                      aria-label={tx('ทำเครื่องหมายว่าแก้แล้ว')}
+                    >
+                      <Icon name="chk" className="sm" />
                     </button>
                   )}
                 </td>

@@ -1,8 +1,10 @@
 /**
  * แจ้งเตือนผ่าน LINE ทันทีที่ API พังจริง (unhandled error) — เจ้าของระบบสั่ง 24 ก.ย. 69 ("แจ้งเตือนไป
- * ใน LINE หรือส่ง email ในกรณีที่เกิด error") ใช้ปลายทาง/กลไกส่งเดียวกับที่ระบบมีอยู่แล้วทั้งหมด
- * (LineClient.pushPlainText + lineApproverTargets จาก notificationRecipientsService.ts — ตัวเดียวกับ
- * ที่ใช้แจ้งอนุมัติ/ตั๋วแจ้งปัญหา) ไม่ได้สร้างช่องทางใหม่ ปิดเงียบๆ ถ้าไม่มี LINE ตั้งไว้เลย
+ * ใน LINE หรือส่ง email ในกรณีที่เกิด error แจ้งเตือนมาให้ admin") ใช้กลไกส่งเดียวกับที่ระบบมีอยู่แล้ว
+ * (LineClient.pushPlainText) แต่ **ปลายทางแยกจากที่แจ้งฝ่ายบัญชี** — ใช้ lineAdminTargets() ไม่ใช่
+ * lineApproverTargets() เพราะ error ระบบเป็นเรื่องของ admin/ทีมดูแลระบบ ไม่ใช่งานอนุมัติของบัญชี
+ * (ตั้งค่าแยกได้ผ่าน LINE_ADMIN_TARGET ใน .env — ไม่ตั้งไว้ก็ยังส่งได้ ถอยไปใช้กลุ่มเดียวกับบัญชีชั่วคราว)
+ * ปิดเงียบๆ ถ้าไม่มี LINE ตั้งไว้เลย
  *
  * ⚠️ ไม่ทำฝั่งอีเมล: ระบบนี้ตั้งใจไม่มีการ "ส่งอีเมลอัตโนมัติ" เลยสักจุด — อีเมลฝั่งธุรกิจทุกเส้นต้องผ่าน
  * createDraft() เป็นแค่ร่างรอคนตรวจก่อนเสมอ (ดู gmailClient.ts's หัวไฟล์) ยังไม่มี SMTP/ผู้ให้บริการส่ง
@@ -13,7 +15,7 @@
  * — ไม่งั้นถ้าบั๊กเดิมโดนยิงรัวๆ (เช่น cron/webhook เรียกซ้ำ) จะสแปม LINE จนท่วมจริง
  */
 import { LineClient, hasLineCredentials } from './lineClient.js';
-import { lineApproverTargets } from './notificationRecipientsService.js';
+import { lineAdminTargets } from './notificationRecipientsService.js';
 
 const ALERT_COOLDOWN_MS = 10 * 60_000;
 const lastAlertAt = new Map<string, number>();
@@ -29,7 +31,7 @@ export async function notifyApiError(error: unknown, context: { method: string; 
   lastAlertAt.set(key, now);
 
   try {
-    const targets = await lineApproverTargets();
+    const targets = await lineAdminTargets();
     if (targets.length === 0) return;
     const text = [
       '🔴 OBS API error',

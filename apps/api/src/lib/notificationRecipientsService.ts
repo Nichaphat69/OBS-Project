@@ -45,6 +45,15 @@ export async function lineApproverTargets(): Promise<string[]> {
   return process.env.LINE_APPROVER_TARGET ? [process.env.LINE_APPROVER_TARGET] : [];
 }
 
+/** ปลายทางแจ้งเตือน "ระบบล่ม/error" โดยเฉพาะ — แยกจาก lineApproverTargets() ด้านบนตั้งใจ (เจ้าของระบบ
+ * สั่ง 24 ก.ย. 69 ว่า error ของระบบต้องแจ้ง admin ไม่ใช่ปนไปกับที่แจ้งฝ่ายบัญชีเรื่องขออนุมัติ/ตั๋วแจ้งปัญหา
+ * ซึ่งเป็นคนละกลุ่มคนละหน้าที่กัน) ยังไม่มีหน้าตั้งค่าแยกให้กรอก จึงอ่านจาก LINE_ADMIN_TARGET ใน .env
+ * ตรงๆ ก่อน — ถ้ายังไม่ได้ตั้งแยกไว้ ถอยไปใช้ LINE_APPROVER_TARGET ต่อ (ดีกว่าไม่แจ้งใครเลย) */
+export async function lineAdminTargets(): Promise<string[]> {
+  if (process.env.LINE_ADMIN_TARGET) return [process.env.LINE_ADMIN_TARGET];
+  return lineApproverTargets();
+}
+
 /** ported from service.js notificationEmailTargets() — อีเมลปลายทางทุกคนที่บอกพนักงานให้ส่ง
  * Timesheet ไปเมื่อเลือก "ส่งผ่าน Email" */
 export async function notificationEmailTargets(): Promise<string[]> {
