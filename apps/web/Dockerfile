@@ -18,6 +18,11 @@ COPY apps/web apps/web
 # @obs/domain resolves to its dist/ build output, and .dockerignore strips **/dist from the build
 # context — so it has to be compiled inside the image before Next can resolve it, same as apps/api.
 RUN npm run build --workspace @obs/domain
+# NEXT_PUBLIC_* ต้องมีตอน build (Next.js ฝัง inline เข้า client bundle ตอนนี้เลย ไม่ใช่ตอน runtime) —
+# ว่างได้ปกติ (Sentry ฝั่ง client จะปิดเงียบๆ ตาม sentry.client.config.ts) แต่ถ้าใส่ DSN เพิ่มทีหลัง
+# ต้อง build image ใหม่เสมอ ตั้ง runtime env อย่างเดียวไม่พอ
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 RUN npm run build --workspace @obs/web
 
 # ── runtime: Next.js standalone output ──

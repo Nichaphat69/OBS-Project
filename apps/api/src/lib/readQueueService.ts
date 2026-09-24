@@ -14,6 +14,9 @@
  *
  * ไม่มี rate limit ฝั่ง ABBYY/Clear Read เขียนไว้ในโค้ดเดิมเลย และ Clear Read คิดเครดิตต่อครั้ง + ช้ามาก
  * (~2.8 นาที/หน้า) จึงจำกัดจำนวนที่อ่านพร้อมกันจริงในโค้ดนี้เอง (MAX_CONCURRENT) ไม่ปล่อยยิงพร้อมกันทั้งหมด
+ *
+ * ⚠️ เจ้าของระบบสั่ง 24 ก.ย. 69 ให้อ่านทีละไฟล์เท่านั้น (ไม่ใช่ 2 ไฟล์พร้อมกันแบบเดิม) — ต้องอ่านไฟล์แรก
+ * เสร็จก่อน ถึงจะเริ่มอ่านไฟล์ถัดไปในคิว จึงล็อก MAX_CONCURRENT ไว้ที่ 1 ตายตัว
  */
 import { prisma, Prisma } from '@obs/db';
 import { readTimesheetFile, UploadError } from './uploadService.js';
@@ -21,7 +24,7 @@ import { nextDocumentNo } from './ingestService.js';
 import { emitChange } from './events.js';
 import { logAudit } from './audit.js';
 
-const MAX_CONCURRENT = 2;
+const MAX_CONCURRENT = 1;
 const POLL_INTERVAL_MS = 1500;
 
 export class ReadQueueError extends Error {

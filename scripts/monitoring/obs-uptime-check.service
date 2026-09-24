@@ -1,0 +1,7 @@
+[Unit]
+Description=OBS uptime watchdog (web/api health check, LINE alert on failure)
+After=network.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/outsource-auto-new/scripts/monitoring/uptime-watchdog.sh

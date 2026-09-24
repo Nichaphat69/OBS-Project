@@ -18,6 +18,7 @@
   "dependencies": {
     "@obs/db": "*",
     "@obs/domain": "*",
+    "@sentry/node": "^11.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.21.2",

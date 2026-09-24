@@ -5,6 +5,15 @@
 // นั้นคือทำให้ทั้งโปรเซส Node ตาย (unhandledRejection ปิดโปรเซสเป็นค่าเริ่มต้นตั้งแต่ Node 15) กระทบทุก
 // request ที่ค้างอยู่พร้อมกัน ไม่ใช่แค่ตัวที่พัง (เจอจริง 15 ก.ย. 69 ตอนไล่ตรวจ audit ทั้งระบบ)
 import 'express-async-errors';
+import * as Sentry from '@sentry/node';
+
+// error tracking ฝั่ง production (เจ้าของระบบสั่ง 24 ก.ย. 69 — "ไม่มี error tracking บั๊กฝั่ง production
+// จะไม่มีใครรู้จนกว่าจะมีคนแจ้ง") — ปิดเงียบๆ ถ้ายังไม่ตั้ง SENTRY_DSN (ต้องสมัคร Sentry เองแล้วเอา DSN
+// มาใส่ .env — ไม่ใช่ค่าที่เดา/ฝังในโค้ดได้) ต้อง init ก่อน import อื่นที่อาจ throw ทั้งหมด
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
+}
+
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -93,6 +102,11 @@ app.use('/api/holidays', holidaysRouter);
 app.use('/api/flowaccount', flowAccountCompaniesRouter);
 app.use('/api', hrddRouter);
 app.use('/api/api-activity-log', apiActivityLogRouter);
+
+// ส่ง error ที่ route ไหนไม่จับเองเข้า Sentry ก่อนถึงตัวจับสุดท้ายด้านล่าง (ปิดเงียบๆ ถ้าไม่มี SENTRY_DSN)
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 // ตัวจับ error สุดท้าย (ไม่มีมาก่อนเลยในระบบใหม่ — เจอจริง 15 ก.ย. 69) — ต้องมี 4 พารามิเตอร์ตรงตาม
 // สเปกของ Express ถึงจะถูกจดจำเป็น error-handling middleware (ไม่ใช่ middleware ปกติ) ต้อง mount

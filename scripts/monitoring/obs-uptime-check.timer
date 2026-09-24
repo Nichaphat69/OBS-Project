@@ -1,0 +1,10 @@
+[Unit]
+Description=Run OBS uptime watchdog every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+Unit=obs-uptime-check.service
+
+[Install]
+WantedBy=timers.target

@@ -44,12 +44,18 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # ต้องส่งตอน build (Next.js ฝัง NEXT_PUBLIC_* เข้า client bundle ตอน build ไม่ใช่ runtime) —
+        # เปลี่ยนค่านี้ใน .env แล้วต้อง `docker compose build web` ใหม่เสมอ แค่ up -d ไม่พอ
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     restart: unless-stopped
     environment:
       # server-side proxy (Next.js route handlers) ต่อไปที่ api ผ่านชื่อ service ภายในเครือข่าย Docker
       API_BASE_URL: http://api:4301
       PORT: ${WEB_PORT:-3000}
       NODE_ENV: production
+      # ฝั่ง server ของ Next.js (sentry.server.config.ts) อ่านตอน runtime ได้ปกติ ไม่ต้อง build ใหม่
+      SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - '${WEB_PORT:-3000}:3000'
     depends_on:
