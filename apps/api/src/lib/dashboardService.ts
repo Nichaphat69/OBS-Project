@@ -658,6 +658,20 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
     .sort((a, b) => a.period.localeCompare(b.period));
 
   const tasks = [
+    // รอ Timesheet — บอกจำนวน (ส่งแล้ว/ทั้งหมด) + รายชื่อคนที่ยังไม่ส่งตรงๆ (เจ้าของระบบสั่ง 24 ก.ย. 69
+    // "ไม่บอกจำนวน (เช่น 2/3) และไม่ระบุว่าใครยังไม่ส่ง") — ข้อมูล expected/received/missing มีอยู่แล้ว
+    // ใน CyclePeriod (getCycleStatus() คำนวณไว้ให้แล้ว) แค่ไม่เคยถูกเอามาขึ้น "งานที่ต้องทำ" เลยตั้งแต่แรก
+    // ไม่ใส่ link เพราะยังไม่มีหน้าไหนแสดง "ใครยังไม่ส่งของรอบนี้" ให้กดตรงเข้าไปได้ตรงๆ (หน้า "บันทึกการส่ง"
+    // กรองด้วย state ในหน้าเอง ไม่รับ query param จาก URL) ข้ามรอบที่ยังไม่มีใครถูกมอบหมายเลย (expected=0)
+    // เพราะไม่มีใครให้ตามจริงๆ ไม่ใช่ของค้าง
+    ...toChase
+      .filter((p) => p.expected > 0)
+      .map((p) => ({
+        step: 1, level: 'warn',
+        title: 'รอ Timesheet',
+        detail: `${p.customerName} รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
+        link: null,
+      })),
     ...sheets
       .filter((s) => s.status === 'mismatch')
       .map((s) => ({

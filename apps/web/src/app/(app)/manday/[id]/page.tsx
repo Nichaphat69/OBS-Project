@@ -441,29 +441,27 @@ export default function ManadyDetailPage() {
               </div>
               <div className="bd">
                 <ul className="acts-l">
-                  <li>
-                    <span className="tx">
-                      {tx('รับเข้าระบบ')}
-                      <small>{sheet.sourceFile ?? sheet.sourceEmailId ?? '—'}</small>
-                    </span>
-                    <span className="tm">{dt(sheet.receivedAt)}</span>
-                  </li>
-                  <li>
-                    <span className="tx">
-                      {tx('ลูกค้าอนุมัติ Timesheet')}
-                      <small>{sheet.approvedByLabel ?? '—'}</small>
-                    </span>
-                    <span className="tm">{dateOnly(sheet.approvedAt)}</span>
-                  </li>
-                  {sheet.audit.map((a, i) => (
-                    <li key={i}>
-                      <span className="tx">
-                        {auditActionLabel(a.action)}
-                        <small>{a.actor}</small>
-                      </span>
-                      <span className="tm">{dt(a.at)}</span>
-                    </li>
-                  ))}
+                  {/* รวมทุกเหตุการณ์ (รับเข้าระบบ/ลูกค้าอนุมัติ/audit log) เป็นรายการเดียวแล้วเรียงตาม
+                      เวลาจริงจากล่าสุดไปเก่าสุด (เจ้าของระบบสั่ง 24 ก.ย. 69) — เดิมตรึง "รับเข้าระบบ"/
+                      "ลูกค้าอนุมัติ" ไว้บนสุดตายตัวสองรายการก่อนเสมอ ไม่ได้เทียบเวลาจริงกับ audit log
+                      ที่ตามมาทีหลังเลย ทำให้เหตุการณ์ล่าสุดจริงๆ (เช่น ยืนยัน/ตีกลับ) ไปโผล่ท้ายสุดแทน */}
+                  {[
+                    { at: sheet.receivedAt, label: tx('รับเข้าระบบ'), detail: sheet.sourceFile ?? sheet.sourceEmailId ?? '—' },
+                    ...(sheet.approvedAt
+                      ? [{ at: sheet.approvedAt, label: tx('ลูกค้าอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '—' }]
+                      : []),
+                    ...sheet.audit.map((a) => ({ at: a.at, label: auditActionLabel(a.action), detail: a.actor })),
+                  ]
+                    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+                    .map((ev, i) => (
+                      <li key={i}>
+                        <span className="tx">
+                          {ev.label}
+                          <small>{ev.detail}</small>
+                        </span>
+                        <span className="tm">{dt(ev.at)}</span>
+                      </li>
+                    ))}
                 </ul>
               </div>
             </div>

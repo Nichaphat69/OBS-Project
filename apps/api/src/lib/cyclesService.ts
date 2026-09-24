@@ -728,11 +728,15 @@ export async function deleteInvoice(invoiceId: string, { actor, client }: { acto
   return { deleted: true, invoiceId, timesheetIds };
 }
 
-/** ลิงก์กดเข้าหน้า "ตรวจ Manday" ตรงจากข้อความ LINE — ported from service.js queueLink() (route จริง
- * ของสแต็กใหม่แทน `?view=queue`) */
-export function queueLink(): string | null {
+/** ลิงก์กดเข้าหน้ารายละเอียด Timesheet ใบนั้นตรงๆ — เดิมข้อความ LINE (notifyNeedsCheck/
+ * notifyCheckFailed ใน ingestService.ts) มีปุ่ม "ตรวจ Manday" ที่พาไปหน้ารายการทั้งหมด `/manday`
+ * (queueLink() เดิม — ported from service.js ที่ใช้ `?view=queue`) ทั้งที่ข้อความนั้นพูดถึงเอกสาร
+ * ใบเดียวเป๊ะๆ — เจ้าของระบบสั่ง 24 ก.ย. 69 ("กด filter จากการแจ้งเตือนแล้วไม่พาไปหน้าปลายทางที่ควรไป")
+ * ให้พาเข้าใบนั้นตรงๆ แทน (documentNo ก็คือ timesheet.id ตรงๆ อยู่แล้ว) — ไม่มีที่ใช้ queueLink() แบบ
+ * ทั่วไปเหลืออยู่แล้ว จึงตัดออกแทนที่จะปล่อยเป็นโค้ดตาย */
+export function documentLink(documentNo: string): string | null {
   const base = webBase();
-  return base ? `${base}/manday` : null;
+  return base ? `${base}/manday/${encodeURIComponent(documentNo)}` : null;
 }
 
 /** ลิงก์กดเข้าหน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้นโดยตรง — ใช้กับปุ่มในคำขออนุมัติ — ported from

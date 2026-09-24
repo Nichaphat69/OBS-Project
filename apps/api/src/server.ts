@@ -48,6 +48,7 @@ import { hrddRouter } from './routes/hrdd.js';
 import { apiActivityLogRouter } from './routes/apiActivityLog.js';
 import { keepModelWarm } from './lib/localLlmClient.js';
 import { startQueueWorker } from './lib/readQueueService.js';
+import { notifyApiError } from './lib/errorAlertService.js';
 
 const app = express();
 
@@ -113,10 +114,16 @@ if (process.env.SENTRY_DSN) {
 // หลังสุดหลังทุก route แล้ว — ครอบทั้ง error ที่แต่ละ route ไม่รู้จัก type (throw ต่อจาก catch block เดิม)
 // และ error ที่ route ไหนไม่ได้ catch เองเลย (ต้องพึ่ง express-async-errors ด้านบนส่งมาถึงตรงนี้)
 // ไม่ log stack เต็มลง response (อาจรั่วรายละเอียดภายใน) แต่ log เต็มไว้ฝั่งเซิร์ฟเวอร์เสมอ
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[obs-api] unhandled error', err);
-  if (res.headersSent) return;
   const status = typeof err?.status === 'number' ? err.status : 500;
+  // แจ้ง LINE เฉพาะ 5xx จริง (ระบบพัง) — 4xx (validation/สิทธิ์ไม่พอ ฯลฯ) เป็นการทำงานปกติของแอป ไม่ใช่
+  // เหตุที่ต้องปลุกใครกลางดึก (เจ้าของระบบสั่ง 24 ก.ย. 69) ไม่ await เพราะไม่อยากให้ผู้ใช้รอ LINE ส่งเสร็จ
+  // ก่อนได้ response error กลับไป — ส่งพังก็แค่ log เงียบๆ (ดู errorAlertService.ts)
+  if (status >= 500) {
+    notifyApiError(err, { method: req.method, path: req.path }).catch(() => {});
+  }
+  if (res.headersSent) return;
   res.status(status).json({ error: err?.message || 'เกิดข้อผิดพลาดที่ไม่คาดคิด' });
 });
 

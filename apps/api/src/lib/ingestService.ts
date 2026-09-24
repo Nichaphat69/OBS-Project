@@ -30,7 +30,7 @@ import { employeesForMatching, holidayMap } from './masterData.js';
 import { logAudit } from './audit.js';
 import { LineClient, buildNeedsCheckFlex, buildCheckFailedFlex } from './lineClient.js';
 import { lineApproverTargets } from './notificationRecipientsService.js';
-import { requestCycleApproval, queueLink } from './cyclesService.js';
+import { requestCycleApproval, documentLink } from './cyclesService.js';
 import { pendingSubmissionFor } from './timesheetSubmissionService.js';
 
 /**
@@ -53,7 +53,7 @@ async function notifyCheckFailed({
 }): Promise<void> {
   const line = client ?? new LineClient();
   const targets = await lineApproverTargets();
-  const link = queueLink();
+  const link = documentLink(documentNo);
   const bubble = buildCheckFailedFlex({
     employeeName,
     periodLabel: thaiMonth(period),
@@ -95,7 +95,7 @@ async function notifyNeedsCheck({
     projectName: contract?.projectName ?? null,
     documentNos: [documentNo],
     periodLabel: thaiMonth(period),
-    queueUrl: queueLink(),
+    queueUrl: documentLink(documentNo),
   });
   const altText = `ตรวจ Manday — ${contract?.customer.nameTh ?? '—'} เอกสาร ${documentNo} ประจำเดือน ${thaiMonth(period)}`;
 

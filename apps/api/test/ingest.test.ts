@@ -339,10 +339,11 @@ test('Timesheet ที่ตรวจผ่าน → แจ้ง LINE เฉ�
   );
 });
 
-test('บับเบิลรอตรวจมีแค่ใบเดียว และปุ่มพาเข้าหน้าตรวจ Manday ของสแต็กใหม่', async () => {
-  // ต้นฉบับใช้ APP_BASE_URL (แอปเก่า) แล้วประกอบลิงก์เป็น `?view=queue&contract=<id>` — สแต็กใหม่ใช้
-  // WEB_BASE_URL (คนละแอป คนละพอร์ต) และหน้าตรวจ Manday เป็น route จริง `/manday` ไม่ใช่ query param
-  // จึงไม่มี contractId ต่อท้าย ดู webBase()/queueLink() ใน timesheetSubmissionService.ts/cyclesService.ts
+test('บับเบิลรอตรวจมีแค่ใบเดียว และปุ่มพาเข้าหน้ารายละเอียดใบนั้นตรงๆ', async () => {
+  // เจ้าของระบบสั่ง 24 ก.ย. 69 ("กด filter จากการแจ้งเตือนแล้วไม่พาไปหน้าปลายทางที่ควรไป") — เดิมปุ่มนี้
+  // พาไปหน้ารายการทั้งหมด `/manday` (queueLink()) ทั้งที่ข้อความพูดถึงเอกสารใบเดียวเป๊ะๆ แก้ให้พาเข้า
+  // `/manday/<documentNo>` ตรงๆ แทน (documentNo คือ timesheet.id อยู่แล้ว) ดู documentLink() ใน
+  // cyclesService.ts
   const before = process.env.WEB_BASE_URL;
   process.env.WEB_BASE_URL = 'https://obs.example.com/';
 
@@ -363,7 +364,7 @@ test('บับเบิลรอตรวจมีแค่ใบเดีย�
     const button = bubbles[0].footer.contents[0];
     assert.equal(button.action.type, 'uri', 'ต้องเป็นปุ่มเปิดเว็บ ไม่ใช่ลิงก์เปล่าในข้อความ');
     assert.equal(button.action.label, 'ตรวจ Manday');
-    assert.equal(button.action.uri, 'https://obs.example.com/manday');
+    assert.equal(button.action.uri, 'https://obs.example.com/manday/2026020104');
   } finally {
     if (before === undefined) delete process.env.WEB_BASE_URL;
     else process.env.WEB_BASE_URL = before;

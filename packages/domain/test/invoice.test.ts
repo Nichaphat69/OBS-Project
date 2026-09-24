@@ -449,6 +449,32 @@ test('payload ส่งแค่ contactId เปล่าๆถ้ามี flo
   assert.equal(payload.contactBranch, undefined);
 });
 
+test('เรทหัก ณ ที่จ่ายที่ไม่ใช่ % เต็ม ต้องถูกปัดก่อนคำนวณเสมอ — กันยอดไม่ตรงกับ FlowAccount', () => {
+  /* เจอจริง 24 ก.ย. 69: สัญญาหนึ่งตั้งเรตไว้ 2.25% (ไม่ใช่ 2% เต็ม) — OBS คำนวณ 80,000 × 2.25% = 1,800
+     แต่ FlowAccount แสดงยอดจริงจากเปอร์เซ็นต์เต็มที่เราส่งไป (documentWithholdingTaxPercentage ปัดเป็น
+     จำนวนเต็มเสมอ) ได้ 80,000 × 2% = 1,600 — สองระบบไม่ตรงกัน กฎหมายภาษีไทยหัก ณ ที่จ่ายมีแค่อัตรา
+     มาตรฐาน 1/2/3/5% เท่านั้น จึงต้องปัดเรตให้เป็น % เต็มตั้งแต่ตอนคำนวณใน buildInvoice() เอง ไม่ใช่
+     แค่ตอนส่ง FlowAccount ถึงจะรับประกันว่ายอดที่ OBS แสดง/บันทึกไว้ตรงกับที่ FlowAccount แสดงเสมอ */
+  const invoice = buildInvoice({
+    period: '2026-03',
+    documentDate: '2026-04-02',
+    customer: { name: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)', taxId: '0107555000104', branch: 'สำนักงานใหญ่' },
+    whtRate: 0.0225,
+    entries: [{
+      employee: DEV,
+      manday: calculateManday({ period: '2026-03', monthlyRate: 80000, reportedWorkDays: 22, leaveDays: [], holidays: new Map() }),
+    }],
+  });
+
+  assert.equal(invoice.totals.totalAfterDiscount, 80000);
+  assert.equal(invoice.totals.whtRate, 0.02, 'ต้องปัด 2.25% เป็น 2% เต็มก่อนใช้งานเสมอ');
+  assert.equal(invoice.totals.withholdingTax, 1600, 'ต้องได้ 80,000 × 2% = 1,600 ไม่ใช่ 80,000 × 2.25% = 1,800');
+
+  const payload = toFlowAccountPayload(invoice) as any;
+  assert.equal(payload.documentWithholdingTaxPercentage, 2);
+  assert.equal(payload.documentWithholdingTaxAmount, 1600, 'เปอร์เซ็นต์กับยอดที่ส่งไป FlowAccount ต้องคำนวณสอดคล้องกัน');
+});
+
 test('ยอดใน PO 6 เดือนตรงกับเรทรายเดือนรวม', () => {
   const monthlyTotal = round2(DEV.monthlyRate + PM.monthlyRate);
   assert.equal(monthlyTotal, 176363.93);

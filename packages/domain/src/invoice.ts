@@ -113,8 +113,16 @@ export function buildInvoice({
   customer,
   entries,
   vatRate = DEFAULT_VAT_RATE,
-  whtRate = DEFAULT_WHT_RATE,
+  whtRate: rawWhtRate = DEFAULT_WHT_RATE,
 }: BuildInvoiceInput): Invoice {
+  // ⚠️ ปัดเรตหัก ณ ที่จ่ายให้เป็น % เต็มเสมอ ก่อนใช้คำนวณอะไรทั้งสิ้น (เจ้าของระบบสั่ง 24 ก.ย. 69 — เจอ
+  // จริงว่าสัญญาหนึ่งตั้งเรตไว้ 2.25% แทนที่จะเป็น 2% เต็ม ทำให้ยอดหัก ณ ที่จ่ายที่ OBS คำนวณ (คิดจาก
+  // 2.25% เป๊ะๆ) กับยอดที่ FlowAccount แสดงในเอกสารจริง (คิดจาก 2% เต็มที่เราส่ง documentWithholding-
+  // TaxPercentage ไป — ฟิลด์นั้นเป็นเลขเต็มเสมอ FlowAccount เอาไปคำนวณแสดงผลเองใหม่ ไม่ได้เชื่อ
+  // documentWithholdingTaxAmount ที่เราคำนวณมาให้ตรงๆ) ไม่ตรงกัน — กฎหมายภาษีไทยหัก ณ ที่จ่ายก็มีแค่
+  // อัตรามาตรฐาน 1/2/3/5% เท่านั้นจริงๆ ไม่มี "2.25%" อยู่แล้ว ปัดตรงนี้จุดเดียวกันไม่ให้สัญญาไหนตั้งเรต
+  // เพี้ยนแบบนี้แล้วเกิดยอดไม่ตรงกับ FlowAccount ได้อีก
+  const whtRate = Math.round(rawWhtRate * 100) / 100;
   const periodStart = entries[0]?.manday.calendar.firstDate ?? `${period}-01`;
   const periodEnd = entries[0]?.manday.calendar.lastDate ?? `${period}-28`;
   const servicePeriod = `${thaiDate(periodStart)} ถึง ${thaiDate(periodEnd)}`;
