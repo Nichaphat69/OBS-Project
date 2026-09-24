@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { Card, Loading, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useToast, usePdfPreview } from '../../../components/Overlays';
+import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPicker';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
-import ReadingCard from './ReadingCard';
 import { useLang } from '../../../lib/language';
 
 interface InboxAttachment {
@@ -47,6 +47,14 @@ interface AiReadRef {
   sourceEmailId: string | null;
   fileName: string | null;
 }
+interface BulkReadItem {
+  key: string;
+  messageId: string;
+  filename: string;
+  status: 'queued' | 'reading' | 'done' | 'failed';
+  error?: string;
+  result?: ReadResultShape;
+}
 
 /** เดาโดเมนจากที่อยู่อีเมลผู้ส่ง เช่น "someone@ptt.co.th" → "ptt.co.th" */
 function senderDomain(from: string): string | null {
@@ -63,11 +71,16 @@ export default function GmailTab() {
   const [inbox, setInbox] = useState<InboxResult | null>(null);
   const [aiReadIds, setAiReadIds] = useState<Map<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
-  const [reading, setReading] = useState<string | null>(null);
-  const [readingFileName, setReadingFileName] = useState<string | null>(null);
-  const [result, setResult] = useState<ReadResultShape | null>(null);
   const [showDismissed, setShowDismissed] = useState(false);
   const [dismissed, setDismissed] = useState<DismissedItem[] | null>(null);
+  // 25 ก.ย. 69 ตามที่ขอ — เดิมมีแต่ปุ่ม "อ่านข้อมูล" ทีละไฟล์แนบ เปลี่ยนเป็นติ๊กเลือกได้หลายไฟล์แนบ + เลือก
+  // ตัวอ่าน/Skill เอง + ปุ่ม "อ่านที่เลือก (N)" ครั้งเดียว — Gmail ไม่มีคิวเบื้องหลังแบบไฟล์อัปโหลด (ต้อง
+  // เช็คสถานะอนุมัติจากเนื้ออีเมลประกอบด้วยเสมอ) จึงอ่านทีละไฟล์ตามลำดับ (sequential) แทน ไม่ใช่ขนาน แต่
+  // ผู้ใช้เห็นภาพเดียวกัน: เลือกไว้ กดครั้งเดียว แล้วดูสถานะแต่ละไฟล์เปลี่ยนไปเรื่อยๆ
+  const picker = useReaderPicker();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkItems, setBulkItems] = useState<BulkReadItem[] | null>(null);
+  const [bulkOpenResult, setBulkOpenResult] = useState<ReadResultShape | null>(null);
 
   function load() {
     setError(null);
@@ -97,15 +110,30 @@ export default function GmailTab() {
 
   useEffect(load, [showAll]);
 
-  async function readAttachment(m: InboxMessage, attachmentFilename: string) {
-    const messageId = m.id;
-    setReading(`${messageId}::${attachmentFilename}`);
-    setReadingFileName(attachmentFilename);
-    setError(null);
+  function toggleAttachment(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  const selectableKeys = (inbox?.messages ?? []).flatMap((m) => m.attachments.map((a) => `${m.id}::${a.filename}`));
+  const allSelected = selectableKeys.length > 0 && selectableKeys.every((k) => selected.has(k));
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(selectableKeys));
+  }
+
+  /** อ่านไฟล์แนบหนึ่งไฟล์จริงๆ — เรียกซ้ำจาก doReadSelected() ทีละรายการตามลำดับ (Gmail ไม่มีคิว
+   * เบื้องหลังแบบไฟล์อัปโหลด ต้องเช็คสถานะอนุมัติจากเนื้ออีเมลประกอบทุกครั้ง) */
+  async function readOne(messageId: string, attachmentFilename: string): Promise<{ ok: true; data: ReadResultShape } | { ok: false; error: string }> {
     try {
+      const m = inbox?.messages.find((mm) => mm.id === messageId);
       // โดเมนยังไม่เคยตั้ง (หรือกำลังดูแบบ "แสดงทุกบริษัท") — ผู้ใช้เลือกอ่านอีเมลนี้แปลว่ายอมรับว่า
       // โดเมนนี้เป็นของบริษัทที่กำลังดำเนินการอยู่ — บันทึกให้อัตโนมัติ (claim ครั้งแรกเท่านั้น เงียบไว้ถ้า 409)
-      if (activeContract && (inbox?.domainMissing || showAll)) {
+      if (m && activeContract && (inbox?.domainMissing || showAll)) {
         const domain = senderDomain(m.from);
         if (domain) {
           await fetch(`/api/customers/${encodeURIComponent(activeContract.customerId)}/email-domain/claim`, {
@@ -118,19 +146,48 @@ export default function GmailTab() {
       const res = await fetch('/api/gmail/read', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messageId, attachmentFilename }),
+        body: JSON.stringify({
+          messageId,
+          attachmentFilename,
+          readerId: picker.readerId,
+          abbyySkillId: picker.chosenReaderId === 'abbyy' ? picker.abbyySkillId : null,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? tx('อ่านไฟล์ไม่สำเร็จ'));
-        return;
-      }
-      setResult(data);
+      if (!res.ok) return { ok: false, error: data.error ?? tx('อ่านไฟล์ไม่สำเร็จ') };
+      return { ok: true, data };
     } catch (e: any) {
-      setError(e.message ?? tx('เชื่อมต่อไม่สำเร็จ — ลองใหม่อีกครั้ง'));
-    } finally {
-      setReading(null);
+      return { ok: false, error: e.message ?? tx('เชื่อมต่อไม่สำเร็จ — ลองใหม่อีกครั้ง') };
     }
+  }
+
+  /** อ่านทุกไฟล์แนบที่ติ๊กไว้ทีละไฟล์ตามลำดับ — เห็นสถานะเปลี่ยนไปเรื่อยๆ ทีละแถว ไม่ต้องรอครบทุกไฟล์
+   * ก่อนเห็นผลไฟล์แรก */
+  async function doReadSelected() {
+    const list = [...selected].map((key) => {
+      const idx = key.indexOf('::');
+      return { key, messageId: key.slice(0, idx), filename: key.slice(idx + 2) };
+    });
+    if (list.length === 0) return;
+
+    setError(null);
+    setBulkItems(list.map(({ key, messageId, filename }) => ({ key, messageId, filename, status: 'queued' })));
+    setSelected(new Set());
+
+    for (const { key, messageId, filename } of list) {
+      setBulkItems((prev) => prev!.map((it) => (it.key === key ? { ...it, status: 'reading' } : it)));
+      const outcome = await readOne(messageId, filename);
+      setBulkItems((prev) =>
+        prev!.map((it) =>
+          it.key === key
+            ? outcome.ok
+              ? { ...it, status: 'done', result: outcome.data }
+              : { ...it, status: 'failed', error: outcome.error }
+            : it,
+        ),
+      );
+    }
+    load();
   }
 
   function openIngestedPreview(messageId: string, filename: string) {
@@ -167,10 +224,72 @@ export default function GmailTab() {
     load();
   }
 
-  if (result) {
+  /* เปิด ReviewCard ทับหน้าความคืบหน้า (25 ก.ย. 69) — ตรวจสอบ/ยืนยันไฟล์ที่อ่านเสร็จแล้วได้ตรงนี้เลย
+     ปิดแล้วกลับมาที่รายการความคืบหน้าเดิม (ไม่รีเซ็ต bulkItems) */
+  if (bulkOpenResult) {
     return (
       <Card title={tx('ตรวจสอบก่อนบันทึก')}>
-        <ReviewCard result={result} onDone={() => setResult(null)} />
+        <ReviewCard result={bulkOpenResult} onDone={() => setBulkOpenResult(null)} />
+      </Card>
+    );
+  }
+
+  /* หน้าความคืบหน้าหลังกด "อ่านที่เลือก" (25 ก.ย. 69 ตามที่ขอ) — อ่านทีละไฟล์ตามลำดับ เห็นสถานะเปลี่ยน
+     ไปเรื่อยๆ ทีละแถว แถวไหน "เสร็จแล้ว" คลิกเปิดตรวจสอบได้เลยเหมือนคิวอ่านของแท็บ "อัปโหลดไฟล์" */
+  if (bulkItems) {
+    const doneCount = bulkItems.filter((it) => it.status === 'done' || it.status === 'failed').length;
+    const allDone = doneCount === bulkItems.length;
+    return (
+      <Card title={tx('กำลังอ่านที่เลือกไว้')} right={<span className="sub">{doneCount}/{bulkItems.length}</span>}>
+        <div className="rq-list">
+          {bulkItems.map((it) => {
+            const clickable = it.status === 'done';
+            const cssStatus = it.status === 'done' ? 'pending' : it.status === 'queued' ? '' : it.status;
+            return (
+              <div
+                key={it.key}
+                className={`rq-row ${cssStatus}${clickable ? ' clickable' : ''}`}
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={clickable ? () => setBulkOpenResult(it.result!) : undefined}
+                onKeyDown={
+                  clickable
+                    ? (e) => {
+                        if (e.key === 'Enter') setBulkOpenResult(it.result!);
+                      }
+                    : undefined
+                }
+              >
+                {it.status === 'reading' ? (
+                  <span className="rq-spinner" />
+                ) : (
+                  <Icon
+                    name={it.status === 'done' ? 'chk' : it.status === 'failed' ? 'x' : 'clock'}
+                    className="sm"
+                    style={{
+                      color: it.status === 'done' ? 'var(--ok)' : it.status === 'failed' ? 'var(--cr)' : 'var(--fnt)',
+                      flex: 'none',
+                    }}
+                  />
+                )}
+                <span className="rq-name">
+                  {it.filename}
+                  {it.status === 'failed' && it.error && <span className="rq-err">{it.error}</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="sub" style={{ marginTop: 14 }}>
+          {allDone
+            ? tx('อ่านครบทุกไฟล์แล้ว — คลิกแถวไหนก็ได้เพื่อตรวจสอบและยืนยันเข้าระบบ')
+            : tx('กำลังอ่านทีละไฟล์ตามลำดับ ไม่ต้องปิดหน้านี้ก็ได้')}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <button className="btn" disabled={!allDone} onClick={() => setBulkItems(null)}>
+            {tx('กลับไปที่กล่องเมล')}
+          </button>
+        </div>
       </Card>
     );
   }
@@ -206,6 +325,23 @@ export default function GmailTab() {
         </div>
       )}
 
+      {inbox && inbox.messages.length > 0 && (
+        <div className="bulkbar" style={{ margin: '0 0 14px', borderRadius: 'var(--r-ctl)' }}>
+          <label className="bulkbar-count" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+            <span>
+              <b>{selected.size}</b> {tx('รายการที่เลือก')}
+            </span>
+          </label>
+          <div className="bulkbar-actions">
+            <ReaderPickerBar picker={picker} />
+            <button className="btn pri sm" disabled={selected.size === 0} onClick={doReadSelected}>
+              <Icon name="chk" className="sm" /> {`${tx('อ่านที่เลือก')} (${selected.size})`}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!inbox && !error && <Loading rows={3} />}
         {inbox?.messages.map((m) => (
@@ -222,20 +358,22 @@ export default function GmailTab() {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-              {m.attachments.map((a) => (
-                <div key={a.filename} className="mailattach">
-                  <span className="fname">
-                    <Icon name="file" className="sm" /> {a.filename} <Icon name="cd" className="xs" />
-                  </span>
-                  <button
-                    className="btn sm pri"
-                    disabled={reading === `${m.id}::${a.filename}`}
-                    onClick={() => readAttachment(m, a.filename)}
-                  >
-                    {reading === `${m.id}::${a.filename}` ? tx('กำลังอ่าน…') : tx('อ่านข้อมูล')}
-                  </button>
-                </div>
-              ))}
+              {m.attachments.map((a) => {
+                const key = `${m.id}::${a.filename}`;
+                return (
+                  <label key={a.filename} className="mailattach" style={{ cursor: 'pointer' }}>
+                    <span className="fname">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(key)}
+                        onChange={() => toggleAttachment(key)}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Icon name="file" className="sm" /> {a.filename} <Icon name="cd" className="xs" />
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -293,7 +431,6 @@ export default function GmailTab() {
         )}
       </div>
       </Card>
-      {reading && <ReadingCard fileName={readingFileName} email />}
     </>
   );
 }

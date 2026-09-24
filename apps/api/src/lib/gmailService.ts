@@ -153,10 +153,16 @@ export async function readTimesheetFromEmail({
   messageId,
   attachmentFilename,
   contractId = null,
+  readerId = null,
+  abbyySkillId = null,
 }: {
   messageId: string;
   attachmentFilename?: string;
   contractId?: string | null;
+  /** เดิมไม่มีทางเลือกตัวอ่าน/Skill เลย — ใช้ตัวที่ระบบตั้งไว้เสมอ (เจ้าของระบบสั่ง 25 ก.ย. 69 ให้เลือก
+   * ได้เหมือนแท็บ "อัปโหลดไฟล์") ส่งต่อให้ readTimesheetFile() ตรงๆ ไม่กระทบพฤติกรรมเดิมถ้าไม่ได้ระบุ */
+  readerId?: string | null;
+  abbyySkillId?: string | null;
 }): Promise<
   ReadResult & {
     fileBytes: Buffer | null;
@@ -184,7 +190,7 @@ export async function readTimesheetFromEmail({
   const pdf = await gmail.getAttachment(messageId, target.attachmentId);
   const [emailMeta, sheet] = await Promise.all([
     readApprovalEmail({ subject: message.subject, from: message.from, date: message.date, body: message.body }),
-    readTimesheetFile({ fileBase64: pdf.toString('base64'), fileName: target.filename, contractId }),
+    readTimesheetFile({ fileBase64: pdf.toString('base64'), fileName: target.filename, contractId, readerId, abbyySkillId }),
   ]);
 
   const blockers = [...sheet.blockers];

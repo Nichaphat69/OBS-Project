@@ -5,6 +5,8 @@ import { Card } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 import { useToast } from '../../../components/Overlays';
+import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPicker';
+import { QueueStatusCard } from '../../../components/QueueStatusCard';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
 
 function fileToBase64(file: File): Promise<string> {
@@ -30,13 +32,6 @@ interface SubmitResult {
   fileName: string;
 }
 
-interface QueueItem {
-  id: number;
-  fileName: string | null;
-  status: string;
-  errorMessage: string | null;
-}
-
 /**
  * `submitOnly` = โหมดของพนักงาน (role `user`) — เลือกไฟล์เดียวแล้วกดส่ง จบ ไม่มีคิว/ตัวอ่านเลย
  * (เจ้าของระบบสั่ง 18 ก.ย. 69: พนักงานมีหน้าที่ "ส่ง" อย่างเดียว) ยิงคนละเส้นกับโหมดฝั่งบัญชีด้านล่าง —
@@ -59,34 +54,12 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<SubmitResult | null>(null);
   const [queuedIds, setQueuedIds] = useState<number[] | null>(null);
-  const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null);
   const [reviewResult, setReviewResult] = useState<ReadResultShape | null>(null);
   const [reviewLoadingId, setReviewLoadingId] = useState<number | null>(null);
-  const [readers, setReaders] = useState<Array<{ id: string; label: string; configured: boolean; active: boolean }>>([]);
-  // null = ใช้ตัวที่ระบบตั้งไว้ (พฤติกรรมเดิม) — ตั้งค่าเมื่อผู้ใช้เลือกเองเฉพาะรอบนี้เท่านั้น
-  const [readerId, setReaderId] = useState<string | null>(null);
-  const [skills, setSkills] = useState<Array<{ id: string; name: string; skillId: string }>>([]);
-  // null = ใช้ Skill ที่ผูกกับสัญญานี้ไว้ (เส้น Gmail ที่ไม่มีคนกดเลือกก็ใช้ทางนี้) — เลือกเองแล้วชนะค่าของสัญญา
-  const [abbyySkillId, setAbbyySkillId] = useState<string | null>(null);
-
-  useEffect(() => {
-    // โหมดพนักงานไม่มีตัวเลือกเครื่องอ่าน/Skill จึงไม่ต้องยิงสองเส้นนี้ให้เปล่าๆ (ทั้งคู่เป็นข้อมูลตั้งค่า
-    // ของฝั่งที่ทำบิล พนักงานเรียกไปก็ไม่ได้ใช้)
-    if (submitOnly) return;
-
-    fetch('/api/settings/readers', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { readers: [] }))
-      // local-llm เป็นตัวสำรองสุดท้ายที่ระบบเรียกเองเมื่อ ABBYY กับ Clear Read ล้มทั้งคู่ ไม่ใช่ตัวเลือก
-      // ของคน จึงไม่ต้องมีปุ่มของตัวเองที่นี่ (เหมือนกับที่หน้า "ตัวอ่าน Timesheet" ตัดออกไปแล้ว —
-      // เจ้าของระบบสั่ง 18 ก.ย. 69 ว่าให้เหลือแค่ 2 ตัวที่คนเลือกได้จริง)
-      .then((d) => setReaders((d.readers ?? []).filter((r: { id: string }) => r.id !== 'local-llm')))
-      .catch(() => setReaders([]));
-
-    fetch('/api/abbyy-skills', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows) => setSkills(Array.isArray(rows) ? rows : []))
-      .catch(() => setSkills([]));
-  }, [submitOnly]);
+  // ยกไปเป็น hook ใช้ร่วมกัน (25 ก.ย. 69) — แท็บ "รอจากพนักงาน"/"ดึงจาก Gmail" ก็ต้องเลือกตัวอ่าน/Skill
+  // แบบเดียวกันตอนอ่านหลายรายการพร้อมกัน ไม่เขียนตรรกะซ้ำอีกสองที่ โหมดพนักงาน (submitOnly) ไม่ใช้ค่า
+  // เหล่านี้เลย (เจ้าของระบบสั่ง 18 ก.ย. 69) แต่ JSX ด้านล่างกันไว้แล้วด้วย submitOnly ไม่ให้ขึ้นมาโชว์
+  const picker = useReaderPicker();
 
   // เช็คว่ามีไฟล์จากคิวนี้ที่ยังไม่เสร็จค้างอยู่ไหมทุกครั้งที่เปิด/รีเฟรชหน้า (23 ก.ย. 69) — เดิมสถานะ
   // "กำลังดูคิวอยู่" เก็บแค่ในหน่วยความจำของหน้าเว็บ รีเฟรชทีก็หายไปเลย ทั้งที่ไฟล์ยังอ่านไม่เสร็จจริงในระบบ
@@ -103,51 +76,6 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
       })
       .catch(() => {});
   }, [submitOnly]);
-
-  // แสดงสถานะสดของไฟล์ที่เพิ่งเข้าคิว (23 ก.ย. 69 อ้างอิงหน้าตาจาก Clear Read เอง) — ดึงจาก /api/ai-reads
-  // เดียวกับที่แท็บ "ประวัติ" ใช้ กรองเฉพาะ id ที่เพิ่งส่งเข้าคิวรอบนี้ แล้วฟัง SSE ตัวเดียวกับที่ประวัติใช้
-  // (events.ts/emitChange) ให้อัปเดตสถานะทันทีไม่ต้องกด refresh เอง
-  useEffect(() => {
-    if (!queuedIds || queuedIds.length === 0) return;
-
-    function loadQueueStatus() {
-      fetch('/api/ai-reads', { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : []))
-        .then((rows: any[]) => {
-          const idSet = new Set(queuedIds);
-          setQueueItems(
-            (Array.isArray(rows) ? rows : [])
-              .filter((r) => idSet.has(r.id))
-              .map((r) => ({ id: r.id, fileName: r.fileName, status: r.status, errorMessage: r.errorMessage })),
-          );
-        })
-        .catch(() => {});
-    }
-
-    loadQueueStatus();
-    let source: EventSource | null = null;
-    try {
-      source = new EventSource('/api/stream');
-      source.addEventListener('change', loadQueueStatus);
-      // เจอจริง 23 ก.ย. 69: ช่วงระหว่างเปิดหน้านี้กับ SSE ต่อสำเร็จมีช่องว่างสั้นๆ ที่พลาดฟัง event
-      // "queued → running" ไปได้ (worker เปลี่ยนสถานะเร็วกว่า SSE handshake) ทำให้ค้างโชว์ "รอคิว" ทั้งที่
-      // จริงๆ กำลังอ่านอยู่แล้ว — ต่อ SSE สำเร็จเมื่อไหร่ให้ดึงสถานะซ้ำอีกทีทันทีเพื่อไล่ตามให้ทัน
-      source.addEventListener('open', loadQueueStatus);
-    } catch {
-      /* SSE ต่อไม่ได้ — ยังมี poll สำรองด้านล่างคอยรีเฟรชต่อ */
-    }
-    // poll สำรองถี่ๆ ระหว่างที่ยังมีคิวค้างอยู่ — กันพลาด event ของ SSE ไปเฉยๆ (เชื่อ SSE อย่างเดียวเสี่ยง
-    // เกินไปสำหรับหน้าที่คนกำลังจ้องรอผลอยู่จริงๆ) ตั้งไว้ถี่ (1.2 วิ) เพราะ ABBYY อ่านไฟล์เล็กเสร็จเร็วมาก
-    // (2-3 วิ) — 4 วิเดิมข้ามสถานะ "กำลังอ่าน" ไปเฉยๆ เพราะอ่านเสร็จก่อน poll รอบถัดไปจะทัน
-    const poll = setInterval(loadQueueStatus, 1200);
-    return () => {
-      source?.close();
-      clearInterval(poll);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queuedIds]);
-
-  const chosenReaderId = readerId ?? readers.find((r) => r.active)?.id ?? null;
 
   function pickFiles(list: FileList | File[] | null | undefined) {
     if (!list || list.length === 0) return;
@@ -231,8 +159,8 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           files: filePayload,
-          readerId,
-          abbyySkillId: chosenReaderId === 'abbyy' ? abbyySkillId : null,
+          readerId: picker.readerId,
+          abbyySkillId: picker.chosenReaderId === 'abbyy' ? picker.abbyySkillId : null,
         }),
       });
       const data = await res.json();
@@ -303,68 +231,14 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
      อัตโนมัติผ่าน SSE ไม่ต้องกด refresh (23 ก.ย. 69 ตามภาพอ้างอิงจาก Clear Read — เจ้าของระบบขอให้เห็นว่า
      "กำลังอ่านไฟล์ไหนอยู่" ไม่ใช่แค่ข้อความสรุปจำนวนเฉยๆ) */
   if (!submitOnly && queuedIds !== null) {
-    const allDone = queueItems !== null && queueItems.every((it) => it.status === 'pending' || it.status === 'failed');
     return (
-      <Card title={tx('เข้าคิวอ่านแล้ว')} right={<span className="sub">{tx('อัปเดตสถานะอัตโนมัติ')}</span>}>
-        <div className="rq-list">
-          {queueItems === null
-            ? queuedIds.map((id) => (
-                <div key={id} className="rq-row">
-                  <span className="rq-spinner" style={{ opacity: 0.4 }} />
-                  <span className="rq-name">{tx('กำลังโหลด…')}</span>
-                </div>
-              ))
-            : queueItems.map((it) => {
-                // แถวที่พร้อมตรวจสอบแล้ว คลิกเปิด ReviewCard ได้เลย (24 ก.ย. 69 ตามที่ขอ — สัญลักษณ์/
-                // londing ด้านซ้ายบอกสถานะอยู่แล้ว จึงตัดป้ายข้อความสถานะด้านขวาที่ซ้ำซ้อนออก)
-                const clickable = it.status === 'pending';
-                return (
-                  <div
-                    key={it.id}
-                    className={`rq-row ${it.status}${clickable ? ' clickable' : ''}`}
-                    role={clickable ? 'button' : undefined}
-                    tabIndex={clickable ? 0 : undefined}
-                    onClick={clickable ? () => openReview(it.id) : undefined}
-                    onKeyDown={clickable ? (e) => { if (e.key === 'Enter') openReview(it.id); } : undefined}
-                  >
-                    {it.status === 'running' || reviewLoadingId === it.id ? (
-                      <span className="rq-spinner" />
-                    ) : (
-                      <Icon
-                        name={it.status === 'pending' ? 'chk' : it.status === 'failed' ? 'x' : 'clock'}
-                        className="sm"
-                        style={{
-                          color:
-                            it.status === 'pending' ? 'var(--ok)' : it.status === 'failed' ? 'var(--cr)' : 'var(--fnt)',
-                          flex: 'none',
-                        }}
-                      />
-                    )}
-                    <span className="rq-name">
-                      {it.fileName ?? tx('ไม่ทราบชื่อไฟล์')}
-                      {it.status === 'failed' && it.errorMessage && <span className="rq-err">{it.errorMessage}</span>}
-                    </span>
-                  </div>
-                );
-              })}
-        </div>
-        <div className="sub" style={{ marginTop: 14 }}>
-          {allDone
-            ? tx('อ่านครบทุกไฟล์แล้ว — คลิกแถวไหนก็ได้เพื่อตรวจสอบและยืนยันเข้าระบบ')
-            : tx('ระบบกำลังอ่านไฟล์เบื้องหลัง ไม่ต้องปิดหน้านี้ก็ได้ — แถวไหนพร้อมแล้วคลิกเข้าไปตรวจสอบได้เลย')}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <button
-            className="btn"
-            onClick={() => {
-              setQueuedIds(null);
-              setQueueItems(null);
-            }}
-          >
-            {tx('อัปโหลดเพิ่ม')}
-          </button>
-        </div>
-      </Card>
+      <QueueStatusCard
+        ids={queuedIds}
+        onOpenRow={openReview}
+        openingId={reviewLoadingId}
+        closeLabel={tx('อัปโหลดเพิ่ม')}
+        onClose={() => setQueuedIds(null)}
+      />
     );
   }
 
@@ -455,45 +329,9 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
         </div>
       )}
 
-      {readers.length > 0 && (
-        <div className="readerpick">
-          <span className="lbl">{tx('อ่านด้วย')}</span>
-          {readers.map((r) => {
-            // เดิมมีกล่องเตือนเต็มแถบใต้ปุ่มตอนเลือก Clear Read — เจ้าของระบบสั่งเอาออก 18 ก.ย. 69
-            // เก็บข้อมูลไว้เป็น tooltip สั้นๆ ที่ปุ่มแทน ไม่ให้ข้อมูลนี้หายไปเงียบๆ ทั้งที่ยังมีประโยชน์
-            const slowHint = r.id === 'clear-read' ? tx('Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า') : undefined;
-            return (
-              <button
-                key={r.id}
-                type="button"
-                className={`rp${chosenReaderId === r.id ? ' on' : ''}`}
-                disabled={!r.configured || processing}
-                title={!r.configured ? tx('ยังตั้งค่าไม่ครบ') : slowHint}
-                onClick={() => setReaderId(r.id)}
-              >
-                {r.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Skill เลือกได้เฉพาะฝั่ง ABBYY — ฝั่ง Clear Read ระบบปักแม่แบบเดียวทั้งระบบ (เจ้าของระบบสั่ง
-          17 ก.ย. 69) จึงไม่มีอะไรให้เลือกเลย ไม่แสดงขั้นตอนนี้เลยถ้าเลือก Clear Read อยู่ */}
-      {chosenReaderId === 'abbyy' && skills.length > 0 && (
-        <div className="readeropt">
-          <label className="lbl" htmlFor="abbyy-skill">{tx('Skill ที่ใช้อ่าน')}</label>
-          <select
-            id="abbyy-skill"
-            value={abbyySkillId ?? ''}
-            disabled={processing}
-            onChange={(e) => setAbbyySkillId(e.target.value || null)}
-          >
-            <option value="">{tx('ตาม Skill ที่ผูกกับสัญญานี้')}</option>
-            {skills.map((s) => (
-              <option key={s.skillId} value={s.skillId}>{s.name}</option>
-            ))}
-          </select>
+      {!submitOnly && (
+        <div style={{ marginTop: 14 }}>
+          <ReaderPickerBar picker={picker} disabled={processing} />
         </div>
       )}
 

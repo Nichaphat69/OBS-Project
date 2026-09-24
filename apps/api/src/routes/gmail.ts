@@ -55,6 +55,8 @@ gmailRouter.post('/read', async (req, res) => {
       messageId: body.messageId,
       attachmentFilename: body.attachmentFilename,
       contractId: body.contractId ?? null,
+      readerId: body.readerId ?? null,
+      abbyySkillId: body.abbyySkillId ?? null,
     });
     const documentNo = await logAiRead({
       source: 'gmail',

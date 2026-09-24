@@ -4343,6 +4343,44 @@ button.file:hover {
 .readeropt select:disabled {
   opacity: 0.55;
 }
+/* ═══ แถบเลือกหลายรายการ (ติ๊กแถว + เลือกตัวอ่าน/Skill + ปุ่มอ่านที่เลือก) ═══
+   ใช้ในแท็บ "รอจากพนักงาน"/"ดึงจาก Gmail" (25 ก.ย. 69 ตามที่ขอ) — ติดอยู่บนสุดของตารางเสมอ ไม่ต้องเลื่อน
+   หาตอนจะกดอ่าน สรุปจำนวนที่เลือกไว้ฝั่งซ้าย ตัวอ่าน/Skill/ปุ่มอ่านชิดขวา (ตามภาพอ้างอิงที่ส่งมา) */
+.bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  background: var(--tint);
+  border-bottom: 1px solid var(--rule);
+}
+.bulkbar-count {
+  font-size: 13px;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+.bulkbar-count b {
+  color: var(--brand-d);
+  font-size: 16px;
+  font-weight: 700;
+  margin-right: 4px;
+}
+.bulkbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+@media (max-width: 720px) {
+  .bulkbar-actions {
+    margin-left: 0;
+  }
+}
+tbody tr.sel td {
+  background: var(--tint);
+}
 /* ═══ แถบบอกขอบเขตข้อมูลที่กำลังดู ═══
    หน้าที่แสดงข้อมูลค่าจ้างรายคนต้องบอกเองว่ากรองอยู่ที่บริษัทไหน ไม่ใช่ให้คนเดาจากรายชื่อที่เห็น —
    ตอนที่รายการรั่วข้ามบริษัท ไม่มีใครจับได้อยู่นานเพราะหน้าจอไม่เคยบอกขอบเขตของตัวเอง */
