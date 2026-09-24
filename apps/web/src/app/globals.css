@@ -2925,6 +2925,10 @@ td .nm {
   flex: 1 1 130px;
   min-width: 0;
 }
+.leave-row input[type='number'] {
+  flex: none;
+  width: 90px;
+}
 .leave-row .btn {
   flex: none;
 }
@@ -5016,4 +5020,55 @@ button.file:hover {
 }
 @media (prefers-reduced-motion: reduce) {
   .rq-spinner { animation-duration: 2.4s; }
+}
+
+/* แก้ชื่อผู้ใช้แบบ inline ในตาราง "ผู้ใช้ระบบ" — เดิม <input> ไม่มี type จึงไม่โดนสไตล์ input[type='text']
+   ด้านบน เหลือกรอบสี่เหลี่ยมดำของเบราว์เซอร์ (เจ้าของระบบชี้ 24 ก.ย. 69) — จัดเป็นการ์ดเล็ก ช่องมุมมนเท่า .frm input */
+.name-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 10px;
+  background: var(--sunk);
+  border: 1px solid var(--hair);
+  border-radius: var(--m3-shape-md);
+}
+.name-edit input[type='text'] {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--m3-shape-md);
+}
+.name-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* คอลัมน์ "สถานะการส่ง" หน้ารายการส่ง — เดิมป้าย "ยังไม่ส่ง" กับ "ยังไม่ผูก LINE OA" เป็น pill สีเทาเหมือนกัน
+   วางต่อกันแนวนอน อ่านเหมือนสถานะสองอัน (เจ้าของระบบชี้ 24 ก.ย. 69) — ให้สถานะเป็น pill เดียว
+   ส่วนหมายเหตุ LINE ลงเป็นบรรทัดเล็กใต้ pill แทน */
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.status-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--mut);
+  padding-left: 2px;
+}
+.status-note::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wn);
+  flex: none;
 }

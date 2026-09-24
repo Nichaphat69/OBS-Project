@@ -16,7 +16,7 @@ test('วันที่ตรงกันทั้งวันที่แล�
     [{ date: '2026-01-08', type: 'ลากิจ' }],
     [{ dateFrom: '2026-01-08', dateTo: '2026-01-08', leaveName: 'ลากิจ', leaveCode: 'BUSINESS' }],
   );
-  assert.deepEqual(rows, [{ date: '2026-01-08', tsType: 'ลากิจ', hrddType: 'ลากิจ', status: 'ok' }]);
+  assert.deepEqual(rows, [{ date: '2026-01-08', tsType: 'ลากิจ', hrddType: 'ลากิจ', status: 'ok', hrddHours: null }]);
 });
 
 test('วันที่ตรงกันแต่ Timesheet เขียนอังกฤษ HRDD เขียนไทย ยังจัดกลุ่มประเภทตรงกันได้ → ok', () => {
@@ -32,7 +32,7 @@ test('วันที่ตรงกันแต่ประเภทไม่�
     [{ date: '2026-01-16', type: 'ลาป่วย' }],
     [{ dateFrom: '2026-01-16', dateTo: '2026-01-16', leaveName: 'ลากิจ' }],
   );
-  assert.deepEqual(rows, [{ date: '2026-01-16', tsType: 'ลาป่วย', hrddType: 'ลากิจ', status: 'warn' }]);
+  assert.deepEqual(rows, [{ date: '2026-01-16', tsType: 'ลาป่วย', hrddType: 'ลากิจ', status: 'warn', hrddHours: null }]);
 });
 
 test('มีใน HRDD (อนุมัติแล้ว) แต่ไม่มีใน Timesheet → info', () => {
@@ -40,12 +40,12 @@ test('มีใน HRDD (อนุมัติแล้ว) แต่ไม่�
     [],
     [{ dateFrom: '2026-01-22', dateTo: '2026-01-22', leaveName: 'ลาป่วย' }],
   );
-  assert.deepEqual(rows, [{ date: '2026-01-22', tsType: null, hrddType: 'ลาป่วย', status: 'info' }]);
+  assert.deepEqual(rows, [{ date: '2026-01-22', tsType: null, hrddType: 'ลาป่วย', status: 'info', hrddHours: null }]);
 });
 
 test('มีใน Timesheet แต่ไม่มีใน HRDD → bad', () => {
   const rows = compareLeaves([{ date: '2026-01-29', type: 'ลาป่วย' }], []);
-  assert.deepEqual(rows, [{ date: '2026-01-29', tsType: 'ลาป่วย', hrddType: null, status: 'bad' }]);
+  assert.deepEqual(rows, [{ date: '2026-01-29', tsType: 'ลาป่วย', hrddType: null, status: 'bad', hrddHours: null }]);
 });
 
 test('HRDD ลาต่อเนื่องหลายวัน (dateFrom ≠ dateTo) เปิดออกมาเทียบเป็นรายวันให้ครบทุกวัน', () => {
@@ -72,6 +72,31 @@ test('ผลลัพธ์เรียงตามวันที่เสม�
 test('ไม่มีวันลาเลยทั้งสองฝั่ง → array เปล่า ไม่ error', () => {
   assert.deepEqual(compareLeaves([], []), []);
   assert.deepEqual(compareLeaves(), []);
+});
+
+test('HRDD ลาไม่เต็มวัน (amountDay:0, amountHour:3) วันเดียว → ติด hrddHours ไว้ให้เห็น', () => {
+  const rows = compareLeaves(
+    [{ date: '2026-07-31', type: 'ลาป่วย' }],
+    [{ dateFrom: '2026-07-31', dateTo: '2026-07-31', leaveName: 'ลาป่วย', amountDay: 0, amountHour: 3, timeFrom: '09:00:00', timeTo: '12:00:00' }],
+  );
+  assert.equal(rows[0].hrddHours, 3, 'ลา 3 ชม. ไม่ใช่วันเต็ม ต้องโชว์จำนวนชั่วโมงไว้');
+});
+
+test('HRDD ลาเต็มวัน (amountDay:1, amountHour:0) → hrddHours เป็น null เหมือนเดิม', () => {
+  const rows = compareLeaves(
+    [{ date: '2026-07-31', type: 'ลาป่วย' }],
+    [{ dateFrom: '2026-07-31', dateTo: '2026-07-31', leaveName: 'ลาป่วย', amountDay: 1, amountHour: 0, timeFrom: '00:00:00', timeTo: '00:00:00' }],
+  );
+  assert.equal(rows[0].hrddHours, null);
+});
+
+test('HRDD ลาต่อเนื่องหลายวัน (amountDay ≥ 1 ข้ามหลายวัน) แต่ละวันยังนับเต็มวันเหมือนเดิม ไม่ติด hrddHours', () => {
+  const rows = compareLeaves(
+    [],
+    [{ dateFrom: '2026-01-09', dateTo: '2026-01-11', leaveName: 'ลาพักร้อน', amountDay: 3, amountHour: 0 }],
+  );
+  assert.equal(rows.length, 3);
+  assert.ok(rows.every((r) => r.hrddHours === null), 'ลาต่อเนื่องหลายวัน ไม่ใช่กรณีลาไม่เต็มวันวันเดียว');
 });
 
 test('summarizeLeaveComparison นับแต่ละสถานะและรวมจำนวนที่ไม่ตรงกันถูกต้อง', () => {

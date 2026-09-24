@@ -195,7 +195,7 @@ export interface TimesheetDetail extends TimesheetListItem {
   sourceEmailSubject: string | null;
   extraction: any;
   manday: any;
-  leaveDays: Array<{ date: string; leaveType: string }>;
+  leaveDays: Array<{ date: string; leaveType: string; hours: number | null }>;
   dayLabels: Array<{
     date: string;
     dayOfWeek: string | null;
@@ -255,7 +255,7 @@ export async function getTimesheet(id: string): Promise<TimesheetDetail | null> 
     sourceEmailSubject: row.sourceEmailSubject,
     extraction: row.extraction ?? null,
     manday: row.computed ?? null,
-    leaveDays: leave.map((l) => ({ date: l.date, leaveType: l.leaveType })),
+    leaveDays: leave.map((l) => ({ date: l.date, leaveType: l.leaveType, hours: l.hours })),
     dayLabels,
     contractDetail: {
       customerId: row.contract.customerId,
@@ -424,7 +424,7 @@ export async function recomputeTimesheet(id: string, { actor = 'system' }: { act
     period: row.period,
     monthlyRate: assignment?.monthlyRate ?? 0,
     reportedWorkDays: row.reportedWorkdays ?? 0,
-    leaveDays: leave.map((l) => ({ date: l.date, type: l.leaveType })),
+    leaveDays: leave.map((l) => ({ date: l.date, type: l.leaveType, hours: l.hours })),
     otDays: overtime.map((o) => ({ date: o.date, hours: o.hours })),
     holidays,
     divisor: { mode: row.contract.divisorMode as any, value: row.contract.divisorValue },

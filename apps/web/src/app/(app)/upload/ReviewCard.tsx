@@ -18,7 +18,7 @@ export interface ReadResultShape {
     period: string | null;
     totalWorkDays: number;
     totalLeaveDays: number;
-    leaveDays: Array<{ date: string; type: string; rawLabel?: string }>;
+    leaveDays: Array<{ date: string; type: string; rawLabel?: string; hours?: number | null }>;
     notes: string[];
   };
   matching: { employee: { id: string; nameTh: string } | null };
@@ -38,6 +38,18 @@ const LEAVE_TYPE_LABEL: Record<string, string> = { sick: 'ลาป่วย', p
 /** ไอคอนต่อประเภทลา — ชุดเดียวกับ LEAVE_ICON ในหน้าตรวจ Manday's [id]/page.tsx เพื่อให้เห็นภาพเดียวกัน
  * ตั้งแต่ตอนกรอกจนถึงตอนตรวจ */
 const LEAVE_TYPE_ICON: Record<string, string> = { sick: 'sickface', personal: 'idcard', vacation: 'plane', unpaid: 'cal', unknown: 'cal', other: 'cal' };
+
+/** ชั่วโมงทำงานมาตรฐานต่อวัน — ใช้แปลง "ลากี่ชั่วโมง" เป็นสัดส่วนวัน (เช่น 4 ชม. = ครึ่งวัน) ต้องตรงกับ
+ * STANDARD_WORK_HOURS_PER_DAY ใน @obs/domain's manday.ts เป๊ะๆ (ไม่ได้ export ออกมาให้ import ตรงๆ
+ * จึงต้องคัดลอกค่าไว้ที่นี่ — ถ้าจะเปลี่ยนค่านี้ ต้องเปลี่ยนพร้อมกันทั้งสองที่) */
+const WORK_HOURS_PER_DAY = 8;
+
+/** จำนวน "วันลา" ที่ใช้แสดงในช่อง "วันลา (นับอัตโนมัติ)" — สูตรเดียวกับ leaveCount ใน calculateManday()
+ * (ลาเต็มวันนับ 1, ลาไม่เต็มวันนับตามสัดส่วนชั่วโมง) เพื่อให้ตัวเลขที่เห็นตรงกับที่ใช้คิดเงินจริง */
+function totalLeaveCount(leaveDays: Array<{ hours?: number | null }>): number {
+  const total = leaveDays.reduce((sum, l) => sum + (l.hours != null ? l.hours / WORK_HOURS_PER_DAY : 1), 0);
+  return Math.round(total * 100) / 100;
+}
 
 /** ประเภทหัก ณ ที่จ่ายที่พบบ่อย — ported from public/app.js's WHT_TYPES */
 const WHT_TYPES = [
@@ -80,8 +92,8 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
      (เครื่องอ่านคนละเจ้า/เอกสารคนละแบบ ให้ผลไม่เท่ากัน) ถ้าพลาดแม้ช่องเดียว การ์ดนี้จะ throw ตอน
      render แล้ว **ทั้งหน้าอัปโหลดกลายเป็นจอขาว** ("Application error") ซึ่งแย่กว่าแสดงค่าว่างมาก
      เพราะไฟล์ถูกอ่านไปแล้ว (เสียเวลา/เสียเครดิต) แต่คนกดไม่เหลืออะไรให้ดูเลย (18 ก.ย. 69) */
-  const [leaveDays, setLeaveDays] = useState<Array<{ date: string; type: string }>>(
-    (result.data?.leaveDays ?? []).map((l) => ({ date: l.date, type: l.type })),
+  const [leaveDays, setLeaveDays] = useState<Array<{ date: string; type: string; hours?: number | null }>>(
+    (result.data?.leaveDays ?? []).map((l) => ({ date: l.date, type: l.type, hours: l.hours ?? null })),
   );
   const [whtPct, setWhtPct] = useState(pctRound((result.contract?.whtRate ?? 0.03) * 100));
   const [confirming, setConfirming] = useState(false);
@@ -90,9 +102,9 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
   const { period: periodNotes, data: dataNotes } = splitNotesByTopic(result.data?.notes ?? []);
 
   function addLeaveDay() {
-    setLeaveDays((d) => [...d, { date: '', type: 'sick' }]);
+    setLeaveDays((d) => [...d, { date: '', type: 'sick', hours: null }]);
   }
-  function updateLeaveDay(i: number, patch: Partial<{ date: string; type: string }>) {
+  function updateLeaveDay(i: number, patch: Partial<{ date: string; type: string; hours: number | null }>) {
     setLeaveDays((d) => d.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
   function removeLeaveDay(i: number) {
@@ -130,7 +142,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
             position,
             period,
             leaveDays,
-            totalLeaveDays: leaveDays.length,
+            totalLeaveDays: totalLeaveCount(leaveDays),
             // ช่องวันทำงานแก้ได้แล้ว ต้องส่งค่าที่แก้ไปด้วย ไม่ใช่ค่าเดิมจาก ...result.data
             totalWorkDays: Number(workDays) || 0,
           },
@@ -200,7 +212,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
         <Field label={tx('วันทำงาน')} value={workDays} onChange={setWorkDays} />
         {/* วันลาเป็นค่าที่นับจากรายการ "วันลาที่อ่านได้" ด้านล่าง ซึ่งเป็นตัวจริงที่แก้ไขได้ — ทำเป็นช่อง
             พิมพ์ได้ด้วยจะขัดกันเองทันทีที่สองค่าไม่ตรง จึงโชว์เป็นช่องอ่านอย่างเดียวให้รูปแบบเหมือนกัน */}
-        <Field label={tx('วันลา (นับอัตโนมัติ)')} value={String(leaveDays.length)} readOnly />
+        <Field label={tx('วันลา (นับอัตโนมัติ)')} value={String(totalLeaveCount(leaveDays))} readOnly />
       </div>
       {/* โน้ตเรื่องรอบเดือนอยู่ติดช่อง "รอบเดือน" ด้านบนทันที แทนที่จะลอยรวมอยู่ท้ายฟอร์ม */}
       <NoteList notes={periodNotes} />
@@ -237,6 +249,20 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
                       </option>
                     ))}
                 </select>
+                {/* ว่าง = ลาเต็มวัน (ปกติ) — ใส่เลขเมื่อลาไม่เต็มวัน (24 ก.ย. 69 ตามที่ขอ ยืนยันจาก HRDD
+                    จริงว่าส่งชั่วโมงมาแยกต่างหาก) หักเงินตามสัดส่วน ดู calculateManday() ใน @obs/domain */}
+                <input
+                  type="number"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  placeholder={tx('เต็มวัน')}
+                  value={l.hours ?? ''}
+                  onChange={(e) => updateLeaveDay(i, { hours: e.target.value === '' ? null : Number(e.target.value) })}
+                  style={{ height: 36, width: 90 }}
+                  title={tx('ชั่วโมงที่ลา (ว่าง = ลาเต็มวัน)')}
+                />
+                <span className="sub" style={{ whiteSpace: 'nowrap', flex: 'none' }}>{tx('ชม.')}</span>
                 <button className="btn ghost sm icon" type="button" title={tx('ลบ')} aria-label={tx('ลบ')} onClick={() => removeLeaveDay(i)}>
                   <Icon name="x" />
                 </button>

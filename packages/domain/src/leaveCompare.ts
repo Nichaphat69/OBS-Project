@@ -28,6 +28,12 @@ export interface HrddLeave {
   dateTo: string;
   leaveName?: string | null;
   leaveCode?: string | null;
+  // เพิ่มทีหลัง (24 ก.ย. 69 — ยืนยันจาก HRDD จริงว่าส่งแยกวัน/ชั่วโมงมาให้ ไม่ใช่หน่วยวันอย่างเดียว)
+  // ตัวอย่างจริง: ลาเต็มวัน = amountDay:1, amountHour:0 · ลา 3 ชม. = amountDay:0, amountHour:3
+  amountDay?: number | null;
+  amountHour?: number | null;
+  timeFrom?: string | null;
+  timeTo?: string | null;
 }
 
 export type LeaveCompareStatus = 'ok' | 'warn' | 'info' | 'bad';
@@ -37,17 +43,28 @@ export interface LeaveCompareRow {
   tsType: string | null;
   hrddType: string | null;
   status: LeaveCompareStatus;
+  /** ชั่วโมงที่ HRDD บันทึกไว้สำหรับวันนี้ — null = ลาเต็มวันปกติ (หรือไม่มีข้อมูล HRDD เลย) มีค่า = HRDD
+   * บอกว่าวันนี้ลาไม่เต็มวัน ใช้เตือนคนตรวจว่า Timesheet ที่บันทึกเป็น "ลาเต็มวัน" อาจไม่ตรงกับที่ HRDD
+   * อนุมัติจริง (24 ก.ย. 69 ตามที่ขอ) */
+  hrddHours: number | null;
 }
 
-/** เปิดช่วงวันที่ dateFrom..dateTo ของ HRDD (ลาต่อเนื่องหลายวัน) ออกเป็นวันละแถว
- * เพราะ Timesheet บันทึกวันลาเป็นรายวัน เทียบกันตรงๆไม่ได้ถ้าไม่เปิดช่วงก่อน */
-function expandHrddLeave(leave: HrddLeave): Array<{ date: string; leaveName: string | null; leaveCode?: string | null }> {
-  const days: Array<{ date: string; leaveName: string | null; leaveCode?: string | null }> = [];
+/** เปิดช่วงวันที่ dateFrom..dateTo ของ HRDD (ลาต่อเนื่องหลายวัน) ออกเป็นวันละแถว เพราะ Timesheet บันทึก
+ * วันลาเป็นรายวัน เทียบกันตรงๆไม่ได้ถ้าไม่เปิดช่วงก่อน — ลาแค่วันเดียว (dateFrom === dateTo) ที่ amountHour
+ * มีค่า (>0) และ amountDay ไม่ใช่วันเต็ม ถือว่าเป็นวันลาไม่เต็มวัน ติด hours ไว้ที่วันนั้น ส่วนลาต่อเนื่อง
+ * หลายวัน (amountDay ≥ 1 ข้ามหลายวัน) ยังนับแต่ละวันเป็นวันเต็มเหมือนเดิมทุกประการ */
+function expandHrddLeave(leave: HrddLeave): Array<{ date: string; leaveName: string | null; leaveCode?: string | null; hours: number | null }> {
+  const days: Array<{ date: string; leaveName: string | null; leaveCode?: string | null; hours: number | null }> = [];
   let d = new Date(`${leave.dateFrom}T00:00:00Z`);
   const end = new Date(`${leave.dateTo}T00:00:00Z`);
   if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return days;
+
+  const isSingleDay = leave.dateFrom === leave.dateTo;
+  const isPartialDay = isSingleDay && !leave.amountDay && Boolean(leave.amountHour);
+  const hours = isPartialDay ? leave.amountHour! : null;
+
   while (d <= end) {
-    days.push({ date: d.toISOString().slice(0, 10), leaveName: leave.leaveName ?? null, leaveCode: leave.leaveCode });
+    days.push({ date: d.toISOString().slice(0, 10), leaveName: leave.leaveName ?? null, leaveCode: leave.leaveCode, hours });
     d = new Date(d.getTime() + 86_400_000);
   }
   return days;
@@ -64,8 +81,12 @@ export function compareLeaves(
 ): LeaveCompareRow[] {
   const tsByDate = new Map<string, string | null>(tsLeaves.map((l) => [l.date, l.type ?? null]));
   const hrddByDate = new Map<string, string | null>();
+  const hrddHoursByDate = new Map<string, number | null>();
   for (const leave of hrddLeaves) {
-    for (const day of expandHrddLeave(leave)) hrddByDate.set(day.date, day.leaveName ?? null);
+    for (const day of expandHrddLeave(leave)) {
+      hrddByDate.set(day.date, day.leaveName ?? null);
+      hrddHoursByDate.set(day.date, day.hours);
+    }
   }
 
   const allDates = new Set([...tsByDate.keys(), ...hrddByDate.keys()]);
@@ -83,7 +104,7 @@ export function compareLeaves(
       status = 'bad';
     }
 
-    return { date, tsType, hrddType, status };
+    return { date, tsType, hrddType, status, hrddHours: hrddHoursByDate.get(date) ?? null };
   });
 }
 

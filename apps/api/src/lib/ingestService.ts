@@ -161,7 +161,9 @@ export interface ExtractedData {
   totalWorkDays: number;
   totalLeaveDays: number;
   days: ExtractedDay[];
-  leaveDays: Array<{ date: string; type: string; rawLabel?: string }>;
+  // hours เพิ่มทีหลัง (24 ก.ย. 69 — ระบบต้องรองรับลาครึ่งวัน/เป็นชั่วโมง) ไม่ระบุ/null = ลาเต็มวัน
+  // (พฤติกรรมเดิมทุกประการ) มีค่า = ลาไม่เต็มวัน หักเงินตามสัดส่วน ดู calculateManday() ใน @obs/domain
+  leaveDays: Array<{ date: string; type: string; rawLabel?: string; hours?: number | null }>;
   otDays?: Array<{ date: string; hours: number }>;
   signedByEmployee?: boolean;
   signedByProjectManager?: boolean;
@@ -488,7 +490,7 @@ export async function ingestTimesheet({
     });
 
     for (const leave of data.leaveDays ?? []) {
-      await tx.leaveDay.create({ data: { timesheetId: documentNo, date: leave.date, leaveType: leave.type } });
+      await tx.leaveDay.create({ data: { timesheetId: documentNo, date: leave.date, leaveType: leave.type, hours: leave.hours ?? null } });
     }
 
     for (const day of data.days ?? []) {

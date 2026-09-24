@@ -32,6 +32,10 @@ const STANDARD_WORK_HOURS_PER_DAY = 8;
 export interface LeaveDayInput {
   date: string;
   type: string;
+  /** ชั่วโมงที่ลาจริงในวันนั้น — ไม่ระบุ/null = ลาเต็มวัน (พฤติกรรมเดิมทุกประการ) ระบุมา (เช่น 4 จาก
+   * วันทำงานเต็ม 8 ชม.) = ลาไม่เต็มวัน หักเงินตามสัดส่วนแทนหักเต็มวัน (24 ก.ย. 69 ตามที่ขอ — ยืนยันจาก
+   * HRDD จริงที่ส่ง amountDay/amountHour แยกกันมาให้ ไม่ใช่หน่วยวันอย่างเดียว) */
+  hours?: number | null;
 }
 
 export interface OtDayInput {
@@ -117,9 +121,14 @@ export function calculateManday({
   const leaveDates = new Set(leaveDays.map((l) => l.date));
   const calendar = buildMonth(period, holidays, leaveDates);
 
-  const leaveCount = leaveDays.length;
+  // จำนวน "วันลา" ที่ใช้คิดเงินจริง — ลาเต็มวัน (hours ไม่ระบุ) นับ 1 เต็ม, ลาไม่เต็มวัน (ระบุ hours มา)
+  // นับตามสัดส่วนชั่วโมงต่อวันทำงานมาตรฐาน (24 ก.ย. 69 ตามที่ขอ) — ลาเต็มวันล้วนๆ ได้ค่าเดิมทุกประการ
+  // (เท่ากับ leaveDays.length เป๊ะๆ) เปลี่ยนพฤติกรรมเฉพาะตอนมีวันที่ระบุ hours มาเท่านั้น
+  const leaveCount = round2(
+    leaveDays.reduce((sum, l) => sum + (l.hours != null ? l.hours / STANDARD_WORK_HOURS_PER_DAY : 1), 0),
+  );
   const standardWorkingDays = calendar.standardWorkingDays;
-  const payableDays = standardWorkingDays - leaveCount;
+  const payableDays = round2(standardWorkingDays - leaveCount);
 
   const divisorValue =
     divisor.mode === DIVISOR_MODE.ACTUAL_WORKING_DAYS
@@ -142,6 +151,7 @@ export function calculateManday({
     calendar,
     reportedWorkDays,
     leaveDays,
+    leaveCount,
     standardWorkingDays,
     payableDays,
     reportedDayLabels,
@@ -164,7 +174,7 @@ export function calculateManday({
     otDays: otBreakdown,
     otTotal,
     lineAmount,
-    remarkLines: buildRemarkLines({ dailyRate, leaveDays }),
+    remarkLines: buildRemarkLines({ dailyRate, leaveDays, leaveCount }),
     checks,
     ok: checks.every((c) => c.severity !== SEVERITY.FAIL),
   };
@@ -178,29 +188,35 @@ export function calculateManday({
  *   รวม = 1 วัน
  *
  * ใบจริงพิมพ์ปีเป็น "68" ซึ่งควรเป็น "69" — ตัวสร้างนี้คำนวณปี พ.ศ. จากวันที่จริง
- */
+ *
+ * 24 ก.ย. 69 — วันที่ลาไม่เต็มวัน (มี hours) โชว์เป็น "X ชม. (Y วัน)" แทน "1 วัน" เพื่อให้ตรงกับที่หัก
+ * เงินจริง ไม่ใช่โกหกว่าหักเต็มวันทั้งที่หักแค่บางส่วน — "รวม" ท้ายสุดใช้ leaveCount ตัวเดียวกับที่ใช้
+ * คิดส่วนลดจริง (round2 แล้ว) ไม่ใช่นับจำนวนแถวเหมือนเดิม เพราะไม่ตรงกันอีกต่อไปถ้ามีวันลาไม่เต็มวันปน */
 function buildRemarkLines({
   dailyRate,
   leaveDays,
+  leaveCount,
 }: {
   dailyRate: number;
   leaveDays: LeaveDayInput[];
+  leaveCount: number;
 }): string[] {
   if (leaveDays.length === 0) return [];
 
   const perDate = new Map<string, number>();
   for (const leave of leaveDays) {
-    perDate.set(leave.date, (perDate.get(leave.date) ?? 0) + 1);
+    const unit = leave.hours != null ? leave.hours / STANDARD_WORK_HOURS_PER_DAY : 1;
+    perDate.set(leave.date, (perDate.get(leave.date) ?? 0) + unit);
   }
 
   const lines = [
     `${dailyRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาทต่อวัน`,
     'ส่วนลดเนื่องจากพนักงานลา',
   ];
-  for (const [date, count] of [...perDate.entries()].sort()) {
-    lines.push(`วันที่ ${thaiDateShort(date)} = ${count} วัน`);
+  for (const [date, unit] of [...perDate.entries()].sort()) {
+    lines.push(unit === 1 ? `วันที่ ${thaiDateShort(date)} = 1 วัน` : `วันที่ ${thaiDateShort(date)} = ${round2(unit)} วัน`);
   }
-  lines.push(`รวม = ${leaveDays.length} วัน`);
+  lines.push(`รวม = ${leaveCount} วัน`);
   return lines;
 }
 
@@ -208,6 +224,7 @@ function runChecks({
   calendar,
   reportedWorkDays,
   leaveDays,
+  leaveCount,
   standardWorkingDays,
   payableDays,
   reportedDayLabels,
@@ -217,6 +234,7 @@ function runChecks({
   calendar: MonthCalendar;
   reportedWorkDays: number;
   leaveDays: LeaveDayInput[];
+  leaveCount: number;
   standardWorkingDays: number;
   payableDays: number;
   reportedDayLabels: ReportedDayLabel[];
@@ -319,7 +337,7 @@ function runChecks({
       id: 'payable_negative',
       severity: SEVERITY.FAIL,
       title: 'วันที่วางบิลได้ติดลบ',
-      detail: `วันลา ${leaveDays.length} วัน มากกว่าวันทำงานของเดือน ${standardWorkingDays} วัน`,
+      detail: `วันลา ${leaveCount} วัน มากกว่าวันทำงานของเดือน ${standardWorkingDays} วัน`,
     });
   }
 

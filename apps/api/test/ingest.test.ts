@@ -480,3 +480,92 @@ test('มูลค่าสัญญาใน listBillingCycles() ตรงก�
   assert.equal(ct.monthsTotal, 6, 'สัญญา 6 เดือน (ม.ค.–มิ.ย. 69)');
   assert.equal(ct.contractValue, 1058183.58, 'ยอดรวมก่อนภาษีในใบว่าจ้าง');
 });
+
+/**
+ * ลาไม่เต็มวัน (ครึ่งวัน/เป็นชั่วโมง) — 24 ก.ย. 69 ตามที่ขอ ยืนยันจาก HRDD จริงว่าส่ง amountDay/
+ * amountHour แยกกันมาให้ ไม่ใช่หน่วยวันอย่างเดียว ทดสอบ end-to-end ว่า `hours` ที่ส่งมาใน leaveDays
+ * ตอน ingest ถูกเก็บลง `leave_days.hours` จริง (ไม่ใช่แค่ที่ชั้นคำนวณล้วนใน @obs/domain ที่เทสต์แยกไว้แล้ว
+ * ใน packages/domain/test/manday.test.ts) และคำนวณส่วนลดตามสัดส่วน ไม่ใช่หักเต็มวัน — ใช้รอบ เม.ย. 69
+ * (ยังไม่มีเทสต์ไหนแตะรอบนี้มาก่อนในไฟล์นี้ จึงไม่ชนกับสถานะที่เทสต์ก่อนหน้าทำไว้)
+ */
+function fakeAprilWithLeave({ employeeName, position, leaveEntries }: {
+  employeeName: string; position: string; leaveEntries: Array<{ date: string; hours?: number | null }>;
+}) {
+  const leaveByDate = new Map(leaveEntries.map((l) => [l.date, l.hours ?? null]));
+  const days = [];
+  for (let d = 1; d <= 30; d += 1) {
+    const date = `2026-04-${String(d).padStart(2, '0')}`;
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+    const weekend = dow === 0 || dow === 6;
+    const onLeave = leaveByDate.has(date);
+
+    if (weekend) days.push({ date, timeIn: null, timeOut: null, label: 'Weekend', jobDescription: null });
+    else if (onLeave) days.push({ date, timeIn: null, timeOut: null, label: 'Sick leave', jobDescription: null });
+    else days.push({ date, timeIn: '8:30', timeOut: '17:00', label: null, jobDescription: 'งานตามที่ได้รับมอบหมาย' });
+  }
+
+  const workDays = days.filter((d) => d.timeIn).length;
+
+  return {
+    vendor: 'iPassion Co.,Ltd.',
+    clientName: 'ThaiLife Insurance Public Co.,Ltd.',
+    projectName: 'Outsource for BAU Project',
+    employeeName,
+    position,
+    period: '2026-04',
+    totalWorkDays: workDays,
+    totalLeaveDays: leaveEntries.length,
+    days,
+    leaveDays: leaveEntries.map((l) => ({ date: l.date, type: 'sick', rawLabel: 'Sick leave', hours: l.hours ?? null })),
+    signedByEmployee: true,
+    signedByProjectManager: true,
+    notes: [],
+  };
+}
+
+test('ลาครึ่งวัน (hours: 4) ตอน ingest → เก็บ leave_days.hours จริง และหักเงินแค่ครึ่งวัน ไม่ใช่เต็มวัน', async () => {
+  const data = fakeAprilWithLeave({
+    employeeName: 'Pongpun Mamak',
+    position: 'Developer',
+    leaveEntries: [{ date: '2026-04-09', hours: 4 }],
+  });
+
+  const result = await ingestTimesheet({
+    documentNo: '2026040199',
+    fileBytes: Buffer.from('ไฟล์ปลอม'),
+    expectedPeriod: '2026-04',
+    extractor: stubExtractor(data),
+  });
+
+  assert.equal(result.created, true);
+  assert.equal(f(result.manday).leaveCount, 0.5, 'ลา 4 ชม. จาก 8 ชม. = ครึ่งวัน');
+  assert.equal(f(result.manday).discount, 1323.6, '2,647.20 × 0.5 = 1,323.60 — หักครึ่งเดียว ไม่ใช่เต็ม 2,647.20');
+
+  const rows = await prisma.leaveDay.findMany({ where: { timesheetId: result.timesheetId! } });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].hours, 4, 'ต้องเก็บจำนวนชั่วโมงจริงลง DB ไม่ใช่ null (ซึ่งจะแปลว่าลาเต็มวัน)');
+
+  const sheet = (await getTimesheet(result.timesheetId!))!;
+  assert.equal(sheet.leaveDays[0].hours, 4, 'อ่านกลับผ่าน getTimesheet() ต้องเห็นชั่วโมงเดียวกัน');
+});
+
+test('ลาเต็มวัน (ไม่ส่ง hours) ตอน ingest → leave_days.hours เป็น null เหมือนพฤติกรรมเดิมทุกประการ', async () => {
+  const data = fakeAprilWithLeave({
+    employeeName: 'Sunee Maneekasemsuk',
+    position: 'Senior Project Manager',
+    leaveEntries: [{ date: '2026-04-09' }],
+  });
+
+  const result = await ingestTimesheet({
+    documentNo: '2026040198',
+    fileBytes: Buffer.from('ไฟล์ปลอม'),
+    expectedPeriod: '2026-04',
+    extractor: stubExtractor(data),
+  });
+
+  assert.equal(f(result.manday).leaveCount, 1);
+
+  const rows = await prisma.leaveDay.findMany({ where: { timesheetId: result.timesheetId! } });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].hours, null);
+});

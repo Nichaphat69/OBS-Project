@@ -23,7 +23,8 @@ interface Manday {
   leaveCount: number;
   // เผื่อ timesheet เก่าที่คำนวณไว้ก่อน field พวกนี้จะถูกเพิ่มเข้ามา (timesheets.computed เป็นสแนปช็อต
   // ตอนคำนวณครั้งล่าสุด ไม่ใช่ทุกใบจะถูกคำนวณใหม่หลัง schema เปลี่ยน) — ต้อง optional ทุกฟิลด์ที่เพิ่มทีหลัง
-  leaveDays?: Array<{ date: string; type: string }>;
+  // hours เพิ่มทีหลัง (24 ก.ย. 69 — รองรับลาครึ่งวัน/เป็นชั่วโมง) null/ไม่ระบุ = ลาเต็มวัน
+  leaveDays?: Array<{ date: string; type: string; hours?: number | null }>;
   divisor?: { mode: string; value: number; applied: number };
   dailyRate: number;
   discount: number;
@@ -57,7 +58,7 @@ interface TimesheetDetail {
   sourceEmailSubject: string | null;
   extraction: any;
   manday: Manday | null;
-  leaveDays: Array<{ date: string; leaveType: string }>;
+  leaveDays: Array<{ date: string; leaveType: string; hours: number | null }>;
   dayLabels: Array<{
     date: string;
     dayOfWeek: string | null;
@@ -95,6 +96,13 @@ function money(n: number | null | undefined) {
 }
 function int(n: number | null | undefined) {
   return n === null || n === undefined ? '—' : Math.round(n).toLocaleString('en-US');
+}
+/** ใช้กับตัวเลข "จำนวนวัน" ที่อาจไม่เต็มวัน (ลาครึ่งวัน/เป็นชั่วโมง — 24 ก.ย. 69) ต่างจาก int() ตรงที่
+ * ไม่ปัดทิ้งเศษ (int() จะปัด 0.5 กลายเป็น 0 หรือ 1 ซึ่งโกหกตัวเลขที่ใช้คิดเงินจริง) แต่ก็ไม่โชว์ ".00"
+ * รกๆ เวลาเป็นจำนวนเต็มพอดี */
+function days(n: number | null | undefined) {
+  if (n === null || n === undefined) return '—';
+  return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 function dateOnly(iso: string | null | undefined) {
   return iso ? iso.slice(0, 10) : '—';
@@ -248,9 +256,17 @@ export default function ManadyDetailPage() {
     () => new Map((m?.calendar?.days ?? []).filter((d) => d.kind === 'holiday').map((d) => [d.date, d.label])),
     [m],
   );
+  // ลาไม่เต็มวัน (มี hours) นับตามสัดส่วนชั่วโมงต่อวันทำงานมาตรฐาน แทนนับ +1 เต็มวันเสมอ (24 ก.ย. 69
+  // ตามที่ขอ) — สูตรเดียวกับ leaveCount ฝั่งเซิร์ฟเวอร์ (@obs/domain's calculateManday()) ลาเต็มวันล้วนๆ
+  // ยังได้ผลรวมเท่าเดิมทุกประการ
   const leaveCounts = useMemo(() => {
-    const counts: Record<string, number> = { sick: 0, personal: 0, vacation: 0, unpaid: 0 };
-    for (const l of m?.leaveDays ?? []) counts[l.type] = (counts[l.type] ?? 0) + 1;
+    const raw: Record<string, number> = { sick: 0, personal: 0, vacation: 0, unpaid: 0 };
+    for (const l of m?.leaveDays ?? []) {
+      const unit = l.hours != null ? l.hours / 8 : 1;
+      raw[l.type] = (raw[l.type] ?? 0) + unit;
+    }
+    const counts: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw)) counts[k] = Math.round(v * 100) / 100;
     return counts;
   }, [m]);
   const dayCounts = m?.calendar?.counts ?? { workday: 0, leave: 0, holiday: 0, weekend: 0 };
@@ -367,7 +383,7 @@ export default function ManadyDetailPage() {
                     </tr>
                     <tr>
                       <td>{tx('วันลา')}</td>
-                      <td className="r">{int(m?.leaveCount)} {tx('วัน')}</td>
+                      <td className="r">{days(m?.leaveCount)} {tx('วัน')}</td>
                     </tr>
                     <tr>
                       <td>
@@ -687,7 +703,7 @@ export default function ManadyDetailPage() {
                       <Icon name="sickface" className="lg" />
                     </span>
                     <span className="stx">
-                      <span className="stv">{int(leaveCounts.sick)}</span>
+                      <span className="stv">{days(leaveCounts.sick)}</span>
                       <span className="stl">{tx('ลาป่วย (วัน)')}</span>
                     </span>
                   </div>
@@ -696,7 +712,7 @@ export default function ManadyDetailPage() {
                       <Icon name="idcard" className="lg" />
                     </span>
                     <span className="stx">
-                      <span className="stv">{int(leaveCounts.personal)}</span>
+                      <span className="stv">{days(leaveCounts.personal)}</span>
                       <span className="stl">{tx('ลากิจ (วัน)')}</span>
                     </span>
                   </div>
@@ -705,7 +721,7 @@ export default function ManadyDetailPage() {
                       <Icon name="plane" className="lg" />
                     </span>
                     <span className="stx">
-                      <span className="stv">{int(leaveCounts.vacation)}</span>
+                      <span className="stv">{days(leaveCounts.vacation)}</span>
                       <span className="stl">{tx('ลาพักร้อน (วัน)')}</span>
                     </span>
                   </div>

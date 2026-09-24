@@ -22,6 +22,10 @@ interface HrddRow {
   tsType: string | null;
   hrddType: string | null;
   status: 'ok' | 'warn' | 'info' | 'bad';
+  /** ชั่วโมงที่ HRDD บันทึกไว้ — null = ลาเต็มวัน (หรือไม่มีข้อมูล) มีค่า = HRDD บอกว่าลาไม่เต็มวัน
+   * (24 ก.ย. 69 ตามที่ขอ) แสดงไว้ให้คนตรวจเห็นเฉยๆ ยังไม่ผูกเข้ากลไก "แก้ไข" ด้านล่าง (นั่นแก้แค่
+   * ประเภทวันลา ไม่ใช่จำนวนชั่วโมง) — เห็นแล้วไปแก้ช่อง "ชั่วโมงที่ลา" ในตารางด้านบนเองตามที่เห็นสมควร */
+  hrddHours: number | null;
 }
 interface HrddSummary {
   counts: { ok: number; warn: number; info: number; bad: number };
@@ -35,6 +39,7 @@ type HrddResult =
 export interface LeaveDayEdit {
   date: string;
   type: string;
+  hours?: number | null;
 }
 
 function toOption(type: string | null | undefined): string {
@@ -75,7 +80,7 @@ export default function HrddCompare({
       const res = await fetch('/api/hrdd-compare-preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ employeeId, period, leaveDays: leaveDays.map((l) => ({ date: l.date, type: l.type })) }),
+        body: JSON.stringify({ employeeId, period, leaveDays: leaveDays.map((l) => ({ date: l.date, type: l.type, hours: l.hours })) }),
       });
       const data = await res.json();
       setResult(res.ok ? data : { state: 'error', message: data.error ?? tx('ตรวจสอบไม่สำเร็จ') });
@@ -275,7 +280,16 @@ function RowGroup({
           )}
         </td>
         <td>{r.tsType ? tx(LEAVE_OPTIONS[r.tsType] ?? r.tsType) : <span className="sub">— {tx('ไม่มีข้อมูล')}</span>}</td>
-        <td>{r.hrddType ?? <span className="sub">— {tx('ไม่มีข้อมูล')}</span>}</td>
+        <td>
+          {r.hrddType ? (
+            <>
+              {tx(LEAVE_OPTIONS[r.hrddType] ?? r.hrddType)}
+              {r.hrddHours != null && <span className="sub"> ({r.hrddHours} {tx('ชม.')})</span>}
+            </>
+          ) : (
+            <span className="sub">— {tx('ไม่มีข้อมูล')}</span>
+          )}
+        </td>
         <td>
           {isResolved ? (
             <span className="st mu">{tx('แก้ไขแล้ว')}</span>

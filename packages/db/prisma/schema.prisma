@@ -334,6 +334,10 @@ model LeaveDay {
   timesheetId String @map("timesheet_id")
   date        String
   leaveType   String @map("leave_type") // sick | personal | vacation | unpaid
+  // เพิ่มทีหลัง (24 ก.ย. 69 — ระบบต้องรองรับลาครึ่งวัน/เป็นชั่วโมง ไม่ใช่แค่ลาเต็มวัน ยืนยันจาก HRDD
+  // จริงที่ส่ง amountDay/amountHour แยกกันมาให้) NULL = ลาเต็มวัน (พฤติกรรมเดิมทุกประการ ไม่กระทบแถวเก่า
+  // เลยสักแถว) มีค่า = ลาแค่บางส่วนของวันนั้น หักเงินตามสัดส่วน ดู calculateManday() ใน @obs/domain
+  hours Float?
 
   timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
 

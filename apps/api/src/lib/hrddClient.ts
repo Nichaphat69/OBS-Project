@@ -39,6 +39,13 @@ export interface HrddLeaveRecord {
   dateTo: string;
   leaveName?: string | null;
   leaveCode?: string | null;
+  // ยืนยันจากของจริง 24 ก.ย. 69 — HRDD ส่งแยกวัน/ชั่วโมงมาให้เสมอ ไม่ใช่หน่วยวันอย่างเดียว ตัวอย่างจริง:
+  // ลาเต็มวัน = amountDay:1, amountHour:0, timeFrom/timeTo:"00:00:00" · ลา 3 ชม. = amountDay:0,
+  // amountHour:3, timeFrom:"09:00:00", timeTo:"12:00:00" — ดู leaveCompare.ts's expandHrddLeave()
+  amountDay?: number | null;
+  amountHour?: number | null;
+  timeFrom?: string | null;
+  timeTo?: string | null;
   [key: string]: unknown;
 }
 
