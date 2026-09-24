@@ -166,6 +166,11 @@ export default function ManadyDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
+  // ผลการอ่านไฟล์ดิบไว้ดีบั๊ก — ไม่แสดงบนหน้าแล้ว ดูได้ใน console (F12)
+  useEffect(() => {
+    if (sheet?.extraction) console.log('[timesheet] ผลการอ่านไฟล์ดิบ', sheet.extraction);
+  }, [sheet?.extraction]);
+
   /**
    * ⚠️ เดิมทิ้งผลลัพธ์ของ fetch ทั้งก้อน (ไม่เช็ค `res.ok`) — ปุ่มจึงขึ้น "กำลังคำนวณ…" แล้วจบเงียบๆ
    * เหมือนสำเร็จทุกครั้ง **ต่อให้เส้นนั้นไม่มีอยู่จริง** ซึ่งเป็นสถานะจริงตอนนี้: ไล่ดูแล้วไม่มีทั้ง
@@ -635,16 +640,6 @@ export default function ManadyDetailPage() {
             </div>
           )}
 
-          {sheet.extraction && (
-            <div className="card">
-              <div className="hd">
-                <h3>{tx('ผลการอ่านไฟล์ดิบ')}</h3>
-              </div>
-              <div className="bd">
-                <pre className="code">{JSON.stringify(sheet.extraction, null, 2)}</pre>
-              </div>
-            </div>
-          )}
         </>
       )}
 

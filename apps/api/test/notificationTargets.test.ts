@@ -41,3 +41,32 @@ test('lineAdminTargets ถอยไปใช้ LINE_APPROVER_TARGET ถ้า�
     if (beforeApprover === undefined) delete process.env.LINE_APPROVER_TARGET; else process.env.LINE_APPROVER_TARGET = beforeApprover;
   }
 });
+
+test('บัญชี admin/accounting ที่ผูกไลน์เองแล้ว (User.lineUserId) ต้องชนะ env var เสมอ', async () => {
+  const beforeAdmin = process.env.LINE_ADMIN_TARGET;
+  const beforeApprover = process.env.LINE_APPROVER_TARGET;
+  process.env.LINE_ADMIN_TARGET = 'Uenv-admin';
+  process.env.LINE_APPROVER_TARGET = 'Uenv-accounting';
+
+  const now = new Date().toISOString();
+  await prisma.user.create({
+    data: {
+      username: 'test-admin-linked', nameTh: 'แอดมินทดสอบ', role: 'admin', createdAt: now,
+      passwordSalt: 'x', passwordHash: 'x', lineUserId: 'Ureal-admin',
+    },
+  });
+  await prisma.user.create({
+    data: {
+      username: 'test-accounting-linked', nameTh: 'บัญชีทดสอบ', role: 'accounting', createdAt: now,
+      passwordSalt: 'x', passwordHash: 'x', lineUserId: 'Ureal-accounting',
+    },
+  });
+  try {
+    assert.deepEqual(await lineAdminTargets(), ['Ureal-admin'], 'ผูกไลน์เองแล้ว ต้องใช้อันนี้ ไม่ใช่ env var');
+    assert.deepEqual(await lineApproverTargets(), ['Ureal-accounting'], 'ผูกไลน์เองแล้ว ต้องใช้อันนี้ ไม่ใช่ env var');
+  } finally {
+    await prisma.user.deleteMany({ where: { username: { in: ['test-admin-linked', 'test-accounting-linked'] } } });
+    if (beforeAdmin === undefined) delete process.env.LINE_ADMIN_TARGET; else process.env.LINE_ADMIN_TARGET = beforeAdmin;
+    if (beforeApprover === undefined) delete process.env.LINE_APPROVER_TARGET; else process.env.LINE_APPROVER_TARGET = beforeApprover;
+  }
+});

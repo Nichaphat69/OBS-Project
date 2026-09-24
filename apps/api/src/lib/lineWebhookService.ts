@@ -266,6 +266,33 @@ async function handleEmployeeLineMessage({
     return { userId, outcome: 'linked', employeeId: pending.id };
   }
 
+  /* ไม่ใช่รหัสของพนักงานคนไหนเลย — เช็คต่อว่าเป็นรหัสของบัญชี admin/accounting (User.lineLinkCode) มั้ย
+   * ก่อนตกไปเป็น "ไม่รู้จักคำสั่งนี้" (เจ้าของระบบสั่ง 24 ก.ย. 69 — ต้องรู้ว่าคนที่แอดไลน์มาเป็น role
+   * อะไร จะได้ส่งแจ้งเตือนที่ตรงหน้าที่ให้อัตโนมัติ) ผูกแล้วจบเลย ไม่มีคำสั่งแชทอื่นต่อสำหรับ role นี้
+   * เหมือนพนักงาน (admin/accounting ไม่พิมพ์คุยกับบอทต่อ แค่รอรับแจ้งเตือนเฉยๆ) */
+  const pendingStaff = await prisma.user.findFirst({
+    where: { lineLinkCode: trimmed, lineLinkCodeExpiresAt: { gt: new Date().toISOString() } },
+    select: { username: true, nameTh: true, role: true },
+  });
+  if (pendingStaff) {
+    await prisma.user.update({ where: { username: pendingStaff.username }, data: { lineUserId: userId, lineLinkCode: null, lineLinkCodeExpiresAt: null } });
+    await logAudit({ actor: `line:${userId}`, action: 'link_staff_line', entityType: 'user', entityId: pendingStaff.username, detail: { role: pendingStaff.role } });
+    const roleNotice =
+      pendingStaff.role === 'admin'
+        ? 'คุณจะได้รับแจ้งเตือนเมื่อระบบมีปัญหา (error) ในฐานะผู้ดูแลระบบ'
+        : pendingStaff.role === 'accounting'
+          ? 'คุณจะได้รับแจ้งเตือนคำขออนุมัติวางบิลและตั๋วแจ้งปัญหาใหม่ ในฐานะฝ่ายบัญชี'
+          : 'เชื่อมต่อบัญชีเรียบร้อยแล้ว';
+    if (replyToken) {
+      try {
+        await line.reply(replyToken, `เชื่อมต่อไลน์กับคุณ${pendingStaff.nameTh} สำเร็จ ✅\n${roleNotice}`);
+      } catch {
+        /* ตอบไม่ได้ก็แล้วไป ผูกบัญชีสำเร็จไปแล้ว */
+      }
+    }
+    return { userId, outcome: 'staff_linked', username: pendingStaff.username, role: pendingStaff.role };
+  }
+
   const linked = await prisma.employee.findFirst({
     where: { lineUserId: userId },
     select: { id: true, nameTh: true, linePendingTicketCategory: true },

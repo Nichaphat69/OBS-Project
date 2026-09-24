@@ -10,6 +10,7 @@
  */
 import { prisma } from '@obs/db';
 import { round2, thaiMonth, money, nextPeriod } from '@obs/domain';
+import { SUBMISSION_METHOD_LABEL } from './activityFeedService.js';
 import { logAudit } from './audit.js';
 
 // ── สถานะรอบบิล — ported from service.js CYCLE_STATE / CYCLE_STATE_LABEL ──────
@@ -606,7 +607,16 @@ export interface DashboardResult {
   toChase: CyclePeriod[];
   tasks: Array<{ step: number; level: string; title: string; detail: string; link: unknown }>;
   cycles: CyclePeriod[];
-  recentAudit: Array<{ at: string; actor: string; action: string; entityType: string | null; entityId: string | null }>;
+  recentSubmissions: Array<{
+    id: string;
+    at: string;
+    employeeName: string;
+    customerName: string;
+    period: string;
+    periodLabel: string;
+    method: string | null;
+    methodLabel: string | null;
+  }>;
 }
 
 /**
@@ -696,11 +706,25 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
       })),
   ];
 
-  const recentAudit = await prisma.auditLog.findMany({
-    orderBy: { id: 'desc' },
+  // "กิจกรรมล่าสุด" — เดิมดึง audit_log ทั้งระบบดิบๆ (set_active_contract, delete_contract, llm ฯลฯ ของทุก
+  // บริษัทปนกัน) เปลี่ยนเป็น "Timesheet ที่เข้ามาในสัญญานี้" ว่าใครส่ง รอบบิลไหน ช่องทางไหน (24 ก.ย. 69
+  // ตามที่ขอ "แสดงกิจกรรมของสัญญานี้เท่านั้น ว่ามีพนักงานคนไหนส่ง Timesheet รอบบิลไหนเข้ามาแล้วบ้าง")
+  const recentSheets = await prisma.timesheet.findMany({
+    where: contractId ? { contractId } : undefined,
+    include: { employee: true, contract: { include: { customer: true } } },
+    orderBy: { receivedAt: 'desc' },
     take: 12,
-    select: { at: true, actor: true, action: true, entityType: true, entityId: true },
   });
+  const recentSubmissions = recentSheets.map((r) => ({
+    id: r.id,
+    at: r.receivedAt,
+    employeeName: r.employee?.nameTh ?? r.rawEmployeeName ?? '—',
+    customerName: r.contract.customer.nameTh,
+    period: r.period,
+    periodLabel: thaiMonth(r.period),
+    method: r.submissionMethod,
+    methodLabel: r.submissionMethod ? SUBMISSION_METHOD_LABEL[r.submissionMethod] ?? null : null,
+  }));
 
   return {
     today,
@@ -731,6 +755,6 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
     toChase,
     tasks,
     cycles: [...allPeriods].sort((a, b) => b.period.localeCompare(a.period)),
-    recentAudit,
+    recentSubmissions,
   };
 }

@@ -455,6 +455,13 @@ model User {
   resetTokenHash       String?  @map("reset_token_hash")
   resetTokenSalt       String?  @map("reset_token_salt")
   resetTokenExpiresAt  String?  @map("reset_token_expires_at")
+  // เพิ่มทีหลัง (24 ก.ย. 69) — ผูกไลน์ส่วนตัวของบัญชี admin/accounting เอง (คนละกลไกกับ
+  // Employee.lineUserId ด้านบน ซึ่งเป็นของ role 'user' เท่านั้น — admin/accounting ไม่ผูกพนักงาน)
+  // ใช้ตัดสินว่า "คนที่แอดไลน์เข้ามาเป็น role อะไร" แล้วส่งแจ้งเตือนที่ตรงกับหน้าที่นั้นให้อัตโนมัติ
+  // (admin → error/ระบบล่ม, accounting → ขออนุมัติ/ตั๋วแจ้งปัญหา) แทนการพิมพ์ userId เองในหน้าตั้งค่า
+  lineUserId              String?  @map("line_user_id")
+  lineLinkCode            String?  @map("line_link_code")
+  lineLinkCodeExpiresAt   String?  @map("line_link_code_expires_at")
 
   employee Employee? @relation(fields: [employeeId], references: [id])
   sessions Session[]

@@ -1,8 +1,29 @@
 'use client';
 
+import { Fragment, useState } from 'react';
+import Link from 'next/link';
 import { Card, EmptyState, Kpi, PageHeader, PoTag, ProgressCell, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
+
+interface PeriodEmployee {
+  employeeId: string;
+  nameTh: string;
+  position: string;
+  status: string;
+  statusLabel: string;
+}
+
+/** เหมือน billing/BillingClient.tsx ทุกอย่าง — ตาราง "รอบบิล" ในแดชบอร์ดคลิกดูรายชื่อพนักงาน+สถานะ
+ * Timesheet รายคนได้เหมือนกัน (24 ก.ย. 69 ตามที่ขอ "อยากให้มีการแสดงพนักงานและสถานะแบบนี้ด้วย") */
+function employeeStatusTone(status: string): 'mu' | 'ok' | 'wn' {
+  if (status === 'not_submitted') return 'mu';
+  if (status === 'billed') return 'ok';
+  return 'wn';
+}
+function employeeStatusLabel(e: { status: string; statusLabel: string }): string {
+  return e.status === 'verified' ? 'รอวางบิล' : e.statusLabel;
+}
 
 interface DashboardData {
   today: string;
@@ -42,7 +63,22 @@ interface DashboardData {
     stateLabel: string;
     state: string;
   }>;
-  recentAudit: Array<{ at: string; actor: string; action: string; entityType: string | null; entityId: string | null }>;
+  recentSubmissions: Array<{
+    id: string;
+    at: string;
+    employeeName: string;
+    customerName: string;
+    period: string;
+    periodLabel: string;
+    method: string | null;
+    methodLabel: string | null;
+  }>;
+}
+
+function formatDateTime(iso: string, lang: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(lang === 'en' ? 'en-US' : 'th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 function money(n: number) {
@@ -50,7 +86,25 @@ function money(n: number) {
 }
 
 export default function DashboardClient({ data, nameTh }: { data: DashboardData; nameTh: string }) {
-  const { tx, formatPeriod } = useLang();
+  const { tx, lang, formatPeriod } = useLang();
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [employeesByKey, setEmployeesByKey] = useState<Record<string, PeriodEmployee[] | 'loading' | 'error'>>({});
+
+  function toggleExpand(contractId: string, period: string) {
+    const key = `${contractId}:${period}`;
+    if (expandedKey === key) {
+      setExpandedKey(null);
+      return;
+    }
+    setExpandedKey(key);
+    if (!employeesByKey[key]) {
+      setEmployeesByKey((m) => ({ ...m, [key]: 'loading' }));
+      fetch(`/api/cycles/${encodeURIComponent(contractId)}/${encodeURIComponent(period)}/employees`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((rows: PeriodEmployee[]) => setEmployeesByKey((m) => ({ ...m, [key]: rows })))
+        .catch(() => setEmployeesByKey((m) => ({ ...m, [key]: 'error' })));
+    }
+  }
 
   return (
     <>
@@ -159,15 +213,56 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                 </tr>
               </thead>
               <tbody>
-                {data.cycles.slice(0, 20).map((c, i) => (
-                  <tr key={`${c.contractId}-${c.period}-${i}`}>
-                    <td>{c.customerName}</td>
-                    <td>{formatPeriod(c.period)}</td>
-                    <td>
-                      <StatusPill tone={CYCLE_STATE_TONE[c.state] ?? 'mu'}>{tx(c.stateLabel)}</StatusPill>
-                    </td>
-                  </tr>
-                ))}
+                {data.cycles.slice(0, 20).map((c, i) => {
+                  const key = `${c.contractId}:${c.period}`;
+                  const expanded = expandedKey === key;
+                  const emps = employeesByKey[key];
+                  return (
+                    <Fragment key={`${c.contractId}-${c.period}-${i}`}>
+                      <tr className="rw" onClick={() => toggleExpand(c.contractId, c.period)} title={tx('คลิกเพื่อดูรายชื่อพนักงานและสถานะ Timesheet แต่ละคน')}>
+                        <td>
+                          <Icon
+                            name="cd"
+                            className="sm"
+                            style={{ marginRight: 6, transition: 'transform 0.15s var(--ease)', transform: expanded ? 'rotate(180deg)' : undefined }}
+                          />
+                          {c.customerName}
+                        </td>
+                        <td>{formatPeriod(c.period)}</td>
+                        <td>
+                          <StatusPill tone={CYCLE_STATE_TONE[c.state] ?? 'mu'}>{tx(c.stateLabel)}</StatusPill>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr>
+                          <td colSpan={3} style={{ padding: 0, background: 'var(--sunk)' }}>
+                            {emps === 'loading' || emps === undefined ? (
+                              <div className="sub" style={{ padding: '12px 24px' }}>{tx('กำลังโหลด…')}</div>
+                            ) : emps === 'error' ? (
+                              <div style={{ padding: '12px 24px', color: 'var(--cr)' }}>{tx('โหลดรายชื่อพนักงานไม่สำเร็จ')}</div>
+                            ) : emps.length === 0 ? (
+                              <div className="sub" style={{ padding: '12px 24px' }}>{tx('ยังไม่มีพนักงานผูกกับสัญญานี้')}</div>
+                            ) : (
+                              <table style={{ width: '100%' }}>
+                                <tbody>
+                                  {emps.map((e) => (
+                                    <tr key={e.employeeId}>
+                                      <td style={{ paddingLeft: 40 }} className="nm">{e.nameTh}</td>
+                                      <td className="sub">{e.position}</td>
+                                      <td className="r" style={{ paddingRight: 24 }}>
+                                        <Tag tone={employeeStatusTone(e.status)}>{tx(employeeStatusLabel(e))}</Tag>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
                 {data.cycles.length === 0 && (
                   <tr>
                     <td colSpan={3} style={{ textAlign: 'center', color: 'var(--mut)' }}>
@@ -181,14 +276,20 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         </Card>
 
         <Card title={tx('กิจกรรมล่าสุด')}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {data.recentAudit.map((a, i) => (
-              <div key={i} style={{ fontSize: 13 }}>
-                <span style={{ color: 'var(--mut)' }}>{a.at}</span> · {a.actor} · {a.action}
-                {a.entityType ? ` · ${a.entityType}${a.entityId ? ` ${a.entityId}` : ''}` : ''}
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {data.recentSubmissions.map((a) => (
+              <Link key={a.id} href={`/manday/${a.id}`} style={{ fontSize: 13, color: 'inherit', textDecoration: 'none' }}>
+                <div>
+                  <b>{a.employeeName}</b> {tx('ส่ง Timesheet รอบ')} {formatPeriod(a.period)}
+                  {data.contracts.length > 1 ? ` · ${a.customerName}` : ''}
+                </div>
+                <div style={{ color: 'var(--mut)', fontSize: 12, marginTop: 2 }}>
+                  {formatDateTime(a.at, lang)}
+                  {a.methodLabel ? ` · ${tx(a.methodLabel)}` : ''}
+                </div>
+              </Link>
             ))}
-            {data.recentAudit.length === 0 && <div style={{ color: 'var(--mut)', fontSize: 13 }}>{tx('ไม่มีกิจกรรม')}</div>}
+            {data.recentSubmissions.length === 0 && <div style={{ color: 'var(--mut)', fontSize: 13 }}>{tx('ไม่มีกิจกรรม')}</div>}
           </div>
         </Card>
       </div>

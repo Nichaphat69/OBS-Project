@@ -66,7 +66,11 @@ const NAV: NavGroup[] = [
       { href: '/master', label: 'ข้อมูลหลัก', icon: 'users', roles: ['admin', 'accounting'] },
       { href: '/readers', label: 'ตัวอ่าน Timesheet', icon: 'eye', roles: ['admin', 'accounting'] },
       { href: '/admin', label: 'จัดการระบบ', icon: 'cog', adminOnly: true },
-      { href: '/my-line-link', label: 'เชื่อมต่อ LINE', icon: 'bell', userOnly: true },
+      // เดิม userOnly (เฉพาะ role พนักงาน) — 24 ก.ย. 69 เปิดให้ admin/accounting เห็นเมนูนี้ด้วย
+      // (ผูกไลน์คนละคอลัมน์กันในฐานข้อมูล ดู staffLineLinkService.ts) ไม่จำกัด role เลย — executive
+      // เห็นได้ด้วยแต่ไม่มีประโยชน์อะไร (ไม่มีแจ้งเตือนอะไรผูกกับ role นี้) ปล่อยผ่านไว้เฉยๆ ไม่คุ้มเขียน
+      // เงื่อนไขแยกอีกเส้นเพื่อกันแค่ role เดียว
+      { href: '/my-line-link', label: 'เชื่อมต่อ LINE', icon: 'bell' },
       // ใหม่ (24 ก.ย. 69 ตามที่ขอ) — แจ้งปัญหาจากเว็บได้เอง แนบรูปได้ ต่างจากทาง LINE เดิม (พิมพ์ข้อความ
       // ล้วนๆ) ที่ยังใช้ได้อยู่เหมือนเดิมคู่ขนานกัน จำกัดแค่ role 'user' เพราะ SupportTicket ผูกกับ
       // employeeId ตรงๆ (admin/accounting ไม่มี employeeId ของตัวเอง)

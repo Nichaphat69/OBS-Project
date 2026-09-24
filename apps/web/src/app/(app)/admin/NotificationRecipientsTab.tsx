@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, Tag } from '../../../components/ui';
+import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
@@ -16,8 +16,82 @@ interface KnownLineUser {
   lastSeenAt: string | null;
   displayName: string | null;
 }
+interface StaffLineStatus {
+  username: string;
+  nameTh: string;
+  role: string;
+  linked: boolean;
+}
 
 const CHANNEL_LABEL: Record<string, string> = { line: 'LINE', email: 'อีเมล' };
+const ROLE_LABEL: Record<string, string> = { admin: 'ผู้ดูแลระบบ', accounting: 'บัญชี' };
+const ROLE_NOTIFY_LABEL: Record<string, string> = {
+  admin: 'ระบบมีปัญหา/error',
+  accounting: 'ขออนุมัติวางบิล · ตั๋วแจ้งปัญหา',
+};
+
+/** "ใครเป็นใคร" ตาม role — อ่านอย่างเดียว (24 ก.ย. 69 ตามที่ขอ "จะได้รู้ว่าคนที่แอดไลน์มาเป็น role อะไร
+ * จะได้รับข้อมูลการแจ้งเตือนอะไรบ้าง") ผูกไลน์เองจากหน้า "เชื่อมต่อ LINE" ในเมนูของแต่ละคน ไม่ใช่แอดมิน
+ * มาเพิ่มให้ที่นี่แบบด้านล่าง — ตารางนี้แค่โชว์ว่าใครผูกแล้วบ้าง ไม่มีปุ่มแก้ไข */
+function StaffLineStatusTable() {
+  const { tx } = useLang();
+  const [rows, setRows] = useState<StaffLineStatus[] | null>(null);
+
+  useEffect(() => {
+    fetch('/api/notification-recipients/staff-line-status', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, []);
+
+  return (
+    <Card title={tx('ใครเป็นใคร — ผูกไลน์เองแล้วบ้าง')} flush>
+      <div className="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>{tx('บัญชี')}</th>
+              <th>Role</th>
+              <th>{tx('จะได้รับแจ้งเตือนเรื่อง')}</th>
+              <th>{tx('สถานะ')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows?.map((r) => (
+              <tr key={r.username}>
+                <td className="nm">
+                  {r.nameTh}
+                  <div className="sub">{r.username}</div>
+                </td>
+                <td>
+                  <Tag tone="mu">{tx(ROLE_LABEL[r.role] ?? r.role)}</Tag>
+                </td>
+                <td className="sub">{tx(ROLE_NOTIFY_LABEL[r.role] ?? '—')}</td>
+                <td>
+                  {r.linked ? (
+                    <StatusPill tone="ok">{tx('ผูกไลน์แล้ว')}</StatusPill>
+                  ) : (
+                    <StatusPill tone="mu">{tx('ยังไม่ผูก')}</StatusPill>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {rows && rows.length === 0 && (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', color: 'var(--mut)' }}>
+                  {tx('ยังไม่มีบัญชี admin/accounting ในระบบ')}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="sub" style={{ padding: '12px 24px' }}>
+        {tx('แต่ละคนผูกไลน์ของตัวเองได้จากเมนู "เชื่อมต่อ LINE" — ไม่ต้องมาเพิ่มที่นี่')}
+      </div>
+    </Card>
+  );
+}
 
 export default function NotificationRecipientsTab() {
   const toast = useToast();
@@ -114,7 +188,12 @@ export default function NotificationRecipientsTab() {
   }
 
   return (
-    <Card title={tx('ผู้รับแจ้งเตือน')}>
+    <>
+      <StaffLineStatusTable />
+      <Card
+        title={tx('ผู้รับแจ้งเตือน (เพิ่มเอง)')}
+        right={<span className="sub">{tx('LINE ของ admin/accounting ผูกเองได้แล้วด้านบน — เพิ่มด้วยมือได้ทั้งสองช่องทาง เผื่อกรณีพิเศษ')}</span>}
+      >
       <div className="frm auto" style={{ marginBottom: 18 }}>
         <label>
           {tx('ช่องทาง')}
@@ -175,6 +254,7 @@ export default function NotificationRecipientsTab() {
         </table>
       </div>
       )}
-    </Card>
+      </Card>
+    </>
   );
 }

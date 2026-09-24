@@ -37,9 +37,17 @@ export async function listNotificationRecipients(): Promise<NotificationRecipien
   return getSetting<NotificationRecipient[]>(SETTING_KEY, []);
 }
 
-/** ported from service.js lineApproverTargets() — ปลายทาง LINE ทุกคนที่จะได้รับแจ้งเตือน
- * (ตั๋วแจ้งปัญหาใหม่ ฯลฯ) ไม่มีใครเพิ่มในหน้านี้เลย ถอยไปใช้ LINE_APPROVER_TARGET จาก env */
+/** ported from service.js lineApproverTargets() — ปลายทาง LINE ทุกคนที่จะได้รับแจ้งเตือน (ขออนุมัติ
+ * วางบิล/ตั๋วแจ้งปัญหาใหม่ ฯลฯ) — เรื่องของฝ่ายบัญชี
+ *
+ * ลำดับการหาปลายทาง (24 ก.ย. 69 ตามที่ขอ "เชื่อมต่อ LINE ครั้งแรกแล้วรู้ว่าเป็น role อะไร"):
+ *  1. บัญชี role 'accounting' ที่ผูกไลน์ส่วนตัวไว้แล้ว (User.lineUserId) — วิธีที่ถูกต้อง/แนะนำให้ใช้
+ *  2. รายชื่อที่เพิ่มเองในหน้า "ผู้รับแจ้งเตือน" (ของเดิมก่อนมีการผูกอัตโนมัติ — เก็บไว้เผื่อยังมีคนใช้อยู่)
+ *  3. LINE_APPROVER_TARGET ใน .env (fallback สุดท้าย กันไม่แจ้งใครเลย) */
 export async function lineApproverTargets(): Promise<string[]> {
+  const linked = await prisma.user.findMany({ where: { role: 'accounting', lineUserId: { not: null } }, select: { lineUserId: true } });
+  if (linked.length) return linked.map((u) => u.lineUserId!);
+
   const list = (await listNotificationRecipients()).filter((r) => r.channel === 'line').map((r) => r.target);
   if (list.length) return list;
   return process.env.LINE_APPROVER_TARGET ? [process.env.LINE_APPROVER_TARGET] : [];
@@ -47,11 +55,33 @@ export async function lineApproverTargets(): Promise<string[]> {
 
 /** ปลายทางแจ้งเตือน "ระบบล่ม/error" โดยเฉพาะ — แยกจาก lineApproverTargets() ด้านบนตั้งใจ (เจ้าของระบบ
  * สั่ง 24 ก.ย. 69 ว่า error ของระบบต้องแจ้ง admin ไม่ใช่ปนไปกับที่แจ้งฝ่ายบัญชีเรื่องขออนุมัติ/ตั๋วแจ้งปัญหา
- * ซึ่งเป็นคนละกลุ่มคนละหน้าที่กัน) ยังไม่มีหน้าตั้งค่าแยกให้กรอก จึงอ่านจาก LINE_ADMIN_TARGET ใน .env
- * ตรงๆ ก่อน — ถ้ายังไม่ได้ตั้งแยกไว้ ถอยไปใช้ LINE_APPROVER_TARGET ต่อ (ดีกว่าไม่แจ้งใครเลย) */
+ * ซึ่งเป็นคนละกลุ่มคนละหน้าที่กัน) ลำดับเดียวกับ lineApproverTargets(): บัญชี role 'admin' ที่ผูกไลน์ไว้
+ * แล้วก่อน → LINE_ADMIN_TARGET ใน .env → ถอยไปใช้กลุ่มบัญชีต่อ (ดีกว่าไม่แจ้งใครเลย) */
 export async function lineAdminTargets(): Promise<string[]> {
+  const linked = await prisma.user.findMany({ where: { role: 'admin', lineUserId: { not: null } }, select: { lineUserId: true } });
+  if (linked.length) return linked.map((u) => u.lineUserId!);
+
   if (process.env.LINE_ADMIN_TARGET) return [process.env.LINE_ADMIN_TARGET];
   return lineApproverTargets();
+}
+
+export interface StaffLineLinkRow {
+  username: string;
+  nameTh: string;
+  role: string;
+  linked: boolean;
+}
+
+/** "ใครเป็นใคร" สำหรับหน้าตั้งค่า "ผู้รับแจ้งเตือน" (24 ก.ย. 69 ตามที่ขอ — "จะได้รู้ว่าคนที่แอดไลน์มาเป็น
+ * role อะไร") — เฉพาะ admin/accounting เท่านั้น (role 'user' ผูกไลน์ผ่าน Employee คนละกลไก มีหน้าของ
+ * ตัวเองอยู่แล้วในหน้า "ข้อมูลหลัก → พนักงาน" ไม่ต้องมาปนกันตรงนี้) */
+export async function listStaffLineStatus(): Promise<StaffLineLinkRow[]> {
+  const users = await prisma.user.findMany({
+    where: { role: { in: ['admin', 'accounting'] } },
+    select: { username: true, nameTh: true, role: true, lineUserId: true },
+    orderBy: [{ role: 'asc' }, { username: 'asc' }],
+  });
+  return users.map((u) => ({ username: u.username, nameTh: u.nameTh, role: u.role, linked: Boolean(u.lineUserId) }));
 }
 
 /** ported from service.js notificationEmailTargets() — อีเมลปลายทางทุกคนที่บอกพนักงานให้ส่ง
