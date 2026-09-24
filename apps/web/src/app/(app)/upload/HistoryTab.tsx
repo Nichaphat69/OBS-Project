@@ -408,7 +408,9 @@ export default function HistoryTab() {
                               : 'Gmail'}
                       </Tag>
                     </td>
-                    <td>{r.model ? formatModelLabel(r.model, nameMap) : '—'}</td>
+                    <td title={r.model ? (formatModelLabel(r.model, nameMap).detail ?? undefined) : undefined}>
+                      {r.model ? formatModelLabel(r.model, nameMap).label : '—'}
+                    </td>
                     <td>
                       <StatusPill tone={STATUS_TONE[r.status] ?? 'mu'} title={r.status === 'failed' ? (r.errorMessage ?? undefined) : undefined}>
                         {tx(STATUS_LABEL[r.status] ?? r.status)}

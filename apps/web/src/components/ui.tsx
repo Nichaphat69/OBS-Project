@@ -135,8 +135,12 @@ export function StatusPill({ tone, children, title }: { tone: PillTone; children
   );
 }
 
-export function Tag({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
-  return <span className={`tg ${tone}`}>{children}</span>;
+export function Tag({ tone, children, title }: { tone: PillTone; children: React.ReactNode; title?: string }) {
+  return (
+    <span className={`tg ${tone}`} title={title}>
+      {children}
+    </span>
+  );
 }
 
 /** เลข PO/ใบว่าจ้าง — ป้ายไล่สีให้เด่นกว่า plain text ธรรมดา ใช้ตรงหัวข้อหน้าที่โชว์เลขใบว่าจ้างของสัญญา
@@ -337,12 +341,16 @@ export function ReadModelTag({ model, sourceEmailId, nameMap }: { model?: string
   // หา UUID ไม่เจอในสารบัญ (Skill ถูกลบไปแล้ว/ยังไม่ได้ซิงก์) — fallback เป็นรหัสดิบเดิม ไม่ใช่ซ่อนไปเฉยๆ
   // เพราะรหัสดิบยังมีประโยชน์ตอนไล่ปัญหาว่าเอกสารนี้อ่านด้วย Skill ไหนกันแน่ — ยังโชว์ต่อแม้ label
   // ข้างหน้าจะเปลี่ยนเป็น channel แล้ว เพราะเป็นคนละคำถามกัน (มาทางไหน vs ใครอ่าน)
+  // 25 ก.ย. 69 — โค้ดเคยโชว์ resolvedDetail (ชื่อ Skill/แม่แบบเต็มๆ) เป็น <span> แยกไว้บนหน้าตรงๆ
+  // ทั้งที่ comment ด้านบนของฟังก์ชันนี้ (และของสารบัญด้านล่าง) เขียนไว้ตั้งแต่แรกว่าจะ "ซ่อนไว้ใน
+  // tooltip" — ขัดกับที่โค้ดทำจริง (เจ้าของระบบสั่งซ้ำอีกรอบว่าต้องซ่อน metadata เชิงเทคนิคจากมุมมอง
+  // user) เอา <span> ออก เหลือแค่ label หลัก (ชื่อเครื่องอ่าน/ช่องทาง) บนหน้า ส่วนรายละเอียด Skill/
+  // แม่แบบยังอยู่ใน title (hover ดูได้) เหมือนที่ตั้งใจไว้แต่แรกทุกประการ
   const resolvedDetail = (parsed.detail && nameMap?.[parsed.engine]?.[parsed.detail]) || parsed.detail;
   return (
     <span className="readmodel" title={resolvedDetail ? `${label} · ${resolvedDetail}` : label}>
       <span className={`rm-dot ${parsed.engine}`} />
       {label}
-      {resolvedDetail && <span className="rm-id">{resolvedDetail}</span>}
     </span>
   );
 }

@@ -14,29 +14,53 @@ interface AuditLogRow {
   detail: unknown;
 }
 
+const PAGE_SIZE = 50;
+
+/** เดิมดึงทีเดียว 200 แถวสุดท้ายแล้วจบ ดูแถวเก่ากว่านั้นไม่ได้เลย (เจ้าของระบบสั่ง 24 ก.ย. 69 "ตาราง
+ * activity ต้องทำ lazy loading เพื่อ performance") เปลี่ยนเป็นแบ่งหน้าจริงแบบเดียวกับแท็บ "API Activity
+ * Log" ข้างๆ กัน — ปุ่มหน้าถัดไป/ก่อนหน้า ไม่ต้องดึงข้อมูลทั้งหมดมาไว้ในเบราว์เซอร์ทีเดียว */
 export default function AuditLogTab() {
   const { tx } = useLang();
   const [rows, setRows] = useState<AuditLogRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
+    setLoading(true);
     setError(null);
-    fetch('/api/audit-log?limit=200', { cache: 'no-store' })
+    fetch(`/api/audit-log?page=${page}&pageSize=${PAGE_SIZE}`, { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
           setError(data.error ?? tx('โหลดข้อมูลไม่สำเร็จ'));
           return;
         }
-        setRows(await r.json());
+        const data = await r.json();
+        setRows(data.rows);
+        setTotal(data.total);
       })
-      .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
+      .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')))
+      .finally(() => setLoading(false));
   }
 
-  useEffect(load, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [page]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeTo = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <Card title={tx('บันทึกระบบ (Audit log)')} right={<span className="sub">{tx('ล่าสุด')} 200 {tx('รายการ')}</span>}>
+    <Card
+      title={tx('บันทึกระบบ (Audit log)')}
+      right={
+        <span className="sub">
+          {loading ? tx('กำลังโหลด…') : `${rangeFrom.toLocaleString()} ${tx('ถึง')} ${rangeTo.toLocaleString()} ${tx('จาก')} ${total.toLocaleString()} ${tx('รายการ')}`}
+        </span>
+      }
+    >
       {error ? (
         <ErrorState message={error} onRetry={load} />
       ) : (
@@ -89,6 +113,17 @@ export default function AuditLogTab() {
           </tbody>
         </table>
       </div>
+      )}
+      {!error && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+          <button type="button" className="btn ghost sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            ‹
+          </button>
+          <span className="sub">{page} / {totalPages}</span>
+          <button type="button" className="btn ghost sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+            ›
+          </button>
+        </div>
       )}
     </Card>
   );

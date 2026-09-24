@@ -11,13 +11,29 @@ export interface AuditLogRow {
   detail: unknown;
 }
 
-export async function auditLog({ limit = 200 }: { limit?: number } = {}): Promise<AuditLogRow[]> {
-  const rows = await prisma.auditLog.findMany({
-    orderBy: { id: 'desc' },
-    take: limit,
-  });
-  return rows.map((r) => ({
-    ...r,
-    detail: r.detail ? JSON.parse(r.detail) : null,
-  }));
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+/** เดิมดึงทีเดียว 200 แถวสุดท้ายแล้วจบ ไม่มีทางดูแถวเก่ากว่านั้นได้เลย (เจ้าของระบบสั่ง 24 ก.ย. 69
+ * "ตาราง activity ต้องทำ lazy loading เพื่อ performance") เปลี่ยนเป็นแบ่งหน้าจริงแบบเดียวกับ
+ * apiActivityLogService.ts's listApiActivity() — skip/take + count คืน total ให้หน้าเว็บทำปุ่มหน้าถัดไป */
+export async function auditLog({ page = 1, pageSize = DEFAULT_PAGE_SIZE }: { page?: number; pageSize?: number } = {}): Promise<{ rows: AuditLogRow[]; total: number }> {
+  const size = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
+  const p = Math.max(page, 1);
+
+  const [rows, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      orderBy: { id: 'desc' },
+      skip: (p - 1) * size,
+      take: size,
+    }),
+    prisma.auditLog.count(),
+  ]);
+  return {
+    rows: rows.map((r) => ({
+      ...r,
+      detail: r.detail ? JSON.parse(r.detail) : null,
+    })),
+    total,
+  };
 }

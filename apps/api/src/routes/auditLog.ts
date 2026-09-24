@@ -8,6 +8,7 @@ export const auditLogRouter = Router();
 auditLogRouter.use(requireAuth, requireSuperAdmin);
 
 auditLogRouter.get('/', async (req, res) => {
-  const limit = req.query.limit ? Number(req.query.limit) : undefined;
-  res.json(await auditLog({ limit }));
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+  res.json(await auditLog({ page, pageSize }));
 });

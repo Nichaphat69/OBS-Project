@@ -69,12 +69,16 @@ function money(n: number) {
 /** แปลง model ดิบ (เช่น "abbyy:80da7c30-…") ให้เป็นชื่อ Skill/แม่แบบที่คนอ่านออก แทนที่จะโชว์ UUID
  * ตรงๆ (24 ก.ย. 69 ตามที่ขอ) — ใช้สารบัญเดียวกับที่หน้าตรวจ Manday ใช้อยู่แล้ว (parseReadModel/
  * useReadModelNameMap ใน components/ui.tsx, readModelNames.ts) ไม่เขียนตัวแปลงคู่ขนานใหม่เอง
- * ค่าดิบใน DB ยังเก็บ skillId ไว้เหมือนเดิมทุกประการ แค่จุดแสดงผลนี้ที่ map เป็นชื่อ */
-export function formatModelLabel(model: string, nameMap: ReadModelNameMap): string {
+ * ค่าดิบใน DB ยังเก็บ skillId ไว้เหมือนเดิมทุกประการ แค่จุดแสดงผลนี้ที่ map เป็นชื่อ
+ *
+ * 25 ก.ย. 69 — คืนแยก label/detail แทนสตริงเดียว (เดิม "ABBYY · แม่แบบทั่วไป" ต่อกันโชว์บนหน้าตรงๆ)
+ * เพราะเจ้าของระบบสั่งซ้ำให้ซ่อนรายละเอียดเชิงเทคนิคแบบนี้จากมุมมอง user เหมือนที่ทำกับ ReadModelTag
+ * ใน ui.tsx ไปแล้ว — ผู้เรียกใช้ label ขึ้นจอตรงๆ ส่วน detail ใส่ไว้ใน title (hover ดูได้ตอนไล่ปัญหา) */
+export function formatModelLabel(model: string, nameMap: ReadModelNameMap): { label: string; detail: string | null } {
   const parsed = parseReadModel(model);
-  if (!parsed) return model;
+  if (!parsed) return { label: model, detail: null };
   const detailName = parsed.detail ? nameMap[parsed.engine]?.[parsed.detail] : null;
-  return detailName ? `${parsed.label} · ${detailName}` : parsed.label;
+  return { label: parsed.label, detail: detailName ?? parsed.detail ?? null };
 }
 
 /** Shared review UI for both the upload-file and Gmail-intake tabs — one reviewed document,
@@ -84,6 +88,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
   const router = useRouter();
   // ใช้ map ชื่อ Skill/แม่แบบมาแสดงแทน UUID ในป้าย "โมเดล" ด้านล่าง (ตัวเดียวกับหน้าตรวจ Manday)
   const nameMap = useReadModelNameMap();
+  const modelInfo = formatModelLabel(result.model, nameMap);
   const [employeeName, setEmployeeName] = useState(result.data?.employeeName ?? '');
   const [position, setPosition] = useState(result.data?.position ?? '');
   const [period, setPeriod] = useState(result.data?.period ?? '');
@@ -196,7 +201,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
     <div style={{ borderTop: '1px solid var(--hair)', paddingTop: 18 }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <Tag tone="mu">{tx('เลขที่')} {result.documentNo}</Tag>
-        <Tag tone="mu">{tx('โมเดล')} {formatModelLabel(result.model, nameMap)}</Tag>
+        <Tag tone="mu" title={modelInfo.detail ?? undefined}>{tx('โมเดล')} {modelInfo.label}</Tag>
         {result.matching?.employee ? (
           <StatusPill tone="ok">{tx('จับคู่')}: {result.matching.employee!.nameTh}</StatusPill>
         ) : (

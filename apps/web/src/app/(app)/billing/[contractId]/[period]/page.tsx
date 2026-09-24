@@ -127,6 +127,11 @@ export default function CycleDetailPage() {
   const [draftingAi, setDraftingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [tab, setTab] = useState<1 | 2>(1);
+  // ซ่อนแท็บ "Payload ที่จะยิงเข้า FlowAccount" จาก role accounting — เป็น JSON ดิบเชิงเทคนิคไว้ไล่ปัญหา
+  // ของฝั่งพัฒนา ไม่ใช่ข้อมูลที่ฝ่ายบัญชีต้องใช้ทำงานประจำวัน (เจ้าของระบบสั่งซ้ำ 25 ก.ย. 69 "ซ่อน
+  // metadata ... ออกจากมุมมอง user") เหลือไว้เฉพาะ admin — หน้านี้เดิมเข้าได้ทั้ง admin/accounting
+  // อยู่แล้ว (ดู requireAdmin ฝั่ง API) จึงต้องรู้ role เองฝั่ง client ผ่าน /api/auth/me
+  const [role, setRole] = useState<string | null>(null);
 
   function load() {
     fetch(`/api/cycles/${params.contractId}/${params.period}`, { cache: 'no-store' })
@@ -138,6 +143,17 @@ export default function CycleDetailPage() {
   }
 
   useEffect(load, [params.contractId, params.period]);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const r = d?.user?.role ?? null;
+        setRole(r);
+        if (r !== 'admin') setTab(2);
+      })
+      .catch(() => {});
+  }, []);
 
   async function doApprove() {
     setApproving(true);
@@ -363,22 +379,26 @@ export default function CycleDetailPage() {
                 </div>
               </Card>
 
-              <div className="tabs" role="tablist">
-                <button className={`tab ${tab === 1 ? 'on' : ''}`} onClick={() => setTab(1)}>
-                  {tx('ข้อมูลที่ส่งเข้า FlowAccount')}
-                </button>
-                <button className={`tab ${tab === 2 ? 'on' : ''}`} onClick={() => setTab(2)}>
-                  {tx('ร่างอีเมล')}
-                </button>
-              </div>
+              {role === 'admin' && (
+                <div className="tabs" role="tablist">
+                  <button className={`tab ${tab === 1 ? 'on' : ''}`} onClick={() => setTab(1)}>
+                    {tx('ข้อมูลที่ส่งเข้า FlowAccount')}
+                  </button>
+                  <button className={`tab ${tab === 2 ? 'on' : ''}`} onClick={() => setTab(2)}>
+                    {tx('ร่างอีเมล')}
+                  </button>
+                </div>
+              )}
 
-              <div className={`tp ${tab === 1 ? 'on' : ''}`}>
-                <Card title={tx('Payload ที่จะยิงเข้า API')} right={tx('ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง')}>
-                  <pre className="code">{JSON.stringify(inv.payload, null, 2)}</pre>
-                </Card>
-              </div>
+              {role === 'admin' && (
+                <div className={`tp ${tab === 1 ? 'on' : ''}`}>
+                  <Card title={tx('Payload ที่จะยิงเข้า API')} right={tx('ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง')}>
+                    <pre className="code">{JSON.stringify(inv.payload, null, 2)}</pre>
+                  </Card>
+                </div>
+              )}
 
-              <div className={`tp ${tab === 2 ? 'on' : ''}`}>
+              <div className={`tp ${role !== 'admin' || tab === 2 ? 'on' : ''}`}>
                 {data.emailDraft && (
                   <Card title={tx('ร่างอีเมลวางบิล')}>
                     <div className="mailacts">
