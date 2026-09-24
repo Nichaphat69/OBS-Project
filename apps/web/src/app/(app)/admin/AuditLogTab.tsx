@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState } from '../../../components/ui';
+import { Card, ErrorState, Loading } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
 
 interface AuditLogRow {
@@ -72,6 +72,13 @@ export default function AuditLogTab() {
                 </td>
               </tr>
             ))}
+            {!rows && (
+              <tr>
+                <td colSpan={5}>
+                  <Loading rows={4} />
+                </td>
+              </tr>
+            )}
             {rows && rows.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ textAlign: 'center', color: 'var(--mut)' }}>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
+import { Card, ErrorState, Loading, StatusPill, Tag } from '../../../components/ui';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
@@ -76,6 +76,13 @@ function StaffLineStatusTable() {
                 </td>
               </tr>
             ))}
+            {!rows && (
+              <tr>
+                <td colSpan={4}>
+                  <Loading rows={4} />
+                </td>
+              </tr>
+            )}
             {rows && rows.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', color: 'var(--mut)' }}>
@@ -243,6 +250,13 @@ export default function NotificationRecipientsTab() {
                 </td>
               </tr>
             ))}
+            {!recipients && (
+              <tr>
+                <td colSpan={4}>
+                  <Loading rows={4} />
+                </td>
+              </tr>
+            )}
             {recipients && recipients.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', color: 'var(--mut)' }}>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, EmptyState, ErrorState, Kpi, PageHeader, PoTag, StatusPill } from '../../../../components/ui';
+import { Card, EmptyState, ErrorState, Kpi, Loading, PageHeader, PoTag, StatusPill } from '../../../../components/ui';
 import { useLang } from '../../../../lib/language';
 
 interface CyclePeriod {
@@ -118,7 +118,19 @@ export default function CompanyDetailClient({ contractId }: { contractId: string
     );
   }
 
-  if (contract === undefined) return null;
+  if (contract === undefined) {
+    return (
+      <>
+        <PageHeader eyebrow={tx('ผู้บริหาร')} title={tx('กำลังโหลด…')} />
+        <Loading variant="cards" rows={3} />
+        <div style={{ marginTop: 22 }}>
+          <Card>
+            <Loading rows={5} />
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   if (contract === null) {
     return (
@@ -210,6 +222,13 @@ export default function CompanyDetailClient({ contractId }: { contractId: string
                     </td>
                   </tr>
                 ))}
+                {employees === null && (
+                  <tr>
+                    <td colSpan={3}>
+                      <Loading rows={4} />
+                    </td>
+                  </tr>
+                )}
                 {employees && employees.length === 0 && (
                   <tr>
                     <td colSpan={3} style={{ textAlign: 'center', color: 'var(--mut)' }}>

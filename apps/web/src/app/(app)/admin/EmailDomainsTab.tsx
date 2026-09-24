@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, StatusPill } from '../../../components/ui';
+import { Card, ErrorState, StatusPill, Loading } from '../../../components/ui';
 import { useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
@@ -101,6 +101,13 @@ export default function EmailDomainsTab() {
                 </tr>
               );
             })}
+            {!rows && (
+              <tr>
+                <td colSpan={4}>
+                  <Loading rows={4} />
+                </td>
+              </tr>
+            )}
             {rows && rows.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', color: 'var(--mut)' }}>

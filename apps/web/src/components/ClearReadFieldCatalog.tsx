@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icon';
 import { useConfirm, useToast } from './Overlays';
+import { Loading } from './ui';
 import { useLang } from '../lib/language';
 
 /**
@@ -347,7 +348,7 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
   }
 
   if (!data) {
-    return <div className="crfields">{picker}<div className="none">{tx('กำลังโหลด…')}</div></div>;
+    return <div className="crfields">{picker}<Loading variant="lines" rows={4} /></div>;
   }
 
   // ต่อ Clear Read ไม่ได้ ≠ หน้าพัง — API จงใจตอบ 200 พร้อมเหตุผล เพื่อให้หน้าตั้งค่ายังเปิดดูได้

@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
-import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
+import { Card, ErrorState, Loading, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { usePdfPreview, useToast } from '../../../components/Overlays';
 import ReviewCard, { formatModelLabel, type ReadResultShape } from './ReviewCard';
@@ -381,6 +381,13 @@ export default function HistoryTab() {
             </tr>
           </thead>
           <tbody>
+            {!rows && (
+              <tr>
+                <td colSpan={8}>
+                  <Loading rows={5} />
+                </td>
+              </tr>
+            )}
             {rows?.map((r) => {
               const expanded = expandedId === r.id;
               const detail = details[r.id];
@@ -436,7 +443,7 @@ export default function HistoryTab() {
                   {expanded && (
                     <tr>
                       <td colSpan={8} style={{ background: 'var(--sunk)' }}>
-                        {detail === 'loading' && <div className="sub" style={{ padding: 12 }}>{tx('กำลังโหลด…')}</div>}
+                        {detail === 'loading' && <Loading variant="lines" rows={3} />}
                         {detail === 'error' && <div style={{ padding: 12, color: 'var(--cr)' }}>{tx('โหลดรายละเอียดไม่สำเร็จ')}</div>}
                         {detail && detail !== 'loading' && detail !== 'error' && <ReadDetail detail={detail} />}
                       </td>

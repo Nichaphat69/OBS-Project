@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState } from '../../../components/ui';
+import { Card, ErrorState, Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
@@ -302,7 +302,12 @@ export default function EmployeesTab() {
   }
 
   if (error) return <ErrorState message={error} onRetry={load} />;
-  if (!employees) return null;
+  if (!employees)
+    return (
+      <Card>
+        <Loading rows={6} />
+      </Card>
+    );
 
   const editingEmployee = employees.find((e) => (e.assignmentId ?? e.id) === editRowKey) ?? null;
 

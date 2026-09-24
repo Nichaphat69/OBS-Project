@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState } from '../../../components/ui';
+import { Card, ErrorState, Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
@@ -314,7 +314,12 @@ export default function CustomersContractsTab() {
   }
 
   if (error) return <ErrorState message={error} onRetry={load} />;
-  if (!contracts) return null;
+  if (!contracts)
+    return (
+      <Card>
+        <Loading />
+      </Card>
+    );
 
   return (
     <>

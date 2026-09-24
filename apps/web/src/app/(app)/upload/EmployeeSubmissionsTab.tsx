@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, EmptyState, Tag } from '../../../components/ui';
+import { Card, EmptyState, Loading, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { usePdfPreview } from '../../../components/Overlays';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
@@ -103,7 +103,7 @@ export default function EmployeeSubmissionsTab({
     <>
       <Card title={tx('รอจากพนักงาน')} right={<span className="sub">{tx('ไฟล์ที่พนักงานส่งเองผ่านระบบ รอฝั่งบัญชีอ่านและยืนยัน')}</span>} flush>
         {items === null ? (
-          <div style={{ padding: 24, color: 'var(--mut)' }}>{tx('กำลังโหลด…')}</div>
+          <Loading rows={4} />
         ) : items.length === 0 ? (
           <EmptyState label={tx('ยังไม่มีไฟล์ที่พนักงานส่งเข้ามารอตรวจ')} />
         ) : (

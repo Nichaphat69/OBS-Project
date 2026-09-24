@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ErrorState, PageHeader, Tag } from '../../../components/ui';
+import { ErrorState, Loading, PageHeader, Tag } from '../../../components/ui';
 import AbbyySkillsManager from '../../../components/AbbyySkillsManager';
 import ClearReadFieldCatalog from '../../../components/ClearReadFieldCatalog';
 import { useLang } from '../../../lib/language';
@@ -55,7 +55,7 @@ export default function ReadersClient({ canSwitchTemplate }: { canSwitchTemplate
       {error ? (
         <ErrorState message={error} onRetry={load} />
       ) : !readers ? (
-        <div className="sub">{tx('กำลังโหลด…')}</div>
+        <Loading variant="cards" rows={3} />
       ) : (
         <>
 

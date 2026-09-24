@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { PageHeader, ReadModelTag, StatusPill, Tag, TabStrip } from '../../../components/ui';
+import { Card, Loading, PageHeader, ReadModelTag, StatusPill, Tag, TabStrip } from '../../../components/ui';
 import { useReadModelNameMap } from '../../../components/readModelNames';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
@@ -147,7 +147,9 @@ export default function MandayClient() {
     return (
       <>
         <PageHeader eyebrow={tx('ขั้นตอน 2 · ตรวจ Manday')} title={tx('ตรวจ Manday')} />
-        <div style={{ color: 'var(--mut)' }}>{tx('กำลังโหลด…')}</div>
+        <Card>
+          <Loading rows={6} />
+        </Card>
       </>
     );
   }

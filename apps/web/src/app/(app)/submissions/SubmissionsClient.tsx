@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, PageHeader, StatusPill, Tag, TabStrip } from '../../../components/ui';
+import { Card, ErrorState, Loading, PageHeader, StatusPill, Tag, TabStrip } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import SupportTicketsPanel from './SupportTicketsPanel';
 import { useLang } from '../../../lib/language';
@@ -253,7 +253,7 @@ export default function SubmissionsClient({ role }: { role: string }) {
           {error ? (
             <ErrorState message={error} onRetry={load} />
           ) : !data ? (
-            <div className="sub">{tx('กำลังโหลด…')}</div>
+            <Loading rows={6} />
           ) : (
             <div className="tw">
               <table>
@@ -280,19 +280,22 @@ export default function SubmissionsClient({ role }: { role: string }) {
                       </td>
                       <td>{r.periodLabel}</td>
                       <td>
-                        <StatusPill tone={STATUS_TONE[r.status]}>{tx(STATUS_LABEL[r.status])}</StatusPill>
-                        {r.deferredAt && (
-                          <div className="sub">{tx('ขอเลื่อน')} · {dt(r.deferredAt)}</div>
-                        )}
-                        {/* ป้ายสั้น ไม่ใช่ประโยคอธิบาย — แต่ยังแยกจาก "ยังไม่ส่ง" เดิมอยู่ เพราะเป็นคนละความจริง:
-                            อันนี้คือระบบไม่มีทางรู้ ไม่ใช่ยืนยันแล้วว่าเงียบจริง เอาป้ายออกจะทำให้สองเคสนี้
-                            กลืนกันจนดูเหมือนยืนยันแล้วว่าไม่ส่งทั้งคู่ */}
-                        {!r.canReceiveLineUpdates && r.status === 'not_submitted' && (
-                          <Tag tone="mu">{tx('ยังไม่ผูก LINE OA')}</Tag>
-                        )}
+                        <div className="status-cell">
+                          <StatusPill tone={STATUS_TONE[r.status]}>{tx(STATUS_LABEL[r.status])}</StatusPill>
+                          {r.deferredAt && (
+                            <div className="sub">{tx('ขอเลื่อน')} · {dt(r.deferredAt)}</div>
+                          )}
+                          {/* ป้ายสั้น ไม่ใช่ประโยคอธิบาย — แต่ยังแยกจาก "ยังไม่ส่ง" เดิมอยู่ เพราะเป็นคนละความจริง:
+                              อันนี้คือระบบไม่มีทางรู้ ไม่ใช่ยืนยันแล้วว่าเงียบจริง เอาป้ายออกจะทำให้สองเคสนี้
+                              กลืนกันจนดูเหมือนยืนยันแล้วว่าไม่ส่งทั้งคู่ — เป็นบรรทัดหมายเหตุใต้ pill ไม่ใช่ pill
+                              ที่สอง (pill เทาสองอันวางคู่กันอ่านเหมือนสถานะสองอัน, 24 ก.ย. 69) */}
+                          {!r.canReceiveLineUpdates && r.status === 'not_submitted' && (
+                            <span className="status-note">{tx('ยังไม่ผูก LINE OA')}</span>
+                          )}
+                        </div>
                       </td>
                       <td>
-                        {r.method ? <Tag tone="mu">{tx(METHOD_LABEL[r.method])}</Tag> : '—'}
+                        {r.method ? <Tag tone="mu">{tx(METHOD_LABEL[r.method])}</Tag> : <span className="sub">—</span>}
                         {r.replyOk === false && (
                           <div className="sub" style={{ color: 'var(--wn)' }}>{tx('พนักงานอาจไม่เห็นข้อความตอบกลับ')}</div>
                         )}

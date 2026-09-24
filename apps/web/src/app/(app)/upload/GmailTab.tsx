@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Tag } from '../../../components/ui';
+import { Card, Loading, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useToast, usePdfPreview } from '../../../components/Overlays';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
@@ -207,6 +207,7 @@ export default function GmailTab() {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!inbox && !error && <Loading rows={3} />}
         {inbox?.messages.map((m) => (
           <div key={m.id} style={{ border: '1px solid var(--hair)', borderRadius: 'var(--r-ctl)', padding: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -278,6 +279,7 @@ export default function GmailTab() {
         </button>
         {showDismissed && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+            {!dismissed && <Loading variant="lines" rows={2} />}
             {dismissed?.map((d) => (
               <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <span className="sub">{d.subject ?? d.id}</span>

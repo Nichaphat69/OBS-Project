@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, ErrorState, Kpi, PageHeader, ProgressCell } from '../../../components/ui';
+import { Card, ErrorState, Kpi, Loading, PageHeader, ProgressCell } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
 
 interface ContractCycles {
@@ -58,7 +58,19 @@ export default function ExecOverviewClient() {
       </>
     );
   }
-  if (!contracts || !employees) return null;
+  if (!contracts || !employees) {
+    return (
+      <>
+        <PageHeader eyebrow={tx('ผู้บริหาร')} title={tx('ภาพรวมทุกบริษัท')} />
+        <Loading variant="cards" rows={3} />
+        <div style={{ marginTop: 22 }}>
+          <Card>
+            <Loading rows={6} />
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   const totalValue = contracts.reduce((sum, c) => sum + (c.contractValue ?? 0), 0);
   const totalBilled = contracts.reduce((sum, c) => sum + (c.billedValue ?? 0), 0);

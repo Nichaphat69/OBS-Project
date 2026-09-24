@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Tag } from '../../../components/ui';
+import { Card, Loading, Tag } from '../../../components/ui';
 import { SETTINGS_CHANGED_EVENT } from '../../../lib/settingsChanged';
 import { useLang } from '../../../lib/language';
 
@@ -43,7 +43,17 @@ export default function OverviewTab() {
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, load);
   }, []);
 
-  if (!settings) return null;
+  if (!settings)
+    return (
+      <div className="g2">
+        <Card>
+          <Loading variant="lines" rows={6} />
+        </Card>
+        <Card>
+          <Loading variant="lines" rows={6} />
+        </Card>
+      </div>
+    );
 
   const effectiveFlowAccountMode = settings.flowaccount?.mode ?? settings.env.flowAccountMode;
   const sameLlmModel = settings.env.localTextModel === settings.env.localVisionModel;

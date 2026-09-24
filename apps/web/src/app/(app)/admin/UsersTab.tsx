@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState } from '../../../components/ui';
+import { Card, ErrorState, Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useConfirm, usePrompt, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
@@ -298,10 +298,16 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
                   <td className="docid">{u.username}</td>
                   <td>
                     {editing === u.username ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 180 }}>
-                        <input value={editNameTh} onChange={(e) => setEditNameTh(e.target.value)} placeholder={tx('ชื่อ (ไทย)')} style={{ height: 32 }} />
-                        <input value={editNameEn} onChange={(e) => setEditNameEn(e.target.value)} placeholder={tx('ชื่อ (อังกฤษ)')} style={{ height: 32 }} />
-                        <div style={{ display: 'flex', gap: 6 }}>
+                      <div
+                        className="name-edit"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !savingName) saveEditName(u.username);
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                      >
+                        <input type="text" value={editNameTh} onChange={(e) => setEditNameTh(e.target.value)} placeholder={tx('ชื่อ (ไทย)')} autoFocus />
+                        <input type="text" value={editNameEn} onChange={(e) => setEditNameEn(e.target.value)} placeholder={tx('ชื่อ (อังกฤษ)')} />
+                        <div className="name-edit-actions">
                           <button className="btn pri sm" disabled={savingName} onClick={() => saveEditName(u.username)}>
                             {tx('บันทึก')}
                           </button>
@@ -385,6 +391,13 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
                 </tr>
               );
             })}
+            {!users && (
+              <tr>
+                <td colSpan={7}>
+                  <Loading rows={4} />
+                </td>
+              </tr>
+            )}
             {users && users.length === 0 && (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', color: 'var(--mut)' }}>

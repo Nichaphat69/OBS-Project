@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Fragment, useEffect, useState } from 'react';
-import { Card, PageHeader, StatusPill, Tag } from '../../../components/ui';
+import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 
@@ -115,7 +115,9 @@ export default function BillingClient() {
     return (
       <>
         <PageHeader eyebrow={tx('ขั้นตอน 3 · วางบิล & ร่างอีเมล')} title={tx('วางบิล & ร่างอีเมล')} />
-        <div style={{ color: 'var(--mut)' }}>{tx('กำลังโหลด…')}</div>
+        <Card>
+          <Loading rows={6} />
+        </Card>
       </>
     );
   }
@@ -186,7 +188,7 @@ export default function BillingClient() {
                         <tr>
                           <td colSpan={5} style={{ padding: 0, background: 'var(--sunk)' }}>
                             {emps === 'loading' || emps === undefined ? (
-                              <div className="sub" style={{ padding: '12px 24px' }}>{tx('กำลังโหลด…')}</div>
+                              <div style={{ padding: '4px 24px' }}><Loading variant="lines" rows={2} /></div>
                             ) : emps === 'error' ? (
                               <div style={{ padding: '12px 24px', color: 'var(--cr)' }}>{tx('โหลดรายชื่อพนักงานไม่สำเร็จ')}</div>
                             ) : emps.length === 0 ? (

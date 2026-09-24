@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import QRCode from 'qrcode';
-import { Card, ErrorState, StatusPill } from '../../../components/ui';
+import { Card, ErrorState, Loading, StatusPill } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
 
 export default function MyLineLinkClient() {
@@ -132,7 +132,7 @@ export default function MyLineLinkClient() {
     <Card title={tx('สถานะการเชื่อมต่อ')}>
       {error && <div style={{ color: 'var(--cr)', marginBottom: 14 }}>{error}</div>}
 
-      {linked === null ? null : linked ? (
+      {linked === null ? <Loading variant="lines" rows={2} /> : linked ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <StatusPill tone="ok">✓ {tx('เชื่อมต่อไลน์แล้ว')}</StatusPill>
           <button className="btn ghost sm" disabled={unlinking} onClick={unlink}>

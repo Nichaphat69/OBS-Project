@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { PageHeader, PoTag, ReadModelTag, StatusPill, parseReadModel } from '../../../../components/ui';
+import { Card, Loading, PageHeader, PoTag, ReadModelTag, StatusPill, Tag, parseReadModel } from '../../../../components/ui';
 import { useReadModelNameMap } from '../../../../components/readModelNames';
 import { Icon } from '../../../../components/Icon';
 import { usePdfPreview, useToast } from '../../../../components/Overlays';
@@ -87,7 +87,8 @@ interface TimesheetDetail {
     vatRate: number;
     whtRate: number;
   };
-  audit: Array<{ at: string; actor: string; action: string; detail: any }>;
+  submissionMethod: string | null;
+  audit: Array<{ id: number; at: string; actor: string; action: string; entityType: string | null; detail: any }>;
 }
 
 function money(n: number | null | undefined) {
@@ -117,8 +118,110 @@ function sumHours(days: TimesheetDetail['dayLabels'], key: 'normalHours' | 'otHo
   const values = days.map((d) => d[key]).filter((v): v is number => v !== null && v !== undefined);
   return values.length ? values.reduce((s, v) => s + Number(v), 0) : null;
 }
-function auditActionLabel(action: string) {
-  return action.replace(/_/g, ' ');
+/* ── ประวัติการดำเนินการ ──
+   เดิมโชว์ชื่อ action ดิบ ("notify line needs check") + actor ดิบ ("llm"/"system") เวลาเป็น UTC — อ่านไม่ออก
+   (24 ก.ย. 69 ตามที่ขอ "ขอแบบเข้าใจง่าย แสดงที่มา ใครเป็นคนส่ง วิธีการใด วันเวลา มันจะเป็น process ของ
+   Manday ใบวางบิล รอบบิลชุดนี้") แปลงเป็นข้อความไทย + แท็กขั้นตอน ครอบทั้งเหตุการณ์ของใบนี้และของรอบบิล */
+type HistoryStage = 'timesheet' | 'manday' | 'billing';
+const HISTORY_STAGE_LABEL: Record<HistoryStage, string> = { timesheet: 'Timesheet', manday: 'Manday', billing: 'วางบิล' };
+const HISTORY_STAGE_TONE: Record<HistoryStage, 'pr' | 'wn' | 'ok'> = { timesheet: 'pr', manday: 'wn', billing: 'ok' };
+
+/** ชุดเดียวกับ SUBMISSION_METHOD_LABEL ใน apps/api activityFeedService.ts */
+const SUBMISSION_METHOD_LABEL: Record<string, string> = {
+  self_obs: 'พนักงานส่งเองผ่านระบบ OBS',
+  auto_gmail: 'ระบบดึงจาก Gmail อัตโนมัติ',
+  self_email: 'พนักงานส่งเองทางอีเมล',
+  proxy_email: 'ผู้อื่นส่งแทนทางอีเมล',
+};
+
+function actorLabel(actor: string): string {
+  if (actor === 'llm') return 'ระบบอ่านไฟล์อัตโนมัติ';
+  if (actor === 'system' || actor === 'n8n') return 'ระบบอัตโนมัติ';
+  if (actor.startsWith('line:')) return 'ผ่าน LINE';
+  return actor;
+}
+
+interface HistoryEventShape {
+  label: string;
+  stage: HistoryStage;
+  error?: boolean;
+  /** ข้อความเสริมที่ไม่ต้องแปล (ตัวเลข/เลขเอกสาร/ข้อความ error) */
+  extra?: string;
+}
+const HISTORY_EVENT: Record<string, (d: any) => HistoryEventShape> = {
+  read_timesheet_file: () => ({ label: 'อ่านไฟล์ Timesheet', stage: 'timesheet' }),
+  extract_timesheet: (d) => ({
+    label: 'อ่านข้อมูลจากไฟล์ Timesheet',
+    stage: 'timesheet',
+    extra: d?.issues ? `พบจุดต้องตรวจ ${d.issues} จุด` : undefined,
+  }),
+  read_email_approval: (d) => ({ label: 'อ่านอีเมลอนุมัติจากลูกค้า', stage: 'timesheet', extra: d?.subject }),
+  ingest_timesheet_replaced: (d) => ({
+    label: 'รับ Timesheet ฉบับแก้ไข (เขียนทับของเดิม)',
+    stage: 'timesheet',
+    extra: d?.submissionMethod ? SUBMISSION_METHOD_LABEL[d.submissionMethod] : undefined,
+  }),
+  recompute_manday: (d) => ({
+    label: 'คำนวณ Manday',
+    stage: 'manday',
+    extra: [d?.payableDays != null ? `วางบิลได้ ${d.payableDays} วัน` : null, d?.discount ? `ส่วนลดวันลา ${money(d.discount)} บาท` : null]
+      .filter(Boolean)
+      .join(' · ') || undefined,
+  }),
+  notify_line_needs_check: () => ({ label: 'แจ้งทาง LINE ให้ตรวจ Manday', stage: 'manday' }),
+  notify_line_needs_check_error: (d) => ({ label: 'แจ้งทาง LINE ให้ตรวจ Manday ไม่สำเร็จ', stage: 'manday', error: true, extra: d?.message }),
+  notify_line_check_failed: () => ({ label: 'แจ้งทาง LINE ว่าตรวจไม่ผ่าน', stage: 'manday', error: true }),
+  notify_line_check_failed_error: (d) => ({ label: 'แจ้งทาง LINE ว่าตรวจไม่ผ่าน — ส่งไม่สำเร็จ', stage: 'manday', error: true, extra: d?.message }),
+  human_checked: (d) => ({
+    label: 'ยืนยันผลตรวจ Manday แล้ว',
+    stage: 'manday',
+    extra: [d?.payableDays != null ? `วางบิลได้ ${d.payableDays} วัน` : null, d?.lineAmount != null ? `${money(d.lineAmount)} บาท` : null]
+      .filter(Boolean)
+      .join(' · ') || undefined,
+  }),
+  reject_timesheet: (d) => ({ label: 'ตีกลับให้แก้ Timesheet', stage: 'manday', error: true, extra: d?.reason ?? undefined }),
+  request_line_approval: (d) => ({
+    label: 'ส่งขออนุมัติวางบิลทาง LINE',
+    stage: 'billing',
+    extra: [d?.headcount ? `${d.headcount} คน` : null, d?.paymentAmount != null ? `${money(d.paymentAmount)} บาท` : null]
+      .filter(Boolean)
+      .join(' · ') || undefined,
+  }),
+  request_line_approval_error: (d) => ({ label: 'ส่งขออนุมัติวางบิลทาง LINE ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  approve_line: (d) => ({ label: 'อนุมัติวางบิลทาง LINE', stage: 'billing', extra: d?.documentNo }),
+  reject_line: () => ({ label: 'ไม่อนุมัติวางบิล (LINE)', stage: 'billing', error: true }),
+  line_approval_denied: () => ({ label: 'มีคนกดอนุมัติทาง LINE แต่ไม่มีสิทธิ์', stage: 'billing', error: true }),
+  approve_cycle: (d) => ({
+    label: 'สร้างใบแจ้งหนี้ใน FlowAccount',
+    stage: 'billing',
+    extra: [d?.documentNo, d?.paymentAmount != null ? `${money(d.paymentAmount)} บาท` : null, d?.mode === 'dry-run' ? 'dry-run' : null]
+      .filter(Boolean)
+      .join(' · ') || undefined,
+  }),
+  flowaccount_create_failed: (d) => ({ label: 'สร้างใบแจ้งหนี้ใน FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  flowaccount_share_link_failed: (d) => ({ label: 'ดึงลิงก์ใบแจ้งหนี้จาก FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  flowaccount_pdf_cache_failed: (d) => ({ label: 'ดึงไฟล์ใบแจ้งหนี้จาก FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  flowaccount_pdf_fetch_failed: (d) => ({ label: 'ดึงไฟล์ใบแจ้งหนี้จาก FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  draft_email_llm: () => ({ label: 'ระบบร่างอีเมลวางบิล', stage: 'billing' }),
+  gmail_draft_created: (d) => ({ label: 'สร้างร่างอีเมลวางบิลใน Gmail', stage: 'billing', extra: d?.to }),
+  email_sent_detected: (d) => ({ label: 'ส่งอีเมลวางบิลแล้ว', stage: 'billing', extra: d?.documentNo }),
+  email_sent_check_failed: (d) => ({ label: 'ตรวจสถานะการส่งอีเมลวางบิลไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  delete_invoice: (d) => ({ label: 'ลบใบแจ้งหนี้', stage: 'billing', error: true, extra: d?.documentNo }),
+};
+
+function historyEventShape(a: { action: string; entityType: string | null; detail: any }): HistoryEventShape {
+  const shape = HISTORY_EVENT[a.action];
+  if (shape) return shape(a.detail);
+  const stage: HistoryStage = a.entityType === 'timesheet' ? 'timesheet' : 'billing';
+  return { label: a.action.replace(/_/g, ' '), stage, error: /error|failed/.test(a.action) };
+}
+
+/** วันเวลาตามเขตเวลาของเครื่อง (เดิมตัดสตริง ISO ตรงๆ เลยโชว์เวลา UTC ช้ากว่าไทย 7 ชม.) */
+function localDt(iso: string | null | undefined, lang: string) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(lang === 'en' ? 'en-GB' : 'th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
@@ -151,7 +254,7 @@ function dedupeRepeatedText(text: string | null | undefined): string {
 }
 
 export default function ManadyDetailPage() {
-  const { tx } = useLang();
+  const { tx, lang } = useLang();
   const openPdfPreview = usePdfPreview();
   const params = useParams<{ id: string }>();
   const [sheet, setSheet] = useState<TimesheetDetail | null>(null);
@@ -271,8 +374,63 @@ export default function ManadyDetailPage() {
   }, [m]);
   const dayCounts = m?.calendar?.counts ?? { workday: 0, leave: 0, holiday: 0, weekend: 0 };
 
+  // ประวัติการดำเนินการ ล่าสุดขึ้นบน — เรียงตามเวลา แล้วตาม id ของ audit log เมื่อเวลาเท่ากัน (หลายเหตุการณ์
+  // เกิดใน ms เดียวกันตอนรับไฟล์ ถ้าไม่มีตัวตัดสินลำดับจะสลับกันมั่ว) "รับเข้าระบบ" ใช้ id ของ ingest_timesheet
+  // (แล้วซ่อนแถว audit นั้นไปเพราะซ้ำกัน) เพื่อให้คนส่ง/ช่องทางที่บันทึกไว้ตอนรับไฟล์มาอยู่แถวเดียวกัน
+  const history = useMemo(() => {
+    if (!sheet) return [];
+    const ingest = sheet.audit.find((a) => a.action === 'ingest_timesheet');
+    const method = sheet.submissionMethod ?? ingest?.detail?.submissionMethod ?? null;
+    const source = sheet.sourceEmailSubject
+      ? `${tx('อีเมล')}: ${sheet.sourceEmailSubject}`
+      : sheet.sourceFile
+        ? `${tx('ไฟล์')}: ${sheet.sourceFile}`
+        : null;
+    const events: Array<{ key: string; at: string; order: number; stage: HistoryStage; label: string; detail: string; error?: boolean }> = [
+      {
+        key: 'received',
+        at: sheet.receivedAt,
+        order: ingest?.id ?? 0,
+        stage: 'timesheet',
+        label: tx('รับ Timesheet เข้าระบบ'),
+        detail: [
+          ingest ? `${tx('ส่งโดย')} ${tx(actorLabel(ingest.actor))}` : null,
+          method ? tx(SUBMISSION_METHOD_LABEL[method] ?? method) : null,
+          source,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      },
+      ...(sheet.approvedAt
+        ? [{ key: 'approved', at: sheet.approvedAt, order: 0, stage: 'timesheet' as const, label: tx('ลูกค้าอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '' }]
+        : []),
+      ...sheet.audit
+        .filter((a) => a.action !== 'ingest_timesheet')
+        .map((a) => {
+          const shape = historyEventShape(a);
+          return {
+            key: `a${a.id}`,
+            at: a.at,
+            order: a.id,
+            stage: shape.stage,
+            label: tx(shape.label),
+            error: shape.error,
+            detail: [tx(actorLabel(a.actor)), shape.extra].filter(Boolean).join(' · '),
+          };
+        }),
+    ];
+    return events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.order - a.order));
+  }, [sheet, tx]);
+
   if (!sheet) {
-    return <PageHeader eyebrow={tx('ตรวจ Manday')} title={tx('กำลังโหลด…')} />;
+    return (
+      <>
+        <PageHeader eyebrow={tx('ตรวจ Manday')} title={tx('กำลังโหลด…')} />
+        <Card>
+          <Loading rows={8} />
+        </Card>
+      </>
+    );
   }
 
   return (
@@ -462,27 +620,18 @@ export default function ManadyDetailPage() {
               </div>
               <div className="bd">
                 <ul className="acts-l">
-                  {/* รวมทุกเหตุการณ์ (รับเข้าระบบ/ลูกค้าอนุมัติ/audit log) เป็นรายการเดียวแล้วเรียงตาม
-                      เวลาจริงจากล่าสุดไปเก่าสุด (เจ้าของระบบสั่ง 24 ก.ย. 69) — เดิมตรึง "รับเข้าระบบ"/
-                      "ลูกค้าอนุมัติ" ไว้บนสุดตายตัวสองรายการก่อนเสมอ ไม่ได้เทียบเวลาจริงกับ audit log
-                      ที่ตามมาทีหลังเลย ทำให้เหตุการณ์ล่าสุดจริงๆ (เช่น ยืนยัน/ตีกลับ) ไปโผล่ท้ายสุดแทน */}
-                  {[
-                    { at: sheet.receivedAt, label: tx('รับเข้าระบบ'), detail: sheet.sourceFile ?? sheet.sourceEmailId ?? '—' },
-                    ...(sheet.approvedAt
-                      ? [{ at: sheet.approvedAt, label: tx('ลูกค้าอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '—' }]
-                      : []),
-                    ...sheet.audit.map((a) => ({ at: a.at, label: auditActionLabel(a.action), detail: a.actor })),
-                  ]
-                    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
-                    .map((ev, i) => (
-                      <li key={i}>
-                        <span className="tx">
-                          {ev.label}
-                          <small>{ev.detail}</small>
+                  {history.map((ev) => (
+                    <li key={ev.key}>
+                      <span className={`tx${ev.error ? ' err' : ''}`}>
+                        <span className="hd-row">
+                          <Tag tone={HISTORY_STAGE_TONE[ev.stage]}>{tx(HISTORY_STAGE_LABEL[ev.stage])}</Tag>
+                          <b>{ev.label}</b>
                         </span>
-                        <span className="tm">{dt(ev.at)}</span>
-                      </li>
-                    ))}
+                        {ev.detail && <small>{ev.detail}</small>}
+                      </span>
+                      <span className="tm">{localDt(ev.at, lang)}</span>
+                    </li>
+                  ))}
                 </ul>
               </div>
             </div>

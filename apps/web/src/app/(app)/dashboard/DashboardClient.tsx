@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from 'react';
 import Link from 'next/link';
-import { Card, EmptyState, Kpi, PageHeader, PoTag, ProgressCell, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
+import { Card, EmptyState, Kpi, Loading, PageHeader, PoTag, ProgressCell, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 
@@ -237,7 +237,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                         <tr>
                           <td colSpan={3} style={{ padding: 0, background: 'var(--sunk)' }}>
                             {emps === 'loading' || emps === undefined ? (
-                              <div className="sub" style={{ padding: '12px 24px' }}>{tx('กำลังโหลด…')}</div>
+                              <div style={{ padding: '4px 24px' }}><Loading variant="lines" rows={2} /></div>
                             ) : emps === 'error' ? (
                               <div style={{ padding: '12px 24px', color: 'var(--cr)' }}>{tx('โหลดรายชื่อพนักงานไม่สำเร็จ')}</div>
                             ) : emps.length === 0 ? (

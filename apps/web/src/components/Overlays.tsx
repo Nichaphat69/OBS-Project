@@ -12,6 +12,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { Loading } from './ui';
 import { useLang } from '../lib/language';
 
 /** นามสกุลที่ต้อง parse เป็นตารางแทนการฝัง iframe — ตรงกับชนิดไฟล์ที่หน้าอัปโหลดรับ
@@ -281,7 +282,11 @@ function SpreadsheetPreview({ url }: { url: string }) {
   }, [url, tx]);
 
   if (state.status === 'loading') {
-    return <div className="xlsx-state">{tx('กำลังโหลดไฟล์…')}</div>;
+    return (
+      <div className="xlsx-state" style={{ placeItems: 'stretch', alignContent: 'start', padding: 16 }}>
+        <Loading rows={8} label={tx('กำลังโหลดไฟล์…')} />
+      </div>
+    );
   }
   if (state.status === 'error') {
     return <div className="xlsx-state err">{state.message}</div>;

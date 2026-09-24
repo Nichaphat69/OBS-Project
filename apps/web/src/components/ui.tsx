@@ -228,6 +228,33 @@ export function EmptyState({ label }: { label: string }) {
   );
 }
 
+/** โครงกระดูก (skeleton) ตอนกำลังโหลด — เดิมแต่ละหน้าโชว์แค่ข้อความ "กำลังโหลด…" หรือว่างเปล่าเลย (เช่นแท็บ
+ * ดึงจาก Gmail) ดูเหมือนหน้าพัง (เจ้าของระบบสั่ง 24 ก.ย. 69 "ทำ lazy loading ทุกหน้า") — แท่งเทาวิ่งแสงเป็นรูปทรง
+ * คร่าวๆ ของเนื้อหาที่กำลังจะมา ใช้ที่เดียวทุกหน้า
+ * - `table` = แถวตาราง (ค่าเริ่มต้น) · `cards` = การ์ด KPI เรียงแนวนอน · `lines` = บรรทัดข้อความสั้นๆ (ในแถวที่กางออก/panel เล็ก) */
+export function Loading({ variant = 'table', rows = 5, label }: { variant?: 'table' | 'cards' | 'lines'; rows?: number; label?: string }) {
+  const { tx } = useLang();
+  return (
+    <div className={`skel skel-${variant}`} role="status" aria-busy="true" aria-live="polite">
+      <span className="sr-only">{label ?? tx('กำลังโหลด…')}</span>
+      {variant === 'cards'
+        ? Array.from({ length: rows }, (_, i) => (
+            <div key={i} className="skel-card">
+              <div className="skel-bar" style={{ width: '45%' }} />
+              <div className="skel-bar lg" style={{ width: '65%' }} />
+            </div>
+          ))
+        : Array.from({ length: rows }, (_, i) => (
+            <div key={i} className="skel-row">
+              {variant === 'table' && <div className="skel-bar" style={{ width: 28, flex: 'none' }} />}
+              <div className="skel-bar" style={{ width: `${[62, 48, 70, 55, 40][i % 5]}%` }} />
+              {variant === 'table' && <div className="skel-bar" style={{ width: '18%', marginLeft: 'auto' }} />}
+            </div>
+          ))}
+    </div>
+  );
+}
+
 /** แสดงตอนโหลดข้อมูลรายการไม่สำเร็จ (backend ล่ม/session หมดอายุ/เน็ตหลุด) — เดิมหลายหน้าไม่มี error
  * state เลย โหลดพังแล้วค้างว่างเปล่าถาวรหรือ crash ทั้งหน้า อันนี้ให้ retry ได้เองไม่ต้อง reload */
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {

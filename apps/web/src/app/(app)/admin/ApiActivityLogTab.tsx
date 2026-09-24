@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Card, ErrorState, Tag } from '../../../components/ui';
+import { Card, ErrorState, Tag, Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { DatePicker } from '../../../components/DatePicker';
 import { useLang } from '../../../lib/language';
@@ -300,6 +300,13 @@ export default function ApiActivityLogTab() {
                     </Fragment>
                   );
                 })}
+                {!rows && (
+                  <tr>
+                    <td colSpan={8}>
+                      <Loading rows={4} />
+                    </td>
+                  </tr>
+                )}
                 {rows && rows.length === 0 && (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', color: 'var(--mut)' }}>

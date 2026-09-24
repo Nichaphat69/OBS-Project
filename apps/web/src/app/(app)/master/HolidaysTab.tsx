@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, Tag } from '../../../components/ui';
+import { Card, ErrorState, Loading, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
@@ -75,7 +75,12 @@ export default function HolidaysTab() {
   }
 
   if (error) return <ErrorState message={error} onRetry={() => load(year)} />;
-  if (!data) return null;
+  if (!data)
+    return (
+      <Card title={tx('ปฏิทินวันหยุด')}>
+        <Loading />
+      </Card>
+    );
 
   return (
     <Card

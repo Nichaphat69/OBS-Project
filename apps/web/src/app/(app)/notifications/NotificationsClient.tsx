@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PageHeader, Card, ErrorState } from '../../../components/ui';
+import { PageHeader, Card, ErrorState, Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { readIds, markRead, visibleNotifications } from '../../../lib/notifRead';
 import { useLang } from '../../../lib/language';
@@ -79,7 +79,16 @@ export default function NotificationsClient({ role }: { role: string }) {
       </>
     );
   }
-  if (!feed) return null;
+  if (!feed) {
+    return (
+      <>
+        <PageHeader eyebrow={tx('แจ้งเตือน')} title={tx('การแจ้งเตือน')} />
+        <Card>
+          <Loading rows={6} />
+        </Card>
+      </>
+    );
+  }
 
   // ตัดรายการที่ "อ่านแล้วเกิน 30 วัน" ออกก่อนเสมอ (เจ้าของระบบสั่ง 23 ก.ย. 69) — ยังไม่อ่านเลยไม่ว่า
   // จะเก่าแค่ไหนก็ยังอยู่ ไม่กระทบตัวเลขนับที่ยังไม่อ่าน (visibleNotifications ไม่ตัดของที่ยังไม่อ่านออก)

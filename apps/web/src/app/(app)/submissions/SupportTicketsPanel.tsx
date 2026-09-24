@@ -5,7 +5,7 @@
    เปลี่ยนปุ่ม/สถานะเป็นไอคอนตามที่ขอเพิ่มเติม (ยังคงตรรกะ resolve เดิมทุกอย่าง แค่หน้าตาเปลี่ยน) */
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
+import { Card, ErrorState, Loading, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
@@ -142,6 +142,13 @@ export default function SupportTicketsPanel() {
                 </td>
               </tr>
             ))}
+            {tickets === null && (
+              <tr>
+                <td colSpan={7}>
+                  <Loading rows={4} />
+                </td>
+              </tr>
+            )}
             {tickets && tickets.length === 0 && (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', color: 'var(--mut)' }}>

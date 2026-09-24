@@ -225,7 +225,10 @@ export interface TimesheetDetail extends TimesheetListItem {
     vatRate: number;
     whtRate: number;
   };
-  audit: Array<{ at: string; actor: string; action: string; detail: any }>;
+  submissionMethod: string | null;
+  /** เรียงจากล่าสุดไปเก่าสุด (id มากก่อน) — รวมเหตุการณ์ของใบนี้เอง + ของรอบบิลที่ใบนี้อยู่ (ขออนุมัติ
+   * ทางไลน์/สร้างใบแจ้งหนี้/ร่างและส่งเมลวางบิล) ให้เห็น process ตั้งแต่รับเข้าจนวางบิลในที่เดียว */
+  audit: Array<{ id: number; at: string; actor: string; action: string; entityType: string | null; detail: any }>;
 }
 
 export async function getTimesheet(id: string): Promise<TimesheetDetail | null> {
@@ -233,7 +236,7 @@ export async function getTimesheet(id: string): Promise<TimesheetDetail | null> 
     where: { id },
     // เหตุผลเดียวกับ LIST_ROW_SELECT — หน้ารายละเอียดก็ไม่ได้ใช้ไบต์ของไฟล์ PDF เหมือนกัน
     // (ปุ่มดูไฟล์ยิงไป GET /api/timesheets/:id/file ซึ่งโหลดไบต์เองอยู่แล้ว)
-    select: { ...LIST_ROW_SELECT, approvedAt: true, sourceEmailId: true, sourceEmailSubject: true },
+    select: { ...LIST_ROW_SELECT, approvedAt: true, sourceEmailId: true, sourceEmailSubject: true, submissionMethod: true },
   });
   if (!row) return null;
 
@@ -243,8 +246,16 @@ export async function getTimesheet(id: string): Promise<TimesheetDetail | null> 
     prisma.leaveDay.findMany({ where: { timesheetId: id }, orderBy: { date: 'asc' } }),
     prisma.timesheetDay.findMany({ where: { timesheetId: id }, orderBy: { date: 'asc' } }),
     prisma.auditLog.findMany({
-      where: { entityType: 'timesheet', entityId: id },
-      orderBy: { id: 'asc' },
+      where: {
+        OR: [
+          { entityType: 'timesheet', entityId: id },
+          // id ของรอบบิล/ใบแจ้งหนี้ตั้งตามแบบเดียวกับ cyclesService.ts (`${contractId}-${period}`,
+          // `INV-${contractId}-${period}`) — ร่างเมลก่อนมีใบแจ้งหนี้ใช้ id แบบรอบบิลแทน
+          { entityType: 'cycle', entityId: `${row.contractId}-${row.period}` },
+          { entityType: 'invoice', entityId: { in: [`INV-${row.contractId}-${row.period}`, `${row.contractId}-${row.period}`] } },
+        ],
+      },
+      orderBy: { id: 'desc' },
     }),
   ]);
 
@@ -253,6 +264,7 @@ export async function getTimesheet(id: string): Promise<TimesheetDetail | null> 
     approvedAt: row.approvedAt,
     sourceEmailId: row.sourceEmailId,
     sourceEmailSubject: row.sourceEmailSubject,
+    submissionMethod: row.submissionMethod,
     extraction: row.extraction ?? null,
     manday: row.computed ?? null,
     leaveDays: leave.map((l) => ({ date: l.date, leaveType: l.leaveType, hours: l.hours })),
@@ -271,9 +283,11 @@ export async function getTimesheet(id: string): Promise<TimesheetDetail | null> 
       whtRate: row.contract.whtRate,
     },
     audit: auditRows.map((a) => ({
+      id: a.id,
       at: a.at,
       actor: a.actor,
       action: a.action,
+      entityType: a.entityType,
       detail: a.detail ? JSON.parse(a.detail) : null,
     })),
   };

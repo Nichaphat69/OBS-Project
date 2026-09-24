@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Card, EmptyState, ErrorState, PageHeader, Tag } from '../../../components/ui';
+import { Card, EmptyState, ErrorState, Loading, PageHeader, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 
@@ -236,7 +236,17 @@ export default function MyProgressClient() {
     );
   }
 
-  if (progress === undefined || !settings) return null;
+  if (progress === undefined || !settings) {
+    return (
+      <>
+        <PageHeader eyebrow={tx('พนักงาน')} title={tx('ความคืบหน้าของฉัน')} />
+        <Loading variant="cards" rows={3} />
+        <Card>
+          <Loading rows={4} />
+        </Card>
+      </>
+    );
+  }
 
   if (!progress) {
     return (

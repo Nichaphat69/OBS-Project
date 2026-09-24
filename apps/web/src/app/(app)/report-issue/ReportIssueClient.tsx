@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Card, StatusPill, Tag } from '../../../components/ui';
+import { Card, Loading, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
@@ -183,7 +183,7 @@ export default function ReportIssueClient() {
 
       <Card title={tx('เรื่องที่เคยแจ้งไปแล้ว')} flush>
         {tickets === null ? (
-          <div className="sub" style={{ padding: 24 }}>{tx('กำลังโหลด…')}</div>
+          <Loading rows={3} />
         ) : tickets.length === 0 ? (
           <div className="sub" style={{ padding: 24, textAlign: 'center' }}>{tx('ยังไม่เคยแจ้งปัญหาไว้เลย')}</div>
         ) : (

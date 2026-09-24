@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, PageHeader, StatusPill, Tag } from '../../../../../components/ui';
+import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../../../components/ui';
 import { Icon } from '../../../../../components/Icon';
 import { useToast, usePdfPreview } from '../../../../../components/Overlays';
 import { useLang } from '../../../../../lib/language';
@@ -187,6 +187,12 @@ export default function CycleDetailPage() {
     return (
       <>
         <PageHeader eyebrow={tx('วางบิล & ร่างอีเมล')} title={tx('กำลังโหลด…')} />
+        <Loading variant="cards" rows={3} />
+        <div style={{ marginTop: 22 }}>
+          <Card>
+            <Loading rows={6} />
+          </Card>
+        </div>
       </>
     );
   }
