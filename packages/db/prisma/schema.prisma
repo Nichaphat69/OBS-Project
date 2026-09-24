@@ -232,11 +232,31 @@ model SupportTicket {
   createdAt   String  @map("created_at")
   resolvedAt  String? @map("resolved_at")
   resolvedBy  String? @map("resolved_by")
+  // เพิ่มทีหลัง (24 ก.ย. 69) — path หน้าเว็บตอนกดแจ้ง (เช่น "/dashboard") เก็บไว้ช่วยไล่ปัญหาเท่านั้น
+  // ไม่มีผลต่อการทำงาน NULL ได้เสมอเพราะตั๋วเก่าที่มาจาก LINE ไม่มีแนวคิด "หน้าเว็บ" เลย
+  pageContext String? @map("page_context")
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee    Employee                  @relation(fields: [employeeId], references: [id])
+  attachments SupportTicketAttachment[]
 
   @@index([status])
   @@map("support_tickets")
+}
+
+// รูปแนบตอนแจ้งปัญหาจากเว็บ (24 ก.ย. 69 ตามที่ขอ "เป็น feedback ที่สามารถเพิ่มรูปได้") — เก็บไบต์ตรงๆ
+// ในตารางแยก เหมือน ai_reads.file_bytes ไม่ยัดรวมเป็น JSON ในแถวตั๋วเอง กันแถวตั๋วบวมตอน list
+model SupportTicketAttachment {
+  id        Int    @id @default(autoincrement())
+  ticketId  Int    @map("ticket_id")
+  fileName  String @map("file_name")
+  mimeType  String @map("mime_type")
+  fileBytes Bytes  @map("file_bytes")
+  createdAt String @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+  @@map("support_ticket_attachments")
 }
 
 // ── ประวัติที่ AI เคยอ่านแล้ว (ทั้งอัปโหลดไฟล์เองและดึงจาก Gmail) ──

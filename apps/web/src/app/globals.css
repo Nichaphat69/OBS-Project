@@ -2482,6 +2482,21 @@ input[type='search']:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 4px rgba(10, 120, 212, 0.12);
 }
+/* textarea เปล่าที่ไม่ได้อยู่ใน .frm เหมือนกัน (เช่น หน้า "แจ้งปัญหา" 24 ก.ย. 69) — มุมโค้งปกติแบบการ์ด
+   ไม่ใช่ pill เหมือน input บรรทัดเดียวด้านบน เพราะเป็นกล่องหลายบรรทัด */
+textarea {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-md);
+  padding: 12px 16px;
+}
+textarea:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px rgba(10, 120, 212, 0.12);
+}
 /* ลูกศร dropdown ของ <select> เปล่า — ของเดิมใช้ลูกศรของเบราว์เซอร์เอง ซึ่งชิดขอบปุ่มมากเกินไปเทียบกับ
    dropdown อื่นในระบบที่มีระยะห่างจากขอบ (เจ้าของระบบชี้จากหน้าการแจ้งเตือน/ตรวจ Manday 23 ก.ย. 69) —
    ปิดลูกศรเดิม แล้ววาดลูกศรเองด้วย background-image ให้เว้นระยะจากขอบเท่ากับ dropdown อื่น (.selectchip) */

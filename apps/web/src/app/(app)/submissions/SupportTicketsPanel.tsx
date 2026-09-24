@@ -9,6 +9,12 @@ import { Card, ErrorState, StatusPill, Tag } from '../../../components/ui';
 import { useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
+interface TicketAttachment {
+  id: number;
+  fileName: string;
+  mimeType: string;
+}
+
 interface TicketRow {
   id: number;
   employeeName: string;
@@ -19,6 +25,7 @@ interface TicketRow {
   createdAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
+  attachments: TicketAttachment[];
 }
 
 export default function SupportTicketsPanel() {
@@ -91,7 +98,22 @@ export default function SupportTicketsPanel() {
                 <td>
                   <Tag tone="mu">{tx(t.categoryLabel)}</Tag>
                 </td>
-                <td style={{ maxWidth: 320 }}>{t.description}</td>
+                <td style={{ maxWidth: 320 }}>
+                  {t.description}
+                  {t.attachments.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {t.attachments.map((a) => (
+                        <a key={a.id} href={`/api/support-tickets/attachments/${a.id}`} target="_blank" rel="noreferrer">
+                          <img
+                            src={`/api/support-tickets/attachments/${a.id}`}
+                            alt={a.fileName}
+                            style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 'var(--m3-shape-sm)', border: '1px solid var(--hair)' }}
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </td>
                 <td className="sub">{t.createdAt.replace('T', ' ').slice(0, 19)}</td>
                 <td>
                   {t.status === 'resolved' ? (

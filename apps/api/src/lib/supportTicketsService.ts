@@ -16,23 +16,31 @@ export class SupportTicketError extends Error {
   }
 }
 
+export interface SupportTicketAttachmentMeta {
+  id: number;
+  fileName: string;
+  mimeType: string;
+}
+
 export interface SupportTicketRow {
   id: number;
   employeeName: string;
   category: string;
   categoryLabel: string;
   description: string;
+  pageContext: string | null;
   status: string;
   createdAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
+  attachments: SupportTicketAttachmentMeta[];
 }
 
 /** ported from service.js listSupportTickets() — ใช้แสดงในหน้าเว็บ "แจ้งปัญหา" ของ admin */
 export async function listSupportTickets({ status }: { status?: string | null } = {}): Promise<SupportTicketRow[]> {
   const rows = await prisma.supportTicket.findMany({
     where: status ? { status } : undefined,
-    include: { employee: { select: { nameTh: true } } },
+    include: { employee: { select: { nameTh: true } }, attachments: { select: { id: true, fileName: true, mimeType: true } } },
     orderBy: { id: 'desc' },
   });
   return rows.map((r) => ({
@@ -41,11 +49,54 @@ export async function listSupportTickets({ status }: { status?: string | null } 
     category: r.category,
     categoryLabel: TICKET_CATEGORIES[r.category] ?? r.category,
     description: r.description,
+    pageContext: r.pageContext,
     status: r.status,
     createdAt: r.createdAt,
     resolvedAt: r.resolvedAt,
     resolvedBy: r.resolvedBy,
+    attachments: r.attachments,
   }));
+}
+
+/** ตั๋วของพนักงานคนเดียว — ใช้กับหน้าเว็บ "แจ้งปัญหา" ฝั่งพนักงาน (24 ก.ย. 69) ดูได้แค่ของตัวเองเท่านั้น
+ * ยึด employeeId จากอาร์กิวเมนต์ตรงๆ ไม่รับ override — ผู้เรียก (route) ต้องส่ง req.user.employeeId มา
+ * เท่านั้น ห้ามรับจาก query/body เด็ดขาด เหมือน pattern อื่นในระบบที่ห้าม endpoint "ของฉัน" ถามแทนคนอื่นได้ */
+export async function listMySupportTickets(employeeId: string): Promise<SupportTicketRow[]> {
+  const rows = await prisma.supportTicket.findMany({
+    where: { employeeId },
+    include: { employee: { select: { nameTh: true } }, attachments: { select: { id: true, fileName: true, mimeType: true } } },
+    orderBy: { id: 'desc' },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    employeeName: r.employee.nameTh,
+    category: r.category,
+    categoryLabel: TICKET_CATEGORIES[r.category] ?? r.category,
+    description: r.description,
+    pageContext: r.pageContext,
+    status: r.status,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt,
+    resolvedBy: r.resolvedBy,
+    attachments: r.attachments,
+  }));
+}
+
+/** ดึงรูปแนบมาแสดง/ดาวน์โหลด — ต้องเป็นเจ้าของตั๋ว (employeeId ตรงกัน) หรือ admin เท่านั้น ผู้เรียก
+ * (route) ส่ง `viewerEmployeeId` มาจาก session เสมอ ไม่รับจาก query กันคนเดารูปแนบของคนอื่น */
+export async function getSupportTicketAttachment(
+  id: number,
+  { viewerEmployeeId, isAdmin }: { viewerEmployeeId: string | null; isAdmin: boolean },
+) {
+  const attachment = await prisma.supportTicketAttachment.findUnique({
+    where: { id },
+    include: { ticket: { select: { employeeId: true } } },
+  });
+  if (!attachment) throw new SupportTicketError('ไม่พบไฟล์แนบนี้', 404);
+  if (!isAdmin && attachment.ticket.employeeId !== viewerEmployeeId) {
+    throw new SupportTicketError('ไม่มีสิทธิ์ดูไฟล์แนบนี้', 403);
+  }
+  return attachment;
 }
 
 /** ported from service.js resolveSupportTicket() — กดจากปุ่มในการ์ดแจ้งเตือน LINE หรือจากหน้าเว็บ ทั้งสองทางเรียกฟังก์ชันเดียวกันนี้ */
@@ -68,25 +119,49 @@ export async function startSupportTicket(employeeId: string, category: string) {
 }
 
 /** ported from service.js submitSupportTicket() — สร้างตั๋วจริงจากข้อความรายละเอียดที่พิมพ์ตามหลังการ
- * เลือกหมวด แล้วแจ้งฝ่ายบัญชี/admin ผ่าน LINE (ห่อ try/catch เพราะเป็นงานเสริม พังได้ก็แค่ log) */
+ * เลือกหมวด แล้วแจ้งฝ่ายบัญชี/admin ผ่าน LINE (ห่อ try/catch เพราะเป็นงานเสริม พังได้ก็แค่ log)
+ *
+ * `attachments`/`pageContext`/`actor` เพิ่มทีหลัง (24 ก.ย. 69 — แจ้งปัญหาจากหน้าเว็บ แนบรูปได้ ต่างจาก
+ * ทาง LINE เดิมที่พิมพ์ข้อความล้วนๆ) เว้นว่างได้ทั้งหมด ไม่กระทบเส้น LINE เดิมที่ไม่เคยส่งพวกนี้มาเลย —
+ * `linePendingTicketCategory` เคลียร์เฉพาะตอนสร้างจาก LINE จริงๆ เท่านั้น (ฝั่งเว็บไม่เคยตั้งค่านี้ไว้
+ * ตั้งแต่แรก เคลียร์ซ้ำก็ไม่เสียหายอะไร แต่ข้ามให้ชัดเจนว่าเป็นคนละที่มา) */
 export async function submitSupportTicket({
   employeeId,
   employeeName,
   category,
   description,
+  pageContext = null,
+  attachments = [],
+  actor,
   client,
 }: {
   employeeId: string;
   employeeName: string;
   category: string;
   description: string;
+  pageContext?: string | null;
+  attachments?: Array<{ fileName: string; mimeType: string; fileBase64: string }>;
+  actor?: string;
   client?: LineClient;
 }) {
+  const resolvedActor = actor ?? `line:${employeeId}`;
   const ticket = await prisma.supportTicket.create({
-    data: { employeeId, category, description, status: 'open', createdAt: new Date().toISOString() },
+    data: {
+      employeeId, category, description, pageContext, status: 'open', createdAt: new Date().toISOString(),
+      attachments: attachments.length
+        ? {
+            create: attachments.map((a) => ({
+              fileName: a.fileName,
+              mimeType: a.mimeType,
+              fileBytes: Buffer.from(a.fileBase64, 'base64'),
+              createdAt: new Date().toISOString(),
+            })),
+          }
+        : undefined,
+    },
   });
   await prisma.employee.update({ where: { id: employeeId }, data: { linePendingTicketCategory: null } });
-  await logAudit({ actor: `line:${employeeId}`, action: 'create_support_ticket', entityType: 'support_ticket', entityId: String(ticket.id), detail: { category } });
+  await logAudit({ actor: resolvedActor, action: 'create_support_ticket', entityType: 'support_ticket', entityId: String(ticket.id), detail: { category } });
 
   const line = client ?? new LineClient();
   try {

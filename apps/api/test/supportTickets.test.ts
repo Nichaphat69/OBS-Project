@@ -16,7 +16,10 @@ import { prisma } from '@obs/db';
 
 import { seedFixtures } from './helpers/testDb.js';
 import { processLineWebhook } from '../src/lib/lineWebhookService.js';
-import { listSupportTickets, resolveSupportTicket } from '../src/lib/supportTicketsService.js';
+import {
+  listSupportTickets, resolveSupportTicket, submitSupportTicket, listMySupportTickets,
+  getSupportTicketAttachment, SupportTicketError,
+} from '../src/lib/supportTicketsService.js';
 import { buildTicketPostback, parseTicketPostback, buildTicketCategoryFlex } from '../src/lib/lineClient.js';
 
 process.env.LINE_APPROVER_USER_IDS = 'Uapprover1';
@@ -172,6 +175,49 @@ test('flow เต็ม: พิมพ์ "แจ้งปัญหา" → เ�
       where: { id: 'EMP-0042' },
       data: { lineUserId: null, linePendingTicketCategory: null },
     });
+  }
+});
+
+test('แจ้งปัญหาจากเว็บพร้อมรูปแนบ (24 ก.ย. 69) — เก็บรูปได้ถูกต้อง เห็นแค่ของตัวเอง และเช็คสิทธิ์ดูรูปแนบ', async () => {
+  const line = new FakeLineClient();
+  const fakeImageBytes = Buffer.from('fake png bytes');
+
+  const ticket = await submitSupportTicket({
+    employeeId: 'EMP-0042',
+    employeeName: 'พงศ์พันธ์ มามาก',
+    category: 'bug',
+    description: 'กดปุ่มยืนยันแล้วหน้าขาว',
+    attachments: [{ fileName: 'screenshot.png', mimeType: 'image/png', fileBase64: fakeImageBytes.toString('base64') }],
+    actor: 'พงศ์พันธ์ มามาก',
+    client: line as any,
+  });
+
+  try {
+    const mine042 = await listMySupportTickets('EMP-0042');
+    const created = mine042.find((t) => t.id === ticket.id);
+    assert.ok(created, 'listMySupportTickets ต้องเห็นตั๋วที่เพิ่งสร้าง');
+    assert.equal(created!.attachments.length, 1, 'ต้องมีรูปแนบ 1 รูป');
+    assert.equal(created!.attachments[0].fileName, 'screenshot.png');
+
+    const mine018 = await listMySupportTickets('EMP-0018');
+    assert.equal(mine018.some((t) => t.id === ticket.id), false, 'ห้ามเห็นตั๋วของคนอื่น');
+
+    const attachmentId = created!.attachments[0].id;
+
+    const asOwner = await getSupportTicketAttachment(attachmentId, { viewerEmployeeId: 'EMP-0042', isAdmin: false });
+    assert.equal(Buffer.from(asOwner.fileBytes).toString('utf8'), 'fake png bytes', 'ไบต์ที่เก็บต้องตรงกับที่ส่งมาเป๊ะๆ');
+
+    const asAdmin = await getSupportTicketAttachment(attachmentId, { viewerEmployeeId: null, isAdmin: true });
+    assert.ok(asAdmin, 'admin ต้องดูรูปแนบของใครก็ได้');
+
+    await assert.rejects(
+      () => getSupportTicketAttachment(attachmentId, { viewerEmployeeId: 'EMP-0018', isAdmin: false }),
+      (error: unknown) => error instanceof SupportTicketError && error.status === 403,
+      'ไม่ใช่เจ้าของตั๋วและไม่ใช่ admin ต้องดูรูปแนบคนอื่นไม่ได้',
+    );
+  } finally {
+    await prisma.supportTicketAttachment.deleteMany({ where: { ticketId: ticket.id } });
+    await prisma.supportTicket.delete({ where: { id: ticket.id } });
   }
 });
 

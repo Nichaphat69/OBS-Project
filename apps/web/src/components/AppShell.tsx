@@ -67,6 +67,10 @@ const NAV: NavGroup[] = [
       { href: '/readers', label: 'ตัวอ่าน Timesheet', icon: 'eye', roles: ['admin', 'accounting'] },
       { href: '/admin', label: 'จัดการระบบ', icon: 'cog', adminOnly: true },
       { href: '/my-line-link', label: 'เชื่อมต่อ LINE', icon: 'bell', userOnly: true },
+      // ใหม่ (24 ก.ย. 69 ตามที่ขอ) — แจ้งปัญหาจากเว็บได้เอง แนบรูปได้ ต่างจากทาง LINE เดิม (พิมพ์ข้อความ
+      // ล้วนๆ) ที่ยังใช้ได้อยู่เหมือนเดิมคู่ขนานกัน จำกัดแค่ role 'user' เพราะ SupportTicket ผูกกับ
+      // employeeId ตรงๆ (admin/accounting ไม่มี employeeId ของตัวเอง)
+      { href: '/report-issue', label: 'แจ้งปัญหา', icon: 'alt', userOnly: true },
     ],
   },
 ];
