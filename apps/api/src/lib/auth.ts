@@ -58,10 +58,30 @@ export interface SessionUser {
   employeeId: string | null;
 }
 
-/** ตรวจ username/password — คืน null ถ้าไม่ตรงหรือถูกปิดใช้งาน (ไม่บอกว่าผิดที่จุดไหน) */
-export async function verifyLogin(username: string, password: string): Promise<SessionUser | null> {
-  const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !user.active) return null;
+/** ตรวจ username/password — คืน null ถ้าไม่ตรงหรือถูกปิดใช้งาน (ไม่บอกว่าผิดที่จุดไหน)
+ *
+ * ⚠️ เจ้าของระบบสั่ง 24 ก.ย. 69 ให้ล็อกอินด้วย "ชื่อ" หรือ "อีเมล" ได้ด้วย ไม่ใช่แค่ username (=อีเมล
+ * ที่แอดมินตั้งให้ตอนสร้างบัญชี ซึ่งพนักงานจำนวนมากไม่รู้/จำไม่ได้ว่าคืออะไร รู้แต่ชื่อตัวเองกับอีเมลจริง)
+ * — เทียบ username/email/nameTh/nameEn พร้อมกัน (case-insensitive) username กับ email เป็นค่าที่ควร
+ * ไม่ซ้ำกันอยู่แล้ว แต่ nameTh/nameEn ไม่มีข้อบังคับ unique เลย ถ้าพิมพ์ชื่อแล้วดันตรงกับคนมากกว่า 1 คน
+ * พอดี ปฏิเสธไปเลยแทนที่จะเดาเอาคนแรกในรายการ กันเข้าบัญชีผิดคนเงียบๆ */
+export async function verifyLogin(identifier: string, password: string): Promise<SessionUser | null> {
+  const trimmed = identifier.trim();
+  if (!trimmed) return null;
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      OR: [
+        { username: { equals: trimmed, mode: 'insensitive' } },
+        { email: { equals: trimmed, mode: 'insensitive' } },
+        { nameTh: { equals: trimmed, mode: 'insensitive' } },
+        { nameEn: { equals: trimmed, mode: 'insensitive' } },
+      ],
+    },
+  });
+  if (candidates.length !== 1) return null;
+  const user = candidates[0];
+  if (!user.active) return null;
 
   const candidate = scryptSync(password, user.passwordSalt, SCRYPT_KEYLEN);
   const stored = Buffer.from(user.passwordHash, 'hex');

@@ -76,6 +76,29 @@ test('login ด้วย username ที่ไม่มีอยู่ → null 
   assert.equal(await verifyLogin('ghost', 'anything1'), null);
 });
 
+test('login ด้วยชื่อ (nameTh) แทน username ได้ (24 ก.ย. 69 ตามที่ขอ)', async () => {
+  const user = await verifyLogin('นิชา', 'sup3rsecret');
+  assert.deepEqual(user, { username: 'nicha', nameTh: 'นิชา', role: 'user', employeeId: null });
+});
+
+test('login ด้วยชื่อ ตัวพิมพ์เล็ก/ใหญ่ไม่ตรงก็ยังเข้าได้ (case-insensitive)', async () => {
+  const user = await verifyLogin('NICHA', 'sup3rsecret');
+  assert.equal(user?.username, 'nicha');
+});
+
+test('login ด้วยอีเมล (email คนละค่ากับ username) ได้', async () => {
+  await prisma.user.update({ where: { username: 'nicha' }, data: { email: 'nicha.test@ipassion.co.th' } });
+  const user = await verifyLogin('nicha.test@ipassion.co.th', 'sup3rsecret');
+  assert.equal(user?.username, 'nicha');
+  await prisma.user.update({ where: { username: 'nicha' }, data: { email: null } });
+});
+
+test('login ด้วยชื่อที่ตรงกับหลายคนพอดี → null (กันเข้าบัญชีผิดคนเงียบๆ)', async () => {
+  await createUser({ username: 'nicha2', nameTh: 'นิชา', password: 'anotherpass1', actor: 'ทดสอบ' });
+  assert.equal(await verifyLogin('นิชา', 'sup3rsecret'), null, 'ชื่อซ้ำกัน 2 คน ต้องปฏิเสธ ไม่ใช่เดาเอาคนแรก');
+  await prisma.user.deleteMany({ where: { username: 'nicha2' } });
+});
+
 test('สร้าง session แล้ว resolve กลับมาได้ข้อมูลตรงกัน', async () => {
   const { token, expiresAt } = await createSession('nicha');
   assert.ok(token.length > 20);

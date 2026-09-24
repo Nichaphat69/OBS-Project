@@ -75,8 +75,15 @@ function LoginForm() {
         {info && <p className="lc-info">{info}</p>}
 
         <label>
-          Username
-          <input value={username} onChange={(e) => setUsername(e.target.value)} type="text" autoFocus required />
+          Username / ชื่อ / อีเมล
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            type="text"
+            autoFocus
+            required
+            placeholder="เช่น admin@ipassion.co.th หรือ ชื่อ-นามสกุล"
+          />
         </label>
 
         <label>
