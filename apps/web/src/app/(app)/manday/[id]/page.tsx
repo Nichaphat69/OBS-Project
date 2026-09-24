@@ -95,6 +95,9 @@ function money(n: number | null | undefined) {
   if (n === null || n === undefined) return '—';
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
 function int(n: number | null | undefined) {
   return n === null || n === undefined ? '—' : Math.round(n).toLocaleString('en-US');
 }
@@ -568,10 +571,32 @@ export default function ManadyDetailPage() {
               </div>
               <div className="bd">
                 <div className="tot">
-                  <div className="t py">
-                    <span>{tx('ยอดของรายการนี้')}</span>
+                  <div className="t">
+                    <span>{tx('ยอดของรายการนี้ก่อนหัก ณ ที่จ่าย')}</span>
                     <span className="v">{money(m?.lineAmount)}</span>
                   </div>
+                  {m != null && (
+                    <>
+                      <div className="t mi">
+                        <span>
+                          {tx('หัก ณ ที่จ่าย (ประมาณ)')} {pctPrecise(sheet.contractDetail.whtRate)}%
+                        </span>
+                        <span className="v">−{money(round2(m.lineAmount * sheet.contractDetail.whtRate))}</span>
+                      </div>
+                      <div className="t py">
+                        <span>{tx('ยอดหลังหัก ณ ที่จ่าย (ประมาณ)')}</span>
+                        <span className="v">{money(round2(m.lineAmount * (1 - sheet.contractDetail.whtRate)))}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* 25 ก.ย. 69 ตามที่ขอ — "หน้าสรุปยังไม่มี subtotal และไม่แสดงยอด withholding tax เป็น
+                    ตัวเลข แสดงแค่เปอร์เซ็นต์" ก่อนหน้านี้แก้แค่หน้าอัปโหลด/หน้ารอบบิลไปแล้ว หน้านี้ (ตรวจ
+                    Manday รายบุคคล) ยังไม่มี — ตัวเลขนี้เป็น "ประมาณ" ไม่ใช่ยอดจริงจากใบแจ้งหนี้ เพราะ WHT
+                    จริงคิดรวมทุกรายการในรอบบิลเดียวกันแล้วปัดครั้งเดียว (ดู buildInvoice() ใน
+                    @obs/domain) ไม่ใช่ปัดแยกทีละคนแบบนี้ — ต่างกันได้สูงสุดไม่กี่สตางค์จากการปัดเศษ */}
+                <div className="sub" style={{ marginTop: 8 }}>
+                  {tx('ยอดประมาณเฉพาะรายการนี้ ยอดจริงในใบแจ้งหนี้คำนวณรวมทุกคนในรอบบิลเดียวกัน อาจต่างเล็กน้อยจากการปัดเศษ')}
                 </div>
               </div>
             </div>
