@@ -412,6 +412,14 @@ export async function employeeProgress(employeeId: string): Promise<EmployeeProg
     include: { contract: { include: { customer: true } } },
   });
 
+  // พนักงานกดส่งไฟล์ผ่าน "ส่งผ่านระบบ" แล้ว (submitOwnTimesheetFile()) แต่ยังไม่ผ่านคิวอ่าน/ยืนยันเป็นแถว
+  // timesheets จริง — ตั้งใจไม่สร้างแถว timesheets เอง (ดู timesheetSubmissionService.ts) ถ้าไม่เช็คตรงนี้
+  // ด้วย หน้านี้จะบอกว่า "ยังไม่ได้ส่ง" ทั้งที่ส่งไปแล้วจริง (เจ้าของระบบเจอจริง 25 ก.ย. 69 — ส่ง Timesheet
+  // เดือน มิ.ย. ไปแล้วแต่หน้ายังขึ้นค้างเหมือนไม่เคยส่ง) ใช้ตรรกะเดียวกับ submissionLogService.ts's
+  // deriveStatus() ให้หน้า "บันทึกการส่ง" (ฝั่ง admin) กับหน้านี้ (ฝั่งพนักงาน) ไม่โกหกกันเอง
+  const submissions = await prisma.timesheetSubmission.findMany({ where: { employeeId } });
+  const submissionByPeriod = new Map(submissions.map((s) => [s.period, s]));
+
   const contracts: EmployeeProgressContract[] = [];
   for (const a of assignments) {
     const periods: EmployeeProgressPeriod[] = [];
@@ -423,12 +431,29 @@ export async function employeeProgress(employeeId: string): Promise<EmployeeProg
       const billed = invoice?.status === 'sent_to_flowaccount';
       const stamp = sheet ? await checkStamp(sheet.id, sheet.computed) : null;
 
+      const sub = submissionByPeriod.get(period) ?? null;
+      let timesheetStatus: string;
+      let timesheetStatusLabel: string;
+      if (sheet) {
+        timesheetStatus = sheet.status;
+        timesheetStatusLabel = STATUS_LABEL[sheet.status] ?? sheet.status;
+      } else if (sub?.reviewStatus === 'problem') {
+        timesheetStatus = 'rejected';
+        timesheetStatusLabel = 'มีปัญหา ต้องส่งใหม่';
+      } else if (sub?.method) {
+        timesheetStatus = 'submitted';
+        timesheetStatusLabel = 'ส่งแล้ว รอตรวจสอบ';
+      } else {
+        timesheetStatus = 'not_submitted';
+        timesheetStatusLabel = 'ยังไม่ได้ส่ง Timesheet';
+      }
+
       periods.push({
         period,
         periodLabel: thaiMonth(period),
         timesheetId: sheet?.id ?? null,
-        timesheetStatus: sheet?.status ?? 'not_submitted',
-        timesheetStatusLabel: sheet ? STATUS_LABEL[sheet.status] ?? sheet.status : 'ยังไม่ได้ส่ง Timesheet',
+        timesheetStatus,
+        timesheetStatusLabel,
         receivedAt: sheet?.receivedAt ?? null,
         submissionMethod: sheet?.submissionMethod ?? null,
         checkedBy: stamp?.by ?? null,

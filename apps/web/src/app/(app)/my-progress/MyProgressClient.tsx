@@ -95,7 +95,10 @@ type StepState = 'dn' | 'cu' | 'wn' | '';
 /** สามขั้นของรอบบิลตามลำดับจริง (ส่ง → ตรวจ → วางบิล) — เดิมวาดเป็นสามแถวเท่ากันหมดเหมือนตาราง
  * ทั้งที่มันเป็นลำดับขั้น อ่านแล้วไม่รู้ว่าตอนนี้ค้างอยู่ตรงไหน */
 function stepsOf(p: EmployeeProgressPeriod): Array<{ key: string; label: string; icon: string; state: StepState; at: string | null }> {
-  const submitted = Boolean(p.timesheetId);
+  // p.timesheetId ยังเป็น null ได้ทั้งที่ส่งไปแล้วจริง — พนักงานส่งไฟล์ผ่าน "ส่งผ่านระบบ" สร้างแค่คิวอ่าน
+  // (ai_reads) ไม่สร้างแถว timesheets ทันที (ดู dashboardService.ts's employeeProgress()) ต้องเช็ค
+  // timesheetStatus === 'submitted' ควบคู่ไปด้วย ไม่งั้นขั้น "ส่ง Timesheet" จะค้างโชว์ว่ายังไม่เสร็จ
+  const submitted = Boolean(p.timesheetId) || p.timesheetStatus === 'submitted';
   const rejected = p.timesheetStatus === 'rejected';
   const mismatch = p.timesheetStatus === 'mismatch';
   const checked = Boolean(p.checkedAt) || p.billed;
