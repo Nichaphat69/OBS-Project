@@ -3,16 +3,15 @@
 import { useState } from 'react';
 import OverviewTab from './OverviewTab';
 import UsersTab from './UsersTab';
-import NotificationRecipientsTab from './NotificationRecipientsTab';
 import AuditLogTab from './AuditLogTab';
 import EmailDomainsTab from './EmailDomainsTab';
 import ApiActivityLogTab from './ApiActivityLogTab';
 import { TabStrip } from '../../../components/ui';
 
+// แท็บ "ผู้รับแจ้งเตือน" เดิม ยุบรวมเข้า "ผู้ใช้" ไปแล้วทั้งหมด (25 ก.ย. 69 ตามที่ขอ) — ดู UsersTab.tsx
 const TABS = [
   { key: 'overview', label: 'ภาพรวม' },
   { key: 'users', label: 'ผู้ใช้' },
-  { key: 'recipients', label: 'ผู้รับแจ้งเตือน' },
   { key: 'auditLog', label: 'บันทึกระบบ' },
   { key: 'domains', label: 'โดเมนอีเมล' },
   { key: 'apiActivityLog', label: 'API Activity Log' },
@@ -27,7 +26,6 @@ export default function AdminTabs({ currentUsername }: { currentUsername: string
 
       {tab === 'overview' && <OverviewTab />}
       {tab === 'users' && <UsersTab currentUsername={currentUsername} />}
-      {tab === 'recipients' && <NotificationRecipientsTab />}
       {tab === 'auditLog' && <AuditLogTab />}
       {tab === 'domains' && <EmailDomainsTab />}
       {tab === 'apiActivityLog' && <ApiActivityLogTab />}

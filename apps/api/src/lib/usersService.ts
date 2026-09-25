@@ -37,6 +37,12 @@ export interface UserRow {
   selfRegistered: boolean;
   active: boolean;
   createdAt: string;
+  /** ผูก LINE แล้วหรือยัง — เพิ่มทีหลัง (25 ก.ย. 69 ตามที่ขอ "ทุก role ต้องแสดงสถานะด้วยว่าคนนี้เชื่อม
+   * ต่อ line แล้ว") เดิมมีแยกอยู่แค่ในตาราง "ผู้รับแจ้งเตือน" และเห็นเฉพาะ admin/accounting เท่านั้น
+   * (listStaffLineStatus() ที่ notificationRecipientsService.ts) รวมเข้ามาที่นี่ให้ครบทุก role รวม
+   * role 'user' ด้วย — ⚠️ role 'user' ผูกไลน์ผ่าน Employee.lineUserId คนละคอลัมน์กับ admin/accounting/
+   * executive ที่ผูกที่ User.lineUserId เอง (ดู staffLineLinkService.ts vs employeeLineLinkService.ts) */
+  lineLinked: boolean;
 }
 
 /** ported from auth.js listUsers() — never returns salt/hash */
@@ -53,9 +59,32 @@ export async function listUsers(): Promise<UserRow[]> {
       selfRegistered: true,
       active: true,
       createdAt: true,
+      lineUserId: true,
     },
   });
-  return rows;
+
+  const employeeIds = rows.filter((r) => r.role === 'user' && r.employeeId).map((r) => r.employeeId!);
+  const employeeLineMap = new Map<string, boolean>();
+  if (employeeIds.length > 0) {
+    const employees = await prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      select: { id: true, lineUserId: true },
+    });
+    for (const e of employees) employeeLineMap.set(e.id, Boolean(e.lineUserId));
+  }
+
+  return rows.map((r) => ({
+    username: r.username,
+    nameTh: r.nameTh,
+    nameEn: r.nameEn,
+    role: r.role,
+    employeeId: r.employeeId,
+    email: r.email,
+    selfRegistered: r.selfRegistered,
+    active: r.active,
+    createdAt: r.createdAt,
+    lineLinked: r.role === 'user' ? (r.employeeId ? employeeLineMap.get(r.employeeId) ?? false : false) : Boolean(r.lineUserId),
+  }));
 }
 
 /** ported from auth.js createUser() — เพิ่ม nameEn (optional) ให้ครบเหมือน Employee (15 ก.ย. 69) */
@@ -114,6 +143,7 @@ export async function createUser({
     selfRegistered: user.selfRegistered,
     active: user.active,
     createdAt: user.createdAt,
+    lineLinked: false,
   };
 }
 

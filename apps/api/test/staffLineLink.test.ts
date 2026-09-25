@@ -13,7 +13,7 @@ import { processLineWebhook } from '../src/lib/lineWebhookService.js';
 import {
   startStaffLineLink, getStaffLineLinkStatus, unlinkStaffLine, linkStaffLineViaLogin, StaffLineLinkError,
 } from '../src/lib/staffLineLinkService.js';
-import { lineAdminTargets, lineApproverTargets, listStaffLineStatus } from '../src/lib/notificationRecipientsService.js';
+import { lineAdminTargets, lineApproverTargets } from '../src/lib/notificationRecipientsService.js';
 
 process.env.LINE_CHANNEL_ACCESS_TOKEN = '';
 process.env.LINE_CHANNEL_SECRET = '';
@@ -124,26 +124,6 @@ test('พิมพ์รหัสของบัญชี accounting → บอ�
     assert.deepEqual(await lineApproverTargets(), ['Uwebhook-acct-test']);
   } finally {
     await prisma.user.deleteMany({ where: { username: 'test-webhook-acct' } });
-  }
-});
-
-test('listStaffLineStatus โชว์เฉพาะ admin/accounting พร้อมสถานะผูกไลน์ที่ถูกต้อง', async () => {
-  await makeTestUser('test-status-admin', 'admin');
-  await makeTestUser('test-status-acct', 'accounting');
-  await makeTestUser('test-status-emp', 'user');
-  try {
-    await linkStaffLineViaLogin('test-status-admin', 'Ustatus-admin');
-
-    const rows = await listStaffLineStatus();
-    const admin = rows.find((r) => r.username === 'test-status-admin');
-    const acct = rows.find((r) => r.username === 'test-status-acct');
-    const emp = rows.find((r) => r.username === 'test-status-emp');
-
-    assert.equal(admin?.linked, true, 'ผูกแล้วต้องขึ้น linked');
-    assert.equal(acct?.linked, false, 'ยังไม่ผูก ต้องขึ้น linked=false ไม่ใช่หายไปจากลิสต์');
-    assert.equal(emp, undefined, 'role user ต้องไม่โผล่ในลิสต์นี้ — ผูกไลน์คนละกลไก มีหน้าของตัวเองแล้ว');
-  } finally {
-    await prisma.user.deleteMany({ where: { username: { in: ['test-status-admin', 'test-status-acct', 'test-status-emp'] } } });
   }
 });
 

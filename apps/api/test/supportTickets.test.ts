@@ -75,7 +75,7 @@ test('buildTicketCategoryFlex มีปุ่มครบ 4 หมวด เป�
   }
 });
 
-test('flow เต็ม: พิมพ์ "แจ้งปัญหา" → เลือกหมวด → พิมพ์รายละเอียด → สร้างตั๋ว + แจ้งฝ่ายบัญชี', async () => {
+test('flow เต็ม: พิมพ์ "แจ้งปัญหา" → เลือกหมวด → พิมพ์รายละเอียด → สร้างตั๋ว + แจ้ง admin', async () => {
   await prisma.employee.update({ where: { id: 'EMP-0042' }, data: { lineUserId: 'Uemployee-ticket-test' } });
   try {
     const line = new FakeLineClient();
@@ -129,7 +129,7 @@ test('flow เต็ม: พิมพ์ "แจ้งปัญหา" → เ�
     assert.match(line.replies[1].text, /แจ้งปัญหาเรียบร้อย/);
     assert.ok(line.replies[1].quickReply, 'ตั๋วถูกสร้างแล้ว กลับมาแตะปุ่มลัดได้ตามปกติ');
 
-    assert.equal(line.broadcasts.length, 1, 'ต้องแจ้งฝ่ายบัญชีผ่าน pushToAll หนึ่งครั้ง');
+    assert.equal(line.broadcasts.length, 1, 'ต้องแจ้ง admin ผ่าน pushToAll หนึ่งครั้ง');
     const notifyText = JSON.stringify(line.broadcasts[0].messages);
     assert.ok(notifyText.includes('ระบบขึ้น error ตอนกดยืนยัน Timesheet'));
     assert.ok(notifyText.includes('พงศ์พันธ์ มามาก'));
@@ -175,6 +175,42 @@ test('flow เต็ม: พิมพ์ "แจ้งปัญหา" → เ�
       where: { id: 'EMP-0042' },
       data: { lineUserId: null, linePendingTicketCategory: null },
     });
+  }
+});
+
+/** 25 ก.ย. 69 ตามที่ขอ — เดิม submitSupportTicket() แจ้งไปที่ lineApproverTargets() (ฝ่ายบัญชี) ทั้งที่
+ * คนที่มีสิทธิ์เปิด/ปิดตั๋วจริงมีแค่ admin (requireSuperAdmin) เทสต์นี้ยืนยันว่าตอนนี้แจ้งไปที่ admin
+ * โดยเฉพาะ ไม่ใช่บัญชี แม้ทั้งสอง role จะผูกไลน์ไว้พร้อมกันก็ตาม (ต้องแยกกันเด็ดขาด ไม่ใช่ fallback
+ * มาเจอกันโดยบังเอิญเหมือนตอนไม่มีใครผูกเลย) */
+test('แจ้งปัญหาใหม่ → ไปหา admin ที่ผูกไลน์ไว้ ไม่ใช่บัญชี แม้บัญชีจะผูกไลน์ไว้ด้วยก็ตาม', async () => {
+  const now = new Date().toISOString();
+  await prisma.user.create({
+    data: {
+      username: 'test-admin-ticket', nameTh: 'แอดมินทดสอบตั๋ว', role: 'admin', createdAt: now,
+      passwordSalt: 'x', passwordHash: 'x', lineUserId: 'Uadmin-ticket-target',
+    },
+  });
+  await prisma.user.create({
+    data: {
+      username: 'test-accounting-ticket', nameTh: 'บัญชีทดสอบตั๋ว', role: 'accounting', createdAt: now,
+      passwordSalt: 'x', passwordHash: 'x', lineUserId: 'Uaccounting-ticket-target',
+    },
+  });
+  const line = new FakeLineClient();
+  try {
+    await submitSupportTicket({
+      employeeId: 'EMP-0042',
+      employeeName: 'พงศ์พันธ์ มามาก',
+      category: 'bug',
+      description: 'ทดสอบว่าแจ้งไปหา admin',
+      actor: 'test',
+      client: line as any,
+    });
+    assert.equal(line.broadcasts.length, 1);
+    assert.deepEqual(line.broadcasts[0].list, ['Uadmin-ticket-target'], 'ต้องส่งหา admin เท่านั้น ไม่ใช่บัญชี');
+  } finally {
+    await prisma.user.deleteMany({ where: { username: { in: ['test-admin-ticket', 'test-accounting-ticket'] } } });
+    await prisma.supportTicket.deleteMany({ where: { employeeId: 'EMP-0042', description: 'ทดสอบว่าแจ้งไปหา admin' } });
   }
 });
 

@@ -65,25 +65,6 @@ export async function lineAdminTargets(): Promise<string[]> {
   return lineApproverTargets();
 }
 
-export interface StaffLineLinkRow {
-  username: string;
-  nameTh: string;
-  role: string;
-  linked: boolean;
-}
-
-/** "ใครเป็นใคร" สำหรับหน้าตั้งค่า "ผู้รับแจ้งเตือน" (24 ก.ย. 69 ตามที่ขอ — "จะได้รู้ว่าคนที่แอดไลน์มาเป็น
- * role อะไร") — เฉพาะ admin/accounting เท่านั้น (role 'user' ผูกไลน์ผ่าน Employee คนละกลไก มีหน้าของ
- * ตัวเองอยู่แล้วในหน้า "ข้อมูลหลัก → พนักงาน" ไม่ต้องมาปนกันตรงนี้) */
-export async function listStaffLineStatus(): Promise<StaffLineLinkRow[]> {
-  const users = await prisma.user.findMany({
-    where: { role: { in: ['admin', 'accounting'] } },
-    select: { username: true, nameTh: true, role: true, lineUserId: true },
-    orderBy: [{ role: 'asc' }, { username: 'asc' }],
-  });
-  return users.map((u) => ({ username: u.username, nameTh: u.nameTh, role: u.role, linked: Boolean(u.lineUserId) }));
-}
-
 /** ported from service.js notificationEmailTargets() — อีเมลปลายทางทุกคนที่บอกพนักงานให้ส่ง
  * Timesheet ไปเมื่อเลือก "ส่งผ่าน Email" */
 export async function notificationEmailTargets(): Promise<string[]> {

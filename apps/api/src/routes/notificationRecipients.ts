@@ -6,7 +6,6 @@ import {
   addNotificationRecipient,
   removeNotificationRecipient,
   listKnownLineUsers,
-  listStaffLineStatus,
   NotificationRecipientError,
 } from '../lib/notificationRecipientsService.js';
 
@@ -15,11 +14,6 @@ notificationRecipientsRouter.use(requireAuth, requireSuperAdmin);
 
 notificationRecipientsRouter.get('/', async (_req, res) => {
   res.json(await listNotificationRecipients());
-});
-
-/** "ใครเป็นใคร" — admin/accounting คนไหนผูกไลน์ตัวเองไว้แล้วบ้าง (24 ก.ย. 69 ตามที่ขอ) */
-notificationRecipientsRouter.get('/staff-line-status', async (_req, res) => {
-  res.json(await listStaffLineStatus());
 });
 
 notificationRecipientsRouter.post('/', async (req, res) => {

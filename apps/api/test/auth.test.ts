@@ -129,13 +129,41 @@ test('listUsers คืนทุกคน เรียงตาม username ไ�
   assert.ok(users.length >= 2);
   const nicha = users.find((u) => u.username === 'nicha')!;
   // ต้นฉบับคืน key แบบ snake_case ปนกับ camelCase (created_at/name_th/employee_id/self_registered +
-  // selfRegistered) — พอร์ตนี้คืน camelCase ล้วนตาม UserRow และเพิ่ม nameEn (Phase 5.4)
-  // ใจความที่เทสต์นี้คุมไว้เหมือนเดิมทุกประการ: ต้องไม่มี salt/hash หลุดออกมาเลย
+  // selfRegistered) — พอร์ตนี้คืน camelCase ล้วนตาม UserRow และเพิ่ม nameEn (Phase 5.4) และ lineLinked
+  // (25 ก.ย. 69 — สถานะผูก LINE ต่อคน) ใจความที่เทสต์นี้คุมไว้เหมือนเดิมทุกประการ: ต้องไม่มี
+  // salt/hash หลุดออกมาเลย
   assert.deepEqual(
     Object.keys(nicha).sort(),
-    ['active', 'createdAt', 'email', 'employeeId', 'nameEn', 'nameTh', 'role', 'selfRegistered', 'username'].sort(),
+    ['active', 'createdAt', 'email', 'employeeId', 'lineLinked', 'nameEn', 'nameTh', 'role', 'selfRegistered', 'username'].sort(),
   );
   assert.equal(nicha.active, true);
+  assert.equal(nicha.lineLinked, false, 'ยังไม่เคยผูกไลน์เลยในข้อมูลทดสอบ');
+});
+
+/** 25 ก.ย. 69 ตามที่ขอ — lineLinked ต้องอ่านคนละคอลัมน์กันตาม role: admin/accounting/executive
+ * ผูกที่ User.lineUserId เอง (staffLineLinkService.ts) ส่วน role 'user' ผูกผ่าน Employee.lineUserId
+ * ของพนักงานที่ตัวเองผูกไว้ (employeeLineLinkService.ts) คนละกลไกกันเด็ดขาด ห้ามอ่านสลับกัน */
+test('listUsers: lineLinked อ่านถูกคอลัมน์ตาม role — admin อ่านจาก User, พนักงานอ่านจาก Employee ที่ผูกไว้', async () => {
+  await prisma.user.update({ where: { username: 'admin@ipassion.co.th' }, data: { lineUserId: 'Uadmin-linked-test' } });
+
+  await prisma.employee.create({
+    data: { id: 'EMP-LINETEST', nameTh: 'พนักงานทดสอบผูกไลน์', invoicePosition: 'Tester', createdAt: new Date().toISOString(), lineUserId: 'Uemployee-linked-test' },
+  });
+  await createUser({ username: 'linked-employee-user', nameTh: 'ผู้ใช้ผูกพนักงานที่มีไลน์', password: 'longenough1', role: 'user', employeeId: 'EMP-LINETEST', actor: 'ทดสอบ' });
+  await prisma.employee.create({
+    data: { id: 'EMP-NOLINE', nameTh: 'พนักงานทดสอบไม่มีไลน์', invoicePosition: 'Tester', createdAt: new Date().toISOString() },
+  });
+  await createUser({ username: 'linked-employee-noline', nameTh: 'ผู้ใช้ผูกพนักงานที่ไม่มีไลน์', password: 'longenough1', role: 'user', employeeId: 'EMP-NOLINE', actor: 'ทดสอบ' });
+
+  try {
+    const users = await listUsers();
+    assert.equal(users.find((u) => u.username === 'admin@ipassion.co.th')!.lineLinked, true, 'admin ต้องอ่านจาก User.lineUserId ของตัวเอง');
+    assert.equal(users.find((u) => u.username === 'linked-employee-user')!.lineLinked, true, 'role user ต้องอ่านจาก Employee.lineUserId ของพนักงานที่ผูกไว้ ไม่ใช่ของ User เอง (ซึ่งเป็น null เสมอ)');
+    assert.equal(users.find((u) => u.username === 'linked-employee-noline')!.lineLinked, false, 'พนักงานที่ผูกไว้ยังไม่เคยผูกไลน์ → false');
+  } finally {
+    await prisma.user.deleteMany({ where: { username: { in: ['linked-employee-user', 'linked-employee-noline'] } } });
+    await prisma.employee.deleteMany({ where: { id: { in: ['EMP-LINETEST', 'EMP-NOLINE'] } } });
+  }
 });
 
 test('updateUserRole เปลี่ยน role ได้ และมีผลกับ login ครั้งต่อไปทันที', async () => {

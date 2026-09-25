@@ -6,7 +6,7 @@
 import { prisma } from '@obs/db';
 import { logAudit } from './audit.js';
 import { LineClient, TICKET_CATEGORIES, buildTicketNotifyFlex } from './lineClient.js';
-import { lineApproverTargets } from './notificationRecipientsService.js';
+import { lineAdminTargets } from './notificationRecipientsService.js';
 
 export class SupportTicketError extends Error {
   status: number;
@@ -119,7 +119,12 @@ export async function startSupportTicket(employeeId: string, category: string) {
 }
 
 /** ported from service.js submitSupportTicket() — สร้างตั๋วจริงจากข้อความรายละเอียดที่พิมพ์ตามหลังการ
- * เลือกหมวด แล้วแจ้งฝ่ายบัญชี/admin ผ่าน LINE (ห่อ try/catch เพราะเป็นงานเสริม พังได้ก็แค่ log)
+ * เลือกหมวด แล้วแจ้ง admin ผ่าน LINE (ห่อ try/catch เพราะเป็นงานเสริม พังได้ก็แค่ log)
+ *
+ * ⚠️ เดิมแจ้งไปที่ lineApproverTargets() (ฝ่ายบัญชี) แต่คนที่มีสิทธิ์เปิดดู/ปิดตั๋วจริงในหน้า "จัดการ
+ * ระบบ" มีแค่ admin เท่านั้น (requireSuperAdmin ที่ routes/supportTickets.ts) บัญชีเห็นแจ้งเตือนแต่ทำ
+ * อะไรกับมันไม่ได้เลย — แก้ให้ตรงกับ role จริงที่รับผิดชอบ (เจ้าของระบบยืนยัน 25 ก.ย. 69: admin รับ
+ * แจ้งปัญหา/help/feedback, บัญชีรับแค่ตรวจ Manday/ขออนุมัติวางบิล ไม่ปนกัน)
  *
  * `attachments`/`pageContext`/`actor` เพิ่มทีหลัง (24 ก.ย. 69 — แจ้งปัญหาจากหน้าเว็บ แนบรูปได้ ต่างจาก
  * ทาง LINE เดิมที่พิมพ์ข้อความล้วนๆ) เว้นว่างได้ทั้งหมด ไม่กระทบเส้น LINE เดิมที่ไม่เคยส่งพวกนี้มาเลย —
@@ -171,7 +176,7 @@ export async function submitSupportTicket({
       description,
       ticketId: ticket.id,
     });
-    const targets = await lineApproverTargets();
+    const targets = await lineAdminTargets();
     await line.pushToAll(targets, [{ type: 'flex', altText: `แจ้งปัญหาใหม่จาก${employeeName}`, contents: flex }]);
   } catch (error: any) {
     await logAudit({ actor: 'system', action: 'notify_support_ticket_error', entityType: 'support_ticket', entityId: String(ticket.id), detail: { message: error.message } });
