@@ -70,7 +70,9 @@ const NAV: NavGroup[] = [
       // (ผูกไลน์คนละคอลัมน์กันในฐานข้อมูล ดู staffLineLinkService.ts) ไม่จำกัด role เลย — executive
       // เห็นได้ด้วยแต่ไม่มีประโยชน์อะไร (ไม่มีแจ้งเตือนอะไรผูกกับ role นี้) ปล่อยผ่านไว้เฉยๆ ไม่คุ้มเขียน
       // เงื่อนไขแยกอีกเส้นเพื่อกันแค่ role เดียว
-      { href: '/my-line-link', label: 'เชื่อมต่อ LINE', icon: 'bell' },
+      // ไอคอนเดิม 'bell' ซ้ำกับเมนู "การแจ้งเตือน" ด้านบน แยกไม่ออกในแถบเมนู (เจ้าของระบบชี้ 25 ก.ย. 69)
+      // เปลี่ยนเป็น 'link' (โซ่เชื่อมสองห่วง) สื่อถึง "เชื่อมต่อบัญชี" ตรงตัวกว่า
+      { href: '/my-line-link', label: 'เชื่อมต่อ LINE', icon: 'link' },
       // ใหม่ (24 ก.ย. 69 ตามที่ขอ) — แจ้งปัญหาจากเว็บได้เอง แนบรูปได้ ต่างจากทาง LINE เดิม (พิมพ์ข้อความ
       // ล้วนๆ) ที่ยังใช้ได้อยู่เหมือนเดิมคู่ขนานกัน จำกัดแค่ role 'user' เพราะ SupportTicket ผูกกับ
       // employeeId ตรงๆ (admin/accounting ไม่มี employeeId ของตัวเอง)
@@ -386,6 +388,7 @@ export function AppShell({
           </button>
           {whoOpen && (
             <div
+              className="whomenu"
               style={{
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
