@@ -3351,6 +3351,11 @@ td .nm {
 .note.wn svg.i { color: var(--wn); }
 .note.cr { background: var(--crb); }
 .note.cr svg.i { color: var(--cr); }
+.note.ok { background: var(--okb); }
+.note.ok svg.i { color: var(--ok); }
+/* ปุ่มจริงในกล่อง .note — เดิมเป็นลิงก์ข้อความเปล่าๆ ต่อท้ายบรรทัด มองไม่ออกว่ากดได้ (เจ้าของระบบชี้
+   25 ก.ย. 69) .note จัดเนื้อในเป็น inline ปุ่มจึงต้องประกาศตัวเองเป็น inline-flex + เว้นบนเอง */
+.note .notebtn { display: inline-flex; margin-top: 8px; text-decoration: none; }
 
 .loading { padding: 60px; text-align: center; color: var(--mut); font-size: 13px; }
 

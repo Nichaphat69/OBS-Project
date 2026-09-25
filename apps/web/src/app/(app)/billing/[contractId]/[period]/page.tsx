@@ -413,15 +413,15 @@ export default function CycleDetailPage() {
                     </div>
                     {gmailDraftError && <div style={{ color: 'var(--cr)', marginBottom: 10 }}>{gmailDraftError}</div>}
                     {gmailDraftResult && (
-                      <div className="note" style={{ marginBottom: 14 }}>
+                      <div className="note ok" style={{ marginBottom: 14 }}>
                         <Icon name="chk" />
                         <span>
                           <strong>{tx('สร้างร่างในกล่อง Drafts แล้ว')}</strong>
                           <br />
                           {gmailDraftResult.note ?? `${tx('แนบไฟล์แล้ว')} ${gmailDraftResult.attachmentCount} ${tx('ไฟล์')}`}
                           <br />
-                          <a href={gmailDraftResult.url} target="_blank" rel="noreferrer">
-                            {tx('เปิดร่างใน Gmail')} →
+                          <a className="btn sm pri notebtn" href={gmailDraftResult.url} target="_blank" rel="noreferrer">
+                            <Icon name="mail" className="sm" /> {tx('เปิดร่างใน Gmail')}
                           </a>
                         </span>
                       </div>
