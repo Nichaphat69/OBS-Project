@@ -132,12 +132,6 @@ export default function CycleDetailPage() {
   const [creatingGmailDraft, setCreatingGmailDraft] = useState(false);
   const [gmailDraftError, setGmailDraftError] = useState<string | null>(null);
   const [gmailDraftResult, setGmailDraftResult] = useState<{ url: string; to: string; note?: string; attachmentCount: number } | null>(null);
-  const [tab, setTab] = useState<1 | 2>(1);
-  // ซ่อนแท็บ "Payload ที่จะยิงเข้า FlowAccount" จาก role accounting — เป็น JSON ดิบเชิงเทคนิคไว้ไล่ปัญหา
-  // ของฝั่งพัฒนา ไม่ใช่ข้อมูลที่ฝ่ายบัญชีต้องใช้ทำงานประจำวัน (เจ้าของระบบสั่งซ้ำ 25 ก.ย. 69 "ซ่อน
-  // metadata ... ออกจากมุมมอง user") เหลือไว้เฉพาะ admin — หน้านี้เดิมเข้าได้ทั้ง admin/accounting
-  // อยู่แล้ว (ดู requireAdmin ฝั่ง API) จึงต้องรู้ role เองฝั่ง client ผ่าน /api/auth/me
-  const [role, setRole] = useState<string | null>(null);
 
   function load() {
     fetch(`/api/cycles/${params.contractId}/${params.period}`, { cache: 'no-store' })
@@ -150,16 +144,13 @@ export default function CycleDetailPage() {
 
   useEffect(load, [params.contractId, params.period]);
 
+  /* payload ที่จะยิงเข้า FlowAccount เคยโชว์เป็นแท็บ JSON ดิบบนหน้านี้ — เอาออกจากหน้าจอทั้งหมด
+     (เจ้าของระบบสั่ง 25 ก.ย. 69 "ไม่ต้องแสดงในระบบเลย เปลี่ยนเป็น console F12 ถึงจะดูได้") เป็นข้อมูล
+     เชิงเทคนิคไว้ไล่ปัญหาฝั่งพัฒนา ไม่ใช่สิ่งที่คนทำบิลต้องเห็น ยังพิมพ์ลง console ไว้ให้เปิด DevTools
+     ดูได้ตอนต้องเทียบชื่อฟิลด์กับ API docs */
   useEffect(() => {
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const r = d?.user?.role ?? null;
-        setRole(r);
-        if (r !== 'admin') setTab(2);
-      })
-      .catch(() => {});
-  }, []);
+    if (data?.invoice?.payload) console.log('[OBS] FlowAccount payload', data.invoice.payload);
+  }, [data]);
 
   async function doApprove() {
     setApproving(true);
@@ -332,7 +323,7 @@ export default function CycleDetailPage() {
       ) : (
         <>
           <div className="split2">
-            {/* ซ้าย: รายการในรอบบิล — แยกตามพนักงาน + tabs FlowAccount payload / ร่างอีเมล */}
+            {/* ซ้าย: รายการในรอบบิล — แยกตามพนักงาน + ร่างอีเมลวางบิล */}
             <div>
               <Card title={tx('รายการในรอบบิล')} flush>
                 <div className="cardgrid" style={{ gridTemplateColumns: '1fr' }}>
@@ -406,26 +397,7 @@ export default function CycleDetailPage() {
                 </div>
               </Card>
 
-              {role === 'admin' && (
-                <div className="tabs" role="tablist">
-                  <button className={`tab ${tab === 1 ? 'on' : ''}`} onClick={() => setTab(1)}>
-                    {tx('ข้อมูลที่ส่งเข้า FlowAccount')}
-                  </button>
-                  <button className={`tab ${tab === 2 ? 'on' : ''}`} onClick={() => setTab(2)}>
-                    {tx('ร่างอีเมล')}
-                  </button>
-                </div>
-              )}
-
-              {role === 'admin' && (
-                <div className={`tp ${tab === 1 ? 'on' : ''}`}>
-                  <Card title={tx('Payload ที่จะยิงเข้า API')} right={tx('ต้องเทียบชื่อฟิลด์กับ API docs ก่อนใช้จริง')}>
-                    <pre className="code">{JSON.stringify(inv.payload, null, 2)}</pre>
-                  </Card>
-                </div>
-              )}
-
-              <div className={`tp ${role !== 'admin' || tab === 2 ? 'on' : ''}`}>
+              <div className="tp on">
                 {data.emailDraft && (
                   <Card title={tx('ร่างอีเมลวางบิล')}>
                     <div className="mailacts">
