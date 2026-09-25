@@ -318,6 +318,29 @@ export default function CustomersContractsTab() {
     }
   }
 
+  async function deleteOrphanCustomer(customer: CustomerWithoutContract) {
+    const ok = await confirm({
+      iconName: 'trash-solid',
+      danger: true,
+      title: tx('ลบลูกค้ารายนี้?'),
+      message: `"${customer.nameTh}" ${tx('จะถูกลบถาวร — กู้คืนไม่ได้ (ลบได้เพราะยังไม่มีสัญญาผูกอยู่)')}`,
+      confirmLabel: tx('ลบ'),
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(customer.id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data?.error ?? tx('ลบไม่สำเร็จ'), true);
+        return;
+      }
+      toast(tx('ลบลูกค้าแล้ว'));
+      load();
+    } catch {
+      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
+    }
+  }
+
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!contracts)
     return (
@@ -374,9 +397,19 @@ export default function CustomersContractsTab() {
                           <b>{o.nameTh}</b>
                           <span>{tx('เลขผู้เสียภาษี')} {o.taxId}</span>
                         </div>
-                        <button className="btn pri sm" onClick={() => setAddContractForCustomerId(o.id)}>
-                          {tx('เพิ่มสัญญา')}
-                        </button>
+                        <div className="rowacts">
+                          <button className="btn pri sm" onClick={() => setAddContractForCustomerId(o.id)}>
+                            {tx('เพิ่มสัญญา')}
+                          </button>
+                          <button
+                            className="btn sm icon dgr"
+                            title={tx('ลบลูกค้ารายนี้')}
+                            aria-label={tx('ลบ')}
+                            onClick={() => deleteOrphanCustomer(o)}
+                          >
+                            <Icon name="trash" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

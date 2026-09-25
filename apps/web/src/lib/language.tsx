@@ -978,6 +978,11 @@ const TX: Record<string, string> = {
   'และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้ (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยวางบิลไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)':
     'and every employee/timesheet under this contract will be permanently deleted — this cannot be undone (only contracts with no invoices at all can be deleted; if even one invoice was billed, the system will refuse to delete it)',
   ลบสัญญาแล้ว: 'Contract deleted',
+  'ลบลูกค้ารายนี้?': 'Delete this customer?',
+  'จะถูกลบถาวร — กู้คืนไม่ได้ (ลบได้เพราะยังไม่มีสัญญาผูกอยู่)':
+    'will be permanently deleted — this cannot be undone (deletable because no contract is linked to it yet)',
+  ลบลูกค้าแล้ว: 'Customer deleted',
+  ลบลูกค้ารายนี้: 'Delete this customer',
   เพิ่มลูกค้าใหม่: 'Add new customer',
   'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ': 'Currently active — deactivating it won’t automatically activate another company',
   'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)': 'Inactive — activate to have the system work with this company (any other active company is automatically deactivated)',

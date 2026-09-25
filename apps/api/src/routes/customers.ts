@@ -7,6 +7,7 @@ import {
   setCustomerEmailDomain,
   claimCustomerEmailDomain,
   createCustomer,
+  deleteCustomer,
   CustomerActionError,
 } from '../lib/customersService.js';
 
@@ -28,6 +29,16 @@ customersRouter.get('/without-contract', requireNotUser, async (_req, res) => {
 customersRouter.post('/', requireAdmin, async (req, res) => {
   try {
     res.json(await createCustomer({ ...req.body, actor: req.user!.nameTh }));
+  } catch (error) {
+    if (error instanceof CustomerActionError) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+});
+
+/** ใหม่ — ลบลูกค้าที่ยังไม่มีสัญญา (ดู deleteCustomer) ใช้เคลียร์รายที่สร้างค้างไว้/สร้างซ้ำ */
+customersRouter.delete('/:id', requireAdmin, async (req, res) => {
+  try {
+    res.json(await deleteCustomer(req.params.id, { actor: req.user!.nameTh }));
   } catch (error) {
     if (error instanceof CustomerActionError) return res.status(error.status).json({ error: error.message });
     throw error;

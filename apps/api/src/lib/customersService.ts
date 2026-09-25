@@ -77,6 +77,20 @@ export async function createCustomer({
 }): Promise<Customer> {
   if (!nameTh || !taxId) throw new CustomerActionError('ต้องระบุชื่อบริษัทและเลขผู้เสียภาษีให้ครบ');
 
+  /* กันสร้างลูกค้าซ้ำ (25 ก.ย. 69) — เดิมไม่เช็คอะไรเลย กดเพิ่มบริษัทเดิมกี่ครั้งก็ได้แถวใหม่ทุกครั้ง
+     จนรายการ "ลูกค้าที่ยังไม่มีสัญญา" มีชื่อเดียวกันซ้อนกันหลายแถว (เจอจริงในระบบ: CP Axtra 2 แถว,
+     KMUTNB 2 แถว) เทียบด้วยเลขผู้เสียภาษี + สาขา ไม่ใช่เลขผู้เสียภาษีอย่างเดียว เพราะนิติบุคคลเดียวกัน
+     มีได้หลายสาขาจริงๆ และแต่ละสาขาออกบิลแยกใบกัน — ไม่ได้ตั้ง unique ที่ระดับฐานข้อมูลเพราะข้อมูลซ้ำ
+     ที่ค้างอยู่ตอนนี้จะทำให้ migration รันไม่ผ่าน ต้องเคลียร์ของเดิมให้หมดก่อนถึงจะตั้งได้ */
+  const branchName = branch ?? 'สำนักงานใหญ่';
+  const duplicate = await prisma.customer.findFirst({ where: { taxId, branch: branchName } });
+  if (duplicate) {
+    throw new CustomerActionError(
+      `มีลูกค้าเลขผู้เสียภาษี ${taxId} (${branchName}) อยู่แล้วคือ "${duplicate.nameTh}" — เพิ่มสัญญาให้รายเดิมแทนการสร้างใหม่`,
+      409,
+    );
+  }
+
   const id = await nextId('CUS');
   const row = await prisma.customer.create({
     data: {
@@ -107,6 +121,38 @@ export async function listCustomersWithoutContract(): Promise<Customer[]> {
     where: { contracts: { none: {} } },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+/** ลบลูกค้าที่ยังไม่มีสัญญาทิ้ง (25 ก.ย. 69) — เดิมไม่มีทางลบเลย ลูกค้าที่สร้างค้างไว้ (กรอกชื่อ+เลข
+ * ผู้เสียภาษีแล้วไม่ได้เพิ่มสัญญาต่อ) หรือที่สร้างซ้ำ จึงค้างในรายการ "ลูกค้าที่ยังไม่มีสัญญา" ถาวร
+ *
+ * ลบได้เฉพาะรายที่ไม่มีสัญญาเท่านั้น — มีสัญญาแล้วแปลว่ามี Timesheet/ใบแจ้งหนี้ห้อยอยู่ข้างหลังได้
+ * ต้องไปปิดสัญญาก่อน ไม่ใช่ลบลูกค้าทิ้งทั้งราย วันหยุดเฉพาะของลูกค้ารายนั้นลบไปพร้อมกันในทรานแซกชัน
+ * เดียว (ไม่มีลูกค้าแล้วปฏิทินเฉพาะรายก็ไม่มีความหมาย และถ้าเหลือไว้ foreign key จะบล็อกการลบ) */
+export async function deleteCustomer(customerId: string, { actor }: { actor: string }): Promise<{ ok: true }> {
+  const customer = await getCustomerOrThrow(customerId);
+
+  const contracts = await prisma.contract.count({ where: { customerId } });
+  if (contracts > 0) {
+    throw new CustomerActionError(
+      `"${customer.nameTh}" มีสัญญาอยู่ ${contracts} ฉบับ — ลบลูกค้าไม่ได้ ต้องลบสัญญาให้หมดก่อน`,
+      409,
+    );
+  }
+
+  const holidays = await prisma.holiday.count({ where: { customerId } });
+  await prisma.$transaction([
+    prisma.holiday.deleteMany({ where: { customerId } }),
+    prisma.customer.delete({ where: { id: customerId } }),
+  ]);
+  await logAudit({
+    actor,
+    action: 'delete_customer',
+    entityType: 'customer',
+    entityId: customerId,
+    detail: { nameTh: customer.nameTh, taxId: customer.taxId, holidaysRemoved: holidays },
+  });
+  return { ok: true };
 }
 
 export async function listCustomerDomains(): Promise<CustomerDomainRow[]> {
