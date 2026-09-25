@@ -59,7 +59,10 @@ export interface EmployeeMasterRow {
   contractNo: string | null;
   customerName: string | null;
   nameAliases: Array<{ alias: string; source: string | null }>;
-  positionAliases: Array<{ alias: string; source: string | null }>;
+  /** true = สัญญานี้ผูกกับ FlowAccount แล้ว (customer.flowaccountContactId ตั้งไว้) — แก้ไข/นำออก
+   * พนักงานแถวนี้จากหน้า OBS ไม่ได้ ต้องใช้ปุ่ม "ซิงก์จาก FlowAccount" แทน (ดู
+   * assertAssignmentsNotFlowAccountLocked ด้านล่าง) */
+  flowaccountLocked: boolean;
 }
 
 /**
@@ -79,7 +82,6 @@ export async function listEmployeesFull({ contractId }: { contractId?: string } 
   const rows: EmployeeMasterRow[] = [];
   for (const e of employees) {
     const nameAliases = e.aliases.filter((a) => a.kind === 'name').map((a) => ({ alias: a.alias, source: a.source }));
-    const positionAliases = e.aliases.filter((a) => a.kind === 'position').map((a) => ({ alias: a.alias, source: a.source }));
     const base = {
       id: e.id,
       nameTh: e.nameTh,
@@ -87,11 +89,10 @@ export async function listEmployeesFull({ contractId }: { contractId?: string } 
       invoicePosition: e.invoicePosition,
       hrddEmployeeCode: e.hrddEmployeeCode,
       nameAliases,
-      positionAliases,
     };
 
     if (e.assignments.length === 0) {
-      rows.push({ ...base, assignmentId: null, contractId: null, monthlyRate: null, quotationNo: null, startDate: null, endDate: null, status: null, poNo: null, contractNo: null, customerName: null });
+      rows.push({ ...base, assignmentId: null, contractId: null, monthlyRate: null, quotationNo: null, startDate: null, endDate: null, status: null, poNo: null, contractNo: null, customerName: null, flowaccountLocked: false });
       continue;
     }
     for (const a of e.assignments) {
@@ -107,6 +108,7 @@ export async function listEmployeesFull({ contractId }: { contractId?: string } 
         poNo: a.contract.poNo,
         contractNo: a.contract.contractNo,
         customerName: a.contract.customer.nameTh,
+        flowaccountLocked: Boolean(a.contract.customer.flowaccountContactId),
       });
     }
   }
@@ -305,8 +307,14 @@ export async function updateEmployee({
     throw new EmployeeMasterError('ต้องระบุชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และช่วงวันที่ให้ครบ');
   }
   if (assignmentId) {
-    const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, employeeId } });
+    const assignment = await prisma.assignment.findFirst({
+      where: { id: assignmentId, employeeId },
+      include: { contract: { include: { customer: true } } },
+    });
     if (!assignment) throw new EmployeeMasterError('ไม่พบอัตราจ้างนี้', 404);
+    // แก้ไขพนักงาน/อัตราจ้างของสัญญาที่ผูก FlowAccount แล้วเองไม่ได้ เหมือน createEmployee()/
+    // removeAssignment() — ข้อมูลต้องยึดจากใบเสนอราคาใน FlowAccount เป็นหลักเท่านั้น (25 ก.ย. 69)
+    assertAssignmentsNotFlowAccountLocked(assignment.contract.customer.flowaccountContactId);
   }
 
   if (assignmentId) {
@@ -343,7 +351,8 @@ export async function removeAssignment(assignmentId: string, { actor }: { actor:
   return { ok: true };
 }
 
-/** ported from service.js addEmployeeAlias() — kind: 'name' (ชื่อ) หรือ 'position' (ตำแหน่ง) */
+/** ported from service.js addEmployeeAlias() — kind: 'name' (ชื่อ) เท่านั้น ("ตำแหน่งพ้อง"/kind:
+ * 'position' ถูกถอดออก 25 ก.ย. 69 — Clear Read อ่านตำแหน่งได้ตรงจากเอกสารอยู่แล้ว ไม่ต้องคอนฟิกล่วงหน้า) */
 export async function addEmployeeAlias({
   employeeId,
   kind,
@@ -357,7 +366,7 @@ export async function addEmployeeAlias({
   source?: string;
   actor: string;
 }): Promise<{ employeeId: string; employeeName: string; kind: string; alias: string }> {
-  if (!['name', 'position'].includes(kind)) throw new EmployeeMasterError("kind ต้องเป็น 'name' หรือ 'position'");
+  if (kind !== 'name') throw new EmployeeMasterError("kind ต้องเป็น 'name'");
   const clean = (alias ?? '').trim();
   if (!clean) throw new EmployeeMasterError('ต้องกรอกชื่อพ้อง');
 

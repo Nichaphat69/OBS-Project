@@ -144,6 +144,10 @@ export default function IconSprite() {
         <path d="M12 20h9" />
         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
       </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="5" y="11" width="14" height="10" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </symbol>
       <symbol id="i-money" viewBox="0 0 24 24">
         <rect x="2.5" y="6" width="19" height="12" rx="2" />
         <circle cx="12" cy="12" r="2.6" />

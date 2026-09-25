@@ -8,7 +8,7 @@
  *   the ingest pipeline in `ingestService.ts`, just not surfaced as its own report here).
  */
 import { prisma } from '@obs/db';
-import { SEVERITY, calculateManday, thaiMonth, thaiDate } from '@obs/domain';
+import { SEVERITY, calculateManday, thaiMonth, thaiDate, round2 } from '@obs/domain';
 import { checkStamp, getCycleStatus, type CheckStamp } from './dashboardService.js';
 import { logAudit } from './audit.js';
 import { holidayMap } from './masterData.js';
@@ -511,4 +511,78 @@ export async function recomputeTimesheet(id: string, { actor = 'system' }: { act
   });
 
   return { ...manday, ok, status };
+}
+
+export interface TimesheetEstimate {
+  monthlyRate: number;
+  leaveCount: number;
+  dailyRate: number;
+  discount: number;
+  subtotal: number;
+  vatRate: number;
+  vat: number;
+  whtRate: number;
+  withholdingTax: number;
+  paymentAmount: number;
+}
+
+/**
+ * ยอดประมาณของ Timesheet ใบเดียวก่อนกดยืนยัน (การ์ดตรวจสอบหน้าอัปโหลด) — คิดด้วยสูตรเดียวกับของจริงทุกขั้น
+ * (25 ก.ย. 69 — เดิมการ์ดคิดหัก ณ ที่จ่ายจากเรทรายเดือนดิบๆ ไม่หักวันลา ไม่รวม VAT จนต้องมีหมายเหตุ "ยอดประมาณ
+ * ... ยังไม่หักวันลาและยังไม่รวม VAT" ตัวเลขไม่ตรงกับใบแจ้งหนี้จริง): ส่วนลดวันลาจาก calculateManday() ด้วย
+ * วันหยุด/ตัวหารของสัญญานี้ แล้วต่อด้วยลำดับเดียวกับ buildInvoice() (VAT และหัก ณ ที่จ่ายคิดจากยอดหลังหักส่วนลด
+ * หัก ณ ที่จ่ายปัดเรตเป็น % เต็ม) ไม่รวม OT เพราะการ์ดนี้ไม่มีข้อมูล OT
+ */
+export async function estimateTimesheetAmount({
+  contractId,
+  employeeId,
+  period,
+  leaveDays,
+  whtRate,
+}: {
+  contractId: string;
+  employeeId: string;
+  period: string;
+  leaveDays: Array<{ date: string; type: string; hours?: number | null }>;
+  whtRate?: number | null;
+}): Promise<TimesheetEstimate | null> {
+  if (!/^\d{4}-\d{2}$/.test(period)) return null;
+  const assignment = await prisma.assignment.findUnique({
+    where: { contractId_employeeId: { contractId, employeeId } },
+    include: { contract: true },
+  });
+  if (!assignment) return null;
+
+  const manday = calculateManday({
+    period,
+    monthlyRate: assignment.monthlyRate,
+    reportedWorkDays: 0,
+    // เอาเฉพาะวันลาที่อยู่ในรอบนี้จริงและกรอกวันที่แล้ว — แถวที่ยังพิมพ์ไม่เสร็จไม่ควรทำให้ยอดเพี้ยน
+    leaveDays: leaveDays
+      .filter((l) => typeof l.date === 'string' && l.date.startsWith(`${period}-`))
+      .map((l) => ({ date: l.date, type: l.type as any, hours: l.hours ?? null })),
+    holidays: await holidayMap(assignment.contract.customerId),
+    divisor: { mode: assignment.contract.divisorMode as any, value: assignment.contract.divisorValue },
+  });
+
+  const subtotal = round2(assignment.monthlyRate - manday.discount);
+  const vatRate = assignment.contract.vatRate;
+  const vat = round2(subtotal * vatRate);
+  // ปัดเป็น % เต็มเหมือน buildInvoice() เป๊ะๆ — ยอดที่โชว์ในการ์ดตรวจต้องเท่ากับใบแจ้งหนี้จริงเสมอ สัญญา
+  // เก็บเรตละเอียดถึง 0.25% ได้ (25 ก.ย. 69) แต่ FlowAccount ยังออกเอกสารด้วย % เต็ม การปัดจึงอยู่ที่ชั้น
+  // คำนวณสองจุดนี้ ไม่ใช่ชั้นเก็บข้อมูล — ดู pctRound ใน apps/web ReviewCard.tsx ที่เตือนผู้ใช้เรื่องนี้
+  const wht = Math.round((whtRate ?? assignment.contract.whtRate) * 100) / 100;
+  const withholdingTax = round2(subtotal * wht);
+  return {
+    monthlyRate: assignment.monthlyRate,
+    leaveCount: manday.leaveCount,
+    dailyRate: manday.dailyRate,
+    discount: manday.discount,
+    subtotal,
+    vatRate,
+    vat,
+    whtRate: wht,
+    withholdingTax,
+    paymentAmount: round2(subtotal + vat - withholdingTax),
+  };
 }

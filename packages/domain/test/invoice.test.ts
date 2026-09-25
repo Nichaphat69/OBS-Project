@@ -31,7 +31,6 @@ const DEV: MatchableEmployee & { nameTh: string; invoicePosition: string; monthl
   nameEn: 'Pongpun Mamak',
   aliases: ['Pongpun Mamark', 'พงษ์พันธ์ มามาก'],
   invoicePosition: 'Developer',
-  positionAliases: ['Dev', 'Java Programmer'],
   monthlyRate: 52943.93,
   quotationNo: 'QT2025120005',
 };
@@ -42,7 +41,6 @@ const PM: MatchableEmployee & { nameTh: string; invoicePosition: string; monthly
   nameEn: 'Sunee Maneekasemsuk',
   aliases: ['Sunee Maneekasemsook'],
   invoicePosition: 'Senior Project Manager',
-  positionAliases: ['PM', 'Senior PM'],
   monthlyRate: 123420.0,
   quotationNo: 'QT2025110015',
 };
@@ -349,10 +347,10 @@ test('จับคู่ชื่อได้ทั้งไทย อังก�
   assert.equal(none.employee, null);
 });
 
-test('ตำแหน่งจาก Timesheet ยอมรับได้ผ่านชื่อพ้อง', () => {
-  assert.ok(checkPosition('Java Programmer', DEV).ok, 'อยู่ในชื่อพ้อง');
-  assert.ok(checkPosition('Dev', DEV).ok, 'ชื่อในใบว่าจ้าง');
+test('ตำแหน่งจาก Timesheet ต้องตรงกับตำแหน่งบนใบแจ้งหนี้เท่านั้น (ตำแหน่งพ้องถูกถอดออก 25 ก.ย. 69)', () => {
   assert.ok(checkPosition('Developer', DEV).ok, 'ชื่อบนใบแจ้งหนี้');
+  assert.equal(checkPosition('Java Programmer', DEV).ok, false, 'ไม่มีตำแหน่งพ้องให้เทียบอีกต่อไป');
+  assert.equal(checkPosition('Dev', DEV).ok, false, 'ไม่มีตำแหน่งพ้องให้เทียบอีกต่อไป');
   assert.equal(checkPosition('Business Analyst', DEV).ok, false);
 });
 

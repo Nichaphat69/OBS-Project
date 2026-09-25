@@ -3129,6 +3129,11 @@ td .nm {
   font-size: 18px;
   font-weight: 800;
 }
+.wht-sum .r.sub-tot {
+  border-top: 1px dashed var(--rule);
+  padding-top: 8px;
+  font-weight: 600;
+}
 .wht-sum .note {
   font-size: 12px;
   color: var(--mut);

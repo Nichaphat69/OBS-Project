@@ -19,7 +19,6 @@ export interface MatchableEmployee {
   nameEn?: string | null;
   aliases?: string[];
   invoicePosition?: string | null;
-  positionAliases?: string[];
   monthlyRate?: number | null;
   quotationNo?: string | null;
 }
@@ -169,6 +168,9 @@ export interface PositionCheckResult {
 /**
  * ตำแหน่งใน Timesheet ตรงกับตำแหน่งของพนักงานคนนั้นหรือไม่
  * ผลลัพธ์เป็นเพียงคำเตือน — ตำแหน่งบนใบแจ้งหนี้ใช้ค่าจากฐานข้อมูลอยู่แล้ว
+ *
+ * เดิมเทียบกับ "ตำแหน่งพ้อง" ที่ตั้งค่าไว้ล่วงหน้าด้วย (feature ถูกถอดออก 25 ก.ย. 69 — Clear Read
+ * อ่านตำแหน่งได้ตรงจากเอกสารอยู่แล้ว ไม่ต้องมาคอนฟิกล่วงหน้าอีกชั้น) เทียบกับ invoicePosition ตรงๆ พอ
  */
 export function checkPosition(
   rawPosition: string | null | undefined,
@@ -177,9 +179,7 @@ export function checkPosition(
   const target = normalizeName(rawPosition);
   if (!target) return { ok: true, reason: 'Timesheet ไม่ได้ระบุตำแหน่ง' };
 
-  const known = [employee.invoicePosition, ...(employee.positionAliases ?? [])]
-    .filter((v): v is string => Boolean(v))
-    .map(normalizeName);
+  const known = [employee.invoicePosition].filter((v): v is string => Boolean(v)).map(normalizeName);
 
   if (known.includes(target)) {
     return { ok: true, reason: 'ตรงกับตำแหน่งในฐานข้อมูล' };

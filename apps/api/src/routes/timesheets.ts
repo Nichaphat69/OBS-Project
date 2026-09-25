@@ -8,6 +8,7 @@ import {
   markTimesheetChecked,
   recomputeTimesheet,
   rejectTimesheet,
+  estimateTimesheetAmount,
   TimesheetActionError,
 } from '../lib/timesheetsService.js';
 import { enterTimesheetManually, IngestError } from '../lib/ingestService.js';
@@ -76,6 +77,24 @@ timesheetsRouter.post('/:id/reject', requireAdmin, async (req, res) => {
     }
     throw error;
   }
+});
+
+/** ยอดประมาณก่อนยืนยัน สำหรับการ์ดตรวจสอบหน้าอัปโหลด — ดู estimateTimesheetAmount() ใน timesheetsService.ts
+ * ข้อมูลเรท/ยอดเงินเป็นของฝ่ายบัญชี จึง requireAdmin เหมือนเส้นอื่นที่คืนยอดเงิน */
+timesheetsRouter.post('/estimate', requireAdmin, async (req, res) => {
+  const { contractId, employeeId, period, leaveDays, whtRate } = req.body ?? {};
+  if (typeof contractId !== 'string' || typeof employeeId !== 'string' || typeof period !== 'string') {
+    return res.status(400).json({ error: 'ต้องระบุ contractId, employeeId, period' });
+  }
+  const estimate = await estimateTimesheetAmount({
+    contractId,
+    employeeId,
+    period,
+    leaveDays: Array.isArray(leaveDays) ? leaveDays : [],
+    whtRate: typeof whtRate === 'number' ? whtRate : null,
+  });
+  if (!estimate) return res.status(404).json({ error: 'ไม่พบพนักงานคนนี้ในสัญญานี้ หรือรอบบิลไม่ถูกต้อง' });
+  res.json(estimate);
 });
 
 timesheetsRouter.post('/read', async (req, res) => {

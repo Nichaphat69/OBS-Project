@@ -53,7 +53,6 @@ export async function employeesForMatching(): Promise<MatchableEmployee[]> {
     nameEn: e.nameEn,
     aliases: e.aliases.filter((a) => a.kind === 'name').map((a) => a.alias),
     invoicePosition: e.invoicePosition,
-    positionAliases: e.aliases.filter((a) => a.kind === 'position').map((a) => a.alias),
     monthlyRate: e.assignments[0]?.monthlyRate ?? null,
     quotationNo: e.assignments[0]?.quotationNo ?? null,
   }));

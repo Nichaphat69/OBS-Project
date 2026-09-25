@@ -184,6 +184,7 @@ export async function submitOwnTimesheetFile({
 
   const pending = contractId && period ? await submittablePeriodFor(employeeId, contractId, period) : await pendingSubmissionFor(employeeId);
   if (!pending) throw new SubmitOwnFileError('ตอนนี้ไม่มีรอบบิลที่ต้องส่ง', 409);
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { nameTh: true } });
 
   const now = new Date().toISOString();
   const saved = await prisma.aiRead.create({
@@ -193,6 +194,8 @@ export async function submitOwnTimesheetFile({
       source: 'employee_submit',
       fileName: cleanName,
       employeeId,
+      // เก็บชื่อไว้ด้วย — ทุกจุดที่แสดงแถว ai_reads อ่านจาก employeeName (ดู listAiReads ใน aiReadsService.ts)
+      employeeName: employee?.nameTh ?? null,
       period: pending.period,
       fileBytes: bytes,
       readAt: now,

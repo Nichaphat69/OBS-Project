@@ -112,7 +112,10 @@ test('รับ Timesheet คนแรกของรอบ → บันทึ�
   assert.equal(result.created, true);
   assert.equal(result.employee!.id, 'EMP-0042', 'จับคู่ "Pongpun Mamak" ได้');
   assert.equal(f(result.matching).name.kind, 'exact');
-  assert.ok(f(result.matching).position.ok, '"Java Programmer" อยู่ในชื่อพ้องของตำแหน่ง');
+  // "ตำแหน่งพ้อง" ถูกถอดออก 25 ก.ย. 69 (Clear Read อ่านตำแหน่งได้ตรงจากเอกสารอยู่แล้ว) — 'Java Programmer'
+  // จึงไม่ตรงกับ 'Developer' ในฐานข้อมูลอีกต่อไป แต่เป็นเพียง "คำเตือน" ไม่ทำให้ใบนี้ตกสถานะ ดู checkPosition()
+  // ใน @obs/domain matching.ts และเทสต์คู่กันที่ packages/domain/test/invoice.test.ts
+  assert.equal(f(result.matching).position.ok, false, 'ไม่มีตำแหน่งพ้องให้เทียบอีกต่อไป');
 
   assert.equal(f(result.manday).standardWorkingDays, 20, 'ก.พ. 2026 มีวันทำงาน 20 วัน');
   assert.equal(f(result.manday).payableDays, 19);

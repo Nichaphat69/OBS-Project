@@ -28,7 +28,7 @@ interface EmployeeRow {
   contractNo: string | null;
   customerName: string | null;
   nameAliases: Alias[];
-  positionAliases: Alias[];
+  flowaccountLocked: boolean;
 }
 interface ActiveContract {
   id: string;
@@ -41,7 +41,7 @@ function money(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-type AliasEditState = { employeeId: string; kind: 'name' | 'position'; mode: 'add' | 'edit'; original?: string } | null;
+type AliasEditState = { employeeId: string; mode: 'add' | 'edit'; original?: string } | null;
 
 /** ported from public/app.js's renderMaster() tab 1 (พนักงาน & ชื่อพ้อง) + renderAliasCell()/
  * renderRateCell()/renderEmployeeAddForm()/renderEmployeeEditForm() — inline edit ของ React ใช้
@@ -88,7 +88,7 @@ export default function EmployeesTab() {
       const res = await fetch(`/api/employees/${encodeURIComponent(aliasEdit.employeeId)}/aliases`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kind: aliasEdit.kind, alias: clean }),
+        body: JSON.stringify({ kind: 'name', alias: clean }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -100,7 +100,7 @@ export default function EmployeesTab() {
       // ⚠️ ต้องเช็คผลของ DELETE ด้วย — เดิมทิ้งผลไปเฉยๆ ถ้าลบไม่สำเร็จ ผู้ใช้จะเห็นว่า "แก้ชื่อพ้องแล้ว"
       // ทั้งที่จริงกลายเป็น **เพิ่มชื่อพ้องซ้ำอีกตัว** โดยของเดิมยังอยู่ และไม่มีอะไรบอกเลย
       if (aliasEdit.mode === 'edit' && aliasEdit.original && aliasEdit.original !== clean) {
-        const delRes = await fetch(`/api/employees/${encodeURIComponent(aliasEdit.employeeId)}/aliases?kind=${encodeURIComponent(aliasEdit.kind)}&alias=${encodeURIComponent(aliasEdit.original)}`, { method: 'DELETE' });
+        const delRes = await fetch(`/api/employees/${encodeURIComponent(aliasEdit.employeeId)}/aliases?kind=name&alias=${encodeURIComponent(aliasEdit.original)}`, { method: 'DELETE' });
         if (!delRes.ok) {
           const delData = await delRes.json().catch(() => ({}));
           toast(delData?.error ?? `${tx('ลบชื่อพ้องเดิมไม่สำเร็จ — ตอนนี้มีทั้งของเดิมและของใหม่')} "${aliasEdit.original}"`, true);
@@ -114,17 +114,16 @@ export default function EmployeesTab() {
     }
   }
 
-  async function removeAlias(employeeId: string, kind: 'name' | 'position', alias: string) {
-    const label = tx(kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง');
+  async function removeAlias(employeeId: string, alias: string) {
     const ok = await confirm({
       iconName: 'trash-solid',
-      title: tx(kind === 'name' ? 'ลบชื่อพ้องนี้?' : 'ลบตำแหน่งพ้องนี้?'),
-      message: `"${alias}" ${tx(kind === 'name' ? 'จะหายไปจากรายการชื่อพ้อง' : 'จะหายไปจากรายการตำแหน่งพ้อง')}`,
+      title: tx('ลบชื่อพ้องนี้?'),
+      message: `"${alias}" ${tx('จะหายไปจากรายการชื่อพ้อง')}`,
       confirmLabel: tx('ลบ'),
     });
     if (!ok) return;
     try {
-      const res = await fetch(`/api/employees/${encodeURIComponent(employeeId)}/aliases?kind=${encodeURIComponent(kind)}&alias=${encodeURIComponent(alias)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/employees/${encodeURIComponent(employeeId)}/aliases?kind=name&alias=${encodeURIComponent(alias)}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
         toast(data?.error ?? tx('ลบไม่สำเร็จ'), true);
@@ -137,16 +136,16 @@ export default function EmployeesTab() {
     }
   }
 
-  function renderAliasCell(e: EmployeeRow, kind: 'name' | 'position', aliases: Alias[]) {
+  function renderAliasCell(e: EmployeeRow, aliases: Alias[]) {
     const editing = aliasEdit;
-    const addingHere = editing?.mode === 'add' && editing.employeeId === e.id && editing.kind === kind;
-    const label = tx(kind === 'name' ? 'ชื่อพ้อง' : 'ตำแหน่งพ้อง');
+    const addingHere = editing?.mode === 'add' && editing.employeeId === e.id;
+    const label = tx('ชื่อพ้อง');
 
     return (
       <>
         {aliases.length === 0 && !addingHere && <span className="sub">{tx('ไม่มี')}</span>}{' '}
         {aliases.map((a) => {
-          const editingThis = editing?.mode === 'edit' && editing.employeeId === e.id && editing.kind === kind && editing.original === a.alias;
+          const editingThis = editing?.mode === 'edit' && editing.employeeId === e.id && editing.original === a.alias;
           if (editingThis) {
             return (
               <span key={a.alias} className="tg alias editing">
@@ -171,14 +170,14 @@ export default function EmployeesTab() {
             );
           }
           return (
-            <span key={a.alias} className={`tg alias-${kind} alias aliastag`} title={`${a.source ?? ''} — ${tx('คลิกเพื่อแก้ไข')}`} onClick={() => { setAliasEdit({ employeeId: e.id, kind, mode: 'edit', original: a.alias }); setAliasValue(a.alias); }}>
+            <span key={a.alias} className="tg alias-name alias aliastag" title={`${a.source ?? ''} — ${tx('คลิกเพื่อแก้ไข')}`} onClick={() => { setAliasEdit({ employeeId: e.id, mode: 'edit', original: a.alias }); setAliasValue(a.alias); }}>
               {a.alias}
               <button
                 className="ax rm"
-                title={tx(kind === 'name' ? 'ลบชื่อพ้องนี้' : 'ลบตำแหน่งพ้องนี้')}
+                title={tx('ลบชื่อพ้องนี้')}
                 onClick={(ev) => {
                   ev.stopPropagation();
-                  removeAlias(e.id, kind, a.alias);
+                  removeAlias(e.id, a.alias);
                 }}
               >
                 ×
@@ -193,7 +192,7 @@ export default function EmployeesTab() {
                 type="text"
                 className="aliasInput"
                 autoFocus
-                placeholder={tx(kind === 'name' ? 'ชื่อพ้องใหม่' : 'ตำแหน่งพ้องใหม่')}
+                placeholder={tx('ชื่อพ้องใหม่')}
                 value={aliasValue}
                 onChange={(ev) => setAliasValue(ev.target.value)}
                 onKeyDown={(ev) => {
@@ -209,7 +208,7 @@ export default function EmployeesTab() {
               </button>
             </span>
           ) : (
-            <button className="lk addal" onClick={() => { setAliasEdit({ employeeId: e.id, kind, mode: 'add' }); setAliasValue(''); }}>
+            <button className="lk addal" onClick={() => { setAliasEdit({ employeeId: e.id, mode: 'add' }); setAliasValue(''); }}>
               + {label}
             </button>
           )}
@@ -283,7 +282,6 @@ export default function EmployeesTab() {
                 <th>{tx('รหัส')}</th>
                 <th>{tx('ชื่อ')}</th>
                 <th>{tx('ชื่อพ้อง')}</th>
-                <th>{tx('ตำแหน่งพ้อง')}</th>
                 <th>{tx('ตำแหน่งบนใบแจ้งหนี้')}</th>
                 <th className="r">{tx('เรท/เดือน')}</th>
                 <th>{tx('บริษัท')}</th>
@@ -298,8 +296,7 @@ export default function EmployeesTab() {
                     <span className="nm">{e.nameTh}</span>
                     <span className="sub">{e.nameEn ?? ''}</span>
                   </td>
-                  <td>{renderAliasCell(e, 'name', e.nameAliases)}</td>
-                  <td>{renderAliasCell(e, 'position', e.positionAliases)}</td>
+                  <td>{renderAliasCell(e, e.nameAliases)}</td>
                   <td>{e.invoicePosition}</td>
                   <td className="r n">{renderRateCell(e)}</td>
                   <td>
@@ -308,13 +305,21 @@ export default function EmployeesTab() {
                   </td>
                   <td>
                     <div className="rowacts">
-                      <button className="btn sm icon" title={tx('แก้ไขข้อมูลพนักงาน')} aria-label={tx('แก้ไข')} onClick={() => setEditRowKey(e.assignmentId ?? e.id)}>
-                        <Icon name="edit" />
-                      </button>
-                      {e.assignmentId && (
-                        <button className="btn sm icon dgr" title={tx('นำออกจากโครงการนี้')} aria-label={tx('ลบ')} onClick={() => removeFromProject(e.assignmentId!, e.nameTh)}>
-                          <Icon name="trash" />
-                        </button>
+                      {e.flowaccountLocked ? (
+                        <span className="sub" title={tx('ข้อมูลดึงจาก FlowAccount — แก้ไข/นำออกจากหน้านี้ไม่ได้ ต้องแก้ที่ FlowAccount แล้วซิงก์ใหม่')}>
+                          <Icon name="lock" />
+                        </span>
+                      ) : (
+                        <>
+                          <button className="btn sm icon" title={tx('แก้ไขข้อมูลพนักงาน')} aria-label={tx('แก้ไข')} onClick={() => setEditRowKey(e.assignmentId ?? e.id)}>
+                            <Icon name="edit" />
+                          </button>
+                          {e.assignmentId && (
+                            <button className="btn sm icon dgr" title={tx('นำออกจากโครงการนี้')} aria-label={tx('ลบ')} onClick={() => removeFromProject(e.assignmentId!, e.nameTh)}>
+                              <Icon name="trash" />
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -322,7 +327,7 @@ export default function EmployeesTab() {
               ))}
               {employees.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--mut)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', color: 'var(--mut)' }}>
                     {tx('ยังไม่มีพนักงานในระบบ')}
                   </td>
                 </tr>

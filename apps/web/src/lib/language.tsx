@@ -651,9 +651,11 @@ const TX: Record<string, string> = {
   'ค่าจ้างทำของ / ค่าบริการ': 'Contract work / services',
   ค่าเช่าทรัพย์สิน: 'Property rental',
   'อัตราหัก ณ ที่จ่าย': 'Withholding tax rate',
-  'ยอดรวมก่อนหัก (Subtotal)': 'Subtotal',
-  'ยอดหลังหัก ณ ที่จ่าย': 'Net after withholding tax',
-  'ยอดประมาณจากอัตรารายเดือน ยังไม่หักวันลาและยังไม่รวม VAT': 'Estimated from the monthly rate — before leave deductions and VAT',
+  'ค่าบริการรายเดือน': 'Monthly service fee',
+  'หักวันลา': 'Leave deduction',
+  'ยอดรวมก่อนภาษี (Subtotal)': 'Subtotal',
+  'คำนวณยอดไม่สำเร็จ — ตรวจรอบบิลและวันลาอีกครั้ง': 'Could not calculate — check the period and leave days',
+  'กำลังคำนวณยอด…': 'Calculating…',
 
   // ── upload/HrddCompare.tsx ──
   ตรงกัน: 'Matches',
@@ -923,17 +925,14 @@ const TX: Record<string, string> = {
 
   // ── master/EmployeesTab.tsx ──
   ชื่อพ้อง: 'Name alias',
-  ตำแหน่งพ้อง: 'Position alias',
   'ลบชื่อพ้องนี้?': 'Delete this name alias?',
-  'ลบตำแหน่งพ้องนี้?': 'Delete this position alias?',
   จะหายไปจากรายการชื่อพ้อง: 'will be removed from the name-alias list',
-  จะหายไปจากรายการตำแหน่งพ้อง: 'will be removed from the position-alias list',
   ไม่มี: 'None',
   คลิกเพื่อแก้ไข: 'Click to edit',
   ลบชื่อพ้องนี้: 'Delete this name alias',
-  ลบตำแหน่งพ้องนี้: 'Delete this position alias',
   ชื่อพ้องใหม่: 'New name alias',
-  ตำแหน่งพ้องใหม่: 'New position alias',
+  'ข้อมูลดึงจาก FlowAccount — แก้ไข/นำออกจากหน้านี้ไม่ได้ ต้องแก้ที่ FlowAccount แล้วซิงก์ใหม่':
+    'Data pulled from FlowAccount — cannot be edited or removed here. Edit it in FlowAccount and re-sync instead',
   แก้เรท: 'Edit rate',
   'นำพนักงานออกจากโครงการนี้?': 'Remove this employee from the project?',
   'จะหายไปจากรายการของโครงการนี้ — ข้อมูลพนักงาน/ชื่อพ้องเดิมยังอยู่ เผื่อย้ายไปผูกโครงการอื่นทีหลัง':

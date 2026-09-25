@@ -3,10 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, Loading, PageHeader, PoTag, ReadModelTag, StatusPill, Tag, parseReadModel } from '../../../../components/ui';
-import { useReadModelNameMap } from '../../../../components/readModelNames';
+import { Card, Loading, PageHeader, PoTag, StatusPill, Tag, parseReadModel } from '../../../../components/ui';
 import { Icon } from '../../../../components/Icon';
-import { usePdfPreview, useToast } from '../../../../components/Overlays';
+import { usePdfPreview } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
 
 interface CalendarDay {
@@ -266,7 +265,6 @@ export default function ManadyDetailPage() {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const readModelNames = useReadModelNameMap();
   const [tab, setTab] = useState<1 | 2 | 3>(1);
   const [calDay, setCalDay] = useState<string | null>(null);
 
@@ -450,14 +448,10 @@ export default function ManadyDetailPage() {
           <h1>
             {sheet.employee.nameTh ?? sheet.rawEmployeeName ?? tx('ไม่ทราบชื่อ')} — {sheet.employee.invoicePosition ?? sheet.rawPosition ?? ''}
           </h1>
+          {/* ไม่โชว์ว่าอ่านไฟล์ด้วยตัวไหน (ABBYY/Clear Read) ในหน้านี้แล้ว — เป็นข้อมูลเบื้องหลังของระบบ
+              ที่คนตรวจ Manday ไม่ได้ใช้ตัดสินใจอะไร ดูได้ที่หน้าแรก (อัปโหลด/ประวัติ) พอ (25 ก.ย. 69) */}
           <p>
             {sheet.contract.customerName} · {tx('โครงการ')} {sheet.contract.projectName} · <PoTag>{sheet.contract.poNo}</PoTag> · {tx('สัญญา')} {sheet.contract.contractNo ?? '—'}
-            {sheet.extraction?.model && (
-              <>
-                {' '}
-                <ReadModelTag model={sheet.extraction.model} sourceEmailId={sheet.sourceEmailId} nameMap={readModelNames} />
-              </>
-            )}
           </p>
         </div>
         <div className="acts">
@@ -613,8 +607,6 @@ export default function ManadyDetailPage() {
                   <dd>{sheet.contract.customerName}</dd>
                   <dt>{tx('เลขผู้เสียภาษี')}</dt>
                   <dd className="n">{sheet.contractDetail.taxId ?? '—'}</dd>
-                  <dt>{tx('อ่านด้วย')}</dt>
-                  <dd>{sheet.extraction?.model ? <ReadModelTag model={sheet.extraction.model} sourceEmailId={sheet.sourceEmailId} nameMap={readModelNames} /> : '—'}</dd>
                   <dt>{tx('ใบว่าจ้าง')}</dt>
                   <dd className="n"><PoTag>{sheet.contract.poNo}</PoTag></dd>
                   <dt>{tx('สัญญา')}</dt>
@@ -629,10 +621,10 @@ export default function ManadyDetailPage() {
                   <dd>{int(sheet.contractDetail.creditDays)} {tx('วัน')}</dd>
                   <dt>{tx('ตัวหารอัตราต่อวัน')}</dt>
                   <dd>{sheet.contractDetail.divisorMode === 'fixed' ? `${tx('คงที่')} ${int(sheet.contractDetail.divisorValue)}` : tx('วันทำงานจริงของเดือน')}</dd>
+                  {/* อ่านอย่างเดียว — แก้อัตราหัก ณ ที่จ่ายจากหน้านี้ไม่ได้แล้ว (25 ก.ย. 69) เพราะเป็นตัวตั้ง
+                      คิดเงินตามสัญญา ต้องแก้ที่หน้าสัญญา (ข้อมูลหลัก → สัญญาบริษัท) ที่เดียวเท่านั้น */}
                   <dt>{tx('หัก ณ ที่จ่าย')}</dt>
-                  <dd>
-                    <WhtRateInline contractId={sheet.contract.id} whtRate={sheet.contractDetail.whtRate} onSaved={load} />
-                  </dd>
+                  <dd className="n">{pctPrecise(sheet.contractDetail.whtRate)}%</dd>
                   <dt>{tx('ผู้ประสานงาน')}</dt>
                   <dd>{sheet.contractDetail.contactName ?? '—'}</dd>
                 </dl>
@@ -993,90 +985,6 @@ export default function ManadyDetailPage() {
  * ตัดมาจากตัวเดียวกับที่ใช้ในหน้าสัญญา (CustomersContractsTab.tsx's pctPrecise) */
 function pctPrecise(rate: number) {
   return Math.round(rate * 10000) / 100;
-}
-
-/**
- * ไอคอนดินสอแก้อัตราหัก ณ ที่จ่ายในหน้าตรวจ/ยืนยัน Timesheet — คนละจุดกับใน CustomersContractsTab.tsx
- * (หน้าสัญญา) ตามที่เจ้าของระบบขอ 18 ก.ย. 69 แต่ยิงเข้า endpoint เดียวกัน (`PATCH /:id/wht-rate`)
- * เพราะเป็นค่าเดียวกันของสัญญาเดียวกัน แก้จากที่ไหนก็ต้องได้ผลเดียวกัน validation 0–30% อยู่ฝั่ง
- * server แล้ว (updateContractWhtRate) จึงเช็คซ้ำแค่ฝั่ง UI พอกันกดส่งค่าที่ผิดชัดๆ ไปเปล่าๆ
- */
-function WhtRateInline({ contractId, whtRate, onSaved }: { contractId: string; whtRate: number; onSaved: () => void }) {
-  const { tx } = useLang();
-  const toast = useToast();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(String(pctPrecise(whtRate)));
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    const pct = Number(value);
-    if (!Number.isFinite(pct) || pct < 0 || pct > 30) {
-      toast(tx('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%'), true);
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/contracts/${encodeURIComponent(contractId)}/wht-rate`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ whtRate: pct / 100 }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(data?.error ?? tx('บันทึกไม่สำเร็จ'), true);
-        return;
-      }
-      toast(tx('บันทึกอัตราหัก ณ ที่จ่ายแล้ว'));
-      setEditing(false);
-      onSaved();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!editing) {
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        {pctPrecise(whtRate)}%
-        <button
-          type="button"
-          className="btn sm icon"
-          title={tx('แก้อัตราหัก ณ ที่จ่าย')}
-          aria-label={tx('แก้ไข')}
-          onClick={() => {
-            setValue(String(pctPrecise(whtRate)));
-            setEditing(true);
-          }}
-        >
-          <Icon name="edit" />
-        </button>
-      </span>
-    );
-  }
-
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <input
-        type="number"
-        min={0}
-        max={30}
-        step={0.01}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        autoFocus
-        style={{ width: 64, height: 30, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 8px' }}
-      />
-      %
-      <button type="button" className="btn sm icon" disabled={saving} title={tx('บันทึก')} onClick={save}>
-        <Icon name="chk" />
-      </button>
-      <button type="button" className="btn sm icon" disabled={saving} title={tx('ยกเลิก')} onClick={() => setEditing(false)}>
-        <Icon name="x" />
-      </button>
-    </span>
-  );
 }
 
 function CalendarView({ manday, calDay, onSelect }: { manday: Manday | null; calDay: string | null; onSelect: (d: string | null) => void }) {

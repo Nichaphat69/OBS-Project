@@ -23,6 +23,7 @@ import {
   declareOwnSubmissionMethod,
 } from '../src/lib/timesheetSubmissionService.js';
 import { isoToday, enumeratePeriods } from '../src/lib/dashboardService.js';
+import { listAiReads } from '../src/lib/aiReadsService.js';
 
 await seedFixtures();
 
@@ -214,4 +215,17 @@ test('แจ้งวิธีส่งของรอบที่ส่งไ�
     () => declareOwnSubmissionMethod({ employeeId: EMP, actor: 'ทดสอบ', contractId: 'CT-NOT-MINE', period: '2026-01', method: 'self_email', client: new FakeLineClient() as any }),
     (e: unknown) => e instanceof SubmitOwnFileError && e.status === 400,
   );
+});
+
+test('ไฟล์ที่พนักงานส่งเอง ต้องขึ้นชื่อพนักงานในรายการ "รอจากพนักงาน" และไม่หายตอนกรองตามสัญญา (25 ก.ย. 69)', async () => {
+  const { contractId, period } = await firstSubmittable();
+  const emp = await prisma.employee.findUnique({ where: { id: EMP }, select: { nameTh: true } });
+  const result = await submitOwnTimesheetFile({ employeeId: EMP, actor: 'ทดสอบ', fileName: 'name-check.pdf', fileBase64: FILE_B64, contractId, period });
+
+  const all = await listAiReads();
+  const row = all.find((r) => r.id === result.fileId);
+  assert.equal(row?.employeeName, emp?.nameTh, 'ต้องไม่เป็น null — ไม่งั้นหน้าเว็บขึ้น "ไม่ทราบชื่อ"');
+
+  const filtered = await listAiReads(contractId);
+  assert.ok(filtered.some((r) => r.id === result.fileId), 'กรองตามสัญญาของพนักงานคนนั้นแล้วต้องยังเห็นไฟล์นี้');
 });

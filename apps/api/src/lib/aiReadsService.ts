@@ -44,6 +44,10 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
     },
     orderBy: { readAt: 'desc' },
     take: 200,
+    // ชื่อพนักงานจากตาราง employees — แถวที่พนักงานส่งเอง (employee_submit) มีแค่ employeeId ไม่มี
+    // employeeName (ไม่ได้อ่านไฟล์ เลยไม่มีชื่อจากเอกสาร) เดิมหน้า "รอจากพนักงาน" จึงขึ้น "ไม่ทราบชื่อ"
+    // ทั้งที่รู้อยู่แล้วว่าใครส่ง (25 ก.ย. 69)
+    include: { employee: { select: { nameTh: true } } },
   });
 
   let filtered = rows;
@@ -52,6 +56,12 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
     const belongs = new Map<string, boolean>();
     const out: typeof rows = [];
     for (const r of rows) {
+      // รู้ employeeId อยู่แล้ว (เช่น พนักงานส่งเอง) — เช็คสัญญาจาก id ตรงๆ ไม่ต้องเดาจากชื่อ เดิมแถวที่ไม่มี
+      // employeeName ถูกทิ้งไปเลย ไฟล์ที่พนักงานส่งมาจึงหายจากรายการตอนเลือกบริษัทไว้
+      if (r.employeeId) {
+        if (await prisma.assignment.findFirst({ where: { employeeId: r.employeeId, contractId }, select: { employeeId: true } })) out.push(r);
+        continue;
+      }
       if (!r.employeeName) continue;
       let ok = belongs.get(r.employeeName);
       if (ok === undefined) {
@@ -73,7 +83,7 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
       sourceEmailId: r.sourceEmailId,
       fileName: r.fileName,
       employeeId: r.employeeId,
-      employeeName: r.employeeName,
+      employeeName: r.employeeName ?? r.employee?.nameTh ?? null,
       period: r.period,
       periodLabel: r.period ? thaiMonth(r.period) : null,
       documentNo: r.documentNo,
