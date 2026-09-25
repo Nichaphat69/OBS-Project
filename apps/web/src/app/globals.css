@@ -3606,6 +3606,16 @@ button.file:hover {
 .acts-l .tx .hd-row b { font-weight: 600; }
 .acts-l .tx small { margin-top: 3px; line-height: 1.5; }
 .acts-l .tx.err .hd-row b { color: var(--cr); }
+/* ป้ายบอกว่าแถวนี้เป็นเรื่องของใคร — ของพนักงานคนนี้ หรือของทั้งรอบบิล (ลิสต์รวม audit สามระดับไว้
+   ด้วยกัน ดูคอมเมนต์ใน manday/[id]/page.tsx) ใช้โทนจางกว่าหัวข้อ เพื่อไม่ให้แย่งสายตาจากชื่อเหตุการณ์ */
+.acts-l .tx .acts-who {
+  font-size: 11px;
+  color: var(--mut);
+  background: var(--hair);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
 
 /* ═══ หน้า "ตัวอ่าน Timesheet" — การ์ดเลือกตัวอ่าน ═══
    แยก "กำลังดู" (preview) ออกจาก "กำลังใช้งาน" (active) ให้ขาดกัน: กดการ์ดแค่เปลี่ยนแผงที่ดูอยู่

@@ -387,12 +387,20 @@ export default function ManadyDetailPage() {
       : sheet.sourceFile
         ? `${tx('ไฟล์')}: ${sheet.sourceFile}`
         : null;
-    const events: Array<{ key: string; at: string; order: number; stage: HistoryStage; label: string; detail: string; error?: boolean }> = [
+    /* ลิสต์นี้รวม audit สามระดับไว้ด้วยกัน (ดู getTimesheet() ใน apps/api timesheetsService.ts): ของ
+       Timesheet ใบนี้ + ของทั้งรอบบิล (entityType 'cycle') + ของใบแจ้งหนี้ (entityType 'invoice') สองระดับ
+       หลังเป็นเรื่องของ "ทุกคนในรอบ" ไม่ใช่ของพนักงานคนนี้ — เดิมแสดงปนกันเป็นลิสต์เดียวโดยไม่บอกขอบเขต
+       คนอ่านจึงแยกไม่ออกว่าแถวไหนเป็นของใคร (เจ้าของระบบชี้ 25 ก.ย. 69: "ต้องขึ้นแสดงด้วยว่าตรวจ Manday
+       ของใคร อันนี้เป็นรายการของใคร") โดยเฉพาะแถวที่ข้อความเอ่ยชื่อคนอื่นในรอบเดียวกัน */
+    const whoThis = sheet.employee.nameTh ?? sheet.rawEmployeeName ?? tx('ไม่ทราบชื่อ');
+    const whoCycle = `${tx('ทั้งรอบบิล')} ${sheet.periodLabel}`;
+    const events: Array<{ key: string; at: string; order: number; stage: HistoryStage; label: string; detail: string; who: string; error?: boolean }> = [
       {
         key: 'received',
         at: sheet.receivedAt,
         order: ingest?.id ?? 0,
         stage: 'timesheet',
+        who: whoThis,
         label: tx('รับ Timesheet เข้าระบบ'),
         detail: [
           ingest ? `${tx('ส่งโดย')} ${tx(actorLabel(ingest.actor))}` : null,
@@ -403,7 +411,7 @@ export default function ManadyDetailPage() {
           .join(' · '),
       },
       ...(sheet.approvedAt
-        ? [{ key: 'approved', at: sheet.approvedAt, order: 0, stage: 'timesheet' as const, label: tx('ลูกค้าอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '' }]
+        ? [{ key: 'approved', at: sheet.approvedAt, order: 0, stage: 'timesheet' as const, who: whoThis, label: tx('ลูกค้าอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '' }]
         : []),
       ...sheet.audit
         .filter((a) => a.action !== 'ingest_timesheet')
@@ -414,6 +422,7 @@ export default function ManadyDetailPage() {
             at: a.at,
             order: a.id,
             stage: shape.stage,
+            who: a.entityType === 'timesheet' ? whoThis : whoCycle,
             label: tx(shape.label),
             error: shape.error,
             detail: [tx(actorLabel(a.actor)), shape.extra].filter(Boolean).join(' · '),
@@ -643,6 +652,7 @@ export default function ManadyDetailPage() {
                         <span className="hd-row">
                           <Tag tone={HISTORY_STAGE_TONE[ev.stage]}>{tx(HISTORY_STAGE_LABEL[ev.stage])}</Tag>
                           <b>{ev.label}</b>
+                          <span className="acts-who">{ev.who}</span>
                         </span>
                         {ev.detail && <small>{ev.detail}</small>}
                       </span>
