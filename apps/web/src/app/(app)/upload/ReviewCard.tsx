@@ -534,8 +534,11 @@ function WhtSection({
       </div>
       {pct !== effectivePct && (
         <div className="note wn">
-          {tx('FlowAccount ยังออกเอกสารด้วย % เต็มเท่านั้น')} — {tx('ใบแจ้งหนี้จริงจะคิดที่')} {effectivePct}%{' '}
-          {tx('(ยอดด้านล่างคำนวณตามนี้แล้ว)')}
+          <Icon name="alt" />
+          <span>
+            {tx('FlowAccount ยังออกเอกสารด้วย % เต็มเท่านั้น')} — {tx('ใบแจ้งหนี้จริงจะคิดที่')} {effectivePct}%{' '}
+            {tx('(ยอดด้านล่างคำนวณตามนี้แล้ว)')}
+          </span>
         </div>
       )}
       {/* ลำดับเดียวกับท้ายใบแจ้งหนี้ (buildInvoice ใน @obs/domain): เรทรายเดือน − ส่วนลดวันลา = Subtotal,
@@ -577,7 +580,10 @@ function WhtSection({
             </div>
           </>
         ) : (
-          <div className="note">{tx(estimateFailed ? 'คำนวณยอดไม่สำเร็จ — ตรวจรอบบิลและวันลาอีกครั้ง' : 'กำลังคำนวณยอด…')}</div>
+          <div className="note">
+            <Icon name="info" />
+            <span>{tx(estimateFailed ? 'คำนวณยอดไม่สำเร็จ — ตรวจรอบบิลและวันลาอีกครั้ง' : 'กำลังคำนวณยอด…')}</span>
+          </div>
         )}
       </div>
     </div>

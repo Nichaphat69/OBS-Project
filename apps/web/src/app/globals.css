@@ -3137,6 +3137,11 @@ td .nm {
 .wht-sum .note {
   font-size: 12px;
   color: var(--mut);
+  /* .note ปกติเป็นกล่องสีมี padding — อยู่ในกล่องยอด (.wht-sum) อีกทีจะกลายเป็นกล่องซ้อนกล่อง */
+  background: none;
+  padding: 0;
+  gap: 8px;
+  grid-template-columns: 15px 1fr;
 }
 
 /* ปุ่ม "+ ชื่อพ้อง/ตำแหน่งพ้อง" กับ "แก้เรท" */
