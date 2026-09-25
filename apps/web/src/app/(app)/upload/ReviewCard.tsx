@@ -58,9 +58,30 @@ const WHT_TYPES = [
   { pct: 3, name: 'ค่าจ้างทำของ / ค่าบริการ' },
   { pct: 5, name: 'ค่าเช่าทรัพย์สิน' },
 ];
-/** อัตราหัก ณ ที่จ่ายเป็น % เต็มเสมอ — ตรงกับ buildInvoice() ใน @obs/domain ที่ปัดเรตเป็น % เต็มก่อนคำนวณ
- * (และ FlowAccount ก็รับแค่เลขเต็ม) ถ้าหน้านี้ยอมให้ตั้ง 3.5% ยอดที่โชว์จะไม่ตรงกับใบแจ้งหนี้จริง */
-const pctRound = (n: number) => Math.round(n);
+/** ปรับได้ละเอียดถึง 0.25% (เจ้าของระบบสั่งคืน 25 ก.ย. 69 — เผื่อวันที่ FlowAccount รองรับเรตทศนิยม
+ * ยังไม่มีเคสจริงที่ต้องใช้ตอนนี้) เคยถูกบังคับเป็น % เต็มไปช่วงหนึ่งใน 61699d4
+ *
+ * ⚠️ ค่าที่ตั้งตรงนี้ไม่ใช่เรตที่ใช้คิดเงินจริงเสมอไป — buildInvoice() ใน @obs/domain ยังปัดเป็น % เต็ม
+ * ก่อนคำนวณอยู่ (และ estimateTimesheetAmount() ฝั่ง api ก็ปัดแบบเดียวกัน) เพราะ FlowAccount รับ
+ * documentWithholdingTaxPercentage เป็นเลขเต็มแล้วเอาไปคิดยอดใหม่เอง ไม่เชื่อยอดที่เราส่งไป — ถ้าปล่อยให้
+ * OBS คิดที่ 3.25% ใบแจ้งหนี้จริงจะออกที่ 3% แล้วสองระบบยอดไม่ตรงกัน (เจอจริง 24 ก.ย. 69 ที่ 2.25% vs 2%)
+ * จึงเตือนไว้ใต้ช่องกรอกแทน ไม่ปัดค่าที่ผู้ใช้ตั้งทิ้งเงียบๆ วันที่ FlowAccount รองรับทศนิยมค่อยถอดการปัด
+ * ใน invoice.ts/timesheetsService.ts ออก แล้วคำเตือนนี้จะหายไปเอง */
+const pctRound = (n: number) => Math.round(n * 100) / 100;
+
+/** ผลจาก POST /api/timesheets/estimate — ดู estimateTimesheetAmount() ใน apps/api timesheetsService.ts */
+interface Estimate {
+  monthlyRate: number;
+  leaveCount: number;
+  dailyRate: number;
+  discount: number;
+  subtotal: number;
+  vatRate: number;
+  vat: number;
+  whtRate: number;
+  withholdingTax: number;
+  paymentAmount: number;
+}
 
 function money(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -101,6 +122,43 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
     (result.data?.leaveDays ?? []).map((l) => ({ date: l.date, type: l.type, hours: l.hours ?? null })),
   );
   const [whtPct, setWhtPct] = useState(pctRound((result.contract?.whtRate ?? 0.03) * 100));
+  // ยอดคิดด้วยสูตรเดียวกับใบแจ้งหนี้จริง (หักวันลาตามตัวหาร/วันหยุดของสัญญา + VAT + หัก ณ ที่จ่าย) — คิดใหม่
+  // ทุกครั้งที่แก้วันลา/รอบ/เรตหัก ณ ที่จ่าย หน่วงไว้นิดหน่อยกันยิงรัวตอนกด −/+ ค้าง
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [estimateFailed, setEstimateFailed] = useState(false);
+  const estContractId = result.contract?.id ?? null;
+  const estEmployeeId = result.matching?.employee?.id ?? null;
+  const leaveKey = JSON.stringify(leaveDays);
+  useEffect(() => {
+    if (!estContractId || !estEmployeeId || !/^\d{4}-\d{2}$/.test(period)) {
+      setEstimate(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetch('/api/timesheets/estimate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contractId: estContractId, employeeId: estEmployeeId, period, leaveDays, whtRate: whtPct / 100 }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((data: Estimate) => {
+          if (cancelled) return;
+          setEstimate(data);
+          setEstimateFailed(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setEstimate(null);
+          setEstimateFailed(true);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estContractId, estEmployeeId, period, leaveKey, whtPct]);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmResult, setConfirmResult] = useState<any>(null);
@@ -283,7 +341,7 @@ export default function ReviewCard({ result, onDone }: { result: ReadResultShape
         />
       </div>
 
-      <WhtSection contract={result.contract} pct={whtPct} onChange={setWhtPct} />
+      <WhtSection contract={result.contract} pct={whtPct} onChange={setWhtPct} estimate={estimate} estimateFailed={estimateFailed} />
 
       {error && <div style={{ color: 'var(--cr)', marginBottom: 14 }}>{error}</div>}
 
@@ -404,17 +462,23 @@ function WhtSection({
   contract,
   pct,
   onChange,
+  estimate,
+  estimateFailed,
 }: {
   contract: { monthlyRate: number } | null;
   pct: number;
   onChange: Dispatch<SetStateAction<number>>;
+  estimate: Estimate | null;
+  estimateFailed: boolean;
 }) {
   const { tx } = useLang();
   // ใช้ functional update (onChange(p => ...)) แทนอ่านค่า pct จาก closure ตรงๆ — ตอนกดค้าง
   // useHoldRepeat ตั้ง callback ไว้ตัวเดียวครั้งแรกที่กด แล้วเรียกซ้ำผ่าน setInterval เดิมตลอด ถ้าอ่าน
   // pct จาก closure จะได้ค่าตอนเริ่มกดค้างซ้ำๆ ไม่ขยับ ต้องให้ React ส่งค่าล่าสุดให้ทุกครั้งแทน
-  const plus = useHoldRepeat(() => onChange((p) => pctRound(Math.min(30, p + 1))));
-  const minus = useHoldRepeat(() => onChange((p) => pctRound(Math.max(0, p - 1))));
+  const plus = useHoldRepeat(() => onChange((p) => pctRound(Math.min(30, p + 0.25))));
+  const minus = useHoldRepeat(() => onChange((p) => pctRound(Math.max(0, p - 0.25))));
+  /** เรตที่ใช้คิดเงินจริง — ดูคำอธิบายที่ pctRound ด้านบน */
+  const effectivePct = Math.round(pct);
 
   if (!contract) {
     return (
@@ -427,9 +491,6 @@ function WhtSection({
     );
   }
 
-  const base = contract.monthlyRate || 0;
-  const amount = Math.round(base * pct) / 100;
-  const net = Math.round((base - amount) * 100) / 100;
 
   return (
     <div className="fsec">
@@ -449,12 +510,12 @@ function WhtSection({
           <button type="button" {...minus}>
             −
           </button>
-          {/* พิมพ์เองได้ ไม่ต้องกด −/+ ทีละขั้น — ปัดเป็น % เต็มเสมอ */}
+          {/* พิมพ์เองได้ ไม่ต้องกด −/+ ทีละขั้น — ละเอียดถึง 0.25% */}
           <span className="valbox">
             <input
               className="val"
               type="number"
-              step="1"
+              step="0.25"
               min="0"
               max="30"
               value={pct}
@@ -471,24 +532,53 @@ function WhtSection({
           </button>
         </div>
       </div>
-      {/* ยอดประมาณจากอัตรารายเดือนของสัญญา (ยังไม่หักวันลา/ยังไม่รวม VAT) — ฐานเดียวกับที่ใบแจ้งหนี้ใช้
-          คิดหัก ณ ที่จ่าย คือยอดก่อน VAT */}
+      {pct !== effectivePct && (
+        <div className="note wn">
+          {tx('FlowAccount ยังออกเอกสารด้วย % เต็มเท่านั้น')} — {tx('ใบแจ้งหนี้จริงจะคิดที่')} {effectivePct}%{' '}
+          {tx('(ยอดด้านล่างคำนวณตามนี้แล้ว)')}
+        </div>
+      )}
+      {/* ลำดับเดียวกับท้ายใบแจ้งหนี้ (buildInvoice ใน @obs/domain): เรทรายเดือน − ส่วนลดวันลา = Subtotal,
+          VAT และหัก ณ ที่จ่ายคิดจาก Subtotal แล้วได้ยอดรับชำระ — เฉพาะพนักงานคนนี้ ไม่รวม OT */}
       <div className="wht-sum">
-        <div className="r">
-          <span>{tx('ยอดรวมก่อนหัก (Subtotal)')}</span>
-          <span>{money(base)}</span>
-        </div>
-        <div className="r cr">
-          <span>
-            {tx('หัก ณ ที่จ่าย')} {pct}%
-          </span>
-          <span>−{money(amount)}</span>
-        </div>
-        <div className="r tot">
-          <span>{tx('ยอดหลังหัก ณ ที่จ่าย')}</span>
-          <span>{money(net)}</span>
-        </div>
-        <div className="note">{tx('ยอดประมาณจากอัตรารายเดือน ยังไม่หักวันลาและยังไม่รวม VAT')}</div>
+        {estimate ? (
+          <>
+            <div className="r">
+              <span>{tx('ค่าบริการรายเดือน')}</span>
+              <span>{money(estimate.monthlyRate)}</span>
+            </div>
+            {estimate.discount > 0 && (
+              <div className="r">
+                <span>
+                  {tx('หักวันลา')} {estimate.leaveCount} {tx('วัน')} × {money(estimate.dailyRate)}
+                </span>
+                <span>−{money(estimate.discount)}</span>
+              </div>
+            )}
+            <div className="r sub-tot">
+              <span>{tx('ยอดรวมก่อนภาษี (Subtotal)')}</span>
+              <span>{money(estimate.subtotal)}</span>
+            </div>
+            <div className="r">
+              <span>
+                {tx('ภาษีมูลค่าเพิ่ม')} {Math.round(estimate.vatRate * 100)}%
+              </span>
+              <span>+{money(estimate.vat)}</span>
+            </div>
+            <div className="r cr">
+              <span>
+                {tx('หัก ณ ที่จ่าย')} {Math.round(estimate.whtRate * 100)}%
+              </span>
+              <span>−{money(estimate.withholdingTax)}</span>
+            </div>
+            <div className="r tot">
+              <span>{tx('ยอดรับชำระ')}</span>
+              <span>{money(estimate.paymentAmount)}</span>
+            </div>
+          </>
+        ) : (
+          <div className="note">{tx(estimateFailed ? 'คำนวณยอดไม่สำเร็จ — ตรวจรอบบิลและวันลาอีกครั้ง' : 'กำลังคำนวณยอด…')}</div>
+        )}
       </div>
     </div>
   );

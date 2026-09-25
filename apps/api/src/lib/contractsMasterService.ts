@@ -421,9 +421,11 @@ export async function deleteContract(contractId: string, { actor }: { actor: str
 export async function updateContractWhtRate(contractId: string, whtRate: number, { actor }: { actor: string }): Promise<{ contractId: string; whtRate: number }> {
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) throw new ContractMasterError('ไม่พบสัญญานี้', 404);
-  // ปัดเป็น % เต็มก่อนเก็บ — buildInvoice() ปัดแบบนี้ตอนคำนวณอยู่แล้ว เก็บ 0.035 ไว้ก็จะโชว์ 3.5% ในหน้าจอ
-  // แต่ใบแจ้งหนี้จริงคิด 4% ยอดไม่ตรงกัน
-  const rate = Math.round(Number(whtRate) * 100) / 100;
+  // เก็บละเอียดถึง 0.25% ได้ (เจ้าของระบบสั่งคืน 25 ก.ย. 69 เผื่อวันที่ FlowAccount รองรับเรตทศนิยม) —
+  // เคยบังคับเป็น % เต็มตอนเก็บใน 61699d4 ทำให้ค่าที่ตั้งไว้เด้งกลับทุกครั้ง ตั้ง 3.25% ไม่เคยติด
+  // การปัดเพื่อกันยอดไม่ตรงกับ FlowAccount ยังอยู่ครบที่ชั้นคำนวณ (buildInvoice()/estimateTimesheetAmount())
+  // ไม่ใช่ที่ชั้นเก็บข้อมูล — วันที่ FlowAccount รองรับ ถอดการปัดสองจุดนั้นออกได้เลยโดยไม่ต้องแก้ข้อมูลเดิม
+  const rate = Math.round(Number(whtRate) * 10000) / 10000;
   if (!Number.isFinite(rate) || rate < 0 || rate > 0.3) {
     throw new ContractMasterError('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%');
   }
