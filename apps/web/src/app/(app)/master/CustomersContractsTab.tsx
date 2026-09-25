@@ -241,6 +241,11 @@ export default function CustomersContractsTab() {
 
   const [contracts, setContracts] = useState<ContractRow[] | null>(null);
   const [orphanCustomers, setOrphanCustomers] = useState<CustomerWithoutContract[]>([]);
+  // เดิมโชว์เป็นการ์ดแจ้งเตือนเปิดค้างไว้เสมอ ดูเหมือนบั๊ก/ของแปลกเทียบกับ FlowAccount ที่ไม่มีแนวคิดนี้
+  // เลย (เจ้าของระบบทักไว้ 25 ก.ย. 69) — เก็บความสามารถ "กลับมาเพิ่มสัญญาทีหลัง" ไว้เหมือนเดิม (ยังจำเป็น
+  // เพราะ CustomerAddForm ด้านล่างยอมให้เว้นสัญญาว่างไว้ตอนสร้างลูกค้าได้) แค่พับซ่อนไว้เป็นค่าเริ่มต้น
+  // ไม่โผล่เป็นแบนเนอร์เด่นเหมือนมีปัญหาให้ต้องรีบแก้
+  const [showOrphans, setShowOrphans] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [editContractId, setEditContractId] = useState<string | null>(null);
   const [addContractForCustomerId, setAddContractForCustomerId] = useState<string | null>(null);
@@ -341,7 +346,8 @@ export default function CustomersContractsTab() {
       )}
 
       {/* ลูกค้าที่สร้างไว้แล้วแต่ยังไม่มีสัญญา (เพิ่งเพิ่มลูกค้าแบบเว้นสัญญาไว้ก่อน) — ต้องมีที่ให้กลับมา
-          หาแล้วเพิ่มสัญญาต่อได้ ไม่งั้นลูกค้ากลุ่มนี้จะหายไปจากหน้านี้ถาวรเพราะรายการหลักไล่จากสัญญา */}
+          หาแล้วเพิ่มสัญญาต่อได้ ไม่งั้นลูกค้ากลุ่มนี้จะหายไปจากหน้านี้ถาวรเพราะรายการหลักไล่จากสัญญา
+          พับซ่อนไว้เป็นค่าเริ่มต้น (25 ก.ย. 69 ตามที่ขอ) ไม่โผล่เป็นแบนเนอร์เด่นเหมือนของเดิม */}
       {orphanCustomers.length > 0 &&
         (addContractForCustomerId ? (
           <AddContractForm
@@ -353,21 +359,31 @@ export default function CustomersContractsTab() {
             }}
           />
         ) : (
-          <Card title={tx('ลูกค้าที่ยังไม่มีสัญญา')} right={<span className="rt">{orphanCustomers.length}</span>}>
-            <div className="tasklist">
-              {orphanCustomers.map((o) => (
-                <div key={o.id} className="taskrow">
-                  <div className="tt">
-                    <b>{o.nameTh}</b>
-                    <span>{tx('เลขผู้เสียภาษี')} {o.taxId}</span>
+          <div style={{ marginBottom: 18 }}>
+            <button type="button" className="btn ghost sm" onClick={() => setShowOrphans((v) => !v)}>
+              <Icon name="chev" className="xs" style={{ transform: showOrphans ? 'rotate(180deg)' : undefined }} />
+              {tx('ลูกค้าที่ยังไม่มีสัญญา')} ({orphanCustomers.length})
+            </button>
+            {showOrphans && (
+              <div style={{ marginTop: 10 }}>
+                <Card title={tx('ลูกค้าที่ยังไม่มีสัญญา')} right={<span className="rt">{orphanCustomers.length}</span>}>
+                  <div className="tasklist">
+                    {orphanCustomers.map((o) => (
+                      <div key={o.id} className="taskrow">
+                        <div className="tt">
+                          <b>{o.nameTh}</b>
+                          <span>{tx('เลขผู้เสียภาษี')} {o.taxId}</span>
+                        </div>
+                        <button className="btn pri sm" onClick={() => setAddContractForCustomerId(o.id)}>
+                          {tx('เพิ่มสัญญา')}
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <button className="btn pri sm" onClick={() => setAddContractForCustomerId(o.id)}>
-                    {tx('เพิ่มสัญญา')}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </Card>
+                </Card>
+              </div>
+            )}
+          </div>
         ))}
 
       {contracts.map((c) =>
