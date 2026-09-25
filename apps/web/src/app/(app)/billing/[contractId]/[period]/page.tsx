@@ -126,6 +126,12 @@ export default function CycleDetailPage() {
   );
   const [draftingAi, setDraftingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  // สร้างร่างจริงในกล่อง Drafts ของ Gmail พร้อมไฟล์แนบ (25 ก.ย. 69 ตามที่ขอ) — ฝั่งเซิร์ฟเวอร์
+  // (createGmailDraft) ทำไว้ครบและมีเทสต์คลุมอยู่แล้วตั้งแต่ก่อนย้ายมา Next.js แค่ไม่เคยมีปุ่มเรียกใช้
+  // ในหน้าเว็บชุดใหม่เลย — ปุ่มนี้แค่เรียกเส้นที่มีอยู่แล้ว ไม่มีตรรกะแนบไฟล์/สร้าง MIME ใหม่ตรงนี้เลย
+  const [creatingGmailDraft, setCreatingGmailDraft] = useState(false);
+  const [gmailDraftError, setGmailDraftError] = useState<string | null>(null);
+  const [gmailDraftResult, setGmailDraftResult] = useState<{ url: string; to: string; note?: string; attachmentCount: number } | null>(null);
   const [tab, setTab] = useState<1 | 2>(1);
   // ซ่อนแท็บ "Payload ที่จะยิงเข้า FlowAccount" จาก role accounting — เป็น JSON ดิบเชิงเทคนิคไว้ไล่ปัญหา
   // ของฝั่งพัฒนา ไม่ใช่ข้อมูลที่ฝ่ายบัญชีต้องใช้ทำงานประจำวัน (เจ้าของระบบสั่งซ้ำ 25 ก.ย. 69 "ซ่อน
@@ -196,6 +202,27 @@ export default function CycleDetailPage() {
       toast(tx('คัดลอกร่างอีเมลแล้ว'));
     } catch {
       toast(tx('คัดลอกไม่สำเร็จ'), true);
+    }
+  }
+
+  /** สร้างร่างจริงในกล่อง Drafts ของ Gmail พร้อมไฟล์แนบ (ใบวางบิลจาก FlowAccount + Timesheet ของ
+   * พนักงานทุกคนในรอบนี้) — ต่างจาก "ให้ AI เรียบเรียง"/"คัดลอกร่าง" ด้านบนที่แค่เตรียมข้อความให้เอาไป
+   * วางเอง ปุ่มนี้ยิงตรงไปวางร่างในกล่องจริงเลย เหลือแค่เข้า Gmail แล้วเลือกผู้รับ/CC เพิ่มก่อนกดส่ง */
+  async function doCreateGmailDraft() {
+    setCreatingGmailDraft(true);
+    setGmailDraftError(null);
+    try {
+      const res = await fetch(`/api/cycles/${params.contractId}/${params.period}/gmail-draft`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) {
+        setGmailDraftError(result.error ?? tx('สร้างร่างอีเมลใน Gmail ไม่สำเร็จ'));
+        return;
+      }
+      setGmailDraftResult(result);
+    } catch {
+      setGmailDraftError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
+    } finally {
+      setCreatingGmailDraft(false);
     }
   }
 
@@ -402,6 +429,9 @@ export default function CycleDetailPage() {
                 {data.emailDraft && (
                   <Card title={tx('ร่างอีเมลวางบิล')}>
                     <div className="mailacts">
+                      <button className="btn sm pri" disabled={creatingGmailDraft} onClick={doCreateGmailDraft}>
+                        <Icon name="mail" className="sm" /> {creatingGmailDraft ? tx('กำลังสร้างร่าง…') : tx('สร้างร่างใน Gmail')}
+                      </button>
                       <button className="btn sm" disabled={draftingAi} onClick={doDraftWithAi}>
                         <Icon name="rf" className="sm" /> {draftingAi ? tx('กำลังเรียบเรียง…') : tx('ให้ AI เรียบเรียง')}
                       </button>
@@ -409,6 +439,21 @@ export default function CycleDetailPage() {
                         <Icon name="doc" className="sm" /> {tx('คัดลอกร่าง')}
                       </button>
                     </div>
+                    {gmailDraftError && <div style={{ color: 'var(--cr)', marginBottom: 10 }}>{gmailDraftError}</div>}
+                    {gmailDraftResult && (
+                      <div className="note" style={{ marginBottom: 14 }}>
+                        <Icon name="chk" />
+                        <span>
+                          <strong>{tx('สร้างร่างในกล่อง Drafts แล้ว')}</strong>
+                          <br />
+                          {gmailDraftResult.note ?? `${tx('แนบไฟล์แล้ว')} ${gmailDraftResult.attachmentCount} ${tx('ไฟล์')}`}
+                          <br />
+                          <a href={gmailDraftResult.url} target="_blank" rel="noreferrer">
+                            {tx('เปิดร่างใน Gmail')} →
+                          </a>
+                        </span>
+                      </div>
+                    )}
                     {aiError && <div style={{ color: 'var(--cr)', marginBottom: 10 }}>{aiError}</div>}
                     {data.emailDraft.highlights && data.emailDraft.highlights.length > 0 && (
                       <div className="note info" style={{ marginBottom: 14 }}>
