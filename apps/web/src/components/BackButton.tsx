@@ -1,8 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
+import { TOP_LEVEL_HREFS } from '../lib/nav';
 
 /**
  * ปุ่มย้อนกลับที่มุมขวาบนของทุกหน้า (เจ้าของระบบสั่ง 24 ก.ย. 69) — เรียก `router.back()` (history
@@ -15,7 +16,11 @@ import { useLang } from '../lib/language';
  */
 export function BackButton() {
   const router = useRouter();
+  const pathname = usePathname();
   const { tx } = useLang();
+  // หน้าแรกของแต่ละเมนูในแถบด้านซ้ายไม่ต้องมีปุ่มนี้ — กดย้อนกลับจากหน้าบนสุดไม่มีความหมาย แถบเมนู
+  // ทำหน้าที่พาไปไหนต่อได้อยู่แล้ว (เจ้าของระบบสั่ง 25 ก.ย. 69) หน้าลูกที่ลึกเข้าไปยังมีปุ่มตามเดิม
+  if (pathname && TOP_LEVEL_HREFS.has(pathname)) return null;
   return (
     <button type="button" className="btn ghost icon" aria-label={tx('ย้อนกลับ')} title={tx('ย้อนกลับ')} onClick={() => router.back()}>
       <Icon name="back" />
