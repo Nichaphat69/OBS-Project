@@ -341,6 +341,10 @@ body.side-collapsed .mtab .bdg {
   border: 1.5px solid var(--paper);
 }
 body.side-collapsed .mtab .bdg.zero { display: none; }
+/* ปุ่ม "ออกจากระบบ" ในเมนูผู้ใช้ (แถบบน) ใช้ .mtab ร่วมกับเมนูข้าง — กฎหุบเมนูด้านบนเลยซ่อนข้อความของมันไปด้วย
+   เหลือแต่ไอคอน (25 ก.ย. 69) เมนูผู้ใช้ไม่ได้อยู่ในเมนูข้าง ต้องแสดงเต็มเสมอไม่ว่าเมนูข้างหุบอยู่หรือไม่ */
+body.side-collapsed .whomenu .mtab { justify-content: flex-start; padding: 11px 14px; gap: 12px; }
+body.side-collapsed .whomenu .mtab > span { display: inline; }
 body.side-collapsed .sgrp {
   font-size: 0; padding: 10px 0 9px; margin: 0 14px;
   border-top: 1px solid var(--hair);
@@ -3149,10 +3153,6 @@ td .nm {
 .lk:hover {
   background: var(--tint);
 }
-.lk.edrate {
-  display: inline-flex;
-  margin-top: 3px;
-}
 
 /* แท็กชื่อพ้อง/ตำแหน่งพ้อง — ชื่อพ้อง = ฟ้าอ่อน, ตำแหน่งพ้อง = เหลืองอ่อน */
 .tg.alias-name {
@@ -3206,6 +3206,17 @@ td .nm {
   min-width: 110px;
   padding: 2px 0;
 }
+/* ต้องชนะ input[type='text'] ค่าเริ่มต้นด้านบน (ทรง pill มีกรอบ สูง 40px) ที่ specificity สูงกว่า .aliasInput
+   ตัวเดียว — ไม่งั้นช่องพิมพ์มีกรอบ pill ของตัวเองซ้อนอยู่ในกรอบ pill ของ .tg.editing อีกชั้น (25 ก.ย. 69) */
+.tg.editing input.aliasInput,
+.tg.editing input.aliasInput:focus {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  height: auto;
+  padding: 2px 0;
+  background: transparent;
+}
 .tg.editing .save,
 .tg.editing .cancel {
   border: none;
@@ -3235,50 +3246,6 @@ td .nm {
   margin-top: 6px;
 }
 
-/* แก้เรทต่อเดือน — input ตัวเลขในหน้าแทน prompt() เหมือนกัน */
-.rateEditRow {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--paper);
-  border: 1px solid var(--brand);
-  border-radius: var(--r-ctl);
-  padding: 2px 4px 2px 8px;
-}
-.rateInput {
-  font: inherit;
-  font-size: 13px;
-  color: var(--ink);
-  background: transparent;
-  border: none;
-  outline: none;
-  width: 100px;
-  padding: 2px 0;
-  text-align: right;
-}
-.rateEditRow .save,
-.rateEditRow .cancel {
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-  font-family: inherit;
-  padding: 0 3px;
-}
-.rateEditRow .save {
-  color: var(--ok);
-  font-weight: 600;
-}
-.rateEditRow .cancel {
-  color: var(--mut);
-}
-.rateEditRow .save:hover {
-  color: var(--brand);
-}
-.rateEditRow .cancel:hover {
-  color: var(--cr);
-}
 
 /* ═══════════════════════════════════════════════════════════
    หน้า "ตรวจ Manday" — stepper 4 ขั้น + แท็บ (ภาพรวม/รายละเอียด/ปฏิทิน) + ปฏิทิน + สมุดคำนวณ

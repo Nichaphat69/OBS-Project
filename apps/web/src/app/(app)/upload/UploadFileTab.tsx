@@ -24,12 +24,65 @@ function fileSizeLabel(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+/** รอบบิลที่พนักงานเลือกส่งได้ — มาจาก GET /api/my-progress ตัวเดียวกับหน้า "ความคืบหน้าของฉัน" */
+interface SubmitOption {
+  key: string;
+  contractId: string;
+  period: string;
+  periodLabel: string;
+  customerName: string;
+  projectName: string;
+  rejected: boolean;
+  /** ช่องทางที่เคยแจ้งไว้แล้ว (จากไลน์หรือหน้านี้) — ยังไม่มีไฟล์เข้าระบบ แต่ให้เห็นว่าเคยตอบไว้ว่าอะไร */
+  declaredMethod: string | null;
+}
+
+/** ตัวเลือกวิธีส่ง — ชุดเดียวกับปุ่มบนการ์ด "Timesheet ยังไม่ส่ง" ในไลน์ (buildOverdueReminderFlex ใน
+ * apps/api lineClient.ts) คำเดียวกันทุกตัว พนักงานเห็นหน้าเว็บกับไลน์แล้วเข้าใจตรงกัน */
+type SubmitMethod = 'self_obs' | 'self_email' | 'proxy_email';
+const SUBMIT_METHODS: Array<{ value: SubmitMethod; label: string; hint: string }> = [
+  { value: 'self_obs', label: 'ส่งผ่านระบบ OBS', hint: 'อัปโหลดไฟล์ Timesheet ตรงนี้เลย' },
+  { value: 'self_email', label: 'ส่งผ่าน Email', hint: 'ส่งไฟล์ทางอีเมลไปแล้ว ฝ่ายบัญชีจะกรอกเข้าระบบให้เมื่อได้รับ' },
+  { value: 'proxy_email', label: 'ให้ผู้ดูแลเป็นคนส่ง', hint: 'ระบบจะแจ้งฝ่ายดูแลทางไลน์ให้ส่งและตรวจ Timesheet แทนคุณ' },
+];
+const METHOD_SHORT: Record<string, string> = { self_obs: 'ส่งผ่านระบบ OBS', self_email: 'ส่งผ่าน Email', proxy_email: 'ให้ผู้ดูแลเป็นคนส่ง' };
+
+/** กติกาเดียวกับกลุ่ม "ต้องลงมือ" (bucketOf() ใน my-progress/MyProgressClient.tsx) และเดียวกับที่
+ * เซิร์ฟเวอร์เช็คซ้ำ (submittablePeriodFor() ใน timesheetSubmissionService.ts) — ถึงรอบแล้ว ยังไม่วางบิล
+ * และยังไม่ส่ง หรือถูกตีกลับ เรียงเก่า→ใหม่ให้รอบที่ค้างนานสุดขึ้นก่อน */
+function submitOptionsFrom(progress: any, submissions: any[]): SubmitOption[] {
+  const current: string = progress?.currentPeriod ?? '';
+  const declared = new Map<string, string>();
+  for (const r of submissions) if (r?.method) declared.set(`${r.contractId}|${r.period}`, r.method);
+  const out: SubmitOption[] = [];
+  for (const c of progress?.contracts ?? []) {
+    for (const p of c.periods ?? []) {
+      if (p.period > current || p.billed) continue;
+      if (p.timesheetStatus !== 'not_submitted' && p.timesheetStatus !== 'rejected') continue;
+      out.push({
+        key: `${c.contractId}|${p.period}`,
+        contractId: c.contractId,
+        period: p.period,
+        periodLabel: p.periodLabel,
+        customerName: c.customerName,
+        projectName: c.projectName,
+        rejected: p.timesheetStatus === 'rejected',
+        declaredMethod: declared.get(`${c.contractId}|${p.period}`) ?? null,
+      });
+    }
+  }
+  return out.sort((a, b) => a.period.localeCompare(b.period));
+}
+
 interface SubmitResult {
   period: string;
   periodLabel: string;
   customerName: string;
   projectName: string;
-  fileName: string;
+  /** มีเฉพาะส่งผ่านระบบ OBS (อัปโหลดไฟล์) */
+  fileName?: string;
+  method: SubmitMethod;
+  emailTargets?: string[];
 }
 
 /**
@@ -45,7 +98,7 @@ interface SubmitResult {
  * ตรวจ/ยืนยันจากแท็บ "ประวัติ" ได้เหมือนเดิมด้วย (เข้าถึงแถวเดียวกัน คนละทางเข้า)
  */
 export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boolean } = {}) {
-  const { tx } = useLang();
+  const { tx, formatPeriod } = useLang();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -60,6 +113,33 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   // แบบเดียวกันตอนอ่านหลายรายการพร้อมกัน ไม่เขียนตรรกะซ้ำอีกสองที่ โหมดพนักงาน (submitOnly) ไม่ใช้ค่า
   // เหล่านี้เลย (เจ้าของระบบสั่ง 18 ก.ย. 69) แต่ JSX ด้านล่างกันไว้แล้วด้วย submitOnly ไม่ให้ขึ้นมาโชว์
   const picker = useReaderPicker();
+
+  // โหมดพนักงาน: ต้องเลือกรอบบิลเองก่อนส่งทุกครั้ง (25 ก.ย. 69 ตามที่ขอ) — เดิมระบบเลือกรอบเก่าสุดที่ค้าง
+  // ให้เองเงียบๆ พนักงานไม่รู้ว่าไฟล์จะไปลงเดือนไหนจนส่งเสร็จแล้ว มากดจากปุ่มในหน้า "ความคืบหน้าของฉัน"
+  // จะติด ?contractId=&period= มาด้วย เลือกรอบนั้นไว้ให้เลย (คนกดเลือกรอบมาจากหน้านั้นแล้ว)
+  const [options, setOptions] = useState<SubmitOption[] | null>(null);
+  const [optionsError, setOptionsError] = useState(false);
+  const [selectedKey, setSelectedKey] = useState('');
+  const [method, setMethod] = useState<SubmitMethod>('self_obs');
+  useEffect(() => {
+    if (!submitOnly || submitted) return;
+    Promise.all([
+      fetch('/api/my-progress', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject())),
+      // ช่องทางที่เคยแจ้งไว้ — โหลดไม่ได้ก็แค่ไม่มีป้ายบอก ไม่ต้องทำให้ทั้งฟอร์มพัง
+      fetch('/api/timesheet-submissions/mine', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { rows: [] }))
+        .catch(() => ({ rows: [] })),
+    ])
+      .then(([progress, subs]) => {
+        const opts = submitOptionsFrom(progress, Array.isArray(subs?.rows) ? subs.rows : []);
+        setOptions(opts);
+        const q = new URLSearchParams(window.location.search);
+        const fromLink = `${q.get('contractId') ?? ''}|${q.get('period') ?? ''}`;
+        setSelectedKey(opts.some((o) => o.key === fromLink) ? fromLink : '');
+      })
+      .catch(() => setOptionsError(true));
+  }, [submitOnly, submitted]);
+  const selected = options?.find((o) => o.key === selectedKey) ?? null;
 
   // เช็คว่ามีไฟล์จากคิวนี้ที่ยังไม่เสร็จค้างอยู่ไหมทุกครั้งที่เปิด/รีเฟรชหน้า (23 ก.ย. 69) — เดิมสถานะ
   // "กำลังดูคิวอยู่" เก็บแค่ในหน่วยความจำของหน้าเว็บ รีเฟรชทีก็หายไปเลย ทั้งที่ไฟล์ยังอ่านไม่เสร็จจริงในระบบ
@@ -114,6 +194,10 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   /** โหมดพนักงาน — ส่งไฟล์เข้าระบบอย่างเดียว ไม่อ่าน ไม่มีหน้ารีวิวให้ยืนยันต่อ */
   async function doSubmit() {
     const file = files[0];
+    if (!selected) {
+      setError(tx('เลือกรอบบิลที่จะส่งก่อน'));
+      return;
+    }
     if (!file) {
       setError(tx('เลือกไฟล์ก่อน'));
       return;
@@ -125,17 +209,44 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
       const res = await fetch('/api/timesheet-submissions/mine/upload', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ fileBase64, fileName: file.name }),
+        body: JSON.stringify({ fileBase64, fileName: file.name, contractId: selected.contractId, period: selected.period }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? tx('ส่งไม่สำเร็จ'));
         return;
       }
-      setSubmitted(data);
+      setSubmitted({ ...data, method: 'self_obs' });
       setFiles([]);
     } catch (e: any) {
       setError(e.message ?? tx('ส่งไม่สำเร็จ'));
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  /** โหมดพนักงาน — แจ้งว่าส่งทางอีเมลแล้ว/ให้ผู้ดูแลเป็นคนส่ง ไม่มีไฟล์ (เหมือนกดปุ่มบนการ์ดในไลน์) */
+  async function doDeclare() {
+    if (!selected) {
+      setError(tx('เลือกรอบบิลที่จะส่งก่อน'));
+      return;
+    }
+    setProcessing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/timesheet-submissions/mine/method', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contractId: selected.contractId, period: selected.period, method }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? tx('บันทึกไม่สำเร็จ'));
+        return;
+      }
+      setSubmitted(data);
+    } catch (e: any) {
+      setError(e.message ?? tx('บันทึกไม่สำเร็จ'));
     } finally {
       setProcessing(false);
     }
@@ -190,27 +301,40 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
       .finally(() => setReviewLoadingId(null));
   }
 
-  /* หน้ายืนยันหลังส่งสำเร็จ (โหมดพนักงาน) — บอกให้ชัดว่าส่งของรอบไหนไปแล้ว เพราะระบบเลือกรอบให้เอง
-     จากรอบที่ค้างเก่าที่สุด ไม่ได้ให้พนักงานเลือก ถ้าไม่บอกกลับไปว่าเป็นรอบไหน คนส่งจะไม่มีทางรู้เลย */
+  /* หน้ายืนยันหลังส่งสำเร็จ (โหมดพนักงาน) — ทวนให้ชัดว่าส่งของรอบไหนไปแล้ว */
   if (submitOnly && submitted) {
     return (
-      <Card title={tx('ส่ง Timesheet แล้ว')}>
+      <Card title={tx(submitted.method === 'self_obs' ? 'ส่ง Timesheet แล้ว' : submitted.method === 'self_email' ? 'บันทึกการส่งผ่าน Email เรียบร้อย' : 'มอบหมายผู้ดูแลระบบเรียบร้อย')}>
         <div className="subdone">
           <span className="ic">
             <Icon name="chk" className="lg" />
           </span>
           <div className="tx">
-            <b>{tx('ส่งเรียบร้อยแล้ว')}</b>
+            <b>{tx(submitted.method === 'self_obs' ? 'ส่งเรียบร้อยแล้ว' : 'บันทึกเรียบร้อยแล้ว')}</b>
             <div className="sub">
               {tx('รอบบิล')} {submitted.periodLabel} · {submitted.customerName} · {submitted.projectName}
             </div>
-            <div className="sub">{submitted.fileName}</div>
-            <div className="sub">{tx('ผู้ดูแลจะตรวจไฟล์นี้ต่อ ติดตามสถานะได้ที่หน้า "บันทึกการส่ง"')}</div>
+            {submitted.method === 'self_obs' && (
+              <>
+                <div className="sub">{submitted.fileName}</div>
+                <div className="sub">{tx('ผู้ดูแลจะตรวจไฟล์นี้ต่อ ติดตามสถานะได้ที่หน้า "บันทึกการส่ง"')}</div>
+              </>
+            )}
+            {submitted.method === 'self_email' && (
+              <div className="sub">
+                {tx('ฝ่ายบัญชีจะกรอกเข้าระบบเมื่อได้รับอีเมล')}
+                {submitted.emailTargets?.length ? ` · ${tx('อีเมลปลายทาง')}: ${submitted.emailTargets.join(', ')}` : ''}
+              </div>
+            )}
+            {submitted.method === 'proxy_email' && (
+              <div className="sub">{tx('ระบบได้ส่งการแจ้งเตือนไปยังฝ่ายดูแล เพื่อดำเนินการส่งและตรวจ Timesheet แทนคุณเรียบร้อยแล้ว')}</div>
+            )}
+            {submitted.method !== 'self_obs' && <div className="sub">{tx('ถ้าเชื่อมต่อ LINE ไว้ จะได้รับข้อความยืนยันทางไลน์ด้วย')}</div>}
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <button className="btn" onClick={() => setSubmitted(null)}>
-            {tx('ส่งไฟล์อีกรอบ')}
+          <button className="btn" onClick={() => { setSubmitted(null); setMethod('self_obs'); }}>
+            {tx('ส่งรอบอื่น')}
           </button>
         </div>
       </Card>
@@ -243,13 +367,51 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   }
 
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const needsFile = !submitOnly || method === 'self_obs';
 
   return (
     <Card
       title={tx(submitOnly ? 'เลือกไฟล์ Timesheet ที่จะส่ง' : 'เลือกไฟล์ Timesheet')}
       right={submitOnly ? undefined : <span className="sub">{tx('PDF ที่ลูกค้าอนุมัติแล้ว — เลือกได้หลายไฟล์พร้อมกัน')}</span>}
     >
-      {files.length === 0 ? (
+      {submitOnly && (
+        <div className="frm" style={{ gridTemplateColumns: '1fr', marginBottom: 14 }}>
+          <label>
+            {tx('รอบบิลที่จะส่ง')}
+            {optionsError ? (
+              <span style={{ color: 'var(--cr)', fontWeight: 400 }}>{tx('โหลดรอบบิลไม่สำเร็จ ลองรีเฟรชหน้านี้')}</span>
+            ) : options === null ? (
+              <span className="sub">{tx('กำลังโหลด…')}</span>
+            ) : options.length === 0 ? (
+              <span className="sub">{tx('ตอนนี้ไม่มีรอบบิลที่ต้องส่ง')}</span>
+            ) : (
+              <select value={selectedKey} onChange={(e) => { setSelectedKey(e.target.value); setError(null); }} disabled={processing}>
+                <option value="">{tx('— เลือกรอบบิล —')}</option>
+                {options.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {formatPeriod(o.period)} · {o.customerName}
+                    {o.rejected ? ` (${tx('ถูกตีกลับ ส่งใหม่')})` : ''}
+                    {!o.rejected && o.declaredMethod ? ` (${tx('แจ้งไว้แล้ว')}: ${tx(METHOD_SHORT[o.declaredMethod] ?? o.declaredMethod)})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+          <label>
+            {tx('วิธีส่ง')}
+            <select value={method} onChange={(e) => { setMethod(e.target.value as SubmitMethod); setError(null); }} disabled={processing}>
+              {SUBMIT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {tx(m.label)}
+                </option>
+              ))}
+            </select>
+            <span className="sub" style={{ fontWeight: 400 }}>{tx(SUBMIT_METHODS.find((m) => m.value === method)!.hint)}</span>
+          </label>
+        </div>
+      )}
+      {/* ส่งทางอีเมล/ให้ผู้ดูแลส่ง = ไม่มีไฟล์มาทางนี้ ซ่อนช่องเลือกไฟล์ไปเลย */}
+      {needsFile && (files.length === 0 ? (
         <div
           className={`dropzone${dragOver ? ' over' : ''}`}
           onClick={() => fileRef.current?.click()}
@@ -327,7 +489,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
             ))}
           </div>
         </div>
-      )}
+      ))}
 
       {!submitOnly && (
         <div style={{ marginTop: 14 }}>
@@ -338,13 +500,19 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
       <button
         className="btn pri lg full"
         style={{ marginTop: 14 }}
-        disabled={processing || files.length === 0}
-        onClick={submitOnly ? doSubmit : doProcessBatch}
+        disabled={processing || (needsFile && files.length === 0) || (submitOnly && !selected)}
+        onClick={!submitOnly ? doProcessBatch : needsFile ? doSubmit : doDeclare}
       >
         <Icon name={submitOnly ? 'send' : 'chk'} />{' '}
-        {submitOnly
-          ? processing ? tx('กำลังส่ง…') : tx('ส่ง Timesheet นี้')
-          : processing ? tx('กำลังเข้าคิว…') : tx('Process Documents')}
+        {!submitOnly
+          ? processing ? tx('กำลังเข้าคิว…') : tx('Process Documents')
+          : processing
+            ? tx('กำลังส่ง…')
+            : method === 'self_email'
+              ? tx('ยืนยันว่าส่งผ่าน Email แล้ว')
+              : method === 'proxy_email'
+                ? tx('แจ้งให้ผู้ดูแลเป็นคนส่ง')
+                : tx('ส่ง Timesheet นี้')}
       </button>
 
       {error && <div style={{ color: 'var(--cr)', marginTop: 14 }}>{error}</div>}

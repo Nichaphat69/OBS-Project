@@ -667,21 +667,39 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
     .filter((p) => p.state === CYCLE_STATE.AWAITING || p.state === CYCLE_STATE.PARTIAL)
     .sort((a, b) => a.period.localeCompare(b.period));
 
+  // ไฟล์ที่พนักงานส่งเองผ่านเว็บ ยังไม่มีใครเปิดอ่าน (แท็บ "รอจากพนักงาน" หน้าอัปโหลด) — กรองตามสัญญาด้วย
+  // assignment ของพนักงานคนนั้นที่ครอบรอบนั้น (กติกาเดียวกับ contractForEmployeeSubmit ใน aiReadsService.ts)
+  const employeeFiles = await prisma.aiRead.findMany({
+    where: { source: 'employee_submit', status: 'pending' },
+    include: { employee: true },
+    orderBy: { readAt: 'desc' },
+  });
+  const employeeFileTasks = [];
+  for (const f of employeeFiles) {
+    if (contractId) {
+      if (!f.employeeId || !f.period) continue;
+      const inContract = await prisma.assignment.findFirst({
+        where: { employeeId: f.employeeId, contractId, status: 'active', startDate: { lte: `${f.period}-01` }, endDate: { gte: `${f.period}-01` } },
+        select: { employeeId: true },
+      });
+      if (!inContract) continue;
+    }
+    employeeFileTasks.push({
+      step: 1, level: 'info',
+      title: 'Timesheet เข้ามาใหม่ รอเปิดตรวจ',
+      detail: `${f.employee?.nameTh ?? f.employeeName ?? '—'}${f.period ? ` รอบ ${thaiMonth(f.period)}` : ''} — ส่งไฟล์ ${f.fileName}`,
+      link: { view: 'employeeQueue' },
+    });
+  }
+
+  /* "งานที่ต้องทำ" = งานที่ลงมือได้เลยตอนนี้ เรียงตามลำดับขั้น แต่ละแถวกดเปิดเข้าไปทำต่อได้ (25 ก.ย. 69 ตามที่ขอ
+     "แสดงเฉพาะงานที่ต้องทำล่าสุด เช่น พนักงานคนนี้ส่ง Timesheet มาแล้ว เข้าไปเปิดตรวจ, พนักงานคนนี้ รอบบิลนี้
+     รอตรวจ Manday หรือรออนุมัติวางบิล สามารถกดเข้าไปตรวจได้เลย") — เดิม "รอ Timesheet" ขึ้นก่อนและนับรวม
+     รอบในอนาคตด้วย (ก.ย. ยังไม่จบก็ทวง ต.ค.–ธ.ค. แล้ว) จนงานจริงจมหายอยู่ท้ายรายการ ตอนนี้ทวงเฉพาะรอบที่ถึง
+     เดือนแล้ว และย้ายไปท้ายสุด ล่าสุดขึ้นก่อน */
+  const currentPeriod = today.slice(0, 7);
   const tasks = [
-    // รอ Timesheet — บอกจำนวน (ส่งแล้ว/ทั้งหมด) + รายชื่อคนที่ยังไม่ส่งตรงๆ (เจ้าของระบบสั่ง 24 ก.ย. 69
-    // "ไม่บอกจำนวน (เช่น 2/3) และไม่ระบุว่าใครยังไม่ส่ง") — ข้อมูล expected/received/missing มีอยู่แล้ว
-    // ใน CyclePeriod (getCycleStatus() คำนวณไว้ให้แล้ว) แค่ไม่เคยถูกเอามาขึ้น "งานที่ต้องทำ" เลยตั้งแต่แรก
-    // ไม่ใส่ link เพราะยังไม่มีหน้าไหนแสดง "ใครยังไม่ส่งของรอบนี้" ให้กดตรงเข้าไปได้ตรงๆ (หน้า "บันทึกการส่ง"
-    // กรองด้วย state ในหน้าเอง ไม่รับ query param จาก URL) ข้ามรอบที่ยังไม่มีใครถูกมอบหมายเลย (expected=0)
-    // เพราะไม่มีใครให้ตามจริงๆ ไม่ใช่ของค้าง
-    ...toChase
-      .filter((p) => p.expected > 0)
-      .map((p) => ({
-        step: 1, level: 'warn',
-        title: 'รอ Timesheet',
-        detail: `${p.customerName} รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
-        link: null,
-      })),
+    ...employeeFileTasks,
     ...sheets
       .filter((s) => s.status === 'mismatch')
       .map((s) => ({
@@ -692,17 +710,30 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
       })),
     ...waitingCheck.map((s) => ({
       step: 2, level: 'warn',
-      title: 'รอคนกดยืนยันผลตรวจ',
+      title: 'รอตรวจ Manday',
       detail: `${s.employeeName} รอบ ${s.periodLabel} — ${money(s.lineAmount ?? 0)} บาท`,
       link: { view: 'detail', id: s.id },
     })),
     ...allPeriods
       .filter((p) => p.state === CYCLE_STATE.READY)
+      .sort((a, b) => b.period.localeCompare(a.period))
       .map((p) => ({
         step: 3, level: 'info',
-        title: 'รอบบิลพร้อมอนุมัติ',
-        detail: `รอบ ${p.periodLabel} ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
+        title: 'รออนุมัติวางบิล',
+        detail: `${p.customerName} รอบ ${p.periodLabel} — ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
         link: { view: 'cycle', contractId: p.contractId, period: p.period },
+      })),
+    // รอ Timesheet — บอกจำนวน (ส่งแล้ว/ทั้งหมด) + รายชื่อคนที่ยังไม่ส่งตรงๆ (เจ้าของระบบสั่ง 24 ก.ย. 69)
+    // ไม่ใส่ link เพราะยังไม่มีหน้าไหนแสดง "ใครยังไม่ส่งของรอบนี้" ให้กดตรงเข้าไปได้ ข้ามรอบที่ยังไม่มีใคร
+    // ถูกมอบหมาย (expected=0) และรอบที่ยังไม่ถึงเดือน
+    ...toChase
+      .filter((p) => p.expected > 0 && p.period <= currentPeriod)
+      .sort((a, b) => b.period.localeCompare(a.period))
+      .map((p) => ({
+        step: 1, level: 'warn',
+        title: 'รอ Timesheet',
+        detail: `${p.customerName} รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
+        link: null,
       })),
   ];
 

@@ -19,7 +19,10 @@ import {
   submitOwnTimesheetFile,
   SubmitOwnFileError,
   pendingSubmissionFor,
+  submittablePeriodFor,
+  declareOwnSubmissionMethod,
 } from '../src/lib/timesheetSubmissionService.js';
+import { isoToday, enumeratePeriods } from '../src/lib/dashboardService.js';
 
 await seedFixtures();
 
@@ -91,5 +94,124 @@ test('ส่งสำเร็จ: เก็บไฟล์ + บันทึก
     await prisma.timesheet.count({ where: { employeeId: EMP } }),
     timesheetsBefore,
     'เส้นนี้ต้องไม่สร้างแถว timesheets — การอ่าน/ตรวจยังเป็นงานของ admin',
+  );
+});
+
+/* ── เลือกรอบบิลเอง (25 ก.ย. 69) — หน้าอัปโหลดของพนักงานบังคับเลือกรอบก่อนส่ง เซิร์ฟเวอร์ต้องเช็คซ้ำ
+   ด้วยกติกาเดียวกับหน้า "ความคืบหน้าของฉัน" ไม่เชื่อค่าที่หน้าเว็บส่งมาเฉยๆ ── */
+
+test('เลือกรอบของสัญญาที่ตัวเองไม่ได้อยู่ ต้องถูกปฏิเสธ', async () => {
+  await assert.rejects(
+    () => submittablePeriodFor(EMP, 'CT-NOT-MINE', '2026-01'),
+    (e: unknown) => e instanceof SubmitOwnFileError && e.status === 400,
+  );
+});
+
+test('เลือกรอบนอกอายุสัญญา/เดือนในอนาคต ต้องถูกปฏิเสธ', async () => {
+  const pending = await pendingSubmissionFor(EMP);
+  assert.ok(pending);
+  await assert.rejects(
+    () => submittablePeriodFor(EMP, pending.contractId, '2999-01'),
+    (e: unknown) => e instanceof SubmitOwnFileError && e.status === 400,
+  );
+});
+
+test('เลือกรอบที่ส่งได้ → ไฟล์ลงรอบที่เลือก ไม่ใช่รอบที่ระบบเดาให้', async () => {
+  const assignment = await prisma.assignment.findFirst({ where: { employeeId: EMP, status: 'active' }, include: { contract: true } });
+  assert.ok(assignment);
+  const current = isoToday().slice(0, 7);
+  let chosen: string | null = null;
+  // ไล่จากรอบใหม่สุดที่ถึงกำหนดแล้วลงไป — ตั้งใจเลือกคนละรอบกับ pendingSubmissionFor() (ที่เอาเก่าสุด)
+  for (const period of enumeratePeriods(assignment.contract.startDate, assignment.contract.endDate).reverse()) {
+    if (period > current) continue;
+    try {
+      await submittablePeriodFor(EMP, assignment.contractId, period);
+      chosen = period;
+      break;
+    } catch {
+      /* รอบนี้ส่งไม่ได้ ลองรอบก่อนหน้า */
+    }
+  }
+  assert.ok(chosen, 'fixture ต้องมีรอบที่ถึงกำหนดและยังส่งได้อย่างน้อยหนึ่งรอบ');
+
+  const result = await submitOwnTimesheetFile({
+    employeeId: EMP,
+    actor: 'ทดสอบ พนักงาน',
+    fileName: 'chosen.pdf',
+    fileBase64: FILE_B64,
+    contractId: assignment.contractId,
+    period: chosen,
+  });
+  assert.equal(result.period, chosen);
+});
+
+/* ── แจ้งว่าส่งด้วยวิธีอื่นจากหน้าเว็บ (25 ก.ย. 69) — ต้องทำเหมือนกดปุ่มบนการ์ดเตือนในไลน์ ── */
+
+class FakeLineClient {
+  broadcasts: any[] = [];
+  personal: any[] = [];
+  async pushFlexToAll(contents: unknown, altText: string, { targets }: { targets?: string[] } = {}) {
+    this.broadcasts.push({ targets: targets ?? [], altText, contents });
+    return {};
+  }
+  async pushFlexToUser(userId: string | null | undefined, altText: string, contents: unknown) {
+    this.personal.push({ userId, altText, contents });
+    return {};
+  }
+}
+
+async function firstSubmittable(): Promise<{ contractId: string; period: string }> {
+  const assignment = await prisma.assignment.findFirst({ where: { employeeId: EMP, status: 'active' }, include: { contract: true } });
+  assert.ok(assignment);
+  const current = isoToday().slice(0, 7);
+  for (const period of enumeratePeriods(assignment.contract.startDate, assignment.contract.endDate)) {
+    if (period > current) continue;
+    try {
+      await submittablePeriodFor(EMP, assignment.contractId, period);
+      return { contractId: assignment.contractId, period };
+    } catch {
+      /* ลองรอบถัดไป */
+    }
+  }
+  throw new Error('fixture ต้องมีรอบที่ส่งได้');
+}
+
+test('แจ้ง "ส่งผ่าน Email" จากเว็บ → บันทึกเป็น self_email + แจ้งฝ่ายบัญชี + ยืนยันเข้าไลน์พนักงาน', async () => {
+  const { contractId, period } = await firstSubmittable();
+  const before = await prisma.employee.findUnique({ where: { id: EMP }, select: { lineUserId: true } });
+  await prisma.employee.update({ where: { id: EMP }, data: { lineUserId: 'U-test-web-declare' } });
+  try {
+    const line = new FakeLineClient();
+    const result = await declareOwnSubmissionMethod({ employeeId: EMP, actor: 'ทดสอบ', contractId, period, method: 'self_email', client: line as any });
+    assert.equal(result.method, 'self_email');
+    assert.equal(result.period, period);
+
+    const row = await prisma.timesheetSubmission.findUnique({ where: { employeeId_period: { employeeId: EMP, period } }, select: { method: true } });
+    assert.equal(row?.method, 'self_email');
+
+    assert.equal(line.broadcasts.length, 1, 'ต้องแจ้งฝ่ายบัญชี/admin ด้วยการ์ดใบเดียวกับเส้นไลน์');
+    assert.match(line.broadcasts[0].altText, /แจ้งส่ง Timesheet ทางอีเมล/);
+    assert.equal(line.personal.length, 1, 'ผูกไลน์ไว้ ต้องได้การ์ดยืนยันเข้าไลน์ตัวเองด้วย');
+    assert.equal(line.personal[0].userId, 'U-test-web-declare');
+  } finally {
+    await prisma.employee.update({ where: { id: EMP }, data: { lineUserId: before?.lineUserId ?? null } });
+  }
+});
+
+test('แจ้ง "ให้ผู้ดูแลเป็นคนส่ง" → proxy_email และไม่สร้างแถว timesheets', async () => {
+  const { contractId, period } = await firstSubmittable();
+  const timesheetsBefore = await prisma.timesheet.count({ where: { employeeId: EMP } });
+  const line = new FakeLineClient();
+  await declareOwnSubmissionMethod({ employeeId: EMP, actor: 'ทดสอบ', contractId, period, method: 'proxy_email', client: line as any });
+  const row = await prisma.timesheetSubmission.findUnique({ where: { employeeId_period: { employeeId: EMP, period } }, select: { method: true } });
+  assert.equal(row?.method, 'proxy_email');
+  assert.match(line.broadcasts[0].altText, /ขอมอบหมายส่ง Timesheet แทน/);
+  assert.equal(await prisma.timesheet.count({ where: { employeeId: EMP } }), timesheetsBefore);
+});
+
+test('แจ้งวิธีส่งของรอบที่ส่งไม่ได้ (นอกสัญญา) ต้องถูกปฏิเสธ ไม่บันทึกอะไร', async () => {
+  await assert.rejects(
+    () => declareOwnSubmissionMethod({ employeeId: EMP, actor: 'ทดสอบ', contractId: 'CT-NOT-MINE', period: '2026-01', method: 'self_email', client: new FakeLineClient() as any }),
+    (e: unknown) => e instanceof SubmitOwnFileError && e.status === 400,
   );
 });

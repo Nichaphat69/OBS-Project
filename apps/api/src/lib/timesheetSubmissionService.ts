@@ -16,7 +16,15 @@ import { addDays, nextPeriod, thaiMonth, thaiDate } from '@obs/domain';
 import { isoToday, enumeratePeriods } from './dashboardService.js';
 import { logAudit } from './audit.js';
 import { recordSubmissionResponse } from './submissionRecordService.js';
-import { LineClient, buildOverdueReminderFlex, EMPLOYEE_QUICK_REPLY } from './lineClient.js';
+import {
+  LineClient,
+  buildOverdueReminderFlex,
+  buildTimesheetEmailConfirmFlex,
+  buildTimesheetProxyConfirmFlex,
+  buildTimesheetMethodNotifyFlex,
+  EMPLOYEE_QUICK_REPLY,
+} from './lineClient.js';
+import { lineApproverTargets, notificationEmailTargets } from './notificationRecipientsService.js';
 
 /** ported from service.js appBase()/uploadLink() — WEB_BASE_URL คือของสแต็กใหม่ (Next.js web app)
  * แยกจาก APP_BASE_URL เดิมซึ่งชี้ไปที่แอปเก่า (คนละพอร์ต/คนละหน้า) ไม่ตั้งไว้ = ไม่มีลิงก์ในการ์ด
@@ -81,6 +89,39 @@ export async function pendingSubmissionFor(employeeId: string): Promise<PendingS
   return null;
 }
 
+/**
+ * รอบบิลที่พนักงานเลือกเองจากหน้าอัปโหลด ส่งได้จริงไหม — กติกาเดียวกับกลุ่ม "ต้องลงมือ" ในหน้า
+ * "ความคืบหน้าของฉัน" (bucketOf() ใน MyProgressClient.tsx) ให้สองหน้าบอกตรงกัน (25 ก.ย. 69 ตามที่ขอ
+ * "role พนักงาน ต้องมีการเลือกเดือนหรือรอบบิลก่อน ถึงจะส่ง Timesheet ได้ ให้สอดคล้องกับหน้าความคืบหน้าของฉัน"):
+ * ต้องเป็นสัญญาที่ตัวเองถูกมอบหมายอยู่ รอบอยู่ในอายุสัญญา ไม่ใช่เดือนในอนาคต ยังไม่วางบิล และยังไม่มี
+ * Timesheet เข้าระบบ (หรือมีแต่ถูกตีกลับ)
+ */
+export async function submittablePeriodFor(employeeId: string, contractId: string, period: string): Promise<PendingSubmission> {
+  const assignment = await prisma.assignment.findFirst({
+    where: { employeeId, contractId, status: 'active' },
+    include: { contract: { include: { customer: true } } },
+  });
+  if (!assignment) throw new SubmitOwnFileError('คุณไม่ได้อยู่ในสัญญานี้ เลือกรอบบิลใหม่', 400);
+  if (!enumeratePeriods(assignment.contract.startDate, assignment.contract.endDate).includes(period)) {
+    throw new SubmitOwnFileError('รอบบิลนี้ไม่อยู่ในอายุสัญญา เลือกรอบบิลใหม่', 400);
+  }
+  if (period > isoToday().slice(0, 7)) throw new SubmitOwnFileError('รอบบิลนี้ยังไม่ถึงกำหนดส่ง', 400);
+
+  const invoice = await prisma.invoice.findUnique({ where: { contractId_period: { contractId, period } } });
+  if (invoice?.status === 'sent_to_flowaccount') throw new SubmitOwnFileError('รอบบิลนี้วางบิลไปแล้ว ส่งเพิ่มไม่ได้', 409);
+  const sheet = await prisma.timesheet.findFirst({ where: { contractId, employeeId, period }, select: { status: true } });
+  if (sheet && sheet.status !== 'rejected') throw new SubmitOwnFileError('รอบบิลนี้มี Timesheet เข้าระบบแล้ว', 409);
+
+  return {
+    contractId,
+    customerName: assignment.contract.customer.nameTh,
+    projectName: assignment.contract.projectName,
+    period,
+    periodLabel: thaiMonth(period),
+    dueDate: thaiDate(timesheetDueDate(period)),
+  };
+}
+
 /** 8 MB — ให้ต่ำกว่าเพดาน express.json ('15mb') อย่างมีระยะ เพราะ base64 พองขึ้นราว 1 ใน 3
  * ไฟล์ 8 MB จะกลายเป็น payload ~10.7 MB ซึ่งยังผ่าน ถ้าปล่อยถึง 15 MB จะโดนตัดตั้งแต่ชั้น body parser
  * แล้วคนกดส่งจะเห็นแค่ error ดิบๆ ที่ไม่ได้บอกว่าไฟล์ใหญ่เกิน */
@@ -123,11 +164,16 @@ export async function submitOwnTimesheetFile({
   actor,
   fileName,
   fileBase64,
+  contractId,
+  period,
 }: {
   employeeId: string;
   actor: string;
   fileName: string;
   fileBase64: string;
+  /** รอบที่พนักงานเลือกเอง — ไม่ส่งมา = ถอยไปใช้รอบเก่าสุดที่ค้าง (pendingSubmissionFor) แบบเดิม */
+  contractId?: string | null;
+  period?: string | null;
 }): Promise<SubmitOwnFileResult> {
   const cleanName = String(fileName ?? '').trim();
   if (!cleanName) throw new SubmitOwnFileError('ไม่พบชื่อไฟล์');
@@ -136,7 +182,7 @@ export async function submitOwnTimesheetFile({
   if (bytes.length === 0) throw new SubmitOwnFileError('ไฟล์ว่างหรืออ่านไม่ได้ ลองเลือกไฟล์ใหม่');
   if (bytes.length > MAX_SUBMIT_BYTES) throw new SubmitOwnFileError('ไฟล์ใหญ่เกิน 8 MB');
 
-  const pending = await pendingSubmissionFor(employeeId);
+  const pending = contractId && period ? await submittablePeriodFor(employeeId, contractId, period) : await pendingSubmissionFor(employeeId);
   if (!pending) throw new SubmitOwnFileError('ตอนนี้ไม่มีรอบบิลที่ต้องส่ง', 409);
 
   const now = new Date().toISOString();
@@ -282,3 +328,100 @@ export async function sendOverdueTimesheetReminders({ today = isoToday(), client
 }
 
 export { uploadLink, myProgressLink };
+
+export interface DeclareMethodResult {
+  method: 'self_email' | 'proxy_email';
+  period: string;
+  periodLabel: string;
+  customerName: string;
+  projectName: string;
+  /** ปลายทางอีเมลที่ฝ่ายบัญชีตั้งไว้ — โชว์ให้พนักงานเห็นว่าควรส่งไปที่ไหน (กรณี self_email) */
+  emailTargets: string[];
+}
+
+/**
+ * พนักงานแจ้งจากหน้าเว็บว่ารอบนี้ "ส่งทางอีเมลแล้ว" หรือ "ให้ผู้ดูแลเป็นคนส่ง" (25 ก.ย. 69 ตามที่ขอ
+ * "ถ้าส่งด้วยวิธีการอื่นแล้ว เช่น ส่งผ่านอีเมลแล้ว ... หรือมีการให้ผู้ดูแลส่งให้ ให้สอดคล้องกับการแจ้งเตือนใน line")
+ *
+ * ทำเหมือนกดปุ่ม "ส่งผ่าน Email"/"ให้ผู้ดูแลเป็นคนส่ง" บนการ์ดเตือนในไลน์ทุกอย่าง (handleTimesheetMethodPostback
+ * ใน lineWebhookService.ts) — บันทึกช่องทางลง timesheet_submissions (หน้า "บันทึกการส่ง" เห็นเหมือนกัน),
+ * แจ้งฝ่ายบัญชี/admin ทางไลน์ด้วยการ์ดใบเดียวกัน และส่งการ์ดยืนยันใบเดียวกันเข้าไลน์ของพนักงานเอง (ถ้าผูกไว้)
+ * ไฟล์ไม่ได้มาทางเส้นนี้ — ไม่สร้างแถว timesheets ฝ่ายบัญชีกรอกเข้าระบบเองเมื่อได้รับอีเมล/ส่งแทน
+ * ส่งไลน์ไม่สำเร็จไม่ทำให้การบันทึกล้ม (เหมือนเส้นไลน์) แค่เก็บ audit ไว้ตามย้อนได้
+ */
+export async function declareOwnSubmissionMethod({
+  employeeId,
+  actor,
+  contractId,
+  period,
+  method,
+  client,
+}: {
+  employeeId: string;
+  actor: string;
+  contractId: string;
+  period: string;
+  method: 'self_email' | 'proxy_email';
+  client?: LineClient;
+}): Promise<DeclareMethodResult> {
+  if (method !== 'self_email' && method !== 'proxy_email') throw new SubmitOwnFileError('เลือกวิธีส่งให้ถูกต้อง');
+  const target = await submittablePeriodFor(employeeId, contractId, period);
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { nameTh: true, lineUserId: true } });
+  if (!employee) throw new SubmitOwnFileError('ไม่พบพนักงาน', 404);
+
+  await recordSubmissionResponse({ employeeId, period, contractId, method });
+  // เหตุผลเดียวกับ submitOwnTimesheetFile — recordSubmissionResponse กลืน error ไว้ อ่านกลับมายืนยันก่อนบอกว่าสำเร็จ
+  const written = await prisma.timesheetSubmission.findUnique({
+    where: { employeeId_period: { employeeId, period } },
+    select: { method: true },
+  });
+  if (written?.method !== method) throw new SubmitOwnFileError('บันทึกช่องทางการส่งไม่สำเร็จ — แจ้งผู้ดูแลระบบ', 500);
+
+  const line = client ?? new LineClient();
+  const emailTargets = method === 'self_email' ? await notificationEmailTargets() : [];
+
+  try {
+    const notifyFlex = buildTimesheetMethodNotifyFlex({ employeeName: employee.nameTh, periodLabel: target.periodLabel, method });
+    const alt = method === 'proxy_email' ? `ขอมอบหมายส่ง Timesheet แทน — ${employee.nameTh}` : `แจ้งส่ง Timesheet ทางอีเมล — ${employee.nameTh}`;
+    await line.pushFlexToAll(notifyFlex, alt, { targets: await lineApproverTargets() });
+  } catch (error: any) {
+    await logAudit({
+      actor: 'system',
+      action: method === 'proxy_email' ? 'notify_timesheet_proxy_error' : 'notify_timesheet_self_email_error',
+      entityType: 'employee',
+      entityId: employeeId,
+      detail: { message: error.message },
+    });
+  }
+
+  if (employee.lineUserId) {
+    try {
+      if (method === 'self_email') {
+        const flex = buildTimesheetEmailConfirmFlex({ customerName: target.customerName, projectName: target.projectName, periodLabel: target.periodLabel, emailTargets });
+        await line.pushFlexToUser(employee.lineUserId, 'บันทึกการส่งผ่าน Email เรียบร้อย', flex, EMPLOYEE_QUICK_REPLY);
+      } else {
+        const flex = buildTimesheetProxyConfirmFlex({ employeeName: employee.nameTh, customerName: target.customerName, projectName: target.projectName, periodLabel: target.periodLabel });
+        await line.pushFlexToUser(employee.lineUserId, 'มอบหมายผู้ดูแลระบบเรียบร้อย', flex, EMPLOYEE_QUICK_REPLY);
+      }
+    } catch {
+      /* เงียบไว้เหมือนเส้นไลน์ — บันทึกสำเร็จไปแล้ว หน้าเว็บก็บอกผลเองอยู่แล้ว */
+    }
+  }
+
+  await logAudit({
+    actor,
+    action: `timesheet_method_${method}`,
+    entityType: 'employee',
+    entityId: employeeId,
+    detail: { contractId, period, via: 'web' },
+  });
+
+  return {
+    method,
+    period,
+    periodLabel: target.periodLabel,
+    customerName: target.customerName,
+    projectName: target.projectName,
+    emailTargets,
+  };
+}

@@ -57,8 +57,6 @@ export default function EmployeesTab() {
   const [aliasEdit, setAliasEdit] = useState<AliasEditState>(null);
   const [aliasValue, setAliasValue] = useState('');
 
-  const [rateEditId, setRateEditId] = useState<string | null>(null);
-  const [rateValue, setRateValue] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   function load() {
@@ -220,63 +218,10 @@ export default function EmployeesTab() {
     );
   }
 
-  async function saveRate() {
-    if (!rateEditId) return;
-    const rate = Number(rateValue);
-    try {
-      const res = await fetch(`/api/assignments/${encodeURIComponent(rateEditId)}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ monthlyRate: rate }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast(data?.error ?? tx('บันทึกไม่สำเร็จ'), true);
-        return;
-      }
-      toast(`${data.employeeName}: ${money(data.from)} → ${money(data.to)} · ${data.note}`);
-      setRateEditId(null);
-      load();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    }
-  }
-
+  /* เรทต่อเดือนแสดงอย่างเดียว ไม่มีปุ่ม "แก้เรท" แล้ว (25 ก.ย. 69 ตามที่ขอ "แก้เรทเงินเดือน ไม่ควรแก้ได้
+     เอาออก") — เรทเป็นตัวตั้งคิดเงินในใบแจ้งหนี้ ไม่ควรแก้กันง่ายๆ จากตารางพนักงาน */
   function renderRateCell(e: EmployeeRow) {
-    if (!e.assignmentId) return money(e.monthlyRate ?? 0);
-    if (rateEditId === e.assignmentId) {
-      return (
-        <div className="rateEditRow">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            className="rateInput"
-            autoFocus
-            value={rateValue}
-            onChange={(ev) => setRateValue(ev.target.value)}
-            onKeyDown={(ev) => {
-              if (ev.key === 'Enter') saveRate();
-              if (ev.key === 'Escape') setRateEditId(null);
-            }}
-          />
-          <button className="ax save" title={tx('บันทึก')} onClick={saveRate}>
-            ✓
-          </button>
-          <button className="ax cancel" title={tx('ยกเลิก')} onClick={() => setRateEditId(null)}>
-            ×
-          </button>
-        </div>
-      );
-    }
-    return (
-      <>
-        {money(e.monthlyRate ?? 0)}{' '}
-        <button className="lk edrate" onClick={() => { setRateEditId(e.assignmentId!); setRateValue(String(e.monthlyRate ?? 0)); }}>
-          {tx('แก้เรท')}
-        </button>
-      </>
-    );
+    return money(e.monthlyRate ?? 0);
   }
 
   async function removeFromProject(assignmentId: string, empName: string) {

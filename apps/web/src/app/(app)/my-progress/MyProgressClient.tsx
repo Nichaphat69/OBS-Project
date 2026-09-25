@@ -125,7 +125,7 @@ function stepsOf(p: EmployeeProgressPeriod): Array<{ key: string; label: string;
   ];
 }
 
-function PeriodRow({ p, bucket }: { p: EmployeeProgressPeriod; bucket: Bucket }) {
+function PeriodRow({ p, bucket, contractId }: { p: EmployeeProgressPeriod; bucket: Bucket; contractId: string }) {
   const { tx } = useLang();
   const steps = stepsOf(p);
   // ขั้นที่ค้างอยู่ตอนนี้ = ตัวแรกที่ยังไม่เสร็จ — เอามาเขียนเป็นประโยคเดียวใต้ชื่อเดือน แทนที่จะให้คนไล่
@@ -165,7 +165,8 @@ function PeriodRow({ p, bucket }: { p: EmployeeProgressPeriod; bucket: Bucket })
 
       <div className="mypg-act">
         {bucket === 'action' ? (
-          <Link href="/upload" className="btn sm pri">
+          // ติดรอบของแถวนี้ไปด้วย — หน้าอัปโหลดบังคับเลือกรอบก่อนส่ง (25 ก.ย. 69) กดจากแถวไหนก็เลือกรอบนั้นไว้ให้
+          <Link href={`/upload?contractId=${encodeURIComponent(contractId)}&period=${encodeURIComponent(p.period)}`} className="btn sm pri">
             <Icon name="up" className="sm" /> {tx(p.timesheetStatus === 'rejected' ? 'ส่งใหม่อีกครั้ง' : 'ส่งไฟล์ Timesheet')}
           </Link>
         ) : (
@@ -179,7 +180,7 @@ function PeriodRow({ p, bucket }: { p: EmployeeProgressPeriod; bucket: Bucket })
 }
 
 /** รอบที่ยังมาไม่ถึง — พับเก็บไว้ท้ายสุด เห็นได้ถ้าอยากดูล่วงหน้า แต่ไม่มาปนกับรอบที่ต้องลงมือจริง */
-function FutureList({ periods }: { periods: EmployeeProgressPeriod[] }) {
+function FutureList({ periods, contractId }: { periods: EmployeeProgressPeriod[]; contractId: string }) {
   const { tx } = useLang();
   const [open, setOpen] = useState(false);
   if (periods.length === 0) return null;
@@ -189,7 +190,7 @@ function FutureList({ periods }: { periods: EmployeeProgressPeriod[] }) {
         <Icon name="chev" className={open ? 'mypg-chev on' : 'mypg-chev'} />
         {tx('รอบที่ยังไม่ถึงกำหนด')} ({periods.length})
       </button>
-      {open && periods.map((p) => <PeriodRow key={p.period} p={p} bucket="future" />)}
+      {open && periods.map((p) => <PeriodRow key={p.period} p={p} bucket="future" contractId={contractId} />)}
     </div>
   );
 }
@@ -318,9 +319,9 @@ export default function MyProgressClient() {
                   <div className="mypg-empty">{tx('ยังไม่มีรอบบิลในสัญญานี้')}</div>
                 )}
                 {due.map((p) => (
-                  <PeriodRow key={p.period} p={p} bucket={bucketOf(p, progress.currentPeriod)} />
+                  <PeriodRow key={p.period} p={p} bucket={bucketOf(p, progress.currentPeriod)} contractId={c.contractId} />
                 ))}
-                <FutureList periods={future} />
+                <FutureList periods={future} contractId={c.contractId} />
               </div>
             </Card>
           );

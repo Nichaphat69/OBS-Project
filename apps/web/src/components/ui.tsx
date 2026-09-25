@@ -180,6 +180,8 @@ function taskHref(link?: TaskLink | null): string | null {
   if (!link) return null;
   if (link.view === 'detail' && link.id) return `/manday/${link.id}`;
   if (link.view === 'cycle' && link.contractId && link.period) return `/billing/${link.contractId}/${link.period}`;
+  // ไฟล์ที่พนักงานส่งเองรอเปิดอ่าน — หน้าอัปโหลดเปิดแท็บ "รอจากพนักงาน" เป็นค่าเริ่มต้นอยู่แล้ว
+  if (link.view === 'employeeQueue') return '/upload';
   return null;
 }
 
@@ -206,7 +208,7 @@ export function TaskList({
               <Icon name={TASK_ICON[t.level] ?? 'info'} />
             </div>
             <div className="tt">
-              <b>{t.title}</b>
+              <b>{tx(t.title)}</b>
               <span>{t.detail}</span>
             </div>
             {href && (

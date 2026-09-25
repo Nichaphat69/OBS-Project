@@ -37,3 +37,28 @@ test('รอบที่ส่งครบแล้ว (ม.ค.) ต้อง�
   const jan = result.tasks.filter((t: any) => t.title === 'รอ Timesheet' && t.detail.includes('มกราคม'));
   assert.equal(jan.length, 0, 'ม.ค. ทั้งสองคนส่งครบแล้วตาม fixture — ไม่ควรถูกทวงอีก');
 });
+
+test('ไฟล์ที่พนักงานส่งเองรอเปิดอ่าน ต้องขึ้นเป็นงานแรกๆ พร้อมลิงก์ไปคิว "รอจากพนักงาน" (25 ก.ย. 69)', async () => {
+  const assignment = await prisma.assignment.findFirst({ where: { contractId: CONTRACT.id, status: 'active' } });
+  assert.ok(assignment, 'fixture ต้องมีพนักงานในสัญญานี้');
+  const row = await prisma.aiRead.create({
+    data: {
+      source: 'employee_submit',
+      fileName: 'dashboard-task-test.pdf',
+      employeeId: assignment.employeeId,
+      period: assignment.startDate.slice(0, 7),
+      readAt: new Date().toISOString(),
+      readBy: 'ทดสอบ',
+    },
+  });
+  try {
+    const result = await dashboard(CONTRACT.id);
+    const idx = result.tasks.findIndex((t: any) => t.title === 'Timesheet เข้ามาใหม่ รอเปิดตรวจ' && t.detail.includes('dashboard-task-test.pdf'));
+    assert.ok(idx >= 0, 'ต้องมีงานของไฟล์ที่เพิ่งส่งมา');
+    assert.deepEqual(result.tasks[idx].link, { view: 'employeeQueue' });
+    const firstChase = result.tasks.findIndex((t: any) => t.title === 'รอ Timesheet');
+    if (firstChase >= 0) assert.ok(idx < firstChase, 'งานที่ลงมือได้ต้องมาก่อนงานทวง "รอ Timesheet"');
+  } finally {
+    await prisma.aiRead.delete({ where: { id: row.id } });
+  }
+});

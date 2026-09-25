@@ -23,7 +23,7 @@ import {
   type SubmissionStatus,
 } from '../lib/submissionLogService.js';
 import { confirmSubmission, SubmissionReviewError } from '../lib/submissionRecordService.js';
-import { submitOwnTimesheetFile, SubmitOwnFileError } from '../lib/timesheetSubmissionService.js';
+import { submitOwnTimesheetFile, declareOwnSubmissionMethod, SubmitOwnFileError } from '../lib/timesheetSubmissionService.js';
 
 export const timesheetSubmissionsRouter = Router();
 timesheetSubmissionsRouter.use(requireAuth);
@@ -69,14 +69,48 @@ timesheetSubmissionsRouter.post('/mine/upload', async (req, res) => {
   if (!employeeId) {
     return res.status(403).json({ error: 'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหน ส่ง Timesheet ไม่ได้ — แจ้งผู้ดูแลระบบให้ผูกบัญชีให้ก่อน' });
   }
+  // ต้องเลือกรอบบิลเองทุกครั้ง (25 ก.ย. 69) — ไม่ให้ระบบเดารอบให้เงียบๆ แล้วไฟล์ไปลงผิดเดือน
+  const contractId = str(req.body?.contractId);
+  const period = str(req.body?.period);
+  if (!contractId || !period || !/^\d{4}-\d{2}$/.test(period)) {
+    return res.status(400).json({ error: 'เลือกรอบบิลที่จะส่งก่อน' });
+  }
   try {
     const result = await submitOwnTimesheetFile({
       employeeId,
       actor: req.user!.nameTh,
       fileName: String(req.body?.fileName ?? ''),
       fileBase64: String(req.body?.fileBase64 ?? ''),
+      contractId,
+      period,
     });
     res.json(result);
+  } catch (error) {
+    if (error instanceof SubmitOwnFileError) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+});
+
+/**
+ * พนักงานแจ้งว่ารอบนี้ส่งด้วยวิธีอื่น ("ส่งผ่าน Email" / "ให้ผู้ดูแลเป็นคนส่ง") — ตัวเลือกชุดเดียวกับการ์ดเตือน
+ * ในไลน์ (ดู declareOwnSubmissionMethod) ยึด employeeId จาก session อย่างเดียวเหมือน /mine/upload
+ */
+timesheetSubmissionsRouter.post('/mine/method', async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) {
+    return res.status(403).json({ error: 'บัญชีนี้ยังไม่ได้ผูกกับพนักงานคนไหน — แจ้งผู้ดูแลระบบให้ผูกบัญชีให้ก่อน' });
+  }
+  const contractId = str(req.body?.contractId);
+  const period = str(req.body?.period);
+  const method = str(req.body?.method);
+  if (!contractId || !period || !/^\d{4}-\d{2}$/.test(period)) {
+    return res.status(400).json({ error: 'เลือกรอบบิลที่จะส่งก่อน' });
+  }
+  if (method !== 'self_email' && method !== 'proxy_email') {
+    return res.status(400).json({ error: 'เลือกวิธีส่งให้ถูกต้อง' });
+  }
+  try {
+    res.json(await declareOwnSubmissionMethod({ employeeId, actor: req.user!.nameTh, contractId, period, method }));
   } catch (error) {
     if (error instanceof SubmitOwnFileError) return res.status(error.status).json({ error: error.message });
     throw error;
