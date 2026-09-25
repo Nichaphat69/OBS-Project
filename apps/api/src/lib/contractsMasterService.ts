@@ -385,10 +385,27 @@ export async function deleteContract(contractId: string, { actor }: { actor: str
 
     for (const { employeeId } of assignments) {
       const stillAssigned = await tx.assignment.count({ where: { employeeId } });
-      if (stillAssigned === 0) {
-        await tx.employeeAlias.deleteMany({ where: { employeeId } });
-        await tx.employee.delete({ where: { id: employeeId } });
-      }
+      if (stillAssigned > 0) continue;
+
+      // ไม่มีอัตราจ้างกับสัญญาไหนเหลือแล้ว — ปกติควรลบทิ้งไปด้วยตามที่ comment บนบอก แต่ถ้ายังมีประวัติ
+      // อื่นผูกอยู่ (ตั๋วแจ้งปัญหา/Timesheet เก่า/รายการในใบแจ้งหนี้เก่า/บัญชีล็อกอิน/ประวัติอ่านไฟล์/
+      // ช่องทางส่ง Timesheet) ต้องข้ามไปเก็บพนักงานไว้แทนที่จะลบ — ไม่งั้น Postgres จะ throw foreign key
+      // error ดิบๆ ("Invalid prisma.employee.delete() invocation...") ทำให้การลบ "สัญญา" (สิ่งที่คน
+      // ตั้งใจจะลบจริงๆ) พังไปด้วยทั้งที่ไม่เกี่ยวกันเลย (เจ้าของระบบเจอจริง 25 ก.ย. 69 — พนักงานที่เคย
+      // แจ้งปัญหาไว้ทำให้ลบสัญญาไม่ได้) เก็บพนักงานไว้เฉยๆ ไม่เสียหายอะไร ไปลบเองทีหลังได้จากหน้า
+      // "ข้อมูลหลัก → พนักงาน" ถ้าต้องการจริงๆ
+      const [tickets, timesheets, invoiceItems, users, aiReads, submissions] = await Promise.all([
+        tx.supportTicket.count({ where: { employeeId } }),
+        tx.timesheet.count({ where: { employeeId } }),
+        tx.invoiceItem.count({ where: { employeeId } }),
+        tx.user.count({ where: { employeeId } }),
+        tx.aiRead.count({ where: { employeeId } }),
+        tx.timesheetSubmission.count({ where: { employeeId } }),
+      ]);
+      if (tickets + timesheets + invoiceItems + users + aiReads + submissions > 0) continue;
+
+      await tx.employeeAlias.deleteMany({ where: { employeeId } });
+      await tx.employee.delete({ where: { id: employeeId } });
     }
 
     await tx.contract.delete({ where: { id: contractId } });

@@ -116,6 +116,16 @@ if (process.env.SENTRY_DSN) {
 // ไม่ log stack เต็มลง response (อาจรั่วรายละเอียดภายใน) แต่ log เต็มไว้ฝั่งเซิร์ฟเวอร์เสมอ
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[obs-api] unhandled error', err);
+
+  // ข้อความดิบของ Prisma ("Invalid `prisma.xxx.delete()` invocation: Foreign key constraint
+  // violated...") หลุดไปให้ user เห็นตรงๆ มาก่อน (เจ้าของระบบเจอจริง 25 ก.ย. 69 ตอนลบสัญญาที่มีพนักงาน
+  // เคยแจ้งปัญหาไว้) จุดที่รู้สาเหตุแน่ชัดควร throw error ที่มีข้อความเฉพาะเจาะจงกว่านี้เอง (ดู
+  // deleteContract() เป็นตัวอย่าง) อันนี้เป็นแค่ตาข่ายกันสุดท้ายเผื่อมีจุดอื่นที่ยังไม่เจอ ไม่ใช่ error
+  // ของระบบจริงๆ (แค่ทำรายการไม่ได้เพราะมีข้อมูลอื่นผูกอยู่) จึงตอบ 400 ไม่ใช่ 500 — ไม่ต้องปลุกใครทาง LINE
+  if (err?.code === 'P2003') {
+    return res.status(400).json({ error: 'ลบไม่ได้ — มีข้อมูลอื่นในระบบผูกอยู่กับรายการนี้' });
+  }
+
   const status = typeof err?.status === 'number' ? err.status : 500;
   // แจ้ง LINE เฉพาะ 5xx จริง (ระบบพัง) — 4xx (validation/สิทธิ์ไม่พอ ฯลฯ) เป็นการทำงานปกติของแอป ไม่ใช่
   // เหตุที่ต้องปลุกใครกลางดึก (เจ้าของระบบสั่ง 24 ก.ย. 69) ไม่ await เพราะไม่อยากให้ผู้ใช้รอ LINE ส่งเสร็จ
