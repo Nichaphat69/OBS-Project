@@ -240,11 +240,6 @@ export default function CycleDetailPage() {
         eyebrow={`${data.contract.poNo} · ${data.periodLabel}`}
         title={data.contract.customerName}
         subtitle={data.contract.projectName}
-        actions={
-          <Link href="/billing" className="btn ghost">
-            ← {tx('กลับ')}
-          </Link>
-        }
       />
 
       {approveError && (
