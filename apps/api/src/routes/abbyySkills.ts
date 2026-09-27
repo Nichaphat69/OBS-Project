@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireSuperAdmin } from '../lib/requireRole.js';
 import { listAbbyySkills, createAbbyySkill, updateAbbyySkill, deleteAbbyySkill, AbbyySkillError } from '../lib/abbyySkillsService.js';
+import { FieldMapSuggestError, suggestFieldMap } from '../lib/fieldMapSuggestService.js';
 
 export const abbyySkillsRouter = Router();
 
@@ -43,6 +44,24 @@ abbyySkillsRouter.delete('/:id', requireSuperAdmin, async (req, res) => {
     res.json(await deleteAbbyySkill(decodeURIComponent(req.params.id), { actor: req.user!.nameTh }));
   } catch (error) {
     if (error instanceof AbbyySkillError) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+});
+
+/**
+ * เดาชื่อฟิลด์จาก Timesheet ตัวอย่าง เพื่อเติมหน้าจอจับคู่ฟิลด์ให้ล่วงหน้า (27 ก.ย. 69)
+ *
+ * **อ่านอย่างเดียว ไม่บันทึกอะไรทั้งสิ้น** — คืนร่างให้หน้าจอเติมในช่อง คนตรวจแล้วกดบันทึกเองผ่านเส้น
+ * PATCH เดิม ถ้าเส้นนี้บันทึกเองจะกลายเป็นการทับ mapping ที่ตั้งไว้แล้วด้วยการเดา
+ */
+abbyySkillsRouter.post('/suggest-field-map', requireSuperAdmin, async (req, res) => {
+  try {
+    res.json(await suggestFieldMap({
+      fileBase64: String(req.body?.fileBase64 ?? ''),
+      fileName: String(req.body?.fileName ?? ''),
+    }));
+  } catch (error) {
+    if (error instanceof FieldMapSuggestError) return res.status(error.status).json({ error: error.message });
     throw error;
   }
 });

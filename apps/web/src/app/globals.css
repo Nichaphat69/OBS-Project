@@ -3358,6 +3358,11 @@ td .nm {
 .note .notebtn { display: inline-flex; margin-top: 8px; text-decoration: none; }
 
 /* ตัวกรองรวมในปุ่มเดียวของหน้า "บันทึกการส่ง" (ดู FilterMenu ใน SubmissionsClient.tsx) */
+/* แถบปุ่ม "ให้ระบบเติมชื่อฟิลด์ให้" ในหน้าจับคู่ฟิลด์ (ดู TimesheetFieldMapEditor.tsx) */
+.fmguess { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.fmguess label { cursor: pointer; }
+.fmguess label[aria-disabled='true'] { opacity: 0.6; cursor: default; }
+
 .fmenu { position: relative; display: inline-flex; }
 .fmenu-n {
   margin-inline-start: 6px; min-width: 18px; height: 18px; padding: 0 5px;

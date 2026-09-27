@@ -9,6 +9,7 @@ import {
   type TimesheetFieldMap,
   type TimesheetFieldSpec,
 } from '@obs/domain';
+import { Icon } from './Icon';
 import { useLang } from '../lib/language';
 
 type Section = 'header' | 'detail';
@@ -60,6 +61,47 @@ export function TimesheetFieldMapEditor({
 }) {
   const { tx } = useLang();
   const [query, setQuery] = useState('');
+  const [guessing, setGuessing] = useState(false);
+  const [guessError, setGuessError] = useState<string | null>(null);
+  const [guessNotes, setGuessNotes] = useState<string[] | null>(null);
+
+  /* เดาชื่อฟิลด์จาก Timesheet ตัวอย่างแล้ว "เติมให้เป็นร่าง" — ไม่บันทึกเอง คนต้องกดบันทึกเองเหมือนเดิม
+     (เจ้าของระบบสั่ง 27 ก.ย. 69 ให้สะดวกกับคนใช้ที่สุด แทนที่จะพิมพ์เองทีละช่อง)
+     เติมทับเฉพาะช่องที่ยังว่างอยู่ — ของที่คนตั้งไว้เองแล้วถือว่าถูกกว่าการเดาเสมอ */
+  async function guessFromFile(file: File) {
+    setGuessing(true);
+    setGuessError(null);
+    setGuessNotes(null);
+    try {
+      const buf = await file.arrayBuffer();
+      let bin = '';
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+      const res = await fetch('/api/abbyy-skills/suggest-field-map', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileBase64: btoa(bin) }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setGuessError(body?.error ?? tx('เดาชื่อฟิลด์ไม่สำเร็จ'));
+        return;
+      }
+      let next = value;
+      for (const [section, list] of [['header', body.header ?? []], ['detail', body.detail ?? []]] as const) {
+        for (const f of list as Array<{ key: string; found: string | null }>) {
+          if (entryOf(next, section as Section, f.key) !== undefined) continue; // คนตั้งไว้เองแล้ว ไม่แตะ
+          if (f.found) next = withEntry(next, section as Section, f.key, f.found);
+        }
+      }
+      onChange(next);
+      setGuessNotes(body.notes ?? []);
+    } catch {
+      setGuessError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
+    } finally {
+      setGuessing(false);
+    }
+  }
 
   const split = value.monthYearSplit;
 
@@ -230,6 +272,32 @@ export function TimesheetFieldMapEditor({
       <div className="sub" style={{ marginBottom: 12 }}>
         {tx('กรอกว่าเอกสารของบริษัทรายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ')}
       </div>
+
+      <div className="fmguess">
+        <label className={`btn sm${guessing || disabled ? '' : ' pri'}`} aria-disabled={guessing || disabled}>
+          <Icon name="up" className="sm" />
+          {guessing ? tx('กำลังอ่านเอกสาร…') : tx('อัปโหลด Timesheet ตัวอย่างให้ระบบเติมให้')}
+          <input
+            type="file"
+            accept=".pdf"
+            hidden
+            disabled={guessing || disabled}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (f) guessFromFile(f);
+            }}
+          />
+        </label>
+        <span className="sub">{tx('อ่านจากชั้นข้อความใน PDF ไม่เสียเครดิตตัวอ่าน · เติมเฉพาะช่องที่ยังว่าง')}</span>
+      </div>
+      {guessError && <div className="note cr"><Icon name="alt" /><span>{guessError}</span></div>}
+      {guessNotes && guessNotes.length > 0 && (
+        <div className="note ok">
+          <Icon name="chk" />
+          <span>{guessNotes.join(' · ')}</span>
+        </div>
+      )}
 
       <input
         value={query}
