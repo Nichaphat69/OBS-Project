@@ -223,7 +223,7 @@ function localDt(iso: string | null | undefined, lang: string) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(lang === 'en' ? 'en-GB' : 'th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleString(lang === 'en' ? 'en-GB' : 'th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
@@ -261,7 +261,6 @@ export default function ManadyDetailPage() {
   const params = useParams<{ id: string }>();
   const [sheet, setSheet] = useState<TimesheetDetail | null>(null);
   const [busy, setBusy] = useState(false);
-  const [recomputing, setRecomputing] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -282,32 +281,6 @@ export default function ManadyDetailPage() {
   useEffect(() => {
     if (sheet?.extraction) console.log('[timesheet] ผลการอ่านไฟล์ดิบ', sheet.extraction);
   }, [sheet?.extraction]);
-
-  /**
-   * ⚠️ เดิมทิ้งผลลัพธ์ของ fetch ทั้งก้อน (ไม่เช็ค `res.ok`) — ปุ่มจึงขึ้น "กำลังคำนวณ…" แล้วจบเงียบๆ
-   * เหมือนสำเร็จทุกครั้ง **ต่อให้เส้นนั้นไม่มีอยู่จริง** ซึ่งเป็นสถานะจริงตอนนี้: ไล่ดูแล้วไม่มีทั้ง
-   * proxy ฝั่ง Next (`/api/timesheets/[id]/recompute`) และ route ฝั่ง Express — มีแต่ฟังก์ชัน
-   * `recomputeTimesheet()` ใน timesheetsService.ts ที่ไม่มีใครเปิดเส้นให้เรียก (ยืนยันด้วย curl:
-   * เส้นนี้ได้ 404 จาก Next ส่วนเส้นที่มีจริงอย่าง /check ได้ 401) จนกว่าฝั่ง backend จะเปิดเส้นให้
-   * ปุ่มนี้จะแจ้ง error ตรงๆ แทนที่จะแกล้งทำเป็นสำเร็จ
-   */
-  async function doRecompute() {
-    setRecomputing(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/timesheets/${params.id}/recompute`, { method: 'POST' });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data?.error ?? tx('คำนวณใหม่ไม่สำเร็จ — ระบบยังไม่เปิดเส้นทางนี้ให้ใช้งาน'));
-        return;
-      }
-      await load();
-    } catch {
-      setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
-    } finally {
-      setRecomputing(false);
-    }
-  }
 
   async function doCheck() {
     setBusy(true);
@@ -462,11 +435,6 @@ export default function ManadyDetailPage() {
           <p>
             {sheet.contract.customerName} · {tx('โครงการ')} {sheet.contract.projectName} · <PoTag>{sheet.contract.poNo}</PoTag> · {tx('สัญญา')} {sheet.contract.contractNo ?? '—'}
           </p>
-        </div>
-        <div className="acts">
-          <button className="btn" disabled={recomputing} onClick={doRecompute}>
-            <Icon name="rf" /> {recomputing ? tx('กำลังคำนวณ…') : tx('คำนวณใหม่')}
-          </button>
         </div>
       </div>
 

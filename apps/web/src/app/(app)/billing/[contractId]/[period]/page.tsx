@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../../../components/ui';
 import { Icon } from '../../../../../components/Icon';
-import { useToast, usePdfPreview } from '../../../../../components/Overlays';
+import { usePdfPreview } from '../../../../../components/Overlays';
 import { useLang } from '../../../../../lib/language';
 
 interface InvoiceItem {
@@ -114,7 +114,6 @@ function initials(name: string) {
 
 export default function CycleDetailPage() {
   const { tx } = useLang();
-  const toast = useToast();
   const openPdfPreview = usePdfPreview();
   const params = useParams<{ contractId: string; period: string }>();
   const [data, setData] = useState<CyclePreview | null>(null);
@@ -124,8 +123,6 @@ export default function CycleDetailPage() {
   const [approveResult, setApproveResult] = useState<{ documentNo: string | null; shareLink: string | null; mode: string; note: string | null } | null>(
     null,
   );
-  const [draftingAi, setDraftingAi] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   // สร้างร่างจริงในกล่อง Drafts ของ Gmail พร้อมไฟล์แนบ (25 ก.ย. 69 ตามที่ขอ) — ฝั่งเซิร์ฟเวอร์
   // (createGmailDraft) ทำไว้ครบและมีเทสต์คลุมอยู่แล้วตั้งแต่ก่อนย้ายมา Next.js แค่ไม่เคยมีปุ่มเรียกใช้
   // ในหน้าเว็บชุดใหม่เลย — ปุ่มนี้แค่เรียกเส้นที่มีอยู่แล้ว ไม่มีตรรกะแนบไฟล์/สร้าง MIME ใหม่ตรงนี้เลย
@@ -169,36 +166,6 @@ export default function CycleDetailPage() {
     }
   }
 
-  async function doDraftWithAi() {
-    setDraftingAi(true);
-    setAiError(null);
-    try {
-      const res = await fetch(`/api/cycles/${params.contractId}/${params.period}/email-draft`, { method: 'POST' });
-      const result = await res.json();
-      if (!res.ok) {
-        setAiError(result.error ?? tx('ให้ AI เรียบเรียงอีเมลไม่สำเร็จ'));
-        return;
-      }
-      setData((d) => (d ? { ...d, emailDraft: result } : d));
-    } finally {
-      setDraftingAi(false);
-    }
-  }
-
-  async function copyDraft() {
-    if (!data?.emailDraft) return;
-    const text = `${tx('ถึง')}: ${data.emailDraft.to}\n${tx('สำเนา')}: ${data.emailDraft.cc}\n${tx('เรื่อง')}: ${data.emailDraft.subject}\n\n${data.emailDraft.body}`;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast(tx('คัดลอกร่างอีเมลแล้ว'));
-    } catch {
-      toast(tx('คัดลอกไม่สำเร็จ'), true);
-    }
-  }
-
-  /** สร้างร่างจริงในกล่อง Drafts ของ Gmail พร้อมไฟล์แนบ (ใบวางบิลจาก FlowAccount + Timesheet ของ
-   * พนักงานทุกคนในรอบนี้) — ต่างจาก "ให้ AI เรียบเรียง"/"คัดลอกร่าง" ด้านบนที่แค่เตรียมข้อความให้เอาไป
-   * วางเอง ปุ่มนี้ยิงตรงไปวางร่างในกล่องจริงเลย เหลือแค่เข้า Gmail แล้วเลือกผู้รับ/CC เพิ่มก่อนกดส่ง */
   async function doCreateGmailDraft() {
     setCreatingGmailDraft(true);
     setGmailDraftError(null);
@@ -399,12 +366,6 @@ export default function CycleDetailPage() {
                       <button className="btn sm pri" disabled={creatingGmailDraft} onClick={doCreateGmailDraft}>
                         <Icon name="mail" className="sm" /> {creatingGmailDraft ? tx('กำลังสร้างร่าง…') : tx('สร้างร่างใน Gmail')}
                       </button>
-                      <button className="btn sm" disabled={draftingAi} onClick={doDraftWithAi}>
-                        <Icon name="rf" className="sm" /> {draftingAi ? tx('กำลังเรียบเรียง…') : tx('ให้ AI เรียบเรียง')}
-                      </button>
-                      <button className="btn sm" onClick={copyDraft}>
-                        <Icon name="doc" className="sm" /> {tx('คัดลอกร่าง')}
-                      </button>
                     </div>
                     {gmailDraftError && <div style={{ color: 'var(--cr)', marginBottom: 10 }}>{gmailDraftError}</div>}
                     {gmailDraftResult && (
@@ -421,7 +382,6 @@ export default function CycleDetailPage() {
                         </span>
                       </div>
                     )}
-                    {aiError && <div style={{ color: 'var(--cr)', marginBottom: 10 }}>{aiError}</div>}
                     {data.emailDraft.highlights && data.emailDraft.highlights.length > 0 && (
                       <div className="note info" style={{ marginBottom: 14 }}>
                         <Icon name="info" />

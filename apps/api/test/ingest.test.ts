@@ -152,6 +152,15 @@ test('รับคนที่สองครบรอบ → บอกให้
   assert.equal(f(result.manday).lineAmount, 123420);
   assert.equal(result.nextAction, NEXT_ACTION.APPROVE_CYCLE);
   assert.equal(f(result.cycle).complete, true);
+
+  /* ตรงนี้ ingestTimesheet() ลองขออนุมัติวางบิลให้เองทันทีที่รอบครบ แล้วต้องติด blocker เสมอ เพราะใบที่
+     เพิ่งเข้ามายังไม่มีใครกดยืนยันผลตรวจ — เป็นลำดับงานปกติ ไม่ใช่ความล้มเหลว ห้ามบันทึกเป็น error
+     (เจ้าของระบบชี้ 27 ก.ย. 69: ประวัติการดำเนินการขึ้นบรรทัดแดง "ส่งขออนุมัติวางบิลทาง LINE ไม่สำเร็จ"
+     ทุกใบทั้งที่ไม่มีอะไรผิด) ความล้มเหลวจริง เช่น ส่ง LINE ไม่ออก ยังต้องบันทึกอยู่ */
+  const approvalErrors = await prisma.auditLog.count({
+    where: { action: 'request_line_approval_error', entityId: 'CT-26B0113-2026-02' },
+  });
+  assert.equal(approvalErrors, 0, 'blocker ที่ยังเคลียร์ไม่ครบต้องไม่ถูกบันทึกเป็น error');
 });
 
 /**

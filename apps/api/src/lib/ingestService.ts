@@ -30,7 +30,7 @@ import { employeesForMatching, holidayMap } from './masterData.js';
 import { logAudit } from './audit.js';
 import { LineClient, buildNeedsCheckFlex, buildCheckFailedFlex } from './lineClient.js';
 import { lineApproverTargets } from './notificationRecipientsService.js';
-import { requestCycleApproval, documentLink } from './cyclesService.js';
+import { requestCycleApproval, documentLink, CycleActionError } from './cyclesService.js';
 import { pendingSubmissionFor } from './timesheetSubmissionService.js';
 
 /**
@@ -574,13 +574,20 @@ export async function ingestTimesheet({
     try {
       await requestCycleApproval(assignment.contractId, period, { actor, client });
     } catch (error: any) {
-      await logAudit({
-        actor: 'system',
-        action: 'request_line_approval_error',
-        entityType: 'cycle',
-        entityId: `${assignment.contractId}-${period}`,
-        detail: { message: error.message },
-      });
+      /* "ยังส่งขออนุมัติไม่ได้: ...ยังไม่มีคนกดยืนยันผลตรวจ Timesheet" ไม่ใช่ความล้มเหลว — เป็นลำดับงาน
+         ปกติ ใบที่เพิ่งเข้ามาตรงนี้ยังไม่มีใครตรวจเลยโดยนิยาม การขออนุมัติจึงติด blocker เสมอ แล้วจะไปส่ง
+         เองตอนคนกดยืนยันครบ (ดู confirmTimesheetCheck() ใน timesheetsService.ts) การบันทึกเป็น error
+         ทำให้ประวัติการดำเนินการขึ้นบรรทัดแดงทุกใบทั้งที่ไม่มีอะไรผิด (เจ้าของระบบชี้ 27 ก.ย. 69)
+         เก็บบันทึกไว้เฉพาะความล้มเหลวจริง เช่น ส่ง LINE ไม่ออก */
+      if (!(error instanceof CycleActionError && error.blockers?.length)) {
+        await logAudit({
+          actor: 'system',
+          action: 'request_line_approval_error',
+          entityType: 'cycle',
+          entityId: `${assignment.contractId}-${period}`,
+          detail: { message: error.message },
+        });
+      }
     }
   }
 

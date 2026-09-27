@@ -403,10 +403,13 @@ export async function markTimesheetChecked(
       await requestCycleApproval(sheet.contract.id, sheet.period, { actor, client });
     }
   } catch (error: any) {
-    await logAudit({
-      actor: 'system', action: 'request_line_approval_error',
-      entityType: 'cycle', entityId: `${sheet.contract.id}-${sheet.period}`, detail: { message: error.message },
-    });
+    // blocker ที่ยังเคลียร์ไม่ครบไม่ใช่ความล้มเหลว — เหตุผลเดียวกับใน ingestService.ts (27 ก.ย. 69)
+    if (!Array.isArray(error?.blockers) || error.blockers.length === 0) {
+      await logAudit({
+        actor: 'system', action: 'request_line_approval_error',
+        entityType: 'cycle', entityId: `${sheet.contract.id}-${sheet.period}`, detail: { message: error.message },
+      });
+    }
   }
 
   return getTimesheet(id);
