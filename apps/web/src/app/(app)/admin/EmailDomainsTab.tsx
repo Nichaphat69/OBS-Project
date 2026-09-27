@@ -61,7 +61,7 @@ export default function EmailDomainsTab() {
   }
 
   return (
-    <Card title={tx('โดเมนอีเมลลูกค้า')} flush>
+    <Card title={tx('โดเมนอีเมลบริษัท')} flush>
       {error ? (
         <ErrorState message={error} onRetry={load} />
       ) : (
@@ -111,7 +111,7 @@ export default function EmailDomainsTab() {
             {rows && rows.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', color: 'var(--mut)' }}>
-                  {tx('ยังไม่มีลูกค้าในระบบ')}
+                  {tx('ยังไม่มีบริษัทในระบบ')}
                 </td>
               </tr>
             )}

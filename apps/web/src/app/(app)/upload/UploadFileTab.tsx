@@ -372,7 +372,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   return (
     <Card
       title={tx(submitOnly ? 'เลือกไฟล์ Timesheet ที่จะส่ง' : 'เลือกไฟล์ Timesheet')}
-      right={submitOnly ? undefined : <span className="sub">{tx('PDF ที่ลูกค้าอนุมัติแล้ว — เลือกได้หลายไฟล์พร้อมกัน')}</span>}
+      right={submitOnly ? undefined : <span className="sub">{tx('PDF ที่บริษัทอนุมัติแล้ว — เลือกได้หลายไฟล์พร้อมกัน')}</span>}
     >
       {submitOnly && (
         <div className="frm" style={{ gridTemplateColumns: '1fr', marginBottom: 14 }}>

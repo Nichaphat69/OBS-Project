@@ -34,7 +34,7 @@ interface ContractRow {
   monthlyTotal: number;
   status: string;
 }
-/** ลูกค้าที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลย — ดู GET /api/customers/without-contract */
+/** บริษัทที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลย — ดู GET /api/customers/without-contract */
 interface CustomerWithoutContract {
   id: string;
   nameTh: string;
@@ -59,7 +59,7 @@ interface FlowAccountCompany {
   employees: FlowAccountEmployee[];
 }
 
-/** ปุ่มเชื่อมต่อ FlowAccount — ย้ายมาจากแถบบน (topbar) เดิม เพราะเป็นสวิตช์ที่คุมข้อมูลลูกค้า/สัญญาที่
+/** ปุ่มเชื่อมต่อ FlowAccount — ย้ายมาจากแถบบน (topbar) เดิม เพราะเป็นสวิตช์ที่คุมข้อมูลบริษัท/สัญญาที่
  * ซิงก์มาจาก FlowAccount โดยตรง จึงควรอยู่ในแท็บนี้แทน ไม่ใช่ปุ่มลอยบนแถบบนที่ไม่เกี่ยวกับหน้าที่เปิดอยู่ */
 function FlowAccountToggle() {
   const confirm = useConfirm();
@@ -232,7 +232,7 @@ function WhtRateCell({ contract, onSaved }: { contract: ContractRow; onSaved: ()
   );
 }
 
-/** ported from public/app.js's renderMaster() tab 2 (ลูกค้า & สัญญา) + renderCustomerAddForm()/
+/** ported from public/app.js's renderMaster() tab 2 (บริษัท & สัญญา) + renderCustomerAddForm()/
  * renderContractEditForm() */
 export default function CustomersContractsTab() {
   const confirm = useConfirm();
@@ -243,7 +243,7 @@ export default function CustomersContractsTab() {
   const [orphanCustomers, setOrphanCustomers] = useState<CustomerWithoutContract[]>([]);
   // เดิมโชว์เป็นการ์ดแจ้งเตือนเปิดค้างไว้เสมอ ดูเหมือนบั๊ก/ของแปลกเทียบกับ FlowAccount ที่ไม่มีแนวคิดนี้
   // เลย (เจ้าของระบบทักไว้ 25 ก.ย. 69) — เก็บความสามารถ "กลับมาเพิ่มสัญญาทีหลัง" ไว้เหมือนเดิม (ยังจำเป็น
-  // เพราะ CustomerAddForm ด้านล่างยอมให้เว้นสัญญาว่างไว้ตอนสร้างลูกค้าได้) แค่พับซ่อนไว้เป็นค่าเริ่มต้น
+  // เพราะ CustomerAddForm ด้านล่างยอมให้เว้นสัญญาว่างไว้ตอนสร้างบริษัทได้) แค่พับซ่อนไว้เป็นค่าเริ่มต้น
   // ไม่โผล่เป็นแบนเนอร์เด่นเหมือนมีปัญหาให้ต้องรีบแก้
   const [showOrphans, setShowOrphans] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -264,7 +264,7 @@ export default function CustomersContractsTab() {
         setContracts(await r.json());
       })
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
-    // ลูกค้าที่สร้างไว้แต่ยังไม่มีสัญญา (เพิ่งแยกขั้นตอนสร้างลูกค้า/สัญญาออกจากกัน) — ล้มเหลวได้เงียบๆ
+    // บริษัทที่สร้างไว้แต่ยังไม่มีสัญญา (เพิ่งแยกขั้นตอนสร้างบริษัท/สัญญาออกจากกัน) — ล้มเหลวได้เงียบๆ
     // เพราะไม่ใช่ข้อมูลหลักของหน้านี้ ไม่ควรทำให้ทั้งหน้าใช้งานไม่ได้ถ้าดึงไม่สำเร็จ
     fetch('/api/customers/without-contract', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : []))
@@ -322,7 +322,7 @@ export default function CustomersContractsTab() {
     const ok = await confirm({
       iconName: 'trash-solid',
       danger: true,
-      title: tx('ลบลูกค้ารายนี้?'),
+      title: tx('ลบบริษัทรายนี้?'),
       message: `"${customer.nameTh}" ${tx('จะถูกลบถาวร — กู้คืนไม่ได้ (ลบได้เพราะยังไม่มีสัญญาผูกอยู่)')}`,
       confirmLabel: tx('ลบ'),
     });
@@ -334,7 +334,7 @@ export default function CustomersContractsTab() {
         toast(data?.error ?? tx('ลบไม่สำเร็จ'), true);
         return;
       }
-      toast(tx('ลบลูกค้าแล้ว'));
+      toast(tx('ลบบริษัทแล้ว'));
       load();
     } catch {
       toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
@@ -354,7 +354,7 @@ export default function CustomersContractsTab() {
       <div className="metabar">
         <FlowAccountToggle />
         <button className="btn pri sm" onClick={() => setAddOpen(true)}>
-          <Icon name="grid" className="sm" /> {tx('เพิ่มลูกค้าใหม่')}
+          <Icon name="grid" className="sm" /> {tx('เพิ่มบริษัทใหม่')}
         </button>
       </div>
 
@@ -368,8 +368,8 @@ export default function CustomersContractsTab() {
         />
       )}
 
-      {/* ลูกค้าที่สร้างไว้แล้วแต่ยังไม่มีสัญญา (เพิ่งเพิ่มลูกค้าแบบเว้นสัญญาไว้ก่อน) — ต้องมีที่ให้กลับมา
-          หาแล้วเพิ่มสัญญาต่อได้ ไม่งั้นลูกค้ากลุ่มนี้จะหายไปจากหน้านี้ถาวรเพราะรายการหลักไล่จากสัญญา
+      {/* บริษัทที่สร้างไว้แล้วแต่ยังไม่มีสัญญา (เพิ่งเพิ่มบริษัทแบบเว้นสัญญาไว้ก่อน) — ต้องมีที่ให้กลับมา
+          หาแล้วเพิ่มสัญญาต่อได้ ไม่งั้นบริษัทกลุ่มนี้จะหายไปจากหน้านี้ถาวรเพราะรายการหลักไล่จากสัญญา
           พับซ่อนไว้เป็นค่าเริ่มต้น (25 ก.ย. 69 ตามที่ขอ) ไม่โผล่เป็นแบนเนอร์เด่นเหมือนของเดิม */}
       {orphanCustomers.length > 0 &&
         (addContractForCustomerId ? (
@@ -385,11 +385,11 @@ export default function CustomersContractsTab() {
           <div style={{ marginBottom: 18 }}>
             <button type="button" className="btn ghost sm" onClick={() => setShowOrphans((v) => !v)}>
               <Icon name="chev" className="xs" style={{ transform: showOrphans ? 'rotate(180deg)' : undefined }} />
-              {tx('ลูกค้าที่ยังไม่มีสัญญา')} ({orphanCustomers.length})
+              {tx('บริษัทที่ยังไม่มีสัญญา')} ({orphanCustomers.length})
             </button>
             {showOrphans && (
               <div style={{ marginTop: 10 }}>
-                <Card title={tx('ลูกค้าที่ยังไม่มีสัญญา')} right={<span className="rt">{orphanCustomers.length}</span>}>
+                <Card title={tx('บริษัทที่ยังไม่มีสัญญา')} right={<span className="rt">{orphanCustomers.length}</span>}>
                   <div className="tasklist">
                     {orphanCustomers.map((o) => (
                       <div key={o.id} className="taskrow">
@@ -403,7 +403,7 @@ export default function CustomersContractsTab() {
                           </button>
                           <button
                             className="btn sm icon dgr"
-                            title={tx('ลบลูกค้ารายนี้')}
+                            title={tx('ลบบริษัทรายนี้')}
                             aria-label={tx('ลบ')}
                             onClick={() => deleteOrphanCustomer(o)}
                           >
@@ -455,7 +455,7 @@ export default function CustomersContractsTab() {
           >
             <div className="g2">
               <dl className="kv">
-                <dt>{tx('ลูกค้า')}</dt>
+                <dt>{tx('บริษัท')}</dt>
                 <dd>{c.customerName}</dd>
                 <dt>{tx('เลขผู้เสียภาษี')}</dt>
                 <dd className="n">{c.taxId}</dd>
@@ -500,7 +500,7 @@ export default function CustomersContractsTab() {
   );
 }
 
-/** ฟอร์ม "เพิ่มลูกค้าใหม่" — สร้างลูกค้า + สัญญาแรกในคราวเดียว เพราะลูกค้าที่ไม่มีสัญญาเลยใช้งานอะไร
+/** ฟอร์ม "เพิ่มบริษัทใหม่" — สร้างบริษัท + สัญญาแรกในคราวเดียว เพราะบริษัทที่ไม่มีสัญญาเลยใช้งานอะไร
  * ไม่ได้ (ไม่มีอัตราจ้าง ไม่มีรอบบิล) */
 function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => void }) {
   const toast = useToast();
@@ -568,7 +568,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
       toast(tx('กรอกชื่อบริษัทและเลขผู้เสียภาษีให้ครบก่อน'), true);
       return;
     }
-    // สัญญาไม่บังคับกรอกตอนสร้างลูกค้าอีกต่อไป (createCustomer() เองก็ต้องการแค่ชื่อ+เลขผู้เสียภาษี
+    // สัญญาไม่บังคับกรอกตอนสร้างบริษัทอีกต่อไป (createCustomer() เองก็ต้องการแค่ชื่อ+เลขผู้เสียภาษี
     // อยู่แล้ว) แต่ถ้าจะกรอกสัญญาด้วยก็ต้องครบทั้ง 4 ช่อง เพราะ createContract() ฝั่ง server ยัง
     // ต้องการครบเหมือนเดิม — ไม่แตะ validation นั้นเพราะมีเหตุผลของมันเอง (บิล/PO อ้างอิงฟิลด์พวกนี้)
     const hasAnyContractField = Boolean(po || pn || startDate || endDate);
@@ -601,15 +601,15 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
       });
       const customer = await customerRes.json();
       if (!customerRes.ok) {
-        toast(customer?.error ?? tx('สร้างลูกค้าไม่สำเร็จ'), true);
+        toast(customer?.error ?? tx('สร้างบริษัทไม่สำเร็จ'), true);
         setSaving(false);
         return;
       }
 
       if (!hasAllContractFields) {
-        // ยังไม่กรอกสัญญาเลย — สร้างแค่ลูกค้าไว้ก่อน ไปเพิ่มสัญญาทีหลังได้จากรายการ "ลูกค้าที่ยังไม่มี
+        // ยังไม่กรอกสัญญาเลย — สร้างแค่บริษัทไว้ก่อน ไปเพิ่มสัญญาทีหลังได้จากรายการ "บริษัทที่ยังไม่มี
         // สัญญา" ด้านบน (ดึงจาก GET /api/customers/without-contract)
-        toast(`${tx('เพิ่มลูกค้า')} "${nt}" ${tx('แล้ว — ยังไม่มีสัญญา เพิ่มสัญญาให้ทีหลังได้จากรายการ "ลูกค้าที่ยังไม่มีสัญญา" ด้านบน')}`);
+        toast(`${tx('เพิ่มบริษัท')} "${nt}" ${tx('แล้ว — ยังไม่มีสัญญา เพิ่มสัญญาให้ทีหลังได้จากรายการ "บริษัทที่ยังไม่มีสัญญา" ด้านบน')}`);
         onSaved();
         return;
       }
@@ -678,7 +678,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
 
   return (
     <Card
-      title={tx('เพิ่มลูกค้าใหม่')}
+      title={tx('เพิ่มบริษัทใหม่')}
       right={<span className="rt">{tx('กรอกข้อมูลบริษัทและสัญญาแรกในคราวเดียว')}</span>}
       footer={
         <>
@@ -686,7 +686,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             {tx('ยกเลิก')}
           </button>
           <button className="btn pri" disabled={saving} onClick={save}>
-            {tx('บันทึกลูกค้าใหม่')}
+            {tx('บันทึกบริษัทใหม่')}
           </button>
         </>
       }
@@ -815,16 +815,16 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
           </label>
         </div>
-        <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
+        <small className="fhint">{tx('พนักงาน/อัตราจ้างของบริษัทรายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
       </div>
 
     </Card>
   );
 }
 
-/** ฟอร์ม "เพิ่มสัญญา" ให้ลูกค้าที่มีอยู่แล้วแต่ยังไม่มีสัญญาเลย (มาจาก CustomerAddForm ที่แยกขั้นตอนไว้
+/** ฟอร์ม "เพิ่มสัญญา" ให้บริษัทที่มีอยู่แล้วแต่ยังไม่มีสัญญาเลย (มาจาก CustomerAddForm ที่แยกขั้นตอนไว้
  * ให้เว้นสัญญาว่างไว้ก่อนได้) validation ฝั่งนี้ครบทุกช่องเหมือน createContract() ฝั่ง server เดิม
- * ไม่ได้ผ่อนอะไรลง แค่แยกเวลากรอกออกจากตอนสร้างลูกค้าเท่านั้น */
+ * ไม่ได้ผ่อนอะไรลง แค่แยกเวลากรอกออกจากตอนสร้างบริษัทเท่านั้น */
 function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWithoutContract; onCancel: () => void; onSaved: () => void }) {
   const toast = useToast();
   const { tx } = useLang();
@@ -954,12 +954,12 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
           <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
         </label>
       </div>
-      <small className="fhint">{tx('พนักงาน/อัตราจ้างของลูกค้ารายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
+      <small className="fhint">{tx('พนักงาน/อัตราจ้างของบริษัทรายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
     </Card>
   );
 }
 
-/** ฟอร์ม "แก้ไขข้อมูลสัญญา" — แก้ทั้งลูกค้า+สัญญาในคราวเดียว (มาแทนที่การ์ดของสัญญานั้นเลยในหน้า) */
+/** ฟอร์ม "แก้ไขข้อมูลสัญญา" — แก้ทั้งบริษัท+สัญญาในคราวเดียว (มาแทนที่การ์ดของสัญญานั้นเลยในหน้า) */
 function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractRow; onCancel: () => void; onSaved: () => void }) {
   const toast = useToast();
   const { tx } = useLang();

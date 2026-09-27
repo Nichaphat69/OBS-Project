@@ -16,7 +16,7 @@ type Section = 'header' | 'detail';
 /** ค่าที่ตั้งได้ต่อหนึ่งฟิลด์มีสามสถานะ ไม่ใช่สอง — ตรงกับ TimesheetFieldMap ใน @obs/domain:
  *   undefined = ยังไม่ได้ตั้ง (ให้ตัวอ่านใช้ค่า default ของมันเอง)
  *   null      = ฟอร์มนี้ไม่มีฟิลด์นี้จริงๆ (อย่าไปเตือนว่าหาไม่เจอ)
- *   string    = เอกสารของลูกค้ารายนี้เรียกฟิลด์นี้ว่าอะไร
+ *   string    = เอกสารของบริษัทรายนี้เรียกฟิลด์นี้ว่าอะไร
  * สองอันหลังต่างกันมากสำหรับฝั่งที่อ่านเอกสาร จึงต้องกดบอกให้ชัด ไม่ใช่เดาเอาจากช่องว่าง */
 function entryOf(map: TimesheetFieldMap, section: Section, key: string): string | null | undefined {
   return map[section]?.[key];
@@ -220,7 +220,7 @@ export function TimesheetFieldMapEditor({
   return (
     <div>
       <div className="section-head" style={{ marginTop: 0 }}>
-        <div className="section-title">{tx('จับคู่ชื่อฟิลด์กับเอกสารของลูกค้า')}</div>
+        <div className="section-title">{tx('จับคู่ชื่อฟิลด์กับเอกสารของบริษัท')}</div>
         <span className="sub">
           {tx('ตั้งค่าแล้ว')} {stats.mapped}/{stats.total}
           {stats.absent > 0 ? ` · ${tx('ระบุว่าไม่มี')} ${stats.absent}` : ''}
@@ -228,7 +228,7 @@ export function TimesheetFieldMapEditor({
       </div>
 
       <div className="sub" style={{ marginBottom: 12 }}>
-        {tx('กรอกว่าเอกสารของลูกค้ารายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ')}
+        {tx('กรอกว่าเอกสารของบริษัทรายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ')}
       </div>
 
       <input
@@ -272,7 +272,7 @@ export function TimesheetFieldMapEditor({
             </div>
           </div>
           <div className="sub" style={{ marginBottom: 12 }}>
-            {tx('ไม่ได้อยู่ในแม่แบบที่ลูกค้าให้มา — เพิ่มเองสำหรับฟอร์มที่พิมพ์ยอดรวมไว้ท้ายเอกสาร อ่านจากช่องสรุปเท่านั้น ไม่นับจากตารางให้')}
+            {tx('ไม่ได้อยู่ในแม่แบบที่บริษัทให้มา — เพิ่มเองสำหรับฟอร์มที่พิมพ์ยอดรวมไว้ท้ายเอกสาร อ่านจากช่องสรุปเท่านั้น ไม่นับจากตารางให้')}
           </div>
           <div className="frm">{visibleSummary.map((f) => renderField('header', f))}</div>
         </>

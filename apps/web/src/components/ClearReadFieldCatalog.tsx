@@ -435,7 +435,7 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
                 <span className="cn">
                   {tx('สเปกมีแต่แม่แบบยังไม่มี')} ({reg.documentMissing.length + reg.detailMissing.length})
                 </span>
-                <span className="cd">{tx('ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มลูกค้าไม่มีช่องนี้จริงก็ไม่ต้องมี')}</span>
+                <span className="cd">{tx('ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มบริษัทไม่มีช่องนี้จริงก็ไม่ต้องมี')}</span>
                 <span className="cvs">
                   {[...new Set([...reg.documentMissing, ...reg.detailMissing])].map((n) => <code key={n}>{n}</code>)}
                 </span>

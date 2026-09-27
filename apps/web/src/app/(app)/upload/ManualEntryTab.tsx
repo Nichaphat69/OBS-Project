@@ -77,7 +77,7 @@ export default function ManualEntryTab() {
         <Field label={tx('ชื่อพนักงานตามใบ')} value={employeeName} onChange={setEmployeeName} />
         <Field label={tx('ตำแหน่งตามใบ')} value={position} onChange={setPosition} />
         <Field label={tx('รอบเดือน (YYYY-MM)')} value={period} onChange={setPeriod} placeholder="2026-06" />
-        <Field label={tx('ผู้อนุมัติฝั่งลูกค้า')} value={approvedBy} onChange={setApprovedBy} />
+        <Field label={tx('ผู้อนุมัติฝั่งบริษัท')} value={approvedBy} onChange={setApprovedBy} />
         <Field label={tx('วันที่อนุมัติ (YYYY-MM-DD)')} value={approvedAt} onChange={setApprovedAt} />
         <label>
           <div className="ey">{tx('ช่องทางที่ได้รับมา')}</div>
@@ -86,7 +86,7 @@ export default function ManualEntryTab() {
             onChange={(e) => setSubmissionMethod(e.target.value)}
             style={{ marginTop: 6, width: '100%', height: 38, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 12px' }}
           >
-            <option value="self_email">{tx('ลูกค้าส่งอีเมลมาเอง')}</option>
+            <option value="self_email">{tx('บริษัทส่งอีเมลมาเอง')}</option>
             <option value="proxy_email">{tx('พนักงานส่งอีเมลแทน')}</option>
           </select>
         </label>

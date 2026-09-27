@@ -132,7 +132,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                   <PoTag>{c.poNo}</PoTag>
                 </div>
                 <div className="cf">
-                  <span className="lbl">{tx('ลูกค้า')}</span>
+                  <span className="lbl">{tx('บริษัท')}</span>
                   <Tag tone="mu">{c.customerName}</Tag>
                 </div>
                 <div className="cf grow">
@@ -207,7 +207,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
             <table>
               <thead>
                 <tr>
-                  <th>{tx('ลูกค้า')}</th>
+                  <th>{tx('บริษัท')}</th>
                   <th>{tx('รอบ')}</th>
                   <th>{tx('สถานะ')}</th>
                 </tr>

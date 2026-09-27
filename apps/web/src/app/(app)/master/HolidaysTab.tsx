@@ -113,7 +113,7 @@ export default function HolidaysTab() {
               <tr key={`${h.date}-${h.customerId ?? ''}`}>
                 <td className="n">{dateOnly(h.date, lang)}</td>
                 <td>{h.name}</td>
-                <td>{h.customerId ? h.customerId : <Tag tone="mu">{tx('ทุกลูกค้า')}</Tag>}</td>
+                <td>{h.customerId ? h.customerId : <Tag tone="mu">{tx('ทุกบริษัท')}</Tag>}</td>
                 <td>
                   <button className="btn sm icon dgr" onClick={() => removeHoliday(h)} title={tx('ลบวันหยุดนี้')}>
                     <Icon name="trash" />

@@ -157,7 +157,7 @@ const HISTORY_EVENT: Record<string, (d: any) => HistoryEventShape> = {
     stage: 'timesheet',
     extra: d?.issues ? `พบจุดต้องตรวจ ${d.issues} จุด` : undefined,
   }),
-  read_email_approval: (d) => ({ label: 'อ่านอีเมลอนุมัติจากลูกค้า', stage: 'timesheet', extra: d?.subject }),
+  read_email_approval: (d) => ({ label: 'อ่านอีเมลอนุมัติจากบริษัท', stage: 'timesheet', extra: d?.subject }),
   ingest_timesheet_replaced: (d) => ({
     label: 'รับ Timesheet ฉบับแก้ไข (เขียนทับของเดิม)',
     stage: 'timesheet',
@@ -384,7 +384,7 @@ export default function ManadyDetailPage() {
           .join(' · '),
       },
       ...(sheet.approvedAt
-        ? [{ key: 'approved', at: sheet.approvedAt, order: 0, stage: 'timesheet' as const, who: whoThis, label: tx('ลูกค้าอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '' }]
+        ? [{ key: 'approved', at: sheet.approvedAt, order: 0, stage: 'timesheet' as const, who: whoThis, label: tx('บริษัทอนุมัติ Timesheet'), detail: sheet.approvedByLabel ?? '' }]
         : []),
       ...sheet.audit
         .filter((a) => a.action !== 'ingest_timesheet')
@@ -468,7 +468,7 @@ export default function ManadyDetailPage() {
             <Icon name="mail" />
           </span>
           <span className="cap">Step 04</span>
-          <span className="pl">{tx('ร่างอีเมลถึงลูกค้า')}</span>
+          <span className="pl">{tx('ร่างอีเมลถึงบริษัท')}</span>
         </div>
       </div>
 
@@ -580,7 +580,7 @@ export default function ManadyDetailPage() {
               </div>
               <div className="bd">
                 <dl className="kv">
-                  <dt>{tx('ลูกค้า')}</dt>
+                  <dt>{tx('บริษัท')}</dt>
                   <dd>{sheet.contract.customerName}</dd>
                   <dt>{tx('เลขผู้เสียภาษี')}</dt>
                   <dd className="n">{sheet.contractDetail.taxId ?? '—'}</dd>

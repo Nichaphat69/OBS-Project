@@ -119,7 +119,6 @@ const TX: Record<string, string> = {
   ทั้งหมด: 'Total',
   ตีกลับ: 'Rejected',
   สัญญา: 'Contracts',
-  ลูกค้า: 'Customer',
   มูลค่าคงเหลือ: 'Remaining value',
   ไม่มีสัญญา: 'No contracts',
   รอบบิล: 'Billing cycles',
@@ -332,7 +331,7 @@ const TX: Record<string, string> = {
   'สเปกห้ามใช้ชื่อซ้ำข้ามระดับ จึงแยกเป็นชื่อใหม่แทน':
     'The spec forbids reusing one name across levels, so each level got its own name.',
   สเปกมีแต่แม่แบบยังไม่มี: 'In the spec but not in the template',
-  'ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มลูกค้าไม่มีช่องนี้จริงก็ไม่ต้องมี':
+  'ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มบริษัทไม่มีช่องนี้จริงก็ไม่ต้องมี':
     'Not necessarily a problem — if the customer form genuinely has no such box, it does not need one.',
   ระบบอ่านไม่ได้: 'Unreadable',
   ชื่อที่เลิกใช้: 'Retired name',
@@ -341,14 +340,14 @@ const TX: Record<string, string> = {
     'This field has no description in the template — the reader has only the field name to go on.',
 
   // ── components/TimesheetFieldMapEditor.tsx ──
-  จับคู่ชื่อฟิลด์กับเอกสารของลูกค้า: "Match field names to the customer's document",
-  'กรอกว่าเอกสารของลูกค้ารายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ':
+  จับคู่ชื่อฟิลด์กับเอกสารของบริษัท: "Match field names to the company's document",
+  'กรอกว่าเอกสารของบริษัทรายนี้เรียกแต่ละฟิลด์ว่าอะไร — เว้นว่างไว้ถ้ายังไม่ตั้ง ระบบจะใช้ค่าเริ่มต้นของตัวอ่าน ส่วนช่องที่ติ๊กว่าไม่มี ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ':
     "Enter what this customer's document calls each field. Leave blank to keep the reader's own default; tick \"not on this form\" and the system won't warn that the field is missing.",
   'ค้นหาฟิลด์ (ชื่อไทย ชื่อสเปก หรือตัวอย่าง)': 'Search fields (Thai label, spec name, or example)',
   ไม่พบฟิลด์ที่ค้นหา: 'No matching fields',
   ฟิลด์หัวเอกสาร: 'Document header fields',
   ช่องสรุปท้ายเอกสาร: 'Document summary box',
-  'ไม่ได้อยู่ในแม่แบบที่ลูกค้าให้มา — เพิ่มเองสำหรับฟอร์มที่พิมพ์ยอดรวมไว้ท้ายเอกสาร อ่านจากช่องสรุปเท่านั้น ไม่นับจากตารางให้':
+  'ไม่ได้อยู่ในแม่แบบที่บริษัทให้มา — เพิ่มเองสำหรับฟอร์มที่พิมพ์ยอดรวมไว้ท้ายเอกสาร อ่านจากช่องสรุปเท่านั้น ไม่นับจากตารางให้':
     'Not part of the template the customer supplied — added for forms that print totals in a summary box. Read from that box only; never counted from the daily rows.',
   ฟิลด์ในตารางรายวัน: 'Daily table columns',
   ชื่อตารางรายวัน: 'Daily table name',
@@ -371,7 +370,7 @@ const TX: Record<string, string> = {
 
   // ── master/MasterDataClient.tsx ──
   'พนักงาน & ชื่อพ้อง': 'Employees & aliases',
-  'ลูกค้า & สัญญา': 'Customers & contracts',
+  'บริษัท & สัญญา': 'Companies & contracts',
   วันหยุด: 'Holidays',
   'ฐานข้อมูลที่ทั้ง 3 ขั้นใช้ร่วมกัน — จับคู่ชื่อ · หาเรทค่าบริการ · นับวันทำงานของเดือน':
     'Shared master data across all 3 steps — name matching · rate lookup · workday counting',
@@ -540,7 +539,7 @@ const TX: Record<string, string> = {
   เลือกไฟล์ก่อน: 'Choose a file first',
   อ่านไฟล์ไม่สำเร็จ: 'Failed to read the file',
   'เลือกไฟล์ Timesheet': 'Choose a timesheet file',
-  'PDF ที่ลูกค้าอนุมัติแล้ว': 'Customer-approved PDF',
+  'PDF ที่บริษัทอนุมัติแล้ว': 'Company-approved PDF',
   'ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์': 'Drag a file here, or click to choose one',
   'กำลังอ่านไฟล์…': 'Reading file…',
   อ่านไฟล์นี้: 'Read this file',
@@ -586,10 +585,10 @@ const TX: Record<string, string> = {
   ชื่อพนักงานตามใบ: 'Employee name (as on the form)',
   ตำแหน่งตามใบ: 'Position (as on the form)',
   'รอบเดือน (YYYY-MM)': 'Period (YYYY-MM)',
-  ผู้อนุมัติฝั่งลูกค้า: 'Approver (client side)',
+  ผู้อนุมัติฝั่งบริษัท: 'Approver (company side)',
   'วันที่อนุมัติ (YYYY-MM-DD)': 'Approval date (YYYY-MM-DD)',
   ช่องทางที่ได้รับมา: 'How it was received',
-  ลูกค้าส่งอีเมลมาเอง: 'Client sent the email directly',
+  บริษัทส่งอีเมลมาเอง: 'Company sent the email directly',
   พนักงานส่งอีเมลแทน: 'Employee sent it on the client’s behalf',
   วันที่ลา: 'Leave dates',
   เพิ่มวันลา: 'Add leave day',
@@ -698,7 +697,7 @@ const TX: Record<string, string> = {
   'อัปโหลด · ระบบอ่านไฟล์': 'Upload · system reads the file',
   'ตรวจ Manday · คนยืนยัน': 'Review Manday · human verifies',
   'วางบิล FlowAccount': 'Bill in FlowAccount',
-  ร่างอีเมลถึงลูกค้า: 'Draft email to customer',
+  ร่างอีเมลถึงบริษัท: 'Draft email to company',
   สรุปรายการที่จะวางบิล: 'Summary of what will be billed',
   เรทค่าบริการต่อเดือนตามใบว่าจ้าง: 'Monthly rate per the PO',
   วันทำงานของเดือน: 'Workdays this month',
@@ -715,7 +714,7 @@ const TX: Record<string, string> = {
   วันทำงานจริงของเดือน: 'Actual workdays in the month',
   ผู้ประสานงาน: 'Coordinator',
   ประวัติการดำเนินการ: 'Action history',
-  'ลูกค้าอนุมัติ Timesheet': 'Customer approved the timesheet',
+  'บริษัทอนุมัติ Timesheet': 'Company approved the timesheet',
   ที่มาของข้อมูล: 'Data source',
   ไฟล์ที่อัปโหลด: 'Uploaded file',
   อ้างอิงอีเมล: 'Email reference',
@@ -751,7 +750,7 @@ const TX: Record<string, string> = {
   'ผ่าน LINE': 'Via LINE',
   'อ่านไฟล์ Timesheet': 'Timesheet file read',
   'อ่านข้อมูลจากไฟล์ Timesheet': 'Data extracted from Timesheet file',
-  อ่านอีเมลอนุมัติจากลูกค้า: 'Customer approval email read',
+  อ่านอีเมลอนุมัติจากบริษัท: 'Company approval email read',
   'รับ Timesheet ฉบับแก้ไข (เขียนทับของเดิม)': 'Revised Timesheet received (replaced the previous one)',
   'คำนวณ Manday': 'Manday calculated',
   'แจ้งทาง LINE ให้ตรวจ Manday': 'LINE notice sent to check Manday',
@@ -850,12 +849,12 @@ const TX: Record<string, string> = {
   ยังไม่มีบันทึก: 'No log entries yet',
 
   // ── admin/EmailDomainsTab.tsx ──
-  โดเมนอีเมลลูกค้า: 'Customer email domains',
+  โดเมนอีเมลบริษัท: 'Company email domains',
   ตั้งโดเมน: 'Set domain',
   'ล้างโดเมนแล้ว — กลับไปแสดงทุกฉบับเหมือนเดิม': 'Domain cleared — back to showing every message as before',
   ยังไม่ได้ตั้ง: 'Not set yet',
   บันทึก: 'Save',
-  ยังไม่มีลูกค้าในระบบ: 'No customers in the system yet',
+  ยังไม่มีบริษัทในระบบ: 'No companies in the system yet',
 
   // ── admin/NotificationRecipientsTab.tsx ──
   อีเมล: 'Email',
@@ -915,7 +914,6 @@ const TX: Record<string, string> = {
   'เติมวันหยุดราชการทางการให้อัตโนมัติตามปีที่เลือก ไม่ต้องพิมพ์เพิ่มเอง': 'Official public holidays are filled in automatically for the selected year — no need to type them in',
   ชื่อวันหยุด: 'Holiday name',
   ขอบเขต: 'Scope',
-  ทุกลูกค้า: 'All customers',
   ลบวันหยุดนี้: 'Delete this holiday',
   ยังไม่มีข้อมูลวันหยุดทางการของปีนี้ในระบบ: 'No official holiday data for this year in the system yet',
 
@@ -974,12 +972,12 @@ const TX: Record<string, string> = {
   'และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้ (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยวางบิลไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)':
     'and every employee/timesheet under this contract will be permanently deleted — this cannot be undone (only contracts with no invoices at all can be deleted; if even one invoice was billed, the system will refuse to delete it)',
   ลบสัญญาแล้ว: 'Contract deleted',
-  'ลบลูกค้ารายนี้?': 'Delete this customer?',
+  'ลบบริษัทรายนี้?': 'Delete this company?',
   'จะถูกลบถาวร — กู้คืนไม่ได้ (ลบได้เพราะยังไม่มีสัญญาผูกอยู่)':
     'will be permanently deleted — this cannot be undone (deletable because no contract is linked to it yet)',
-  ลบลูกค้าแล้ว: 'Customer deleted',
-  ลบลูกค้ารายนี้: 'Delete this customer',
-  เพิ่มลูกค้าใหม่: 'Add new customer',
+  ลบบริษัทแล้ว: 'Company deleted',
+  ลบบริษัทรายนี้: 'Delete this company',
+  เพิ่มบริษัทใหม่: 'Add new company',
   'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ': 'Currently active — deactivating it won’t automatically activate another company',
   'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)': 'Inactive — activate to have the system work with this company (any other active company is automatically deactivated)',
   แก้ไขข้อมูลสัญญา: 'Edit contract',
@@ -996,7 +994,7 @@ const TX: Record<string, string> = {
   'คน + เรทต่อเดือนจากใบเสนอราคานี้มาให้อัตโนมัติ': 'employee(s) + monthly rates automatically from this quotation',
   'ใบเสนอราคานี้ไม่มีรายชื่อพนักงานให้ดึง — เพิ่มรายชื่อในใบเสนอราคาที่ FlowAccount ก่อน':
     'This quotation has no employee list to fetch — add the names to the quotation in FlowAccount first',
-  สร้างลูกค้าไม่สำเร็จ: 'Failed to create customer',
+  สร้างบริษัทไม่สำเร็จ: 'Failed to create company',
   สร้างสัญญาไม่สำเร็จ: 'Failed to create contract',
   ไม่สำเร็จ: 'failed',
   พร้อมพนักงาน: 'with',
@@ -1018,8 +1016,8 @@ const TX: Record<string, string> = {
   วันเริ่มสัญญา: 'Contract start date',
   วันสิ้นสุดสัญญา: 'Contract end date',
   'หัก ณ ที่จ่าย (%)': 'Withholding tax (%)',
-  'พนักงาน/อัตราจ้างของลูกค้ารายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"': 'Employees/pay rates for this customer can be added later from the "Employees & aliases" tab',
-  บันทึกลูกค้าใหม่: 'Save new customer',
+  'พนักงาน/อัตราจ้างของบริษัทรายนี้เพิ่มได้ทีหลังจากแท็บ "พนักงาน & ชื่อพ้อง"': 'Employees/pay rates for this company can be added later from the "Employees & aliases" tab',
+  บันทึกบริษัทใหม่: 'Save new company',
   ข้อมูลสัญญา: 'Contract details',
 
   // ── companies/page.tsx, companies/[contractId]/page.tsx ──
