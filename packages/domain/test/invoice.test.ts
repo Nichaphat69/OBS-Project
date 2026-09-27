@@ -347,6 +347,28 @@ test('จับคู่ชื่อได้ทั้งไทย อังก�
   assert.equal(none.employee, null);
 });
 
+test('พนักงานพิมพ์ชื่อมาทั้งไทยและอังกฤษในช่องเดียว → ยังระบุตัวตนได้', () => {
+  /* ฟอร์มหลายเจ้าปล่อยให้พนักงานพิมพ์ชื่อเอง บางคนใส่มาทั้งสองภาษา เทียบทั้งสตริงรวดเดียวจะไม่ตรงกับ
+     อะไรเลยทั้งที่แต่ละท่อนตรงเป๊ะ (เจ้าของระบบสั่ง 27 ก.ย. 69) */
+  for (const raw of [
+    `${DEV.nameTh} / ${DEV.nameEn}`,
+    `${DEV.nameEn} (${DEV.nameTh})`,
+    `${DEV.nameTh} ${DEV.nameEn}`,
+  ]) {
+    const r = matchEmployee(raw, [DEV, PM]);
+    assert.equal(r.employee?.id, DEV.id, `ต้องจับคู่ได้: ${raw}`);
+    assert.equal(r.match, 'exact', 'เทียบตรงตัวทีละท่อน จึงถือเป็น exact ไม่ใช่การเดา');
+  }
+});
+
+test('สองภาษาในช่องเดียวแต่ชี้คนละคน → ต้องไม่เดา ให้คนเลือกเอง', () => {
+  // ผูกผิดคนหมายถึงจ่ายเงินผิดคน — เดาไม่ได้เด็ดขาด
+  const r = matchEmployee(`${DEV.nameTh} / ${PM.nameEn}`, [DEV, PM]);
+  assert.equal(r.employee, null);
+  assert.equal(r.match, 'none');
+  assert.match(r.reason, /ปนกัน/);
+});
+
 test('ตำแหน่งจาก Timesheet ต้องตรงกับตำแหน่งบนใบแจ้งหนี้เท่านั้น (ตำแหน่งพ้องถูกถอดออก 25 ก.ย. 69)', () => {
   assert.ok(checkPosition('Developer', DEV).ok, 'ชื่อบนใบแจ้งหนี้');
   assert.equal(checkPosition('Java Programmer', DEV).ok, false, 'ไม่มีตำแหน่งพ้องให้เทียบอีกต่อไป');

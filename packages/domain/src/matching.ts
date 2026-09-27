@@ -78,6 +78,23 @@ export interface MatchResult {
 }
 
 /**
+ * แยกชื่อที่เขียนมาทั้งสองภาษาในช่องเดียว ออกเป็นท่อนไทยกับท่อนอังกฤษ
+ *
+ * ฟอร์มหลายเจ้าปล่อยให้พนักงานพิมพ์ชื่อเอง บางคนจึงใส่มาทั้งคู่ เช่น "อรวรรณ กิตติศักดิ์ / Orawan
+ * Kittisak" หรือ "Orawan Kittisak (อรวรรณ กิตติศักดิ์)" — เทียบทั้งสตริงรวดเดียวจะไม่ตรงกับอะไรเลย
+ * ทั้งที่ทั้งสองท่อนตรงกับฐานข้อมูลเป๊ะ (เจ้าของระบบสั่ง 27 ก.ย. 69 ให้ระบุตัวตนพนักงานได้ในเคสนี้)
+ *
+ * คืนค่าเฉพาะตอนที่มีทั้งอักษรไทยและอักษรละตินจริงๆ เท่านั้น ชื่อภาษาเดียวไม่ถูกแตะ
+ */
+export function splitBilingualName(value: string | null | undefined): { thai: string; latin: string } | null {
+  const text = String(value ?? '');
+  const thai = (text.match(/[\u0E00-\u0E7F][\u0E00-\u0E7F\s]*/g) ?? []).join(' ').replace(/\s+/g, ' ').trim();
+  const latin = (text.match(/[A-Za-z][A-Za-z'\-\s]*/g) ?? []).join(' ').replace(/\s+/g, ' ').trim();
+  if (!thai || !latin) return null;
+  return { thai, latin };
+}
+
+/**
  * @param rawName          ชื่อที่อ่านได้จาก Timesheet
  * @param employees        [{ id, nameTh, nameEn, aliases: string[], ... }]
  * @param options.maxDistance  ระยะแก้ไขที่ยอมรับได้ (ค่าเริ่มต้น 2)
@@ -110,7 +127,37 @@ export function matchEmployee(
     }
   }
 
-  // 3. สะกดต่างเล็กน้อย — คืนค่าพร้อมเหตุผลให้คนตรวจยืนยัน
+  /* 3. เขียนมาทั้งสองภาษาในช่องเดียว — แยกท่อนไทย/ท่อนอังกฤษแล้วเทียบแบบตรงตัวทีละท่อน
+        ยังเป็นการเทียบ "ตรงตัว" อยู่ ไม่ได้เดา จึงปลอดภัยพอที่จะให้ผลเป็น EXACT ได้
+        ⚠️ ถ้าสองท่อนชี้ไปคนละคน = อ่านมาผิดหรือเป็นชื่อคนละคนปนกัน ห้ามเดาว่าเป็นใคร ปล่อยให้ตกไป
+        ชั้นล่างและให้คนตัดสินเอง ผูกผิดคนหมายถึงจ่ายเงินผิดคน */
+  const parts = splitBilingualName(rawName);
+  if (parts) {
+    const hit = (piece: string): MatchableEmployee | null => {
+      const t = normalizeName(piece);
+      if (!t) return null;
+      for (const e of employees) {
+        if (normalizeName(e.nameTh) === t || normalizeName(e.nameEn) === t) return e;
+        for (const alias of e.aliases ?? []) if (normalizeName(alias) === t) return e;
+      }
+      return null;
+    };
+    const byThai = hit(parts.thai);
+    const byLatin = hit(parts.latin);
+    if (byThai && byLatin && byThai.id !== byLatin.id) {
+      return {
+        match: MATCH.NONE,
+        employee: null,
+        reason: `"${rawName}" มีชื่อสองคนปนกัน (${byThai.nameTh ?? byThai.id} กับ ${byLatin.nameEn ?? byLatin.id}) — ต้องให้คนเลือกเองก่อนวางบิล`,
+      };
+    }
+    const both = byThai ?? byLatin;
+    if (both) {
+      return { match: MATCH.EXACT, employee: both, reason: 'ตรงกับชื่อในฐานข้อมูล (เขียนมาทั้งไทยและอังกฤษ)' };
+    }
+  }
+
+  // 4. สะกดต่างเล็กน้อย — คืนค่าพร้อมเหตุผลให้คนตรวจยืนยัน
   let best: { employee: MatchableEmployee; candidate: string; distance: number } | null = null;
   for (const employee of employees) {
     const candidates = [employee.nameTh, employee.nameEn, ...(employee.aliases ?? [])];
@@ -129,7 +176,7 @@ export function matchEmployee(
     };
   }
 
-  /* 4. ชั้นสุดท้าย — ใช้ตัวอักษรที่ซ้ำกัน ไม่ใช่ระยะแก้ไข
+  /* 5. ชั้นสุดท้าย — ใช้ตัวอักษรที่ซ้ำกัน ไม่ใช่ระยะแก้ไข
      โมเดล vision อ่านชื่อผิดแบบ "สลับ/แทรกตัวอักษร" ซึ่งกินระยะแก้ไขเกิน 2 อย่างรวดเร็ว
      (วัดกับของจริง: "Korawit Khamsuk" → "Korweil Khamsiuk" ต่างกัน 5 · "Sunee Maneekasemsuk"
      → "Sineee Masamasukiam" ต่างกัน 9) ทั้งที่ตัวอักษรที่ใช้แทบเป็นชุดเดียวกัน

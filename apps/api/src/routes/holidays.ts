@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
-import { HolidayError, addHoliday, ensureOfficialHolidays, listHolidays, officialHolidayYears, removeHoliday } from '../lib/holidaysService.js';
+import { HolidayError, addHoliday, ensureOfficialHolidays, listHolidays, removeHoliday, selectableHolidayYears } from '../lib/holidaysService.js';
 
 export const holidaysRouter = Router();
 holidaysRouter.use(requireAuth);
@@ -11,7 +11,7 @@ holidaysRouter.use(requireAuth);
 holidaysRouter.get('/', requireAdmin, async (req, res) => {
   const year = Number(req.query.year) || new Date().getFullYear();
   await ensureOfficialHolidays(year, req.user!.nameTh);
-  res.json({ year, years: officialHolidayYears(), holidays: await listHolidays(year) });
+  res.json({ year, years: await selectableHolidayYears(), holidays: await listHolidays(year) });
 });
 
 /** ported from server.js `POST /api/holidays` */

@@ -142,6 +142,26 @@ export function officialHolidayYears(): number[] {
   return Object.keys(OFFICIAL_THAI_HOLIDAYS).map(Number).sort((a, b) => a - b);
 }
 
+/**
+ * ปีที่เลือกดูได้ในหน้า "วันหยุด" — กว้างกว่าปีที่ฝังวันหยุดราชการไว้ในโค้ด (เจ้าของระบบสั่ง 27 ก.ย. 69
+ * "อยากให้เลือกปีได้ทุกปี พอคลิกก็เห็นวันหยุดในปีที่เลือกทั้งหมด") เดิมหน้าเว็บให้เลือกได้แค่ 3 ปีที่มี
+ * OFFICIAL_THAI_HOLIDAYS อยู่ ทั้งที่ตารางเก็บวันหยุดของปีไหนก็ได้
+ *
+ * = ปีที่มีข้อมูลจริงในตาราง ∪ ปีที่มีวันหยุดราชการฝังไว้ ∪ ช่วง 3 ปีรอบปีปัจจุบัน — ปีที่ไม่มีข้อมูลเลย
+ * ยังเลือกได้ (ได้ตารางว่าง) ไม่ได้ซ่อนทิ้งเหมือนเดิม
+ */
+export async function selectableHolidayYears(): Promise<number[]> {
+  const rows = await prisma.holiday.findMany({ select: { date: true } });
+  const years = new Set<number>(officialHolidayYears());
+  for (const r of rows) {
+    const y = Number(String(r.date).slice(0, 4));
+    if (Number.isFinite(y) && y > 0) years.add(y);
+  }
+  const now = new Date().getFullYear();
+  for (let y = now - 3; y <= now + 3; y += 1) years.add(y);
+  return [...years].sort((a, b) => a - b);
+}
+
 /** ported from service.js ensureOfficialHolidays() — เติมวันหยุดทางการของปีนี้เข้าตาราง ถ้ายังไม่เคย
  * มีเลยสักวันในปีนั้น (customer_id ทั้งหมด) — เติมครั้งเดียวต่อปี ไม่ทับซ้ำถ้าเคยเติม/แก้ไขไปแล้ว */
 export async function ensureOfficialHolidays(year: number, actor: string): Promise<{ seeded: boolean; count?: number }> {
