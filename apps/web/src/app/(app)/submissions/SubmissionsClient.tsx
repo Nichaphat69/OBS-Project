@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, ErrorState, Loading, PageHeader, StatusPill, Tag, TabStrip } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import SupportTicketsPanel from './SupportTicketsPanel';
@@ -55,6 +55,7 @@ interface SubmissionRow {
   employeeId: string;
   employeeName: string;
   contractId: string;
+  customerId: string;
   customerName: string;
   projectName: string;
   period: string;
@@ -101,6 +102,80 @@ function pct(n: number, total: number): string {
   return `${Math.round((n / total) * 100)}%`;
 }
 
+/**
+ * ตัวกรองทั้งหมดรวมอยู่ในปุ่มเดียว กดแล้วกางแผงให้เลือกทีละหัวข้อ (เจ้าของระบบสั่ง 27 ก.ย. 69
+ * "รวมทั้ง 4 ปุ่มให้อยู่ในปุ่มเดียวกันเลย พอคลิกเข้าไปแล้วก็ให้เลือก 4 หัวข้อย่อยอีกที")
+ *
+ * เดิมวางชิปเลือก 3 อันเรียงกันบนหัวการ์ด พอเพิ่มตัวกรองบริษัทเข้าไปเป็น 4 อันก็ยาวจนเบียดชื่อการ์ด
+ * ปุ่มเดียวยังบอกจำนวนตัวกรองที่เปิดอยู่ด้วย จะได้รู้ว่ากำลังดูข้อมูลที่ถูกกรองอยู่ ไม่ใช่ทั้งหมด
+ */
+function FilterMenu({
+  open, onToggle, onClose, activeCount, onClear, groups,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  activeCount: number;
+  onClear: () => void;
+  groups: Array<{
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    allLabel: string;
+    options: Array<{ value: string; label: string }>;
+  }>;
+}) {
+  const { tx } = useLang();
+  const box = useRef<HTMLDivElement>(null);
+
+  // ปิดเมื่อคลิกนอกแผง — แผงลอยทับเนื้อหาอยู่ ถ้าไม่ปิดเองจะบังตารางที่เพิ่งกรองเสร็จ
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) onClose();
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open, onClose]);
+
+  return (
+    <div className="fmenu" ref={box}>
+      <button type="button" className={`btn sm${activeCount ? ' pri' : ''}`} onClick={onToggle} aria-expanded={open}>
+        <Icon name="cog" className="sm" /> {tx('ตัวกรอง')}
+        {activeCount > 0 && <span className="fmenu-n">{activeCount}</span>}
+      </button>
+      {open && (
+        <div className="fmenu-panel">
+          {groups.map((g) => (
+            <label key={g.label} className="fmenu-row">
+              <span className="fmenu-lbl">{tx(g.label)}</span>
+              <span className="selectchip grow">
+                <select value={g.value} onChange={(e) => g.onChange(e.target.value)}>
+                  <option value="">{tx(g.allLabel)}</option>
+                  {g.options.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <Icon name="chev" />
+              </span>
+            </label>
+          ))}
+          <div className="fmenu-foot">
+            <button type="button" className="btn sm" onClick={onClear} disabled={activeCount === 0}>
+              {tx('ล้างตัวกรอง')}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SubmissionsClient({ role }: { role: string }) {
   const { tx } = useLang();
   const isStaff = role === 'admin' || role === 'accounting';
@@ -109,10 +184,14 @@ export default function SubmissionsClient({ role }: { role: string }) {
   const [period, setPeriod] = useState('');
   const [status, setStatus] = useState('');
   const [method, setMethod] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [data, setData] = useState<ListResult | null>(null);
   /* รอบบิลที่มีอยู่จริง เก็บไว้ตอนที่ยังไม่ได้กรองรอบ — พอกรองรอบแล้วผลลัพธ์จะเหลือรอบเดียว ถ้าสร้าง
      ตัวเลือกจากผลลัพธ์ที่กรองแล้วจะเหลือให้เลือกแค่รอบที่เลือกอยู่ กลับไปรอบอื่นไม่ได้อีกเลย */
   const [periodOptions, setPeriodOptions] = useState<Array<{ value: string; label: string }>>([]);
+  /* บริษัทที่มีอยู่จริง — เก็บตอนยังไม่ได้กรองบริษัท ด้วยเหตุผลเดียวกับ periodOptions ข้างบน */
+  const [companyOptions, setCompanyOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [error, setError] = useState<string | null>(null);
 
   // แท็บแจ้งปัญหายังเป็นของ admin เท่านั้นเหมือนเดิม — หน้านี้เปิดกว้างขึ้น แต่ไม่ได้แปลว่าฟังก์ชันเดิม
@@ -128,6 +207,7 @@ export default function SubmissionsClient({ role }: { role: string }) {
     if (period) qs.set('period', period);
     if (status) qs.set('status', status);
     if (method) qs.set('method', method);
+    if (customerId) qs.set('customerId', customerId);
     const path = isStaff ? '/api/timesheet-submissions' : '/api/timesheet-submissions/mine';
     fetch(`${path}${qs.toString() ? `?${qs}` : ''}`, { cache: 'no-store' })
       .then(async (r) => {
@@ -147,11 +227,21 @@ export default function SubmissionsClient({ role }: { role: string }) {
               .map(([value, label]) => ({ value, label })),
           );
         }
+        if (!customerId) {
+          const seen = new Map<string, string>();
+          for (const row of body.rows) seen.set(row.customerId, row.customerName);
+          setCompanyOptions(
+            [...seen]
+              .filter(([value]) => value)
+              .sort((a, b) => a[1].localeCompare(b[1], 'th'))
+              .map(([value, label]) => ({ value, label })),
+          );
+        }
       })
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
   }
 
-  useEffect(load, [period, status, method, isStaff]);
+  useEffect(load, [period, status, method, customerId, isStaff]);
 
   const rows = data?.rows ?? [];
   const submitted = data ? data.summary.submitted + data.summary.confirmed : 0;
@@ -215,39 +305,23 @@ export default function SubmissionsClient({ role }: { role: string }) {
         <Card
           title={tx(TABS.find((t) => t.key === tab)?.label ?? '')}
           right={
-            <div className="subfilters">
-              {/* เลิกใช้ <input type="month"> แล้ว — ปฏิทินที่กางออกมาเป็นของเบราว์เซอร์ หน้าตาคนละภาษา
-                  กับทั้งระบบและแก้ไม่ได้ (เจ้าของระบบสั่ง 18 ก.ย. 69) เปลี่ยนเป็นชิปเลือกแบบเดียวกับอีก
-                  สองตัวข้างๆ แล้วให้เลือกจาก "รอบบิลที่มีอยู่จริง" แทนที่จะเปิดปฏิทินทั้งปีให้เลือกเดือน
-                  ที่ไม่มีข้อมูลสักแถว */}
-              <span className="selectchip">
-                <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-                  <option value="">{tx('ทุกรอบบิล')}</option>
-                  {periodOptions.map((p) => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-                <Icon name="chev" />
-              </span>
-              <span className="selectchip">
-                <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="">{tx('ทุกสถานะ')}</option>
-                  {(Object.keys(STATUS_LABEL) as Status[]).map((s) => (
-                    <option key={s} value={s}>{tx(STATUS_LABEL[s])}</option>
-                  ))}
-                </select>
-                <Icon name="chev" />
-              </span>
-              <span className="selectchip">
-                <select value={method} onChange={(e) => setMethod(e.target.value)}>
-                  <option value="">{tx('ทุกช่องทาง')}</option>
-                  {(Object.keys(METHOD_LABEL) as Method[]).map((m) => (
-                    <option key={m} value={m}>{tx(METHOD_LABEL[m])}</option>
-                  ))}
-                </select>
-                <Icon name="chev" />
-              </span>
-            </div>
+            <FilterMenu
+              open={filtersOpen}
+              onToggle={() => setFiltersOpen((v) => !v)}
+              onClose={() => setFiltersOpen(false)}
+              activeCount={[period, status, method, customerId].filter(Boolean).length}
+              onClear={() => { setPeriod(''); setStatus(''); setMethod(''); setCustomerId(''); }}
+              groups={[
+                { label: 'บริษัท', value: customerId, onChange: setCustomerId, allLabel: 'ทุกบริษัท',
+                  options: companyOptions },
+                { label: 'รอบบิล', value: period, onChange: setPeriod, allLabel: 'ทุกรอบบิล',
+                  options: periodOptions },
+                { label: 'สถานะ', value: status, onChange: setStatus, allLabel: 'ทุกสถานะ',
+                  options: (Object.keys(STATUS_LABEL) as Status[]).map((v) => ({ value: v, label: tx(STATUS_LABEL[v]) })) },
+                { label: 'ช่องทาง', value: method, onChange: setMethod, allLabel: 'ทุกช่องทาง',
+                  options: (Object.keys(METHOD_LABEL) as Method[]).map((v) => ({ value: v, label: tx(METHOD_LABEL[v]) })) },
+              ]}
+            />
           }
         >
           {error ? (

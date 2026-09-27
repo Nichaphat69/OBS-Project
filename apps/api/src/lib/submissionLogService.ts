@@ -36,6 +36,7 @@ export interface SubmissionLogRow {
   employeeId: string;
   employeeName: string;
   contractId: string;
+  customerId: string;
   customerName: string;
   projectName: string;
   period: string;
@@ -63,6 +64,9 @@ export interface SubmissionLogFilter {
   period?: string | null;
   employeeId?: string | null;
   contractId?: string | null;
+  /** กรองตามบริษัทที่ส่งพนักงานไป — หนึ่งบริษัทมีได้หลายสัญญา จึงกรองที่นี่ไม่ใช่ที่ contractId
+   *  (เจ้าของระบบสั่ง 27 ก.ย. 69 ให้เลือกดูรายการส่งรายบริษัทได้) */
+  customerId?: string | null;
   method?: SubmissionMethod | null;
   status?: SubmissionStatus | null;
   /** role 'user' เห็นได้เฉพาะของตัวเอง — บังคับที่ชั้น route ว่าส่งค่าอื่นไม่ได้ */
@@ -118,6 +122,7 @@ export async function listTimesheetSubmissions(filter: SubmissionLogFilter = {})
       status: 'active',
       ...(employeeId ? { employeeId } : {}),
       ...(filter.contractId ? { contractId: filter.contractId } : {}),
+      ...(filter.customerId ? { contract: { customerId: filter.customerId } } : {}),
     },
     include: { contract: { include: { customer: true } }, employee: true },
   });
@@ -145,6 +150,7 @@ export async function listTimesheetSubmissions(filter: SubmissionLogFilter = {})
         employeeId: a.employeeId,
         employeeName: a.employee.nameTh,
         contractId: a.contractId,
+        customerId: a.contract.customerId,
         customerName: a.contract.customer.nameTh,
         projectName: a.contract.projectName,
         period,

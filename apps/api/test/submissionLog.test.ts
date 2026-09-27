@@ -56,6 +56,20 @@ test('รายชื่อมาจากสัญญาที่ active ไม
   assert.equal(rowFor(res, EMP_A, '2026-04'), undefined);
 });
 
+test('กรองตามบริษัทได้ — เห็นเฉพาะรายการส่งของบริษัทนั้น', async () => {
+  // เจ้าของระบบสั่ง 27 ก.ย. 69 ให้เลือกดูรายการส่งรายบริษัทได้ — หนึ่งบริษัทมีได้หลายสัญญา
+  // จึงกรองที่ customerId ไม่ใช่ contractId
+  const contract = await prisma.contract.findUnique({ where: { id: CONTRACT.id } });
+  const all = await listTimesheetSubmissions({ today: TODAY });
+  const mine = await listTimesheetSubmissions({ today: TODAY, customerId: contract!.customerId });
+  assert.ok(all.rows.length > 0);
+  assert.equal(mine.rows.length, all.rows.length, 'fixture มีบริษัทเดียว จึงต้องได้ครบเท่าเดิม');
+  assert.ok(mine.rows.every((r) => r.customerId === contract!.customerId));
+
+  const none = await listTimesheetSubmissions({ today: TODAY, customerId: 'CUS-ไม่มีจริง' });
+  assert.equal(none.rows.length, 0, 'บริษัทที่ไม่มีอยู่ต้องได้ผลว่าง ไม่ใช่คืนทั้งหมด');
+});
+
 test('มีไฟล์ใน timesheets แล้วชนะเสมอ แม้ไม่มีใครกดอะไรในระบบใหม่เลย', async () => {
   await prisma.timesheetSubmission.deleteMany({ where: { employeeId: { in: [EMP_A, EMP_B] } } });
 

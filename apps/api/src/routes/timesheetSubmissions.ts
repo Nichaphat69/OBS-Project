@@ -34,6 +34,7 @@ function filtersFrom(query: Record<string, unknown>): SubmissionLogFilter {
   return {
     period: str(query.period),
     contractId: str(query.contractId),
+    customerId: str(query.customerId),
     method: str(query.method) as SubmissionMethod | null,
     status: str(query.status) as SubmissionStatus | null,
   };
