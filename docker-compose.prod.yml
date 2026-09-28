@@ -145,7 +145,37 @@ services:
         done
     logging: *logging
 
+  # n8n สำหรับงานอัตโนมัติของ OBS — ตั้งใจแยกตัวจาก n8n บนเครื่อง dev ซึ่งมี workflow ของโปรเจกต์ BSCP
+  # ที่เปิดทำงานอยู่ปนอยู่ด้วย ยกมาทั้งตัวจะลาก automation ของทีมอื่นมาด้วย (ตรวจพบ 28 ก.ย. 69)
+  #
+  # อยู่ในเครือข่าย compose เดียวกับ api จึงเรียก http://api:4301 ได้ตรงๆ — ไม่ต้องพึ่ง Cloudflare Tunnel
+  # ที่ URL เปลี่ยนทุกครั้งที่รีสตาร์ท เหลือแค่ LINE webhook เท่านั้นที่ยังต้องใช้ tunnel
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.40.7
+    restart: always
+    environment:
+      # โซนเวลาไทย — workflow มี trigger 09:00 ถ้าไม่ตั้ง n8n ใช้ UTC แล้วจะยิงตอน 16:00 เวลาไทย
+      GENERIC_TIMEZONE: ${TZ:-Asia/Bangkok}
+      TZ: ${TZ:-Asia/Bangkok}
+      # ตั้งเองเสมอ — ถ้าปล่อยให้ n8n สุ่มเก็บไว้ใน volume แล้ววันหนึ่ง volume หาย credential ทั้งหมด
+      # จะถอดรหัสไม่ได้อีกเลย
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?ต้องตั้งค่า}
+      N8N_PORT: 5678
+      N8N_SECURE_COOKIE: 'false'
+      N8N_RUNNERS_ENABLED: 'true'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      N8N_PERSONALIZATION_ENABLED: 'false'
+    ports:
+      - '127.0.0.1:${N8N_PORT:-5678}:5678'
+    volumes:
+      - obs_n8n:/home/node/.n8n
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logging
+
 volumes:
+  obs_n8n:
   obs_pgdata:
   obs_pgbackup:
   obs_caddy_data:
