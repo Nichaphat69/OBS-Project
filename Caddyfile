@@ -1,0 +1,40 @@
+# ทางเข้าเดียวของระบบตอน production — ใช้กับ docker-compose.prod.yml เท่านั้น
+# Caddy ขอใบรับรอง TLS จาก Let's Encrypt ให้เองและต่ออายุให้อัตโนมัติ ไม่ต้องตั้ง cron เอง
+#
+# ทำไมต้องแยกสองโดเมน: หน้าเว็บ (Next.js) มี route handler ของตัวเองอยู่ใต้ /api/* สำหรับ proxy ฝั่ง
+# เซิร์ฟเวอร์ ส่วน Express ก็ให้บริการ /api/* เหมือนกัน ถ้าเอามารวมโดเมนเดียวกันจะชนกันและต้องมาไล่
+# แยกทีละ path ซึ่งพังง่ายเวลาเพิ่ม endpoint ใหม่ — แยกโดเมนแล้ว path ของทั้งสองฝั่งคงเดิมทั้งหมด
+#
+# ผู้เรียกจากภายนอกที่ต้องใช้ {$API_DOMAIN} โดยตรง (ไม่ผ่านหน้าเว็บ):
+#   - LINE webhook  → https://{$API_DOMAIN}/api/line/webhook   (ต้องไปตั้งใน LINE Developers Console)
+#   - n8n           → เส้นที่ใช้ N8N_SHARED_SECRET
+# ผู้ใช้ทั่วไปเข้าที่ {$PUBLIC_DOMAIN} อย่างเดียว
+
+{
+	email {$TLS_EMAIL}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+	# อัปโหลด Timesheet ส่งไฟล์เป็น base64 ใน body — ฝั่ง Express ตั้ง limit ไว้ 15mb ให้ตรงกัน
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy web:3000
+	log {
+		output stdout
+		format console
+	}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy api:4301
+	log {
+		output stdout
+		format console
+	}
+}

@@ -1,0 +1,137 @@
+# Production stack — แยกไฟล์จาก docker-compose.yml (ของเครื่องทดสอบ) โดยตั้งใจ ไม่ใช่ overlay
+# เพราะความต่างไม่ได้มีแค่ค่าไม่กี่ตัว แต่เป็นคนละรูปแบบการเปิดพอร์ต: เครื่องทดสอบเปิด 3000/4301/5433
+# ออกมาที่ host ตรงๆ ส่วนตัวนี้ไม่เปิดอะไรออก host เลยนอกจาก 80/443 ของ reverse proxy
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#
+# ⚠️ ก่อนใช้จริงต้องไล่ .env.production ให้ครบทุกบรรทัดก่อน — ทุกค่าที่ยังชี้ไป test/sandbox จะทำให้
+# ระบบทำงาน "ได้" แต่ผิดเงียบๆ (บอสระบุข้อนี้เป็นเงื่อนไขห้ามพลาดของ go-live) ดู .env.production.example
+#
+# สิ่งที่ยังไม่ได้ทำในไฟล์นี้ และต้องตัดสินใจก่อน go live จริง:
+#   - ยังไม่มีการส่ง backup ออกนอกเครื่อง (pg-backup เขียนลง volume บนเครื่องเดียวกัน — เครื่องพังก็หายด้วย)
+#   - ยังไม่ได้แยก PostgreSQL ออกเป็น managed service
+#   - ยังไม่มี monitoring/alert นอกจาก Sentry
+
+name: obs-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?ต้องตั้งค่า}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้งค่า}
+      POSTGRES_DB: ${POSTGRES_DB:?ต้องตั้งค่า}
+    # ไม่เปิดพอร์ตออก host โดยตั้งใจ — ต่างจากเครื่องทดสอบที่เปิด 5433 ไว้ให้เครื่องมือฝั่ง dev ต่อตรง
+    # ฐานข้อมูล production ต้องเข้าถึงได้จากเครือข่ายภายในของ compose เท่านั้น
+    volumes:
+      - obs_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: &logging
+      driver: json-file
+      options: { max-size: '10m', max-file: '5' }
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: always
+    env_file: .env.production
+    environment:
+      # ต่อผ่านชื่อ service ในเครือข่าย Docker — คนละค่ากับ DATABASE_URL ใน .env ที่ไว้ให้เครื่องมือฝั่ง host
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      PORT: 4301
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4301/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Next.js ฝัง NEXT_PUBLIC_* เข้า bundle ตอน build — เปลี่ยนค่านี้แล้วต้อง build ใหม่ แค่ up -d ไม่พอ
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    restart: always
+    environment:
+      API_BASE_URL: http://api:4301
+      PORT: 3000
+      NODE_ENV: production
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logging
+
+  # TLS + ทางเข้าเดียวของระบบ — Caddy ขอและต่ออายุใบรับรองให้เองจาก Let's Encrypt
+  # ต้องชี้ DNS ของ ${PUBLIC_DOMAIN} และ ${API_DOMAIN} มาที่เครื่องนี้ก่อน ไม่งั้นขอใบรับรองไม่ผ่าน
+  proxy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?ต้องตั้งค่าโดเมนจริง}
+      API_DOMAIN: ${API_DOMAIN:?ต้องตั้งค่าโดเมนของ API}
+      TLS_EMAIL: ${TLS_EMAIL:?ต้องตั้งอีเมลสำหรับแจ้งเตือนใบรับรองหมดอายุ}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - obs_caddy_data:/data
+      - obs_caddy_config:/config
+    depends_on:
+      - web
+      - api
+    logging: *logging
+
+  # สำรองฐานข้อมูลวันละครั้ง เก็บย้อนหลังตาม BACKUP_KEEP_DAYS
+  # ⚠️ เขียนลง volume บนเครื่องเดียวกับฐานข้อมูล — กันได้แค่ "ลบข้อมูลผิด/อัปเกรดพัง" ไม่ได้กันเครื่องหาย
+  # ต้องมีตัวส่งไฟล์ออกนอกเครื่อง (S3 หรืออื่นๆ) อีกชั้นก่อนถือว่าปลอดภัยจริง
+  pg-backup:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - obs_pgbackup:/backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          f="/backup/obs-$$(date +%Y%m%d-%H%M%S).sql.gz"
+          if pg_dump --no-owner | gzip > "$$f"; then
+            echo "[pg-backup] $$f ($$(du -h "$$f" | cut -f1))"
+          else
+            echo "[pg-backup] ล้มเหลว $$(date -Iseconds)" >&2
+            rm -f "$$f"
+          fi
+          find /backup -name 'obs-*.sql.gz' -mtime "+$$BACKUP_KEEP_DAYS" -delete
+          sleep 86400
+        done
+    logging: *logging
+
+volumes:
+  obs_pgdata:
+  obs_pgbackup:
+  obs_caddy_data:
+  obs_caddy_config:
