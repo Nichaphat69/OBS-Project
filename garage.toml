@@ -1,0 +1,16 @@
+# ที่เก็บไฟล์ของ OBS — ใช้กับ service `storage` ใน docker-compose.prod.yml เท่านั้น
+# โหนดเดียว จึงตั้ง replication_factor = 1 (ไม่มีสำเนาข้ามเครื่อง) การสำรองอาศัยการ tar volume ออกไป
+# ไม่ใช่การจำลองข้อมูลของตัว Garage เอง
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage"

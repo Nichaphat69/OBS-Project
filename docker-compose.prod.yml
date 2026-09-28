@@ -174,7 +174,30 @@ services:
         condition: service_healthy
     logging: *logging
 
+  # ที่เก็บไฟล์ PDF — ย้ายออกจากฐานข้อมูล (ตัดสินใจ 28 ก.ย. 69) เดิมเก็บเป็น bytea ในตาราง ทำให้
+  # ไฟล์สำรองรายวันลากไฟล์ทุกใบไปด้วยและโตขึ้นเรื่อยๆ ตามการใช้งาน
+  #
+  # ใช้ Garage ไม่ใช่ MinIO เพราะ MinIO ปิด image สาธารณะไปแล้ว (ตรวจเมื่อ 28 ก.ย. 69 — ทั้ง Docker Hub
+  # และ quay.io ปฏิเสธ) Garage พูดภาษา S3 เหมือนกันและ image เล็กกว่ามาก (21 MB เทียบกับ SeaweedFS
+  # 532 MB / Zenko 1.46 GB) ซึ่งสำคัญเพราะเครื่องนี้ RAM 1.9 GB และแชร์กับระบบอื่น
+  # วันหนึ่งย้ายไป S3 จริงของ AWS ได้โดยเปลี่ยนแค่ endpoint กับ key
+  #
+  # ไม่เปิดพอร์ตออกเครื่อง — api เรียกที่ http://storage:3900 ในเครือข่าย Docker เท่านั้น
+  storage:
+    image: dxflrs/garage:v1.0.1
+    restart: always
+    environment:
+      # ส่งเป็น env ไม่เขียนลง garage.toml เพราะ Garage ปฏิเสธไฟล์ config ที่คนอื่นอ่านได้
+      GARAGE_RPC_SECRET: ${STORAGE_RPC_SECRET:?ต้องตั้งค่า — สร้างด้วย openssl rand -hex 32}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - obs_storage_meta:/var/lib/garage/meta
+      - obs_storage_data:/var/lib/garage/data
+    logging: *logging
+
 volumes:
+  obs_storage_meta:
+  obs_storage_data:
   obs_n8n:
   obs_pgdata:
   obs_pgbackup:
