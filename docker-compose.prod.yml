@@ -2,7 +2,11 @@
 # เพราะความต่างไม่ได้มีแค่ค่าไม่กี่ตัว แต่เป็นคนละรูปแบบการเปิดพอร์ต: เครื่องทดสอบเปิด 3000/4301/5433
 # ออกมาที่ host ตรงๆ ส่วนตัวนี้ไม่เปิดอะไรออก host เลยนอกจาก 80/443 ของ reverse proxy
 #
-#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#   มี reverse proxy เป็นของตัวเอง (ขอใบรับรอง TLS เองด้วย Caddy):
+#     docker compose -f docker-compose.prod.yml --env-file .env.production --profile edge up -d
+#   เครื่องที่มี nginx/reverse proxy ของระบบอื่นถือ 80/443 อยู่แล้ว (เช่นเครื่องที่รัน iNexus):
+#     docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#     แล้วให้ proxy ตัวนั้นชี้มาที่ 127.0.0.1:${WEB_PORT} (หน้าเว็บ) และ 127.0.0.1:${API_PORT} (API)
 #
 # ⚠️ ก่อนใช้จริงต้องไล่ .env.production ให้ครบทุกบรรทัดก่อน — ทุกค่าที่ยังชี้ไป test/sandbox จะทำให้
 # ระบบทำงาน "ได้" แต่ผิดเงียบๆ (บอสระบุข้อนี้เป็นเงื่อนไขห้ามพลาดของ go-live) ดู .env.production.example
@@ -49,6 +53,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # ผูกกับ 127.0.0.1 เท่านั้น — ให้ reverse proxy บนเครื่องเดียวกันต่อได้ แต่เน็ตภายนอกเข้าไม่ถึง
+    # ใช้ตอนเครื่องมี nginx ของระบบอื่นถือ 80/443 อยู่แล้ว (ดูหมายเหตุหัวไฟล์)
+    ports:
+      - '127.0.0.1:${API_PORT:-4301}:4301'
     healthcheck:
       test: ['CMD', 'node', '-e', "fetch('http://localhost:4301/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -70,6 +78,8 @@ services:
       PORT: 3000
       NODE_ENV: production
       SENTRY_DSN: ${SENTRY_DSN:-}
+    ports:
+      - '127.0.0.1:${WEB_PORT:-3000}:3000'
     depends_on:
       api:
         condition: service_healthy
@@ -77,7 +87,12 @@ services:
 
   # TLS + ทางเข้าเดียวของระบบ — Caddy ขอและต่ออายุใบรับรองให้เองจาก Let's Encrypt
   # ต้องชี้ DNS ของ ${PUBLIC_DOMAIN} และ ${API_DOMAIN} มาที่เครื่องนี้ก่อน ไม่งั้นขอใบรับรองไม่ผ่าน
+  # อยู่ใต้ profile `edge` — สตาร์ทเฉพาะเครื่องที่ยังไม่มี reverse proxy เป็นของตัวเอง
+  #   มี proxy เอง:        docker compose -f docker-compose.prod.yml --profile edge up -d
+  #   อยู่หลัง nginx คนอื่น: docker compose -f docker-compose.prod.yml up -d   (ไม่ใส่ profile)
+  # กรณีหลัง ตัว reverse proxy ของเครื่องต้อง proxy ไปที่ 127.0.0.1:${WEB_PORT} และ 127.0.0.1:${API_PORT}
   proxy:
+    profiles: ['edge']
     image: caddy:2-alpine
     restart: always
     ports:
