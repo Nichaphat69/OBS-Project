@@ -14,6 +14,7 @@ import { prisma } from '@obs/db';
 
 import { seedFixtures } from './helpers/testDb.js';
 import { enqueueFiles, enqueueExisting, ReadQueueError } from '../src/lib/readQueueService.js';
+import { loadFile } from '../src/lib/fileStorage.js';
 
 await seedFixtures();
 
@@ -56,7 +57,7 @@ test('enqueueFiles สร้างแถว ai_reads สถานะ queued ต�
     assert.equal(row.requestedReaderId, 'abbyy');
     assert.equal(row.requestedAbbyySkillId, 'SKILL-1');
     assert.equal(row.fileName, i === 0 ? 'a.pdf' : 'b.pdf');
-    assert.equal(Buffer.from(row.fileBytes!).toString('utf8'), '%PDF-1.4 fake timesheet');
+    assert.equal((await loadFile(row.fileKey))?.toString('utf8'), '%PDF-1.4 fake timesheet');
   }
 });
 

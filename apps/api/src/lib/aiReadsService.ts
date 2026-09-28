@@ -123,8 +123,8 @@ async function contractForEmployeeSubmit(
   };
 }
 
-/** ported from service.js getAiRead() — deliberately excludes file_bytes (full PDF blob, not
- * useful to the review-card UI which just needs the extraction JSON). */
+/** ported from service.js getAiRead() — หน้ารีวิวใช้แค่ extraction JSON ไม่ต้องใช้ตัวไฟล์
+ * (เดิมที่นี่ตัดคอลัมน์ file_bytes ออก ตอนนี้ไฟล์ไม่ได้อยู่ในฐานข้อมูลแล้ว เหลือแค่ file_key) */
 export async function getAiRead(id: number) {
   const row = await prisma.aiRead.findUnique({
     where: { id },

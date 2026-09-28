@@ -16,6 +16,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # ที่เก็บไฟล์เอกสาร — ไฟล์ไม่ได้อยู่ในฐานข้อมูลแล้วตั้งแต่ 28 ก.ย. 69 ต้องมีตัวนี้ถึงจะอัปโหลดไฟล์ได้
+  # ตั้งค่าครั้งแรก: `docker compose up -d storage` แล้วรัน (ครั้งเดียวพอ)
+  #   docker compose exec storage /garage layout assign -z dc1 -c 10G $(docker compose exec -T storage /garage node id -q | cut -d@ -f1)
+  #   docker compose exec storage /garage layout apply --version 1
+  #   docker compose exec storage /garage bucket create obs-files
+  #   docker compose exec storage /garage key create obs-api        # เอา Key ID / Secret key ไปใส่ .env
+  #   docker compose exec storage /garage bucket allow --read --write --owner obs-files --key obs-api
+  storage:
+    image: dxflrs/garage:v1.0.1
+    restart: unless-stopped
+    environment:
+      GARAGE_RPC_SECRET: ${STORAGE_RPC_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
+    ports:
+      - '${STORAGE_PORT:-3900}:3900'
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - obs_storage_meta:/var/lib/garage/meta
+      - obs_storage_data:/var/lib/garage/data
+
   api:
     build:
       context: .
@@ -63,3 +82,5 @@ services:
 
 volumes:
   obs_postgres_data:
+  obs_storage_meta:
+  obs_storage_data:

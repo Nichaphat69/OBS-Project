@@ -12,10 +12,9 @@
 //     Other JSON-text columns not yet touched by this phase (payload, response, email_draft,
 //     audit_log.detail, settings.value) stay String for now — upgraded when that module is
 //     ported, per the plan's "minimize simultaneous changes" principle.
-//   - BLOB columns (source_file_bytes, file_bytes, document_pdf) map to Prisma Bytes (bytea).
-//     ทุกคอลัมน์มีคู่ `*_key` ที่เพิ่มเมื่อ 28 ก.ย. 69 — ที่อยู่ของไฟล์เดียวกันใน storage container
-//     ตอนนี้เขียนลงทั้งสองที่ ตอนอ่านลอง storage ก่อนแล้วตกมาที่ bytea (ดู lib/fileStorage.ts)
-//     ห้ามลบคอลัมน์ bytea จนกว่าจะย้ายไฟล์เก่าออกครบและยืนยันว่าอ่านได้ทุกใบ
+//   - ไฟล์เอกสารไม่ได้เก็บในฐานข้อมูลแล้ว (เลิกใช้ bytea เมื่อ 28 ก.ย. 69) — อยู่ใน storage container
+//     ส่วนตารางเก็บแค่ที่อยู่ของไฟล์ในคอลัมน์ `*_key` (source_file_key, file_key, document_pdf_key)
+//     ดู lib/fileStorage.ts · คอลัมน์พวกนี้ nullable เพราะแถวที่สร้างก่อนย้ายจะไม่มีไฟล์ผูกอยู่
 
 generator client {
   provider = "prisma-client-js"
@@ -165,7 +164,6 @@ model Timesheet {
   sourceEmailId       String?  @map("source_email_id")
   sourceEmailSubject  String?  @map("source_email_subject")
   sourceFile          String?  @map("source_file")
-  sourceFileBytes     Bytes?   @map("source_file_bytes")
   sourceFileKey       String?  @map("source_file_key")
   receivedAt          String   @map("received_at")
   approvedBy          String?  @map("approved_by")
@@ -247,14 +245,13 @@ model SupportTicket {
   @@map("support_tickets")
 }
 
-// รูปแนบตอนแจ้งปัญหาจากเว็บ (24 ก.ย. 69 ตามที่ขอ "เป็น feedback ที่สามารถเพิ่มรูปได้") — เก็บไบต์ตรงๆ
-// ในตารางแยก เหมือน ai_reads.file_bytes ไม่ยัดรวมเป็น JSON ในแถวตั๋วเอง กันแถวตั๋วบวมตอน list
+// รูปแนบตอนแจ้งปัญหาจากเว็บ (24 ก.ย. 69 ตามที่ขอ "เป็น feedback ที่สามารถเพิ่มรูปได้") — แยกเป็นตาราง
+// ของตัวเอง ไม่ยัดรวมเป็น JSON ในแถวตั๋ว กันแถวตั๋วบวมตอน list · ตัวไฟล์อยู่ใน storage container
 model SupportTicketAttachment {
   id        Int    @id @default(autoincrement())
   ticketId  Int    @map("ticket_id")
   fileName  String @map("file_name")
   mimeType  String @map("mime_type")
-  fileBytes Bytes  @map("file_bytes")
   fileKey   String? @map("file_key")
   createdAt String @map("created_at")
 
@@ -284,7 +281,6 @@ model AiRead {
   status        String  @default("pending")
   model         String?
   extraction    Json?
-  fileBytes     Bytes?  @map("file_bytes")
   fileKey       String? @map("file_key")
   readAt        String  @map("read_at")
   readBy        String? @map("read_by")
@@ -370,7 +366,6 @@ model Invoice {
   period              String
   documentNo          String? @map("document_no")
   shareLink           String? @map("share_link")
-  documentPdf         Bytes?  @map("document_pdf")
   documentPdfKey      String? @map("document_pdf_key")
   documentDate        String  @map("document_date")
   dueDate             String? @map("due_date")

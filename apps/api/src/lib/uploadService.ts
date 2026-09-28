@@ -85,7 +85,7 @@ export interface ReadResult {
 /** ported from service.js readTimesheetFile() — preview only, does NOT write to the DB.
  *
  * รับ `fileBytes` ตรงๆ ได้ด้วย (เพิ่ม 23 ก.ย. 69 ให้ readQueueService.ts ใช้) — ตอน worker ของคิวอ่าน
- * หลายไฟล์หยิบไบต์ที่เก็บไว้ในคอลัมน์ `ai_reads.file_bytes` มาอ่านต่อ ไม่ต้องแปลงเป็น base64 แล้วแปลง
+ * หลายไฟล์หยิบไบต์ที่ดึงจากที่เก็บไฟล์มาอ่านต่อ ไม่ต้องแปลงเป็น base64 แล้วแปลง
  * กลับมาเป็นไบต์อีกทีโดยไม่จำเป็น — ต้องส่งมาอย่างใดอย่างหนึ่งเท่านั้น */
 export async function readTimesheetFile({
   fileBase64,
@@ -220,7 +220,7 @@ export async function logAiRead({
 }): Promise<string> {
   const documentNo = await nextDocumentNo();
   const data: any = result?.data ?? {};
-  // ไฟล์ต้นฉบับเก็บแยกไว้ในคอลัมน์ file_bytes ของตัวเอง — ห้ามปนไปกับ extraction JSON
+  // ไฟล์ต้นฉบับไปเก็บที่ storage แล้วจดที่อยู่ไว้ในคอลัมน์ file_key — ห้ามปนไบต์ไปกับ extraction JSON
   const { fileBytes, ...resultWithoutBytes } = result ?? {};
   // เพิ่ม 15 ก.ย. 69 — ผูก employeeId จากผลจับคู่ชื่อจริง (result.matching.employee.id) ไม่ใช่แค่ชื่อ
   // free-text ใช้จำกัดสิทธิ์ role "user" ตอนดูประวัติ (ดู aiReadsService.ts/routes/aiReads.ts)
@@ -240,7 +240,6 @@ export async function logAiRead({
       documentNo,
       model: (result?.model as string | undefined) ?? null,
       extraction: resultWithoutBytes as any,
-      fileBytes: fileBytes ?? undefined,
       fileKey,
       readAt: new Date().toISOString(),
       readBy: actor,
@@ -317,7 +316,7 @@ export async function confirmTimesheet({
   const result = await ingestTimesheet({
     documentNo,
     fileName: fileName ?? `อัปโหลดด้วยมือ · ${data.period}`,
-    fileBytes: pendingRead ? await loadFile(pendingRead) : null,
+    fileBytes: await loadFile(pendingRead?.fileKey),
     sourceEmailId,
     sourceEmailSubject,
     approvedBy,

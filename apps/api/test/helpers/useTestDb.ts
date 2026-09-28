@@ -18,3 +18,6 @@ if (explicit) {
     (_all, db: string, tail: string) => `/${db.endsWith('_test') ? db : `${db}_test`}${tail}`,
   );
 }
+
+// ชุดเทสต์ใช้ที่เก็บไฟล์ในหน่วยความจำ ไม่ต้องมีคอนเทนเนอร์ storage รันอยู่ (ดู lib/fileStorage.ts)
+process.env.STORAGE_DRIVER = 'memory';

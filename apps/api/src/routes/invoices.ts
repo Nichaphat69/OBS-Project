@@ -40,13 +40,13 @@ invoicesRouter.get('/', requireAdmin, async (req, res) => {
 /** ไฟล์ PDF ของใบแจ้งหนี้ — cache มาจาก FlowAccount shareLink ตอนอนุมัติ (approveCycle) ไม่ผ่าน
  * res.json เพราะต้องส่งเป็นไบต์ดิบให้เบราว์เซอร์เปิดดูได้ตรงๆ — ports จาก timesheets.ts's GET
  * /:id/file's pattern (15 ก.ย. 69 ตามที่ user ขอ ให้แนบไฟล์นี้ในอีเมลวางบิลได้จริง) เอกสารเก่าที่
- * อนุมัติไปแล้วก่อน feature นี้จะไม่มีไฟล์ (documentPdf เป็น null) ต้องลบแล้วอนุมัติใหม่ถึงจะ cache ได้ */
+ * อนุมัติไปแล้วก่อน feature นี้จะไม่มีไฟล์ (document_pdf_key เป็น null) ต้องลบแล้วอนุมัติใหม่ถึงจะ cache ได้ */
 invoicesRouter.get('/:id/file', requireAdmin, async (req, res) => {
   const row = await prisma.invoice.findUnique({
     where: { id: req.params.id },
-    select: { id: true, documentNo: true, documentPdf: true, documentPdfKey: true },
+    select: { id: true, documentNo: true, documentPdfKey: true },
   });
-  const bytes = row ? await loadFile({ fileKey: row.documentPdfKey, fileBytes: row.documentPdf }) : null;
+  const bytes = await loadFile(row?.documentPdfKey);
   if (!row || !bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ PDF ของใบแจ้งหนี้ ${req.params.id}` });
   }

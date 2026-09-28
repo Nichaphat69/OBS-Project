@@ -59,7 +59,6 @@ export async function enqueueFiles({
       data: {
         source: 'batch_upload',
         fileName: f.fileName,
-        fileBytes: bytes,
         fileKey: await storeFile('ai-read', bytes, { fileName: f.fileName }),
         status: 'queued',
         requestedReaderId: readerId ?? null,
@@ -121,7 +120,7 @@ async function processOne(id: number): Promise<void> {
   emitChange('read-queue');
 
   const row = await prisma.aiRead.findUnique({ where: { id } });
-  const bytes = row ? await loadFile(row) : null;
+  const bytes = await loadFile(row?.fileKey);
   if (!row || !bytes) {
     await prisma.aiRead.update({ where: { id }, data: { status: 'failed', errorMessage: 'ไม่พบไฟล์ต้นฉบับ' } });
     emitChange('read-queue');

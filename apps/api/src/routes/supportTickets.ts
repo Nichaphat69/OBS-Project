@@ -73,7 +73,7 @@ supportTicketsRouter.get('/attachments/:id', async (req, res) => {
       viewerEmployeeId: req.user!.employeeId,
       isAdmin: req.user!.role === 'admin',
     });
-    const bytes = await loadFile(attachment);
+    const bytes = await loadFile(attachment.fileKey);
     if (!bytes) return res.status(404).json({ error: 'ไม่พบไฟล์แนบนี้' });
     res.setHeader('Content-Type', attachment.mimeType);
     res.send(bytes);

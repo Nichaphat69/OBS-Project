@@ -21,6 +21,7 @@ import {
   getSupportTicketAttachment, SupportTicketError,
 } from '../src/lib/supportTicketsService.js';
 import { buildTicketPostback, parseTicketPostback, buildTicketCategoryFlex } from '../src/lib/lineClient.js';
+import { loadFile } from '../src/lib/fileStorage.js';
 
 process.env.LINE_APPROVER_USER_IDS = 'Uapprover1';
 process.env.LINE_CHANNEL_ACCESS_TOKEN = '';
@@ -241,7 +242,7 @@ test('แจ้งปัญหาจากเว็บพร้อมรูป�
     const attachmentId = created!.attachments[0].id;
 
     const asOwner = await getSupportTicketAttachment(attachmentId, { viewerEmployeeId: 'EMP-0042', isAdmin: false });
-    assert.equal(Buffer.from(asOwner.fileBytes).toString('utf8'), 'fake png bytes', 'ไบต์ที่เก็บต้องตรงกับที่ส่งมาเป๊ะๆ');
+    assert.equal((await loadFile(asOwner.fileKey))?.toString('utf8'), 'fake png bytes', 'ไบต์ที่เก็บต้องตรงกับที่ส่งมาเป๊ะๆ');
 
     const asAdmin = await getSupportTicketAttachment(attachmentId, { viewerEmployeeId: null, isAdmin: true });
     assert.ok(asAdmin, 'admin ต้องดูรูปแนบของใครก็ได้');

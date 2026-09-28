@@ -249,9 +249,9 @@ timesheetsRouter.post('/manual', async (req, res) => {
 timesheetsRouter.get('/:id/file', requireAdmin, async (req, res) => {
   const row = await prisma.timesheet.findUnique({
     where: { id: req.params.id },
-    select: { id: true, sourceFile: true, sourceFileBytes: true, sourceFileKey: true },
+    select: { id: true, sourceFile: true, sourceFileKey: true },
   });
-  const bytes = row ? await loadFile({ fileKey: row.sourceFileKey, fileBytes: row.sourceFileBytes }) : null;
+  const bytes = await loadFile(row?.sourceFileKey);
   if (!row || !bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของ Timesheet ${req.params.id}` });
   }

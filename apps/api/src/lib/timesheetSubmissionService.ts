@@ -156,7 +156,7 @@ export interface SubmitOwnFileResult {
  * ผลที่ตามมาโดยตั้งใจ: หน้า "บันทึกการส่ง" จะขึ้นสถานะ "ส่งแล้ว" ช่องทาง "ส่งผ่านระบบ OBS" ทันที
  * แต่ยังไม่เข้าคิวตรวจ Manday จนกว่า admin จะเอาไฟล์ไปอ่าน — ตรงกับความจริงว่ามีแค่ไฟล์ ยังไม่มีตัวเลข
  *
- * ไฟล์ไปอยู่ที่ `ai_reads.file_bytes` (ไม่ใช่ `timesheets.source_file_bytes`) เพราะแถว `timesheets`
+ * ไฟล์ผูกกับแถว `ai_reads` (ไม่ใช่ `timesheets`) เพราะแถว `timesheets`
  * ต้องมีการจับคู่ชื่อพนักงาน/รอบ/สัญญาครบก่อน ซึ่งยังไม่มีข้อมูลพวกนั้นเลยตอนนี้ — และเส้นดาวน์โหลด
  * `GET /api/ai-reads/:id/file` กันสิทธิ์ตาม employeeId ให้อยู่แล้ว พนักงานจึงเปิดดูของตัวเองได้ทันที
  */
@@ -199,7 +199,6 @@ export async function submitOwnTimesheetFile({
       // เก็บชื่อไว้ด้วย — ทุกจุดที่แสดงแถว ai_reads อ่านจาก employeeName (ดู listAiReads ใน aiReadsService.ts)
       employeeName: employee?.nameTh ?? null,
       period: pending.period,
-      fileBytes: bytes,
       fileKey,
       readAt: now,
       readBy: actor,

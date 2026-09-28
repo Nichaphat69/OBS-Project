@@ -453,7 +453,6 @@ export async function ingestTimesheet({
         sourceEmailId,
         sourceEmailSubject,
         sourceFile: fileName,
-        sourceFileBytes: fileBytes ?? undefined,
         sourceFileKey,
         receivedAt,
         approvedBy,

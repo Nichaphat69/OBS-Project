@@ -15,6 +15,7 @@ import { prisma } from '@obs/db';
 
 import { seedFixtures, CUSTOMER, CONTRACT } from './helpers/testDb.js';
 import { createGmailDraft, syncEmailSent, InvoiceEmailError } from '../src/lib/invoiceEmailService.js';
+import { storeFile } from '../src/lib/fileStorage.js';
 
 /** GmailClient ปลอม — บันทึกทุกอย่างที่ถูกเรียก เพื่อยืนยันว่าแตะเฉพาะร่าง ไม่แตะการส่ง */
 class FakeGmailClient {
@@ -49,7 +50,8 @@ async function withContactEmail(email: string | null) {
 /** ใส่ไฟล์ต้นฉบับให้ Timesheet เหมือนตอน ingest จริง — fixture ไม่ได้ใส่มาให้ */
 async function giveTimesheetFiles(ids: string[]) {
   for (const id of ids) {
-    await prisma.timesheet.update({ where: { id }, data: { sourceFileBytes: Buffer.from('x') } });
+    const sourceFileKey = await storeFile('timesheet', Buffer.from('x'), { fileName: `${id}.pdf` });
+    await prisma.timesheet.update({ where: { id }, data: { sourceFileKey } });
   }
 }
 
@@ -113,7 +115,7 @@ test('แนบไฟล์ Timesheet ที่มีจริงให้คร
 test('ไฟล์แนบหาไม่เจอสักใบ ต้องยังสร้างร่างได้ ไม่ล้มทั้งฉบับ', async () => {
   await seedFixtures();
   await withContactEmail('thanwarat@tli.example.com');
-  // ไม่ใส่ sourceFileBytes ให้ใครเลย
+  // ไม่ใส่ไฟล์ต้นฉบับให้ใครเลย
 
   const gmail = new FakeGmailClient();
   const result: any = await createGmailDraft(CONTRACT.id, PERIOD, { actor: 'ทดสอบ', client: gmail as any });

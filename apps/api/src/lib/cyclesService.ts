@@ -502,7 +502,6 @@ async function saveInvoice({
         period,
         documentNo,
         shareLink,
-        documentPdf,
         documentPdfKey,
         documentDate: preview.invoice!.documentDate,
         dueDate: preview.invoice!.dueDate,

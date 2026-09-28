@@ -142,10 +142,9 @@ export interface TimesheetListResult {
   counts: { needsReview: number; checked: number; all: number; billed: number; rejected: number };
 }
 
-/** ช่องที่ shapeTimesheetRow() ใช้จริง — ต้องระบุเป็น select ไม่ใช่ include เฉยๆ เพราะ include จะดึง
- * ทุกคอลัมน์รวม `source_file_bytes` ที่เก็บไฟล์ PDF ทั้งไฟล์มาด้วย หน้ารายการไม่ได้ใช้ไบต์พวกนั้นเลย
- * (คนกดดูไฟล์ค่อยไปโหลดที่ GET /api/timesheets/:id/file) แต่ของจริงจะลากมาทั้งหมดทุกครั้งที่เปิดหน้า
- * — วัดจาก DB dev: 6 แถว = 1.3 MB ซึ่งยังไม่รู้สึก แต่พอเก็บไปทั้งปีจะเป็นหลักร้อย MB ต่อการเปิดหน้า 1 ครั้ง
+/** ช่องที่ shapeTimesheetRow() ใช้จริง — ระบุเป็น select ไม่ใช่ include เฉยๆ ไม่ให้ลากคอลัมน์ที่หน้า
+ * รายการไม่ได้ใช้มาทุกครั้งที่เปิดหน้า (เดิมตัวที่หนักคือ `source_file_bytes` ที่เก็บไฟล์ PDF ทั้งไฟล์ —
+ * วัดจาก DB dev ได้ 6 แถว = 1.3 MB · ตอนนี้ไฟล์ย้ายไป storage แล้ว เหลือแค่ที่อยู่ไฟล์)
  * ⚠️ เพิ่มช่องใน shapeTimesheetRow() เมื่อไหร่ ต้องเพิ่มที่นี่ด้วย ไม่งั้นจะได้ undefined เงียบๆ */
 const LIST_ROW_SELECT = {
   id: true,

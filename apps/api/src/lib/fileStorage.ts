@@ -2,21 +2,33 @@
  * ชั้นกลางระหว่างระบบกับที่เก็บไฟล์ — จุดเดียวที่โค้ดส่วนอื่นต้องรู้จัก
  *
  * เดิมไฟล์ PDF ทุกใบเก็บเป็น `bytea` อยู่ในฐานข้อมูล ทำให้ไฟล์สำรองรายวันลากไฟล์ทุกใบไปด้วยและโตขึ้น
- * เรื่อยๆ ตามการใช้งาน ตัดสินใจ 28 ก.ย. 69 ว่าย้ายไปเก็บใน storage container แยก (Garage) โดยฐานข้อมูล
- * เหลือเก็บแค่ "ที่อยู่ของไฟล์"
+ * เรื่อยๆ ตามการใช้งาน ย้ายมาเก็บใน storage container แยก (Garage) เมื่อ 28 ก.ย. 69 โดยฐานข้อมูล
+ * เหลือเก็บแค่ "ที่อยู่ของไฟล์" ในคอลัมน์ `*_key` — **คอลัมน์ `*_bytes` ถูกลบทิ้งแล้ว**
+ * (เจ้าของระบบยืนยันวันเดียวกันว่าข้อมูลบนเครื่อง production ตอนนั้นเป็นข้อมูลตัวอย่างทั้งหมด)
  *
- * **ตอนนี้อยู่ในช่วงเขียนลงทั้งสองที่** ตามลำดับที่ตกลงกันไว้ — เขียนลง storage ด้วย และยังเขียนลงคอลัมน์
- * เดิมด้วย ตอนอ่านจะลอง storage ก่อนแล้วค่อยตกมาที่คอลัมน์เดิม ยังไม่เลิกเขียนลงฐานข้อมูลจนกว่าจะย้าย
- * ไฟล์เก่าออกครบและยืนยันว่าอ่านได้ทุกใบ **ห้ามลบคอลัมน์ `*_bytes` จนถึงตอนนั้น**
- *
- * ถ้าเครื่องไหนไม่ได้ตั้งค่า storage ไว้ (เครื่อง dev ของแต่ละคน) ทุกอย่างทำงานเหมือนเดิมทุกประการ —
- * `storeFile()` คืน null แล้วระบบก็ใช้คอลัมน์เดิมต่อไป ไม่ต้องตั้ง storage ถึงจะรันได้
+ * เพราะไม่มีสำเนาในฐานข้อมูลให้ตกกลับไปใช้แล้ว `storeFile()` จึง **โยน error เมื่อเก็บไม่สำเร็จ**
+ * ไม่กลืนเงียบเหมือนตอนที่ยังเขียนลงสองที่ — ถ้ากลืน ไฟล์จะหายโดยไม่มีใครรู้
  */
 import { randomUUID } from 'node:crypto';
 import { getObject, hasStorageCredentials, putObject } from './s3Client.js';
 
 /** โฟลเดอร์ใน storage — แยกตามชนิดเอกสาร ให้ไล่ดูและตั้ง lifecycle rule ทีหลังได้ */
 export type FileKind = 'ai-read' | 'timesheet' | 'invoice' | 'support';
+
+export class FileStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FileStorageError';
+  }
+}
+
+/**
+ * ที่เก็บในหน่วยความจำสำหรับเทสต์เท่านั้น — เปิดด้วย STORAGE_DRIVER=memory (ตั้งไว้ใน
+ * test/helpers/useTestDb.ts) เพื่อให้ชุดเทสต์รันได้โดยไม่ต้องมีคอนเทนเนอร์ storage
+ * **ห้ามใช้ตอนรันจริง** — ข้อมูลหายทุกครั้งที่รีสตาร์ท
+ */
+const memoryStore = new Map<string, Buffer>();
+const useMemoryDriver = () => process.env.STORAGE_DRIVER === 'memory';
 
 const EXT_BY_MIME: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -32,47 +44,37 @@ function extensionFor(fileName: string | null | undefined, mimeType: string | nu
   return (mimeType && EXT_BY_MIME[mimeType.toLowerCase()]) || 'bin';
 }
 
-/**
- * เก็บไฟล์ลง storage แล้วคืน key ไว้บันทึกในฐานข้อมูล — คืน null เมื่อยังไม่ได้ตั้งค่า storage
- *
- * **ตั้งใจให้ไม่โยน error ออกมา** เพราะช่วงนี้ไบต์ยังถูกเขียนลงคอลัมน์เดิมคู่กันอยู่ ถ้า storage ล่มชั่วคราว
- * ไม่ควรทำให้คนใช้งานอัปโหลดไฟล์ไม่ได้ — แถวนั้นจะไม่มี key แล้วตอนอ่านจะตกไปใช้คอลัมน์เดิมเอง
- * (จะเปลี่ยนเป็นโยน error ตอนเลิกเขียนลงฐานข้อมูลแล้วเท่านั้น)
- */
+/** เก็บไฟล์ลง storage แล้วคืน key ไว้บันทึกในฐานข้อมูล — โยน error ถ้าเก็บไม่ได้ */
 export async function storeFile(
   kind: FileKind,
   bytes: Buffer,
   { fileName = null, mimeType = null }: { fileName?: string | null; mimeType?: string | null } = {},
-): Promise<string | null> {
-  if (!hasStorageCredentials()) return null;
+): Promise<string> {
   const now = new Date();
   const key =
     `${kind}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/` +
     `${randomUUID()}.${extensionFor(fileName, mimeType)}`;
-  try {
-    await putObject(key, bytes, mimeType || 'application/octet-stream');
+
+  if (useMemoryDriver()) {
+    memoryStore.set(key, Buffer.from(bytes));
     return key;
-  } catch (error) {
-    console.error('[fileStorage] เก็บไฟล์ลง storage ไม่สำเร็จ ใช้คอลัมน์เดิมแทน:', error);
-    return null;
   }
+  if (!hasStorageCredentials()) {
+    throw new FileStorageError(
+      'ยังไม่ได้ตั้งค่าที่เก็บไฟล์ — ต้องมี STORAGE_ENDPOINT, STORAGE_ACCESS_KEY และ STORAGE_SECRET_KEY ' +
+        '(เครื่องพัฒนาสั่ง `docker compose up -d storage` แล้วคัดค่าจาก .env.example ได้)',
+    );
+  }
+  await putObject(key, bytes, mimeType || 'application/octet-stream');
+  return key;
 }
 
-/**
- * อ่านไบต์ของไฟล์ — ลองจาก storage ก่อน ถ้าไม่มี key หรืออ่านไม่ได้ก็ใช้ไบต์จากคอลัมน์เดิม
- * รับ `fileBytes` เป็น Uint8Array ได้ด้วยเพราะ Prisma คืนคอลัมน์ `Bytes` มาแบบนั้น
- */
-export async function loadFile(
-  { fileKey, fileBytes }: { fileKey?: string | null; fileBytes?: Buffer | Uint8Array | null },
-): Promise<Buffer | null> {
-  if (fileKey && hasStorageCredentials()) {
-    try {
-      const bytes = await getObject(fileKey);
-      if (bytes) return bytes;
-      console.error(`[fileStorage] ไม่พบไฟล์ ${fileKey} ใน storage ใช้คอลัมน์เดิมแทน`);
-    } catch (error) {
-      console.error(`[fileStorage] อ่าน ${fileKey} จาก storage ไม่สำเร็จ ใช้คอลัมน์เดิมแทน:`, error);
-    }
+/** อ่านไบต์ของไฟล์จาก key — คืน null เมื่อแถวนั้นไม่มีไฟล์ หรือหาไฟล์ใน storage ไม่เจอ */
+export async function loadFile(fileKey: string | null | undefined): Promise<Buffer | null> {
+  if (!fileKey) return null;
+  if (useMemoryDriver()) return memoryStore.get(fileKey) ?? null;
+  if (!hasStorageCredentials()) {
+    throw new FileStorageError('ยังไม่ได้ตั้งค่าที่เก็บไฟล์ จึงอ่านไฟล์ที่บันทึกไว้ไม่ได้');
   }
-  return fileBytes ? Buffer.from(fileBytes) : null;
+  return getObject(fileKey);
 }

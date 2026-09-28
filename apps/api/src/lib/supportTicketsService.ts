@@ -153,16 +153,15 @@ export async function submitSupportTicket({
   const resolvedActor = actor ?? `line:${employeeId}`;
   // เก็บไฟล์ลง storage ให้เสร็จก่อน create เพราะ map() ข้างใน `create` เป็น sync จะ await ข้างในไม่ได้
   const attachmentRows = await Promise.all(
-    attachments.map(async (a) => {
-      const bytes = Buffer.from(a.fileBase64, 'base64');
-      return {
+    attachments.map(async (a) => ({
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+      fileKey: await storeFile('support', Buffer.from(a.fileBase64, 'base64'), {
         fileName: a.fileName,
         mimeType: a.mimeType,
-        fileBytes: bytes,
-        fileKey: await storeFile('support', bytes, { fileName: a.fileName, mimeType: a.mimeType }),
-        createdAt: new Date().toISOString(),
-      };
-    }),
+      }),
+      createdAt: new Date().toISOString(),
+    })),
   );
   const ticket = await prisma.supportTicket.create({
     data: {

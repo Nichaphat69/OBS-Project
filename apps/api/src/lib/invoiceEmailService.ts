@@ -52,7 +52,7 @@ export async function cacheInvoicePdf(
   try {
     const { bytes } = await fa.fetchSharedPdf(shareLink);
     const documentPdfKey = await storeFile('invoice', bytes, { fileName: `${invoiceId}.pdf`, mimeType: 'application/pdf' });
-    await prisma.invoice.update({ where: { id: invoiceId }, data: { documentPdf: bytes, documentPdfKey } });
+    await prisma.invoice.update({ where: { id: invoiceId }, data: { documentPdfKey } });
     return bytes;
   } catch (error: any) {
     await logAudit({
@@ -73,12 +73,12 @@ export async function getInvoiceFile(
 ): Promise<AttachmentFile | null> {
   const row = await prisma.invoice.findUnique({
     where: { id },
-    select: { id: true, documentNo: true, shareLink: true, documentPdf: true, documentPdfKey: true },
+    select: { id: true, documentNo: true, shareLink: true, documentPdfKey: true },
   });
   if (!row) return null;
 
   const filename = invoiceFileName(row);
-  const cached = await loadFile({ fileKey: row.documentPdfKey, fileBytes: row.documentPdf });
+  const cached = await loadFile(row.documentPdfKey);
   if (cached) return { filename, bytes: cached };
 
   const bytes = await cacheInvoicePdf(row.id, row.shareLink, { client });
@@ -89,9 +89,9 @@ export async function getInvoiceFile(
 export async function getTimesheetFile(id: string): Promise<AttachmentFile | null> {
   const row = await prisma.timesheet.findUnique({
     where: { id },
-    select: { id: true, sourceFile: true, sourceFileBytes: true, sourceFileKey: true },
+    select: { id: true, sourceFile: true, sourceFileKey: true },
   });
-  const bytes = row ? await loadFile({ fileKey: row.sourceFileKey, fileBytes: row.sourceFileBytes }) : null;
+  const bytes = await loadFile(row?.sourceFileKey);
   if (!row || !bytes) return null;
   return { filename: row.sourceFile || `${row.id}.pdf`, bytes };
 }

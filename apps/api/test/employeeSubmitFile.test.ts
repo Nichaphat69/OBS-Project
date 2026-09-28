@@ -24,6 +24,7 @@ import {
 } from '../src/lib/timesheetSubmissionService.js';
 import { isoToday, enumeratePeriods } from '../src/lib/dashboardService.js';
 import { listAiReads } from '../src/lib/aiReadsService.js';
+import { loadFile } from '../src/lib/fileStorage.js';
 
 await seedFixtures();
 
@@ -74,13 +75,13 @@ test('ส่งสำเร็จ: เก็บไฟล์ + บันทึก
   // ไฟล์ต้องอยู่จริงและเป็นไบต์เดิม ไม่ใช่แค่มีแถว
   const stored = await prisma.aiRead.findUnique({
     where: { id: result.fileId },
-    select: { fileBytes: true, employeeId: true, period: true, source: true, model: true },
+    select: { fileKey: true, employeeId: true, period: true, source: true, model: true },
   });
   assert.equal(stored?.employeeId, EMP);
   assert.equal(stored?.period, pending.period);
   assert.equal(stored?.source, 'employee_submit');
   assert.equal(stored?.model, null, 'ห้ามมี model เพราะเส้นนี้ไม่ได้อ่านไฟล์');
-  assert.equal(Buffer.from(stored!.fileBytes!).toString('utf8'), '%PDF-1.4 fake timesheet');
+  assert.equal((await loadFile(stored!.fileKey))?.toString('utf8'), '%PDF-1.4 fake timesheet');
 
   // หัวใจของฟีเจอร์ — ต้องขึ้นว่าส่งแล้วผ่านระบบ OBS
   const submission = await prisma.timesheetSubmission.findUnique({

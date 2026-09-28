@@ -44,7 +44,7 @@ const FILE_CONTENT_TYPES: Record<string, string> = {
 aiReadsRouter.get('/:id/file', async (req, res) => {
   const row = await prisma.aiRead.findUnique({
     where: { id: Number(req.params.id) },
-    select: { fileName: true, fileBytes: true, fileKey: true, employeeId: true },
+    select: { fileName: true, fileKey: true, employeeId: true },
   });
   if (!row) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของรายการนี้` });
@@ -53,7 +53,7 @@ aiReadsRouter.get('/:id/file', async (req, res) => {
   if (req.user!.role === 'user' && row.employeeId !== req.user!.employeeId) {
     return res.status(403).json({ error: 'ดูไฟล์ของคนอื่นไม่ได้' });
   }
-  const bytes = await loadFile(row);
+  const bytes = await loadFile(row.fileKey);
   if (!bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของรายการนี้` });
   }
