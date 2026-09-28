@@ -23,6 +23,7 @@ import { readTimesheetFile, UploadError } from './uploadService.js';
 import { nextDocumentNo } from './ingestService.js';
 import { emitChange } from './events.js';
 import { logAudit } from './audit.js';
+import { loadFile, storeFile } from './fileStorage.js';
 
 const MAX_CONCURRENT = 1;
 const POLL_INTERVAL_MS = 1500;
@@ -59,6 +60,7 @@ export async function enqueueFiles({
         source: 'batch_upload',
         fileName: f.fileName,
         fileBytes: bytes,
+        fileKey: await storeFile('ai-read', bytes, { fileName: f.fileName }),
         status: 'queued',
         requestedReaderId: readerId ?? null,
         requestedAbbyySkillId: abbyySkillId ?? null,
@@ -119,7 +121,8 @@ async function processOne(id: number): Promise<void> {
   emitChange('read-queue');
 
   const row = await prisma.aiRead.findUnique({ where: { id } });
-  if (!row || !row.fileBytes) {
+  const bytes = row ? await loadFile(row) : null;
+  if (!row || !bytes) {
     await prisma.aiRead.update({ where: { id }, data: { status: 'failed', errorMessage: 'ไม่พบไฟล์ต้นฉบับ' } });
     emitChange('read-queue');
     return;
@@ -127,7 +130,7 @@ async function processOne(id: number): Promise<void> {
 
   try {
     const result = await readTimesheetFile({
-      fileBytes: Buffer.from(row.fileBytes),
+      fileBytes: bytes,
       fileName: row.fileName,
       readerId: row.requestedReaderId,
       abbyySkillId: row.requestedAbbyySkillId,

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '@obs/db';
 import { requireAuth } from '../lib/requireAuth.js';
 import { listAiReads, getAiRead, dismissAiRead, AiReadError } from '../lib/aiReadsService.js';
+import { loadFile } from '../lib/fileStorage.js';
 
 export const aiReadsRouter = Router();
 
@@ -43,13 +44,18 @@ const FILE_CONTENT_TYPES: Record<string, string> = {
 aiReadsRouter.get('/:id/file', async (req, res) => {
   const row = await prisma.aiRead.findUnique({
     where: { id: Number(req.params.id) },
-    select: { fileName: true, fileBytes: true, employeeId: true },
+    select: { fileName: true, fileBytes: true, fileKey: true, employeeId: true },
   });
-  if (!row?.fileBytes) {
+  if (!row) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของรายการนี้` });
   }
+  // ตรวจสิทธิ์ก่อนไปหยิบไฟล์จาก storage — ไม่ควรดึงไบต์ของคนอื่นออกมาแล้วค่อยปฏิเสธ
   if (req.user!.role === 'user' && row.employeeId !== req.user!.employeeId) {
     return res.status(403).json({ error: 'ดูไฟล์ของคนอื่นไม่ได้' });
+  }
+  const bytes = await loadFile(row);
+  if (!bytes) {
+    return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของรายการนี้` });
   }
   const filename = row.fileName || `ai-read-${req.params.id}`;
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';
@@ -58,11 +64,11 @@ aiReadsRouter.get('/:id/file', async (req, res) => {
   const encoded = encodeURIComponent(filename);
   res.set({
     'Content-Type': contentType,
-    'Content-Length': String(row.fileBytes.length),
+    'Content-Length': String(bytes.length),
     'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encoded}`,
     'Cache-Control': 'no-store',
   });
-  res.send(Buffer.from(row.fileBytes));
+  res.send(bytes);
 });
 
 aiReadsRouter.post('/dismiss', async (req, res) => {

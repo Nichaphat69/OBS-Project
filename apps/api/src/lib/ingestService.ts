@@ -32,6 +32,7 @@ import { LineClient, buildNeedsCheckFlex, buildCheckFailedFlex } from './lineCli
 import { lineApproverTargets } from './notificationRecipientsService.js';
 import { requestCycleApproval, documentLink, CycleActionError } from './cyclesService.js';
 import { pendingSubmissionFor } from './timesheetSubmissionService.js';
+import { storeFile } from './fileStorage.js';
 
 /**
  * ข้อ 2.6 — แจ้งทีมบัญชีทาง LINE ทันทีที่ Manday ไม่ผ่านตรวจตอนอ่านไฟล์เข้าระบบ ส่งให้ทุกคนในรายชื่อ
@@ -434,6 +435,9 @@ export async function ingestTimesheet({
 
   const positionCheck = checkPosition(data.position, employee);
 
+  // เก็บไฟล์ก่อนเปิด transaction — ถ้าเก็บข้างในจะถือ transaction ค้างไว้ตลอดเวลาที่เรียกผ่านเครือข่าย
+  const sourceFileKey = fileBytes ? await storeFile('timesheet', fileBytes, { fileName }) : null;
+
   await prisma.$transaction(async (tx) => {
     await tx.leaveDay.deleteMany({ where: { timesheetId: documentNo } });
     await tx.timesheetDay.deleteMany({ where: { timesheetId: documentNo } });
@@ -450,6 +454,7 @@ export async function ingestTimesheet({
         sourceEmailSubject,
         sourceFile: fileName,
         sourceFileBytes: fileBytes ?? undefined,
+        sourceFileKey,
         receivedAt,
         approvedBy,
         approvedAt: approvedAt ?? (data.signedByProjectManager ? `${period}-28` : null),

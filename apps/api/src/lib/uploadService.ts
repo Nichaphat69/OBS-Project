@@ -18,6 +18,7 @@ import { extractTimesheetFromSpreadsheet } from './spreadsheetExtractionService.
 import { getActiveContract } from './dashboardService.js';
 import { pendingSubmissionFor } from './timesheetSubmissionService.js';
 import { ingestTimesheet, nextDocumentNo, type ExtractedData } from './ingestService.js';
+import { loadFile, storeFile } from './fileStorage.js';
 
 /** เลือก ABBYY Skill ให้ตรงบริษัท (multi-skill) — ใช้สัญญาที่ระบุมาก่อน (ถ้ามี) ไม่งั้น fallback ไป
  * ใช้สัญญาที่ "กำลังดำเนินการอยู่" (ตัวสลับบริษัทบนแถบบน) เพราะตอนอ่านไฟล์ preview ยังไม่รู้ว่าเป็น
@@ -225,11 +226,14 @@ export async function logAiRead({
   // free-text ใช้จำกัดสิทธิ์ role "user" ตอนดูประวัติ (ดู aiReadsService.ts/routes/aiReads.ts)
   const employeeId: string | null = result?.matching?.employee?.id ?? null;
 
+  const resolvedFileName = fileName ?? (result?.fileName as string | undefined) ?? null;
+  const fileKey = fileBytes ? await storeFile('ai-read', fileBytes, { fileName: resolvedFileName }) : null;
+
   await prisma.aiRead.create({
     data: {
       source,
       sourceEmailId,
-      fileName: fileName ?? (result?.fileName as string | undefined) ?? null,
+      fileName: resolvedFileName,
       employeeId,
       employeeName: data.employeeName ?? null,
       period: data.period ?? null,
@@ -237,6 +241,7 @@ export async function logAiRead({
       model: (result?.model as string | undefined) ?? null,
       extraction: resultWithoutBytes as any,
       fileBytes: fileBytes ?? undefined,
+      fileKey,
       readAt: new Date().toISOString(),
       readBy: actor,
     },
@@ -312,7 +317,7 @@ export async function confirmTimesheet({
   const result = await ingestTimesheet({
     documentNo,
     fileName: fileName ?? `อัปโหลดด้วยมือ · ${data.period}`,
-    fileBytes: pendingRead?.fileBytes ?? null,
+    fileBytes: pendingRead ? await loadFile(pendingRead) : null,
     sourceEmailId,
     sourceEmailSubject,
     approvedBy,

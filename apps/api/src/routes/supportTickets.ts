@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireSuperAdmin } from '../lib/requireRole.js';
 import { TICKET_CATEGORIES } from '../lib/lineClient.js';
+import { loadFile } from '../lib/fileStorage.js';
 import {
   getSupportTicketAttachment,
   listMySupportTickets,
@@ -72,8 +73,10 @@ supportTicketsRouter.get('/attachments/:id', async (req, res) => {
       viewerEmployeeId: req.user!.employeeId,
       isAdmin: req.user!.role === 'admin',
     });
+    const bytes = await loadFile(attachment);
+    if (!bytes) return res.status(404).json({ error: 'ไม่พบไฟล์แนบนี้' });
     res.setHeader('Content-Type', attachment.mimeType);
-    res.send(Buffer.from(attachment.fileBytes));
+    res.send(bytes);
   } catch (error) {
     if (error instanceof SupportTicketError) return res.status(error.status).json({ error: error.message });
     throw error;

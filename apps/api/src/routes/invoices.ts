@@ -4,6 +4,7 @@ import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
 import { CycleActionError, deleteInvoice, listInvoices } from '../lib/cyclesService.js';
 import { getActiveContract } from '../lib/dashboardService.js';
+import { loadFile } from '../lib/fileStorage.js';
 
 export const invoicesRouter = Router();
 
@@ -43,9 +44,10 @@ invoicesRouter.get('/', requireAdmin, async (req, res) => {
 invoicesRouter.get('/:id/file', requireAdmin, async (req, res) => {
   const row = await prisma.invoice.findUnique({
     where: { id: req.params.id },
-    select: { id: true, documentNo: true, documentPdf: true },
+    select: { id: true, documentNo: true, documentPdf: true, documentPdfKey: true },
   });
-  if (!row?.documentPdf) {
+  const bytes = row ? await loadFile({ fileKey: row.documentPdfKey, fileBytes: row.documentPdf }) : null;
+  if (!row || !bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ PDF ของใบแจ้งหนี้ ${req.params.id}` });
   }
   const filename = `${row.documentNo || row.id}.pdf`;
@@ -53,11 +55,11 @@ invoicesRouter.get('/:id/file', requireAdmin, async (req, res) => {
   const encoded = encodeURIComponent(filename);
   res.set({
     'Content-Type': 'application/pdf',
-    'Content-Length': String(row.documentPdf.length),
+    'Content-Length': String(bytes.length),
     'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encoded}`,
     'Cache-Control': 'no-store',
   });
-  res.send(Buffer.from(row.documentPdf));
+  res.send(bytes);
 });
 
 /** ลบใบแจ้งหนี้ทิ้ง (ทั้งเอกสารจริงใน FlowAccount และแถวในระบบเรา) — ใช้ตอนวางบิลผิดรอบ/ผิดคน แล้ว

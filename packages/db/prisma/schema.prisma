@@ -13,6 +13,9 @@
 //     audit_log.detail, settings.value) stay String for now — upgraded when that module is
 //     ported, per the plan's "minimize simultaneous changes" principle.
 //   - BLOB columns (source_file_bytes, file_bytes, document_pdf) map to Prisma Bytes (bytea).
+//     ทุกคอลัมน์มีคู่ `*_key` ที่เพิ่มเมื่อ 28 ก.ย. 69 — ที่อยู่ของไฟล์เดียวกันใน storage container
+//     ตอนนี้เขียนลงทั้งสองที่ ตอนอ่านลอง storage ก่อนแล้วตกมาที่ bytea (ดู lib/fileStorage.ts)
+//     ห้ามลบคอลัมน์ bytea จนกว่าจะย้ายไฟล์เก่าออกครบและยืนยันว่าอ่านได้ทุกใบ
 
 generator client {
   provider = "prisma-client-js"
@@ -163,6 +166,7 @@ model Timesheet {
   sourceEmailSubject  String?  @map("source_email_subject")
   sourceFile          String?  @map("source_file")
   sourceFileBytes     Bytes?   @map("source_file_bytes")
+  sourceFileKey       String?  @map("source_file_key")
   receivedAt          String   @map("received_at")
   approvedBy          String?  @map("approved_by")
   approvedAt          String?  @map("approved_at")
@@ -251,6 +255,7 @@ model SupportTicketAttachment {
   fileName  String @map("file_name")
   mimeType  String @map("mime_type")
   fileBytes Bytes  @map("file_bytes")
+  fileKey   String? @map("file_key")
   createdAt String @map("created_at")
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id])
@@ -280,6 +285,7 @@ model AiRead {
   model         String?
   extraction    Json?
   fileBytes     Bytes?  @map("file_bytes")
+  fileKey       String? @map("file_key")
   readAt        String  @map("read_at")
   readBy        String? @map("read_by")
   errorMessage  String? @map("error_message")
@@ -365,6 +371,7 @@ model Invoice {
   documentNo          String? @map("document_no")
   shareLink           String? @map("share_link")
   documentPdf         Bytes?  @map("document_pdf")
+  documentPdfKey      String? @map("document_pdf_key")
   documentDate        String  @map("document_date")
   dueDate             String? @map("due_date")
   total               Float

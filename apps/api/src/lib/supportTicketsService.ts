@@ -7,6 +7,7 @@ import { prisma } from '@obs/db';
 import { logAudit } from './audit.js';
 import { LineClient, TICKET_CATEGORIES, buildTicketNotifyFlex } from './lineClient.js';
 import { lineAdminTargets } from './notificationRecipientsService.js';
+import { storeFile } from './fileStorage.js';
 
 export class SupportTicketError extends Error {
   status: number;
@@ -150,19 +151,23 @@ export async function submitSupportTicket({
   client?: LineClient;
 }) {
   const resolvedActor = actor ?? `line:${employeeId}`;
+  // เก็บไฟล์ลง storage ให้เสร็จก่อน create เพราะ map() ข้างใน `create` เป็น sync จะ await ข้างในไม่ได้
+  const attachmentRows = await Promise.all(
+    attachments.map(async (a) => {
+      const bytes = Buffer.from(a.fileBase64, 'base64');
+      return {
+        fileName: a.fileName,
+        mimeType: a.mimeType,
+        fileBytes: bytes,
+        fileKey: await storeFile('support', bytes, { fileName: a.fileName, mimeType: a.mimeType }),
+        createdAt: new Date().toISOString(),
+      };
+    }),
+  );
   const ticket = await prisma.supportTicket.create({
     data: {
       employeeId, category, description, pageContext, status: 'open', createdAt: new Date().toISOString(),
-      attachments: attachments.length
-        ? {
-            create: attachments.map((a) => ({
-              fileName: a.fileName,
-              mimeType: a.mimeType,
-              fileBytes: Buffer.from(a.fileBase64, 'base64'),
-              createdAt: new Date().toISOString(),
-            })),
-          }
-        : undefined,
+      attachments: attachmentRows.length ? { create: attachmentRows } : undefined,
     },
   });
   await prisma.employee.update({ where: { id: employeeId }, data: { linePendingTicketCategory: null } });

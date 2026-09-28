@@ -25,6 +25,7 @@ import {
   EMPLOYEE_QUICK_REPLY,
 } from './lineClient.js';
 import { lineApproverTargets, notificationEmailTargets } from './notificationRecipientsService.js';
+import { storeFile } from './fileStorage.js';
 
 /** ported from service.js appBase()/uploadLink() — WEB_BASE_URL คือของสแต็กใหม่ (Next.js web app)
  * แยกจาก APP_BASE_URL เดิมซึ่งชี้ไปที่แอปเก่า (คนละพอร์ต/คนละหน้า) ไม่ตั้งไว้ = ไม่มีลิงก์ในการ์ด
@@ -187,6 +188,7 @@ export async function submitOwnTimesheetFile({
   const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { nameTh: true } });
 
   const now = new Date().toISOString();
+  const fileKey = await storeFile('ai-read', bytes, { fileName: cleanName });
   const saved = await prisma.aiRead.create({
     data: {
       // แยกจาก 'upload'/'gmail' ให้ชัด — สองค่านั้นแปลว่า "ผ่านเครื่องอ่านมาแล้ว" ส่วนค่านี้คือไฟล์ดิบ
@@ -198,6 +200,7 @@ export async function submitOwnTimesheetFile({
       employeeName: employee?.nameTh ?? null,
       period: pending.period,
       fileBytes: bytes,
+      fileKey,
       readAt: now,
       readBy: actor,
     },

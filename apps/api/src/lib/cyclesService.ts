@@ -32,6 +32,7 @@ import { LineClient } from './lineClient.js';
 import { lineApproverTargets } from './notificationRecipientsService.js';
 import { webBase } from './timesheetSubmissionService.js';
 import { draftBillingEmail } from './llmEmailService.js';
+import { storeFile } from './fileStorage.js';
 
 export async function listBillingCycles(contractId?: string) {
   const today = isoToday();
@@ -485,6 +486,10 @@ async function saveInvoice({
   emailDraft?: unknown;
 }) {
   const t = preview.invoice!.totals;
+  // เก็บไฟล์ก่อนเปิด transaction ด้วยเหตุผลเดียวกับ ingestService
+  const documentPdfKey = documentPdf
+    ? await storeFile('invoice', documentPdf, { fileName: `${documentNo ?? invoiceId}.pdf`, mimeType: 'application/pdf' })
+    : null;
 
   await prisma.$transaction(async (tx) => {
     await tx.invoiceItem.deleteMany({ where: { invoiceId } });
@@ -498,6 +503,7 @@ async function saveInvoice({
         documentNo,
         shareLink,
         documentPdf,
+        documentPdfKey,
         documentDate: preview.invoice!.documentDate,
         dueDate: preview.invoice!.dueDate,
         total: t.total,

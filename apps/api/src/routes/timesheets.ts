@@ -20,6 +20,7 @@ import { getActiveContract } from '../lib/dashboardService.js';
 import { SpreadsheetExtractionError } from '../lib/spreadsheetExtractionService.js';
 import { checkTimesheetAgainstHrdd, HrddCompareError } from '../lib/hrddCompareService.js';
 import { enqueueFiles, enqueueExisting, ReadQueueError } from '../lib/readQueueService.js';
+import { loadFile } from '../lib/fileStorage.js';
 
 export const timesheetsRouter = Router();
 
@@ -248,9 +249,10 @@ timesheetsRouter.post('/manual', async (req, res) => {
 timesheetsRouter.get('/:id/file', requireAdmin, async (req, res) => {
   const row = await prisma.timesheet.findUnique({
     where: { id: req.params.id },
-    select: { id: true, sourceFile: true, sourceFileBytes: true },
+    select: { id: true, sourceFile: true, sourceFileBytes: true, sourceFileKey: true },
   });
-  if (!row?.sourceFileBytes) {
+  const bytes = row ? await loadFile({ fileKey: row.sourceFileKey, fileBytes: row.sourceFileBytes }) : null;
+  if (!row || !bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของ Timesheet ${req.params.id}` });
   }
   const filename = row.sourceFile || `${row.id}.pdf`;
@@ -258,11 +260,11 @@ timesheetsRouter.get('/:id/file', requireAdmin, async (req, res) => {
   const encoded = encodeURIComponent(filename);
   res.set({
     'Content-Type': 'application/pdf',
-    'Content-Length': String(row.sourceFileBytes.length),
+    'Content-Length': String(bytes.length),
     'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encoded}`,
     'Cache-Control': 'no-store',
   });
-  res.send(Buffer.from(row.sourceFileBytes));
+  res.send(bytes);
 });
 
 /** เทียบวันลาที่ Timesheet รายงานกับวันลาที่อนุมัติแล้วจริงใน HRDD — อ่านอย่างเดียว ไม่มีเขียน/แก้/ลบ

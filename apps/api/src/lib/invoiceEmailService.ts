@@ -15,6 +15,7 @@ import { FlowAccountClient } from './flowaccountClient.js';
 import { previewCycleInvoice } from './cyclesService.js';
 import { getSetting } from './dashboardService.js';
 import { logAudit } from './audit.js';
+import { loadFile, storeFile } from './fileStorage.js';
 
 export class InvoiceEmailError extends Error {
   status: number;
@@ -50,7 +51,8 @@ export async function cacheInvoicePdf(
   const fa = client ?? new FlowAccountClient();
   try {
     const { bytes } = await fa.fetchSharedPdf(shareLink);
-    await prisma.invoice.update({ where: { id: invoiceId }, data: { documentPdf: bytes } });
+    const documentPdfKey = await storeFile('invoice', bytes, { fileName: `${invoiceId}.pdf`, mimeType: 'application/pdf' });
+    await prisma.invoice.update({ where: { id: invoiceId }, data: { documentPdf: bytes, documentPdfKey } });
     return bytes;
   } catch (error: any) {
     await logAudit({
@@ -71,12 +73,13 @@ export async function getInvoiceFile(
 ): Promise<AttachmentFile | null> {
   const row = await prisma.invoice.findUnique({
     where: { id },
-    select: { id: true, documentNo: true, shareLink: true, documentPdf: true },
+    select: { id: true, documentNo: true, shareLink: true, documentPdf: true, documentPdfKey: true },
   });
   if (!row) return null;
 
   const filename = invoiceFileName(row);
-  if (row.documentPdf) return { filename, bytes: Buffer.from(row.documentPdf) };
+  const cached = await loadFile({ fileKey: row.documentPdfKey, fileBytes: row.documentPdf });
+  if (cached) return { filename, bytes: cached };
 
   const bytes = await cacheInvoicePdf(row.id, row.shareLink, { client });
   return bytes ? { filename, bytes } : null;
@@ -86,10 +89,11 @@ export async function getInvoiceFile(
 export async function getTimesheetFile(id: string): Promise<AttachmentFile | null> {
   const row = await prisma.timesheet.findUnique({
     where: { id },
-    select: { id: true, sourceFile: true, sourceFileBytes: true },
+    select: { id: true, sourceFile: true, sourceFileBytes: true, sourceFileKey: true },
   });
-  if (!row?.sourceFileBytes) return null;
-  return { filename: row.sourceFile || `${row.id}.pdf`, bytes: Buffer.from(row.sourceFileBytes) };
+  const bytes = row ? await loadFile({ fileKey: row.sourceFileKey, fileBytes: row.sourceFileBytes }) : null;
+  if (!row || !bytes) return null;
+  return { filename: row.sourceFile || `${row.id}.pdf`, bytes };
 }
 
 /** เติมใบวางบิลเข้าไปในรายการไฟล์แนบของร่างที่บันทึกไว้ก่อนหน้า — ported from withInvoiceAttachment()
