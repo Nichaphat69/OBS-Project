@@ -46,6 +46,7 @@ function signedHeadersFor(
   key: string,
   payload: Buffer,
   extraHeaders: Record<string, string>,
+  query: Record<string, string> = {},
 ): { url: string; headers: Record<string, string> } {
   const endpoint = process.env.STORAGE_ENDPOINT!;
   const bucket = process.env.STORAGE_BUCKET || 'obs-files';
@@ -54,8 +55,13 @@ function signedHeadersFor(
   const secretKey = process.env.STORAGE_SECRET_KEY!;
 
   const base = new URL(endpoint);
-  const path = `/${bucket}/${encodeKey(key)}`;
-  const url = `${base.origin}${path}`;
+  const path = key ? `/${bucket}/${encodeKey(key)}` : `/${bucket}`;
+  // ต้องเรียงชื่อพารามิเตอร์ตามตัวอักษรและเข้ารหัสทั้งชื่อและค่า ไม่งั้นลายเซ็นไม่ตรง
+  const canonicalQuery = Object.keys(query)
+    .sort()
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(query[k])}`)
+    .join('&');
+  const url = `${base.origin}${path}${canonicalQuery ? `?${canonicalQuery}` : ''}`;
 
   const now = new Date();
   const amzDate = `${now.toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`;
@@ -74,7 +80,7 @@ function signedHeadersFor(
   const canonicalHeaders = sortedNames.map((h) => `${h}:${String(headers[h] ?? '').trim()}\n`).join('');
   const signedHeaderList = sortedNames.join(';');
 
-  const canonicalRequest = [method, path, '', canonicalHeaders, signedHeaderList, payloadHash].join('\n');
+  const canonicalRequest = [method, path, canonicalQuery, canonicalHeaders, signedHeaderList, payloadHash].join('\n');
   const scope = `${dateStamp}/${region}/${SERVICE}/aws4_request`;
   const stringToSign = [ALGORITHM, amzDate, scope, sha256hex(canonicalRequest)].join('\n');
 
@@ -90,8 +96,14 @@ function signedHeadersFor(
   return { url, headers };
 }
 
-async function send(method: string, key: string, payload: Buffer, extraHeaders: Record<string, string> = {}) {
-  const { url, headers } = signedHeadersFor(method, key, payload, extraHeaders);
+async function send(
+  method: string,
+  key: string,
+  payload: Buffer,
+  extraHeaders: Record<string, string> = {},
+  query: Record<string, string> = {},
+) {
+  const { url, headers } = signedHeadersFor(method, key, payload, extraHeaders, query);
   const controller = new AbortController();
   const timer = setTimeout(() => { controller.abort(); }, TIMEOUT_MS);
   try {
@@ -124,4 +136,44 @@ export async function deleteObject(key: string): Promise<void> {
   if (!res.ok && res.status !== 404) {
     throw new StorageError(`ลบไฟล์จาก storage ไม่สำเร็จ (${res.status})`, res.status);
   }
+}
+
+const XML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const unescapeXml = (v: string) => v.replace(/&(amp|lt|gt|quot|apos);/g, (_m, e: string) => XML_ENTITIES[e]);
+
+export interface StoredObject {
+  key: string;
+  size: number;
+}
+
+/**
+ * ไล่รายชื่อออบเจ็กต์ทั้งถัง — ใช้ ListObjectsV2 และตามหน้าต่อไปให้เองจนครบ
+ *
+ * แกะ XML ด้วย regex ไม่ใช่ตัว parser เต็มรูปแบบ เพราะคำตอบของ ListObjectsV2 มีโครงตายตัวและ
+ * ระบบนี้ต้องการแค่สองช่อง — ไม่คุ้มที่จะลากไลบรารี XML เข้ามาเพื่อเท่านี้ (ค่า Key ที่มีอักขระพิเศษ
+ * ถูก escape มาในรูป &amp; ฯลฯ จึงต้องแปลงกลับ ไม่งั้นชื่อไฟล์ที่มี & จะเพี้ยน)
+ */
+export async function listObjects(prefix = ''): Promise<StoredObject[]> {
+  const out: StoredObject[] = [];
+  let token: string | null = null;
+  do {
+    const query: Record<string, string> = { 'list-type': '2', 'max-keys': '1000' };
+    if (prefix) query.prefix = prefix;
+    if (token) query['continuation-token'] = token;
+
+    const res = await send('GET', '', Buffer.alloc(0), {}, query);
+    if (!res.ok) throw new StorageError(`ไล่รายชื่อไฟล์ใน storage ไม่สำเร็จ (${res.status})`, res.status);
+    const xml = await res.text();
+
+    for (const block of xml.match(/<Contents>[\s\S]*?<\/Contents>/g) ?? []) {
+      const key = /<Key>([\s\S]*?)<\/Key>/.exec(block)?.[1];
+      if (!key) continue;
+      out.push({ key: unescapeXml(key), size: Number(/<Size>(\d+)<\/Size>/.exec(block)?.[1] ?? 0) });
+    }
+
+    token = /<IsTruncated>true<\/IsTruncated>/.test(xml)
+      ? (/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1] ?? null)
+      : null;
+  } while (token);
+  return out;
 }

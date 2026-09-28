@@ -145,6 +145,32 @@ services:
         done
     logging: *logging
 
+  # สำรองไฟล์ใน storage — ตั้งแต่เลิกเก็บไฟล์เป็น binary ในฐานข้อมูล (28 ก.ย. 69) ไฟล์ไม่ได้ติดไปกับ
+  # pg_dump อีกแล้ว ถ้าไม่มีตัวนี้ ไฟล์ทุกใบจะมีสำเนาเดียวอยู่ใน Garage เท่านั้น
+  #
+  # ใช้ image เดียวกับ api เพราะสคริปต์ใช้ตัวเชื่อม S3 ตัวเดียวกับที่ระบบใช้จริงอยู่แล้ว ไม่ต้องเพิ่ม image
+  # ใหม่บนเครื่องที่แรมจำกัด · เขียนลงที่เก็บชุดเดียวกับไฟล์สำรองฐานข้อมูล จะได้ย้ายออกนอกเครื่องทีเดียวจบ
+  storage-backup:
+    # build บล็อกเดียวกับ api เป๊ะๆ — compose จึงใช้ image ที่ build ไว้แล้วรอบเดียว ไม่ build ซ้ำ
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: obs-prod-api
+    restart: always
+    env_file: .env.production
+    depends_on: [storage]
+    volumes:
+      - obs_pgbackup:/backup
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          node dist/scripts/backupStorage.js || echo "[storage-backup] รอบนี้ไม่ครบ $$(date -Iseconds)" >&2
+          sleep 86400
+        done
+    logging: *logging
+
   # n8n สำหรับงานอัตโนมัติของ OBS — ตั้งใจแยกตัวจาก n8n บนเครื่อง dev ซึ่งมี workflow ของโปรเจกต์ BSCP
   # ที่เปิดทำงานอยู่ปนอยู่ด้วย ยกมาทั้งตัวจะลาก automation ของทีมอื่นมาด้วย (ตรวจพบ 28 ก.ย. 69)
   #
