@@ -187,7 +187,17 @@ services:
       # จะถอดรหัสไม่ได้อีกเลย
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?ต้องตั้งค่า}
       N8N_PORT: 5678
-      N8N_SECURE_COOKIE: 'false'
+      # เปิดให้เข้าจากเบราว์เซอร์ตรงๆ ผ่าน nginx แล้ว (29 ก.ย. 69) — ต้องบอก n8n ว่าที่อยู่จริงของตัวเอง
+      # คืออะไร ไม่งั้นมันจะประกาศ URL เป็น localhost:5678 ทั้งในช่อง OAuth Redirect URL บนหน้าจอ
+      # และใน URL ของ webhook ซึ่งเอาไปใช้จริงไม่ได้เลย
+      N8N_HOST: ${N8N_HOST:-n8n.43.210.186.204.sslip.io}
+      N8N_PROTOCOL: https
+      N8N_EDITOR_BASE_URL: https://${N8N_HOST:-n8n.43.210.186.204.sslip.io}/
+      WEBHOOK_URL: https://${N8N_HOST:-n8n.43.210.186.204.sslip.io}/
+      # อยู่หลัง reverse proxy หนึ่งชั้น — บอกให้เชื่อ X-Forwarded-* ของ nginx เพื่อให้เห็น IP จริงของคนเข้า
+      N8N_PROXY_HOPS: 1
+      # เข้าผ่าน https อย่างเดียวแล้ว (พอร์ต 80 เด้งไป 443) จึงติดธง Secure ให้คุกกี้เซสชันได้
+      N8N_SECURE_COOKIE: 'true'
       N8N_RUNNERS_ENABLED: 'true'
       N8N_DIAGNOSTICS_ENABLED: 'false'
       N8N_PERSONALIZATION_ENABLED: 'false'
