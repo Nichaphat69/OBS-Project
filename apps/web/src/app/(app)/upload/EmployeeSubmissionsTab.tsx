@@ -8,6 +8,7 @@ import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPick
 import { QueueStatusCard } from '../../../components/QueueStatusCard';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
 import { useLang } from '../../../lib/language';
+import { readJson } from '../../../lib/fetchJson';
 
 export interface EmployeeSubmissionItem {
   id: number;
@@ -79,9 +80,9 @@ export default function EmployeeSubmissionsTab({
           abbyySkillId: picker.chosenReaderId === 'abbyy' ? picker.abbyySkillId : null,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? tx('เข้าคิวไม่สำเร็จ'));
+      const { ok, error: failure } = await readJson(res);
+      if (!ok) {
+        setError(failure ?? tx('เข้าคิวไม่สำเร็จ'));
         return;
       }
       setQueuedIds([...selected]);

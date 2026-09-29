@@ -8,6 +8,7 @@ import { useToast } from '../../../components/Overlays';
 import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPicker';
 import { QueueStatusCard } from '../../../components/QueueStatusCard';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
+import { readJson } from '../../../lib/fetchJson';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -274,12 +275,12 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
           abbyySkillId: picker.chosenReaderId === 'abbyy' ? picker.abbyySkillId : null,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? tx('เข้าคิวไม่สำเร็จ'));
+      const { ok, data, error: failure } = await readJson(res);
+      if (!ok) {
+        setError(failure ?? tx('เข้าคิวไม่สำเร็จ'));
         return;
       }
-      setQueuedIds(Array.isArray(data.ids) ? data.ids : []);
+      setQueuedIds(Array.isArray(data?.ids) ? data.ids : []);
       setFiles([]);
     } catch (e: any) {
       setError(e.message ?? tx('เข้าคิวไม่สำเร็จ'));
