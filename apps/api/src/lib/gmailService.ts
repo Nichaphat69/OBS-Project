@@ -18,13 +18,30 @@
  */
 import { prisma } from '@obs/db';
 import { thaiMonth, normalizePeriod } from '@obs/domain';
-import { GmailClient, hasGmailCredentials } from './gmailClient.js';
+import { GmailClient, hasGmailAccess } from './gmailClient.js';
 import { readTimesheetFile, type ReadResult } from './uploadService.js';
+import { ingestTimesheet } from './ingestService.js';
+import { extractTimesheet } from './extractionService.js';
 import { readApprovalEmail } from './llmEmailService.js';
 import { logAudit } from './audit.js';
 
+/* คำค้นเริ่มต้นของกล่อง Gmail — ตั้งใจให้ "กว้างไว้ก่อน" (28 ก.ย. 69)
+ *
+ * ของเดิม `subject:(TimeSheet OR "แจ้งอนุมัติ")` แคบเกินไป เพราะลูกค้าแต่ละเจ้าตั้งหัวเรื่องคนละแบบสิ้นเชิง
+ * ตรวจกับอีเมลจริงของรอบ ส.ค. 2026 แล้วหลุดอย่างน้อย 4 แบบ:
+ *   - "ตารางเข้างาน เดือน ส.ค. 2026"                        (Big C) — ไม่มีคำว่า timesheet เลย
+ *   - "รบกวนอนุมัติ Time Sheet เดือน สิงหาคม 2569"           (T8)    — เขียนแยกเป็น "Time Sheet"
+ *   - "FW: [Time Sheet] Thai Group_..._AUG_2026"            (TSG)   — เขียนแยกเหมือนกัน
+ *   - "[ACTION REQUIRED] Timesheets 082026 ..."             (V-Link)— เติม s เป็นพหูพจน์
+ * Gmail ตัดคำเป็น token ("Time Sheet" จึงไม่ match คำว่า timesheet) และไม่ทำ stemming ให้ ต้องไล่ใส่เอง
+ *
+ * หน้า "ดึงจาก Gmail" ให้คนเลือกไฟล์เองอยู่แล้ว การกวาดมาเกินจึงเสียแค่ต้องกวาดตาผ่าน แต่การกวาดมาไม่ครบ
+ * แปลว่าบิลรอบนั้นหายไปเงียบๆ — เลือกให้กว้างไว้ก่อนจึงถูกกว่า และยังมีตัวกรอง from:@โดเมนลูกค้า
+ * ซ้อนอีกชั้นตอนเลือกสัญญาอยู่แล้ว (ดู effectiveQuery ด้านล่าง) */
 export const DEFAULT_GMAIL_QUERY =
-  process.env.GMAIL_QUERY ?? 'subject:(TimeSheet OR "แจ้งอนุมัติ") has:attachment filename:pdf newer_than:90d';
+  process.env.GMAIL_QUERY
+  ?? 'subject:(timesheet OR timesheets OR "time sheet" OR "time-sheet" OR อนุมัติ OR ตารางเข้างาน OR บันทึกเวลา) '
+     + 'has:attachment filename:pdf newer_than:90d';
 
 export class GmailIntakeError extends Error {
   status: number;
@@ -72,7 +89,7 @@ export async function gmailInbox({
   max?: number;
   contractId?: string;
 } = {}): Promise<GmailInboxResult> {
-  if (!hasGmailCredentials()) {
+  if (!(await hasGmailAccess())) {
     throw new GmailIntakeError('ยังไม่ได้เชื่อมต่อ Gmail — ใส่ GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN ใน .env');
   }
 
@@ -174,7 +191,7 @@ export async function readTimesheetFromEmail({
   }
 > {
   if (!messageId) throw new GmailIntakeError('ต้องระบุอีเมลที่จะดึง');
-  if (!hasGmailCredentials()) {
+  if (!(await hasGmailAccess())) {
     throw new GmailIntakeError('ยังไม่ได้เชื่อมต่อ Gmail — ใส่ GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN ใน .env');
   }
 
@@ -257,7 +274,7 @@ export async function undismissGmailMessage(messageId: string, { actor }: { acto
 export async function listDismissedGmailMessages() {
   const rows = await prisma.gmailDismissed.findMany({ orderBy: { dismissedAt: 'desc' } });
   if (!rows.length) return [];
-  if (!hasGmailCredentials()) {
+  if (!(await hasGmailAccess())) {
     return rows.map((row) => ({
       id: row.messageId,
       subject: null,
@@ -279,4 +296,93 @@ export async function listDismissedGmailMessages() {
       }
     }),
   );
+}
+
+/**
+ * ดึงอีเมลใหม่ทั้งหมดแล้วส่งเข้าระบบให้จบในเส้นเดียว — ใช้โดย n8n แทน Gmail Trigger เดิม (29 ก.ย. 69)
+ *
+ * **ทำไมย้ายมาไว้ที่นี่** — เดิม n8n เป็นคนคุยกับ Gmail เอง ซึ่งแปลว่าระบบมีสิทธิ์เข้าถึงกล่องเมล
+ * เก็บอยู่สองที่ (ใน OBS หนึ่ง ใน n8n อีกหนึ่ง) วันที่สิทธิ์หลุดต้องตามไปต่อใหม่ทั้งสองที่ และหลุด
+ * ไม่พร้อมกันด้วย · OBS ต้องมีสิทธิ์นี้อยู่แล้วเพราะฟีเจอร์ร่างอีเมลวางบิลใช้ Gmail API เหมือนกัน
+ * ตัวที่อยู่ใน n8n จึงเป็นของซ้ำซ้อนล้วนๆ
+ *
+ * **เลิกกรองคำว่า "อนุมัติ" ที่ n8n แล้ว** — ด่านนั้นดูแค่เนื้อความ ไม่ดูหัวเรื่อง ทำให้อีเมลจริงของ
+ * ลูกค้าหลายเจ้าตกด่านแล้วหายเงียบโดยไม่มีร่องรอย (เจอจริง 29 ก.ย. 69) ตอนนี้ปล่อยให้เข้ามาแล้วให้
+ * ชั้นตรวจของระบบเป็นคนตัดสิน ซึ่งละเอียดกว่าและบันทึกไว้ว่าทำไมไม่ผ่าน
+ *
+ * อีเมลที่เคยอ่านไปแล้วถูกกรองออกตั้งแต่ใน `gmailInbox()` (เทียบจาก `sourceEmailId` + ชื่อไฟล์)
+ * จึงเรียกซ้ำกี่ครั้งก็ไม่ประมวลผลซ้ำ
+ */
+export interface GmailIngestOutcome {
+  messageId: string;
+  subject: string;
+  fileName: string;
+  ok: boolean;
+  /** ค่าที่ n8n ใช้ตัดสินว่าจะทำอะไรต่อ — รูปเดียวกับที่ POST /api/timesheets/ingest คืนมา */
+  nextAction?: string;
+  timesheetId?: string | null;
+  contractId?: string | null;
+  period?: string | null;
+  reason?: string | null;
+  error?: string;
+}
+
+export async function ingestNewGmailTimesheets({
+  max = 20,
+  ingest,
+}: {
+  max?: number;
+  /** ฉีดเข้ามาได้เพื่อให้เทสต์ไม่ต้องยิง OCR จริง — ปกติใช้ตัวจริงจาก ingestService */
+  ingest?: typeof ingestTimesheet;
+} = {}): Promise<{ scanned: number; processed: number; results: GmailIngestOutcome[] }> {
+  const inbox = await gmailInbox({ max });
+  const run = ingest ?? ingestTimesheet;
+  const gmail = new GmailClient();
+  const results: GmailIngestOutcome[] = [];
+
+  for (const message of inbox.messages) {
+    for (const attachment of message.attachments) {
+      const base = { messageId: message.id, subject: message.subject, fileName: attachment.filename };
+      try {
+        const bytes = await gmail.getAttachment(message.id, attachment.attachmentId);
+        /* เลขเอกสารจากตัวเลขยาวๆ ในหัวเรื่อง ตามที่ workflow เดิมทำ — ไม่เจอก็ใช้ id ของอีเมลแทน
+           ซึ่งไม่ซ้ำแน่นอนและตามกลับไปหาต้นทางได้ */
+        const documentNo = /(\d{9,12})/.exec(message.subject ?? '')?.[1] ?? message.id;
+        const outcome = await run({
+          documentNo,
+          fileBytes: bytes,
+          fileName: attachment.filename,
+          sourceEmailId: message.id,
+          sourceEmailSubject: message.subject,
+          receivedAt: message.receivedAt ?? new Date().toISOString(),
+          approvedBy: message.from ?? null,
+          actor: 'n8n',
+          submissionMethod: 'auto_gmail',
+          extractor: extractTimesheet,
+        } as any);
+        results.push({
+          ...base,
+          ok: true,
+          nextAction: (outcome as any).nextAction,
+          timesheetId: (outcome as any).timesheetId ?? null,
+          contractId: (outcome as any).contractId ?? null,
+          period: (outcome as any).period ?? null,
+          reason: (outcome as any).reason ?? null,
+        });
+      } catch (error: any) {
+        // ไฟล์เดียวพังต้องไม่ทำให้ทั้งรอบหยุด — ที่เหลือต้องถูกอ่านต่อจนครบ แล้วรายงานตัวที่พังกลับไป
+        results.push({ ...base, ok: false, error: String(error?.message ?? error).slice(0, 300) });
+      }
+    }
+  }
+
+  await logAudit({
+    actor: 'n8n',
+    action: 'gmail_auto_ingest',
+    entityType: 'gmail',
+    entityId: String(results.length),
+    detail: { scanned: inbox.messages.length, processed: results.length, failed: results.filter((r) => !r.ok).length },
+  });
+
+  return { scanned: inbox.messages.length, processed: results.length, results };
 }

@@ -300,7 +300,24 @@ export default function GmailTab() {
         title={tx('อีเมลแจ้งอนุมัติ Timesheet')}
         right={inbox ? <span className="sub">{tx('กล่องของ')} {inbox.account}</span> : undefined}
       >
-      {error && <div style={{ color: 'var(--cr)', marginBottom: 14 }}>{error}</div>}
+      {/* ปัญหาที่เจอบ่อยที่สุดในแท็บนี้คือสิทธิ์เข้าถึงกล่องเมลหมดอายุ ซึ่งเดิมขึ้นเป็นข้อความแดงแล้วจบ
+          ไม่มีทางไปต่อเลย ต้องไปตามคนที่เข้าเครื่องได้มาแก้ให้ — ใส่ทางลัดไปหน้าเชื่อมต่อไว้ตรงนี้
+          ให้คนที่เจอปัญหากดแก้ได้เองทันทีในหน้าเดียวกัน (29 ก.ย. 69) */}
+      {error && (
+        <div className="note cr" style={{ marginBottom: 14 }}>
+          <Icon name="alt" />
+          <span>
+            {error}
+            {/* ข้อความจากฝั่งเซิร์ฟเวอร์เมื่อสิทธิ์หมดอายุจะมีคำว่า "เชื่อมต่อ" อยู่เสมอ (ดู gmailClient.ts)
+                ใช้เป็นตัวแยกว่าควรโชว์ปุ่มไหม แทนที่จะโชว์ทุก error รวมถึงอันที่ปุ่มนี้ช่วยอะไรไม่ได้ */}
+            {/เชื่อมต่อ|สิทธิ์/.test(error) && (
+              <a className="btn sm pri" href="/gmail-link" style={{ display: 'inline-flex', marginTop: 10 }}>
+                {tx('ไปหน้าเชื่อมต่อ Gmail')}
+              </a>
+            )}
+          </span>
+        </div>
+      )}
 
       {inbox && activeContract && !showAll && inbox.domain && (
         <div className="mailbanner">

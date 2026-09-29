@@ -8,7 +8,7 @@
  * ไม่พอร์ต (รอ Phase 5.5.6) จึงยังไม่เพิ่ม field เปล่าๆ ที่ไม่มีใครใช้จริง
  */
 import { getSetting, setSetting } from './dashboardService.js';
-import { hasGmailCredentials } from './gmailClient.js';
+import { hasGmailAccess } from './gmailClient.js';
 import { DEFAULT_GMAIL_QUERY } from './gmailService.js';
 import { hasLineCredentials } from './lineClient.js';
 import { lineApproverTargets } from './notificationRecipientsService.js';
@@ -60,7 +60,7 @@ export async function settingsSnapshot(): Promise<SettingsSnapshot> {
       localLlmBaseUrl: LOCAL_LLM_BASE_URL,
       localTextModel: LOCAL_TEXT_MODEL,
       localVisionModel: LOCAL_VISION_MODEL,
-      hasGmail: hasGmailCredentials(),
+      hasGmail: await hasGmailAccess(),
       gmailQuery: DEFAULT_GMAIL_QUERY,
       /* LINE กับ APP_BASE_URL — ไม่มีสองอย่างนี้ ปุ่มในข้อความแจ้งเตือนจะกดเข้าเว็บไม่ได้
          หน้าจัดการระบบต้องบอกได้ว่าตั้งครบหรือยัง ไม่ใช่ต้องไปเปิด .env ดูเอง */

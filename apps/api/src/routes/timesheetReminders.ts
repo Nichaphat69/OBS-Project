@@ -4,6 +4,8 @@ import { sendOverdueTimesheetReminders } from '../lib/timesheetSubmissionService
 import { ingestTimesheet, IngestError } from '../lib/ingestService.js';
 import { extractTimesheet, ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
+import { ingestNewGmailTimesheets, GmailIntakeError } from '../lib/gmailService.js';
+import { GmailError } from '../lib/gmailClient.js';
 import { logExposedRequest } from '../lib/apiActivityLog.js';
 
 /** เส้นทางที่ n8n เรียกตรงเข้ามาโดยไม่มี session ใดๆ — เดิม (`src/server.js`'s `PUBLIC_API_PATTERNS`)
@@ -41,6 +43,27 @@ timesheetRemindersRouter.post('/ingest', logExposedRequest('n8n'), requireN8nSec
     res.json(result);
   } catch (error) {
     if (error instanceof IngestError || error instanceof ExtractionError || error instanceof AbbyyError) {
+      return res.status((error as any).status ?? 502).json({ error: error.message });
+    }
+    throw error;
+  }
+});
+
+/**
+ * ดึงอีเมลใหม่จากกล่องที่ระบบเชื่อมไว้ แล้วส่งเข้าระบบให้จบในครั้งเดียว (29 ก.ย. 69)
+ *
+ * แทน Gmail Trigger ใน n8n — เพื่อไม่ให้สิทธิ์เข้าถึงกล่องเมลถูกเก็บไว้สองที่ ดูเหตุผลเต็มที่
+ * `ingestNewGmailTimesheets()` ใน gmailService.ts · n8n เรียกเส้นนี้ตามเวลาที่ตั้งไว้ แล้วเอา
+ * `results[]` ไปแยกทีละรายการเข้า Switch เดิมที่ดู `nextAction` (รูปข้อมูลเหมือน /ingest ทุกประการ)
+ *
+ * เรียกซ้ำได้ไม่มีผลข้างเคียง — อีเมลที่อ่านไปแล้วถูกกรองออกตั้งแต่ชั้นที่ไล่รายการในกล่อง
+ */
+timesheetRemindersRouter.post('/ingest-from-gmail', logExposedRequest('n8n'), requireN8nSecret, async (req, res) => {
+  try {
+    const max = Number.isFinite(Number(req.body?.max)) ? Number(req.body.max) : undefined;
+    res.json(await ingestNewGmailTimesheets({ max }));
+  } catch (error) {
+    if (error instanceof GmailIntakeError || error instanceof GmailError) {
       return res.status((error as any).status ?? 502).json({ error: error.message });
     }
     throw error;

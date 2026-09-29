@@ -435,6 +435,35 @@ model CycleApproval {
 }
 
 // ── ผู้ใช้งานระบบ (login) ────────────────────────────────────
+// ── กล่อง Gmail ที่ระบบได้รับอนุญาตให้อ่าน ──────────────────────────────
+/// เดิมเก็บ refresh token ไว้ใน `.env` ตัวเดียวทั้งระบบ (`GMAIL_REFRESH_TOKEN`) ซึ่งมีปัญหาสามข้อ:
+/// ไม่มีใครรู้ว่าระบบกำลังอ่านกล่องของใครอยู่ · เปลี่ยนกล่องต้อง SSH เข้าเครื่องแก้ไฟล์แล้วรีสตาร์ท ·
+/// และเวลา token หลุด (เจ้าของกล่องเปลี่ยนรหัสผ่าน) ไม่มีใครรู้จนกว่าจะมีคนกดแล้วเจอ error
+/// ตารางนี้ย้ายมาเก็บในฐานข้อมูล ผูกกับคนที่กดเชื่อม และบันทึกว่ากล่องไหนถูกใช้อยู่จริง (29 ก.ย. 69)
+///
+/// `refreshToken` เข้ารหัสไว้ด้วย AES-256-GCM (ดู lib/tokenCrypto.ts) — กันกรณีไฟล์สำรองฐานข้อมูล
+/// หลุดออกไปนอกเครื่อง ไม่ได้กันคนที่เข้าถึงเครื่องได้ เพราะกุญแจอยู่บนเครื่องเดียวกัน
+model GmailConnection {
+  id            Int     @id @default(autoincrement())
+  /// อีเมลของกล่องที่ผูก — ถามจาก Google ตอนเชื่อม ไม่ให้คนพิมพ์เอง จะได้ตรงกับความจริงเสมอ
+  email         String  @unique
+  refreshToken  String  @map("refresh_token")
+  /// สิทธิ์ที่ Google ให้มาจริง — ใช้เตือนเมื่อขาด gmail.readonly (กดยินยอมผ่านแต่อ่านเมลไม่ได้)
+  scopes        String?
+  /// กล่องที่ระบบใช้อยู่จริง มีได้ทีละหนึ่ง — จุดนี้คือ "config" ที่ทำให้เลือกกล่องได้โดยไม่ต้องต่อใหม่
+  isActive      Boolean @default(false) @map("is_active")
+  /// username ของคนที่กดเชื่อม (ไม่ใช่เจ้าของกล่อง — สองคนนี้เป็นคนละคนได้)
+  connectedBy   String  @map("connected_by")
+  connectedAt   String  @map("connected_at")
+  /// ครั้งสุดท้ายที่เรียก Google แล้วผ่าน — ใช้บอกบนหน้าจอว่ายังใช้งานได้อยู่จริง
+  lastOkAt      String? @map("last_ok_at")
+  /// ข้อความจาก Google ตอนล่าสุดที่ใช้ไม่ได้ — ล้างทิ้งเมื่อกลับมาใช้ได้
+  lastError     String? @map("last_error")
+  lastErrorAt   String? @map("last_error_at")
+
+  @@map("gmail_connections")
+}
+
 // role: 'admin' | 'accounting' | 'user' | 'executive' — ดู src/auth.js ROLES
 model User {
   username      String  @id
