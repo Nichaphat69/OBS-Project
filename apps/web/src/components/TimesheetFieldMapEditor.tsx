@@ -12,6 +12,9 @@ import {
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
 
+/** id ของรายการป้ายที่อ่านได้จากเอกสาร — ใช้ร่วมกันทุกช่อง วาง <datalist> ไว้ที่เดียว */
+const LABEL_LIST_ID = 'fieldmap-doc-labels';
+
 type Section = 'header' | 'detail';
 
 /** ค่าที่ตั้งได้ต่อหนึ่งฟิลด์มีสามสถานะ ไม่ใช่สอง — ตรงกับ TimesheetFieldMap ใน @obs/domain:
@@ -64,6 +67,9 @@ export function TimesheetFieldMapEditor({
   const [guessing, setGuessing] = useState(false);
   const [guessError, setGuessError] = useState<string | null>(null);
   const [guessNotes, setGuessNotes] = useState<string[] | null>(null);
+  /* ป้ายทุกอันที่อ่านได้จากเอกสารตัวอย่าง — เอาไปทำเป็นรายการให้เลือกในทุกช่อง ช่องที่ระบบเดาไม่ออก
+     คนจะได้กดเลือกจากของจริงในเอกสารแทนการพิมพ์เอง (ซึ่งพิมพ์ผิดตัวเดียวก็อ่านไม่เจอ) */
+  const [docLabels, setDocLabels] = useState<string[]>([]);
 
   /* เดาชื่อฟิลด์จาก Timesheet ตัวอย่างแล้ว "เติมให้เป็นร่าง" — ไม่บันทึกเอง คนต้องกดบันทึกเองเหมือนเดิม
      (เจ้าของระบบสั่ง 27 ก.ย. 69 ให้สะดวกกับคนใช้ที่สุด แทนที่จะพิมพ์เองทีละช่อง)
@@ -96,6 +102,7 @@ export function TimesheetFieldMapEditor({
       }
       onChange(next);
       setGuessNotes(body.notes ?? []);
+      setDocLabels(Array.isArray(body.labels) ? body.labels : []);
     } catch {
       setGuessError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
     } finally {
@@ -135,6 +142,7 @@ export function TimesheetFieldMapEditor({
           value={typeof entry === 'string' ? entry : ''}
           disabled={disabled || absent}
           placeholder={absent ? '—' : f.name}
+          list={docLabels.length > 0 ? LABEL_LIST_ID : undefined}
           onChange={(e) => onChange(withEntry(value, section, f.key, e.target.value || undefined))}
         />
         <span className="fieldabsent">
@@ -208,12 +216,14 @@ export function TimesheetFieldMapEditor({
               value={split?.month ?? ''}
               disabled={disabled}
               placeholder={tx('ช่องเดือน')}
+              list={docLabels.length > 0 ? LABEL_LIST_ID : undefined}
               onChange={(e) => setSplitPart('month', e.target.value)}
             />
             <input
               value={split?.year ?? ''}
               disabled={disabled}
               placeholder={tx('ช่องปี')}
+              list={docLabels.length > 0 ? LABEL_LIST_ID : undefined}
               onChange={(e) => setSplitPart('year', e.target.value)}
             />
           </span>
@@ -222,6 +232,7 @@ export function TimesheetFieldMapEditor({
             value={typeof entry === 'string' ? entry : ''}
             disabled={disabled || absent}
             placeholder={absent ? '—' : f.name}
+            list={docLabels.length > 0 ? LABEL_LIST_ID : undefined}
             onChange={(e) => onChange(withEntry(value, 'header', f.key, e.target.value || undefined))}
           />
         )}
@@ -297,6 +308,13 @@ export function TimesheetFieldMapEditor({
           <Icon name="chk" />
           <span>{guessNotes.join(' · ')}</span>
         </div>
+      )}
+      {docLabels.length > 0 && (
+        <datalist id={LABEL_LIST_ID}>
+          {docLabels.map((l) => (
+            <option key={l} value={l} />
+          ))}
+        </datalist>
       )}
 
       <input
