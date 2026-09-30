@@ -10,6 +10,7 @@ import {
   GmailIntakeError,
 } from '../lib/gmailService.js';
 import { logAiRead } from '../lib/uploadService.js';
+import { enqueueFromInbox, ReadQueueError } from '../lib/readQueueService.js';
 import { UploadError } from '../lib/uploadService.js';
 import { ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
@@ -58,6 +59,25 @@ gmailRouter.get('/inbox', async (req, res) => {
     if (error instanceof GmailIntakeError || error instanceof GmailError) {
       return res.status((error as any).status ?? 502).json({ error: error.message });
     }
+    throw error;
+  }
+});
+
+/** อ่านไฟล์ที่เลือกแบบเข้าคิวเบื้องหลัง (30 ก.ย. 69) — ตอบทันทีไม่รอ OCR แล้วให้ worker เดียวกับหน้า "อัปโหลดไฟล์"
+ * อ่านต่อ (เดิมใช้ POST /read ที่รอผลในคำขอเดียว ซึ่ง OCR ช้าเกิน 90 วินาทีแล้ว nginx ตัดเป็น 504 HTML) */
+gmailRouter.post('/read-queue', async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const items = Array.isArray(body.items)
+      ? body.items.map((i: any) => ({ messageId: String(i?.messageId ?? ''), attachmentFilename: i?.attachmentFilename ?? null }))
+      : [];
+    if (items.some((i: any) => !i.messageId)) return res.status(400).json({ error: 'ต้องระบุอีเมลที่จะอ่าน' });
+    const readerId = typeof body.readerId === 'string' && body.readerId ? body.readerId : null;
+    const abbyySkillId = typeof body.abbyySkillId === 'string' && body.abbyySkillId ? body.abbyySkillId : null;
+    const queued = await enqueueFromInbox({ items, readerId, abbyySkillId, actor: req.user!.nameTh });
+    res.json({ queued: queued.length, ids: queued.map((q) => q.id), items: queued });
+  } catch (error) {
+    if (error instanceof ReadQueueError) return res.status(error.status).json({ error: error.message });
     throw error;
   }
 });

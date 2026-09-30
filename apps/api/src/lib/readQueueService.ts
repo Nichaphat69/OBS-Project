@@ -76,6 +76,85 @@ export async function enqueueFiles({
   return ids;
 }
 
+/** เข้าคิวไฟล์ที่ n8n ส่งมาเก็บไว้ (`inbound_emails`) — แท็บ "ดึงจาก Gmail" (30 ก.ย. 69)
+ *
+ * ใช้ไฟล์ที่เก็บไว้แล้วตรงๆ (ไม่คัดลอกไฟล์ซ้ำ ชี้ file_key เดียวกัน) แล้วให้ worker ตัวเดียวกับหน้า "อัปโหลดไฟล์"
+ * อ่านเบื้องหลัง — เดิมแท็บนี้อ่านแบบรอผลในคำขอเดียว ซึ่ง OCR ช้าเกิน 90 วินาทีแล้ว nginx ตัดเป็น 504 (HTML)
+ *
+ * กดซ้ำได้ไม่เกิดแถวซ้ำ: ไฟล์เดิมที่ยังค้างในคิว/อ่านไปแล้ว → คืน id เดิม · ไฟล์เดิมที่ 'failed' → เข้าคิวใหม่
+ * ที่แถวเดิม (ให้กดลองใหม่ได้) · ตัวที่ผู้ใช้ทิ้ง ('discarded') → สร้างแถวใหม่ */
+export async function enqueueFromInbox({
+  items,
+  readerId,
+  abbyySkillId,
+  actor,
+}: {
+  items: Array<{ messageId: string; attachmentFilename?: string | null }>;
+  readerId?: string | null;
+  abbyySkillId?: string | null;
+  actor: string;
+}): Promise<Array<{ id: number; subject: string | null; fileName: string }>> {
+  if (items.length === 0) throw new ReadQueueError('ยังไม่ได้เลือกไฟล์');
+
+  const out: Array<{ id: number; subject: string | null; fileName: string }> = [];
+  for (const it of items) {
+    const stored = await prisma.inboundEmail.findFirst({
+      where: { sourceEmailId: it.messageId, ...(it.attachmentFilename ? { fileName: it.attachmentFilename } : {}) },
+      orderBy: { id: 'asc' },
+    });
+    if (!stored) throw new ReadQueueError('ไม่พบอีเมลฉบับนี้ในรายการที่ n8n ส่งมา', 404);
+
+    const existing = await prisma.aiRead.findFirst({
+      where: { source: 'gmail', sourceEmailId: stored.sourceEmailId, fileName: stored.fileName, status: { not: 'discarded' } },
+      orderBy: { id: 'desc' },
+    });
+    if (existing && existing.status !== 'failed') {
+      out.push({ id: existing.id, subject: stored.subject, fileName: stored.fileName });
+      continue;
+    }
+    if (existing) {
+      await prisma.aiRead.update({
+        where: { id: existing.id },
+        data: {
+          status: 'queued',
+          errorMessage: null,
+          requestedReaderId: readerId ?? null,
+          requestedAbbyySkillId: abbyySkillId ?? null,
+          readBy: actor,
+        },
+      });
+      out.push({ id: existing.id, subject: stored.subject, fileName: stored.fileName });
+      continue;
+    }
+
+    const row = await prisma.aiRead.create({
+      data: {
+        source: 'gmail',
+        sourceEmailId: stored.sourceEmailId,
+        fileName: stored.fileName,
+        fileKey: stored.fileKey,
+        status: 'queued',
+        requestedReaderId: readerId ?? null,
+        requestedAbbyySkillId: abbyySkillId ?? null,
+        readAt: new Date().toISOString(),
+        readBy: actor,
+      },
+      select: { id: true },
+    });
+    out.push({ id: row.id, subject: stored.subject, fileName: stored.fileName });
+  }
+
+  await logAudit({
+    actor,
+    action: 'enqueue_read_from_inbox',
+    entityType: 'ai_read',
+    entityId: out.map((o) => o.id).join(','),
+    detail: { count: out.length, readerId, abbyySkillId },
+  });
+  emitChange('read-queue');
+  return out;
+}
+
 /** เข้าคิวแถว ai_reads ที่มีอยู่แล้ว (ไฟล์ที่พนักงานส่งเองผ่านระบบ ยังไม่เคยอ่าน) — ใช้กับแท็บ "ส่งผ่านระบบ"
  * ที่เลือกได้หลายรายการพร้อมกัน เฉพาะแถวที่ยัง 'pending' แบบยังไม่มี extraction (ไม่งั้นจะไปอ่านทับของที่
  * อ่านและรีวิวไปแล้ว) — เช็คจาก extraction เป็น null เท่านั้นที่ปิดคิวได้ */

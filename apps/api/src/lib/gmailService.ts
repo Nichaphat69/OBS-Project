@@ -103,15 +103,18 @@ export async function gmailInbox({
     (
       await prisma.aiRead.findMany({
         where: { sourceEmailId: { not: null }, status: { not: 'discarded' } },
-        select: { sourceEmailId: true, fileName: true, period: true, documentNo: true },
+        select: { sourceEmailId: true, fileName: true, period: true, documentNo: true, status: true },
       })
-    ).map((r) => [`${r.sourceEmailId}::${r.fileName}`, { period: r.period, documentNo: r.documentNo }]),
+    ).map((r) => [`${r.sourceEmailId}::${r.fileName}`, { period: r.period, documentNo: r.documentNo, status: r.status }]),
   );
   const dismissed = new Set((await prisma.gmailDismissed.findMany({ select: { messageId: true } })).map((r) => r.messageId));
 
   const withAttachments = messages.map((m) => ({
     ...m,
-    attachments: m.attachments.map((a) => ({ ...a, ...known.get(`${m.id}::${a.filename}`) })),
+    attachments: m.attachments.map((a) => {
+      const { status, ...rest } = known.get(`${m.id}::${a.filename}`) ?? ({} as any);
+      return { ...a, ...rest, inProgress: status === 'queued' || status === 'running' };
+    }),
   }));
 
   return {
@@ -122,8 +125,9 @@ export async function gmailInbox({
     domainMissing,
     skipped: 0,
     messages: withAttachments
-      .filter((m) => !dismissed.has(m.id) && m.attachments.some((a) => !a.documentNo))
-      .map((m) => ({ ...m, attachments: m.attachments.filter((a) => !a.documentNo) })),
+      .filter((m) => !dismissed.has(m.id) && m.attachments.some((a) => !a.documentNo && !a.inProgress))
+      // ไฟล์ที่กำลังอยู่ในคิวอ่าน (queued/running) ซ่อนจากรายการ — ไปดูสถานะที่การ์ดคิวแทน ไม่ให้กดซ้ำ
+      .map((m) => ({ ...m, attachments: m.attachments.filter((a) => !a.documentNo && !a.inProgress) })),
     ingested: withAttachments
       .filter((m) => m.attachments.every((a) => a.documentNo))
       .map((m) => {

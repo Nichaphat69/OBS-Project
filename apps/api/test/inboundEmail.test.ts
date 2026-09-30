@@ -6,11 +6,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prisma } from '@obs/db';
 import { receiveInboundEmail, InboundEmailError } from '../src/lib/inboundEmailService.js';
+import { enqueueFromInbox, ReadQueueError } from '../src/lib/readQueueService.js';
 import { gmailInbox, dismissGmailMessage, listDismissedGmailMessages, readTimesheetFromEmail } from '../src/lib/gmailService.js';
 
 const pdf = (text = 'x') => Buffer.from(`%PDF-1.4\n${text}`).toString('base64');
 
 async function clear() {
+  await prisma.aiRead.deleteMany({ where: { source: 'gmail' } });
   await prisma.gmailDismissed.deleteMany({});
   await prisma.inboundEmail.deleteMany({});
 }
@@ -77,5 +79,53 @@ test('กดอ่านอีเมลที่ไม่มีในราย�
   await assert.rejects(
     readTimesheetFromEmail({ messageId: 'ไม่มีจริง' }),
     (e: any) => e.status === 404,
+  );
+});
+
+test('เข้าคิวอ่านไฟล์ที่ n8n ส่งมา: สร้างแถว queued ใช้ไฟล์เดิม ไม่ต้องไปโหลดจาก Gmail และซ่อนจากรายการ', async () => {
+  await clear();
+  await receiveInboundEmail(base);
+  const stored = await prisma.inboundEmail.findFirstOrThrow({});
+  const [q] = await enqueueFromInbox({ items: [{ messageId: 'mail-1', attachmentFilename: 'ts.pdf' }], readerId: 'abbyy', abbyySkillId: 'skill-1', actor: 'tester' });
+  const row = await prisma.aiRead.findUniqueOrThrow({ where: { id: q.id } });
+  assert.equal(row.status, 'queued');
+  assert.equal(row.source, 'gmail');
+  assert.equal(row.sourceEmailId, 'mail-1');
+  assert.equal(row.fileKey, stored.fileKey);
+  assert.equal(row.requestedReaderId, 'abbyy');
+  assert.equal(row.requestedAbbyySkillId, 'skill-1');
+  assert.equal(q.subject, 'Timesheet ส.ค.');
+  // กำลังอยู่ในคิว → ไม่โผล่ในรายการให้กดซ้ำ
+  assert.equal((await gmailInbox({})).messages.length, 0);
+});
+
+test('กดเข้าคิวซ้ำไม่เกิดแถวซ้ำ', async () => {
+  await clear();
+  await receiveInboundEmail(base);
+  const a = await enqueueFromInbox({ items: [{ messageId: 'mail-1' }], actor: 't' });
+  const b = await enqueueFromInbox({ items: [{ messageId: 'mail-1' }], actor: 't' });
+  assert.equal(a[0].id, b[0].id);
+  assert.equal(await prisma.aiRead.count({ where: { source: 'gmail' } }), 1);
+});
+
+test('ไฟล์ที่อ่านล้มเหลวกลับเข้าคิวได้ที่แถวเดิม และยังโผล่ในรายการให้ลองใหม่', async () => {
+  await clear();
+  await receiveInboundEmail(base);
+  const [a] = await enqueueFromInbox({ items: [{ messageId: 'mail-1' }], actor: 't' });
+  await prisma.aiRead.update({ where: { id: a.id }, data: { status: 'failed', errorMessage: 'พัง' } });
+  assert.equal((await gmailInbox({})).messages.length, 1, 'แถวที่ failed ต้องกลับมาให้กดลองใหม่');
+  const [b] = await enqueueFromInbox({ items: [{ messageId: 'mail-1' }], actor: 't', readerId: 'clear-read' });
+  assert.equal(b.id, a.id);
+  const row = await prisma.aiRead.findUniqueOrThrow({ where: { id: a.id } });
+  assert.equal(row.status, 'queued');
+  assert.equal(row.errorMessage, null);
+  assert.equal(row.requestedReaderId, 'clear-read');
+});
+
+test('เข้าคิวอีเมลที่ไม่มีในรายการต้องบอก 404', async () => {
+  await clear();
+  await assert.rejects(
+    enqueueFromInbox({ items: [{ messageId: 'ไม่มีจริง' }], actor: 't' }),
+    (e: any) => e instanceof ReadQueueError && e.status === 404,
   );
 });
