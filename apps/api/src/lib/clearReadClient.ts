@@ -333,8 +333,41 @@ export class ClearReadClient {
     });
   }
 
+  /**
+   * ดึงผลอ่านของ "ทุกหน้า" แล้วรวมเป็นก้อนเดียว
+   *
+   * ⚠️ `/inquiry/ocr-detail` คืนผลทีละหน้า (ดู `page_number` ใน response) ถ้าไม่ระบุหน้าจะได้แค่หน้า 1 เสมอ
+   * ทั้งที่ Clear Read อ่านครบทุกหน้าแล้ว — เดิมที่นี่ดึงหน้าเดียว ไฟล์ 7 หน้าจึงได้แค่ 5 แถวจาก 31 วัน
+   * และช่องสรุป/ผู้อนุมัติที่อยู่หน้าท้ายๆ หายหมด (เจอจริง 30 ก.ย. 69 กับ Timesheet T8) ตัวเลขวันทำงาน
+   * ที่ตกหล่นแบบนี้ไหลไปถึงใบแจ้งหนี้เงียบๆ
+   *
+   * ตัวระบุหน้าอยู่ใน **query string** (`?page=N`) ไม่ใช่ใน body — ใส่ใน body จะถูกเมินหรือโดน 400
+   * (ยืนยันจากโค้ดหน้าเว็บของ Clear Read เองและลองยิงจริง) จำนวนหน้าดูจาก `document.pages`
+   * ดึงหน้าเกินจำนวนจะได้ error ของฝั่งโน้น จึงไม่เดาเลยเลขหน้า
+   *
+   * หน้าไหนดึงไม่สำเร็จ = ล้มทั้งใบ ไม่ข้ามหน้าเงียบๆ เพราะผลที่ได้ครึ่งเดียวผิดกว่าไม่ได้ผลเลย
+   */
   async fetchDetail(documentId: string): Promise<any> {
-    const body = await this.post('/inquiry/ocr-detail', {
+    const first = await this.fetchDetailPage(documentId, 1);
+    const pageCount = Array.isArray(first?.document?.pages) ? first.document.pages.length : 1;
+    if (pageCount <= 1) return first;
+
+    const pages = [first];
+    for (let p = 2; p <= pageCount; p++) {
+      try {
+        pages.push(await this.fetchDetailPage(documentId, p));
+      } catch (error) {
+        throw new ClearReadError(
+          `ดึงผลอ่านหน้า ${p}/${pageCount} จาก Clear Read ไม่สำเร็จ — ${(error as Error).message}`,
+          { status: (error as ClearReadError).status ?? null, body: (error as ClearReadError).body ?? null },
+        );
+      }
+    }
+    return mergeClearReadPages(pages);
+  }
+
+  private async fetchDetailPage(documentId: string, page: number): Promise<any> {
+    const body = await this.post(`/inquiry/ocr-detail?page=${page}`, {
       json: { project_id: this.projectId, document_id: documentId },
     });
     return body?.data;
@@ -346,6 +379,45 @@ export class ClearReadClient {
     await this.waitUntilRead(documentId);
     return this.fetchDetail(documentId);
   }
+}
+
+/**
+ * รวมผลอ่านรายหน้าเป็นก้อนเดียวรูปเดียวกับผลหน้าเดียว (`mapClearReadResult` ใช้ต่อได้เลยไม่ต้องแก้)
+ *
+ * - ช่อง "ตารางรายวัน" (TimesheetDetails): ต่อแถวของทุกหน้าตามลำดับหน้า
+ * - ช่องอื่นทั้งหมด (หัวเอกสาร ช่องสรุป ผู้อนุมัติ ลายเซ็น): เอาค่าแรกที่ไม่ว่างตามลำดับหน้า — ข้อมูลเหล่านี้
+ *   กระจายอยู่คนละหน้า (ชื่อพนักงานหน้า 1, ยอดรวมชั่วโมงหน้า 6, ผู้อนุมัติหน้า 7) หน้าไหนไม่มีจะเป็นค่าว่าง
+ * - ข้อความดิบ OCR ต่อกันทุกหน้า ที่เหลือ (task_id, document ฯลฯ) ใช้ของหน้าแรก
+ */
+export function mergeClearReadPages(pages: any[]): any {
+  const first = pages[0] ?? {};
+  const isEmpty = (v: unknown) => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
+
+  const order: string[] = [];
+  const byKey = new Map<string, ClearReadField>();
+  for (const page of pages) {
+    for (const f of Array.isArray(page?.fields) ? (page.fields as ClearReadField[]) : []) {
+      const existing = byKey.get(f.key_field);
+      if (!existing) {
+        order.push(f.key_field);
+        byKey.set(f.key_field, { ...f, value: f.key_field === TIMESHEET_DETAIL_LINE_ITEM ? [...(Array.isArray(f.value) ? f.value : [])] : f.value });
+        continue;
+      }
+      if (f.key_field === TIMESHEET_DETAIL_LINE_ITEM) {
+        if (Array.isArray(f.value)) (existing.value as unknown[]).push(...f.value);
+      } else if (isEmpty(existing.value) && !isEmpty(f.value)) {
+        existing.value = f.value;
+      }
+    }
+  }
+
+  return {
+    ...first,
+    page_number: 1,
+    pages_merged: pages.length,
+    ocr_raw_text: pages.map((p) => p?.ocr_raw_text ?? '').filter(Boolean).join('\n\n'),
+    fields: order.map((k) => byKey.get(k)),
+  };
 }
 
 async function safeJson(res: Response): Promise<unknown> {

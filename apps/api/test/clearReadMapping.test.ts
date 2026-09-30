@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapClearReadResult } from '../src/lib/clearReadClient.js';
+import { mapClearReadResult, mergeClearReadPages } from '../src/lib/clearReadClient.js';
 
 /** payload รูปเดียวกับที่ Clear Read คืนมาจริง — fields เป็น array แบน มี TimesheetDetails หนึ่งรายการ
  * ที่ value เป็น array ของแถว (ดูตัวอย่างจริงในคอมเมนต์หัว clearReadClient.ts) */
@@ -293,4 +293,66 @@ test('Place ในตารางรายวันต้องอ่านเ�
   assert.equal(only.days[0].dailySite, 'ไซต์บางนา');
   const both: any = mapClearReadResult(docFields({}, [workRow(3, { Place: 'ไซต์บางนา', Daily_Site: 'ไซต์พระราม 9' })]));
   assert.equal(both.days[0].dailySite, 'ไซต์พระราม 9');
+});
+
+
+/* ── รวมผลหลายหน้า (30 ก.ย. 69) ──────────────────────────────────────────────────────────────
+ * /inquiry/ocr-detail คืนผลทีละหน้า ถ้าดึงหน้าเดียวไฟล์ 7 หน้าจะได้แค่ 5 แถวจาก 31 วัน (เจอจริงกับ T8)
+ * รูป payload ด้านล่างจำลองจากผลจริง: หัวเอกสารอยู่หน้า 1 · ยอดรวมชั่วโมงอยู่หน้า 6 · ผู้อนุมัติอยู่หน้า 7 */
+const T8_PAGES = [
+  { page_number: 1, ocr_raw_text: 'หน้า1', document: { pages: new Array(3).fill({}) }, fields: [
+    { key_field: 'Employee_Name', value: 'Chakrit Trasinpaipool' },
+    { key_field: 'Month_Year', value: 'ส.ค. 2026' },
+    { key_field: 'Approved_By_Name', value: null },
+    { key_field: 'TimesheetDetails', value: [workRowAug(3), workRowAug(4)] },
+  ] },
+  { page_number: 2, ocr_raw_text: 'หน้า2', fields: [
+    { key_field: 'Employee_Name', value: '' },
+    { key_field: 'TimesheetDetails', value: [workRowAug(5), workRowAug(6)] },
+  ] },
+  { page_number: 3, ocr_raw_text: 'หน้า3', fields: [
+    { key_field: 'Total_Normal_Hours', value: 24 },
+    { key_field: 'Approved_By_Name', value: 'ผู้จัดการ' },
+    { key_field: 'Employee_Name', value: 'ชื่อจากหน้าท้ายที่ไม่ควรทับหน้า 1' },
+    { key_field: 'TimesheetDetails', value: [workRowAug(7)] },
+  ] },
+];
+
+function workRowAug(day: number) {
+  return { Date: `${day} ส.ค. 26`, Normal_Hours: 8, Time_In: '09:00', Time_Out: '18:00' };
+}
+
+test('รวมหลายหน้า: แถวรายวันต่อกันครบทุกหน้าตามลำดับ', () => {
+  const merged = mergeClearReadPages(T8_PAGES);
+  const rows = merged.fields.find((f: any) => f.key_field === 'TimesheetDetails').value;
+  assert.deepEqual(rows.map((r: any) => r.Date), ['3 ส.ค. 26', '4 ส.ค. 26', '5 ส.ค. 26', '6 ส.ค. 26', '7 ส.ค. 26']);
+});
+
+test('รวมหลายหน้า: ช่องอื่นเอาค่าแรกที่ไม่ว่าง (หน้าแรกชนะ) และเก็บช่องที่มีแค่หน้าท้าย', () => {
+  const merged = mergeClearReadPages(T8_PAGES);
+  const get = (k: string) => merged.fields.find((f: any) => f.key_field === k)?.value;
+  assert.equal(get('Employee_Name'), 'Chakrit Trasinpaipool', 'ค่าจากหน้าท้ายต้องไม่ทับหน้าแรก');
+  assert.equal(get('Total_Normal_Hours'), 24, 'ยอดรวมที่อยู่หน้าท้ายต้องไม่หาย');
+  assert.equal(get('Approved_By_Name'), 'ผู้จัดการ', 'หน้าแรกเป็น null ต้องไปเติมจากหน้าที่มีค่า');
+});
+
+test('รวมหลายหน้า: ข้อความดิบต่อกัน และไม่แก้ข้อมูลหน้าเดิมที่ส่งเข้ามา', () => {
+  const before = JSON.stringify(T8_PAGES);
+  const merged = mergeClearReadPages(T8_PAGES);
+  assert.equal(merged.ocr_raw_text, 'หน้า1\n\nหน้า2\n\nหน้า3');
+  assert.equal(merged.pages_merged, 3);
+  assert.equal(JSON.stringify(T8_PAGES), before, 'ต้องไม่ทำให้ input เปลี่ยน');
+});
+
+test('รวมหลายหน้าแล้วส่งเข้า mapClearReadResult ได้ครบทุกแถวและเดือนถูก', () => {
+  const d: any = mapClearReadResult(mergeClearReadPages(T8_PAGES));
+  assert.equal(d.days.length, 5, 'ต้องเห็นวันจากทุกหน้า ไม่ใช่แค่หน้าแรก');
+  assert.equal(d.period, '2026-08');
+  assert.equal(d.totalWorkDays, 5);
+});
+
+test('ไฟล์หน้าเดียวรวมแล้วได้ข้อมูลเดิมครบ', () => {
+  const single = detailWith([workRow(3), workRow(4)]);
+  const merged = mergeClearReadPages([single]);
+  assert.deepEqual(merged.fields, single.fields);
 });
