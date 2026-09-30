@@ -1,47 +1,29 @@
 /**
- * "ดึงจาก Gmail" — ported (narrowed) from src/service.js's `gmailInbox()`,
- * `readTimesheetFromEmail()`, `dismissGmailMessage()`, `undismissGmailMessage()`,
- * `listDismissedGmailMessages()`.
+ * แท็บ "ดึงจาก Gmail" — รายการไฟล์ Timesheet ที่ n8n ส่งเข้ามาเก็บไว้ (`inbound_emails`) รอให้คนกดอ่าน
  *
- * Simplifications vs. the original:
- * - The original filters the inbox to the "currently active company" (a company switcher stored
- *   in the session/topbar this migration hasn't built yet) — this port takes an explicit optional
- *   `contractId` instead; omit it to see every company's candidate emails (equivalent to the
- *   original's "แสดงทุกบริษัท" toggle).
- * - `readTimesheetFromEmail()` runs the email body through a local-LLM reader (`readApprovalEmail`,
- *   Phase 5.7) to auto-extract approval status/document number/approver, then blocks ingestion if
- *   the status isn't exactly "อนุมัติ" or the month doesn't match the PDF — matching the original.
- *   Narrowed vs. the original: the original's multi-document (`documents[]`) blockers-merging isn't
- *   needed here since this stack's `Extractor` interface is already single-document only (see
- *   extractionService.ts's file header) — the email-derived blockers are simply added to the one
- *   document's blockers list directly.
+ * (30 ก.ย. 69) เดิมไฟล์นี้ไปอ่านกล่อง Gmail ด้วย token ของ OBS เอง ซึ่งหลุดทุกครั้งที่เจ้าของกล่อง
+ * เปลี่ยนรหัสผ่าน และทำให้ระบบเข้าถึงกล่องเมลส่วนตัวของแผนกบัญชีได้ทั้งกล่อง — ตอนนี้ OBS ไม่แตะ Gmail
+ * ในเส้นทางนี้เลย: กล่อง obs@ อ่านโดย n8n (Gmail Trigger) แล้วส่งเฉพาะ PDF ของอีเมลที่หัวเรื่องเป็น
+ * Timesheet มาที่ `POST /api/timesheets/receive-email` (ดู inboundEmailService.ts)
+ *
+ * `readTimesheetFromEmail()` ยังทำเหมือนเดิม: ให้โมเดลอ่านเนื้ออีเมลดึงสถานะอนุมัติ/เลขเอกสาร/ผู้อนุมัติ
+ * แล้วบล็อกถ้าสถานะไม่ใช่ "อนุมัติ" เป๊ะๆ หรือเดือนในอีเมลไม่ตรงกับในไฟล์ — ต่างแค่ว่าเนื้ออีเมลกับไฟล์
+ * มาจากที่เก็บของเราเอง ไม่ใช่ดึงจาก Gmail ตอนกด
+ *
+ * ฟีเจอร์ร่างอีเมลวางบิลยังใช้ Gmail API ผ่าน gmailClient.ts แยกต่างหาก ไม่เกี่ยวกับไฟล์นี้
  */
 import { prisma } from '@obs/db';
 import { thaiMonth, normalizePeriod } from '@obs/domain';
-import { GmailClient, hasGmailAccess } from './gmailClient.js';
 import { readTimesheetFile, type ReadResult } from './uploadService.js';
-import { ingestTimesheet } from './ingestService.js';
-import { extractTimesheet } from './extractionService.js';
 import { readApprovalEmail } from './llmEmailService.js';
+import { loadFile } from './fileStorage.js';
 import { logAudit } from './audit.js';
 
-/* คำค้นเริ่มต้นของกล่อง Gmail — ตั้งใจให้ "กว้างไว้ก่อน" (28 ก.ย. 69)
- *
- * ของเดิม `subject:(TimeSheet OR "แจ้งอนุมัติ")` แคบเกินไป เพราะลูกค้าแต่ละเจ้าตั้งหัวเรื่องคนละแบบสิ้นเชิง
- * ตรวจกับอีเมลจริงของรอบ ส.ค. 2026 แล้วหลุดอย่างน้อย 4 แบบ:
- *   - "ตารางเข้างาน เดือน ส.ค. 2026"                        (Big C) — ไม่มีคำว่า timesheet เลย
- *   - "รบกวนอนุมัติ Time Sheet เดือน สิงหาคม 2569"           (T8)    — เขียนแยกเป็น "Time Sheet"
- *   - "FW: [Time Sheet] Thai Group_..._AUG_2026"            (TSG)   — เขียนแยกเหมือนกัน
- *   - "[ACTION REQUIRED] Timesheets 082026 ..."             (V-Link)— เติม s เป็นพหูพจน์
- * Gmail ตัดคำเป็น token ("Time Sheet" จึงไม่ match คำว่า timesheet) และไม่ทำ stemming ให้ ต้องไล่ใส่เอง
- *
- * หน้า "ดึงจาก Gmail" ให้คนเลือกไฟล์เองอยู่แล้ว การกวาดมาเกินจึงเสียแค่ต้องกวาดตาผ่าน แต่การกวาดมาไม่ครบ
- * แปลว่าบิลรอบนั้นหายไปเงียบๆ — เลือกให้กว้างไว้ก่อนจึงถูกกว่า และยังมีตัวกรอง from:@โดเมนลูกค้า
- * ซ้อนอีกชั้นตอนเลือกสัญญาอยู่แล้ว (ดู effectiveQuery ด้านล่าง) */
+/* ตัวกรองหัวเรื่องที่ตั้งไว้ใน Gmail Trigger ของ n8n (ไฟล์ n8n/01-obs-workflow.json) — เก็บไว้ที่นี่เพื่อ
+ * แสดงในหน้าตั้งค่าเท่านั้น OBS ไม่ได้ใช้ค้นอะไรแล้ว · ตั้งใจไม่มีคำว่า "อนุมัติ" เดี่ยวๆ เพราะกว้างเกินไป
+ * จะลากอีเมลเรื่องอื่นเข้ามาด้วย (ผู้ใช้กังวลเรื่องข้อมูลนอกเหนือจาก Timesheet) */
 export const DEFAULT_GMAIL_QUERY =
-  process.env.GMAIL_QUERY
-  ?? 'subject:(timesheet OR timesheets OR "time sheet" OR "time-sheet" OR อนุมัติ OR ตารางเข้างาน OR บันทึกเวลา) '
-     + 'has:attachment filename:pdf newer_than:90d';
+  'subject:(timesheet OR timesheets OR "time sheet" OR "time-sheet" OR ตารางเข้างาน OR บันทึกเวลา) has:attachment filename:pdf';
 
 export class GmailIntakeError extends Error {
   status: number;
@@ -79,46 +61,45 @@ export interface GmailInboxResult {
   ingested: Array<InboxMessage & { period?: string | null; documentNo?: string | null; periodLabel?: string | null }>;
 }
 
-/** ported from service.js gmailInbox() */
+/** รายการไฟล์ที่ n8n ส่งมาและยังไม่มีใครกดอ่าน (+ รายการที่อ่านไปแล้ว แยกไว้อีกกอง) */
 export async function gmailInbox({
-  query,
-  max = 15,
+  max = 50,
   contractId,
 }: {
   query?: string;
   max?: number;
   contractId?: string;
 } = {}): Promise<GmailInboxResult> {
-  if (!(await hasGmailAccess())) {
-    throw new GmailIntakeError('ยังไม่ได้เชื่อมต่อ Gmail — ใส่ GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN ใน .env');
-  }
-
-  const explicit = Boolean(query);
-  const base = query || DEFAULT_GMAIL_QUERY;
-
   const contract = contractId ? await prisma.contract.findUnique({ where: { id: contractId }, include: { customer: true } }) : null;
-  // customers.email_domain เก็บค่าไม่ตรงรูปแบบกัน (บาง row มี "@" นำหน้าติดมาด้วย บาง row ไม่มี) — ตัด
-  // "@" นำหน้าทิ้งเสมอตรงนี้ที่เดียว กันบั๊ก "from:@@domain" (double-@ ใช้ query ไม่ได้เลย) ที่ query
-  // builder ด้านล่าง และกันไม่ให้ senderDomain() (คืนค่าไม่มี @ เสมอ) เทียบไม่ตรงกับค่านี้ (เจอจริง 15
-  // ก.ย. 69 — Big-C ตั้ง emailDomain มี @ นำหน้า กรองไม่เจออีเมลเลยทั้งที่มีอยู่จริงในกล่อง)
+  // customers.email_domain เก็บค่าไม่ตรงรูปแบบกัน (บาง row มี "@" นำหน้า บาง row ไม่มี) — ตัดทิ้งที่เดียวตรงนี้
+  // ให้เทียบกับ senderDomain() (คืนค่าไม่มี @ เสมอ) ได้ตรงกัน (Big-C เจอจริง 15 ก.ย. 69)
   const activeDomain = (contract?.customer.emailDomain ?? '').trim().toLowerCase().replace(/^@+/, '') || null;
-  const applyFilter = !explicit && Boolean(contract);
-  // ⚠️ เดิมต่อโดเมนเข้าไปในคำค้นแบบ plain text (`${base} ${activeDomain}`) — Gmail search ตีความคำ
-  // ท้ายๆแบบนี้เป็น full-text search ธรรมดา (ต้องเจอคำว่า "ipassion.co.th" ปรากฏอยู่จริงในหัวเรื่อง/
-  // เนื้อหา/snippet ของอีเมล) ไม่ใช่ตัวกรอง "จากโดเมนนี้" ตามที่ตั้งใจเลย — อีเมลจริงจากโดเมนนั้นที่ไม่มี
-  // คำว่าโดเมนตัวเองปรากฏในเนื้อหาเลยจะหลุดหายไปหมด (เจอจริง 15 ก.ย. 69 — บริษัท ปตท. ตั้งโดเมน
-  // ipassion.co.th ไว้แล้ว แต่ผลลัพธ์ขึ้น "ไม่มีอีเมลที่ต้องอ่าน" ทั้งที่กล่องมีอีเมลจากโดเมนนี้จริง) ต้อง
-  // ใช้ operator `from:@domain` ของ Gmail ถึงจะกรองตามโดเมนผู้ส่งจริงๆ ตามเอกสาร Gmail search operators
-  const effectiveQuery = applyFilter && activeDomain ? `${base} from:@${activeDomain}` : base;
+  const applyFilter = Boolean(contract);
   const domain = applyFilter ? activeDomain : null;
   const domainMissing = applyFilter && !activeDomain;
 
-  const gmail = new GmailClient();
-  const [profile, found] = await Promise.all([gmail.profile(), gmail.searchMessages({ query: effectiveQuery, max })]);
-  const { skipped } = found;
+  const rows = await prisma.inboundEmail.findMany({ orderBy: { createdAt: 'desc' }, take: Math.max(1, max) * 10 });
 
-  const messages =
-    applyFilter && activeDomain ? found.messages.filter((m) => senderDomain(m.from) === activeDomain) : found.messages;
+  const byEmail = new Map<string, InboxMessage>();
+  for (const r of rows) {
+    let m = byEmail.get(r.sourceEmailId);
+    if (!m) {
+      m = {
+        id: r.sourceEmailId,
+        subject: r.subject ?? '',
+        from: r.fromAddress ?? '',
+        receivedAt: r.receivedAt,
+        snippet: (r.bodyText ?? '').replace(/\s+/g, ' ').slice(0, 160),
+        attachments: [],
+      };
+      byEmail.set(r.sourceEmailId, m);
+    }
+    m.attachments.push({ filename: r.fileName, size: r.fileSize, attachmentId: String(r.id) });
+  }
+
+  let messages = [...byEmail.values()];
+  if (applyFilter && activeDomain) messages = messages.filter((m) => senderDomain(m.from) === activeDomain);
+  messages = messages.slice(0, max);
 
   const known = new Map(
     (
@@ -130,29 +111,18 @@ export async function gmailInbox({
   );
   const dismissed = new Set((await prisma.gmailDismissed.findMany({ select: { messageId: true } })).map((r) => r.messageId));
 
-  const withAttachments = messages
-    .filter((m) => m.pdfAttachments.length > 0)
-    .map((m) => ({
-      id: m.id,
-      subject: m.subject,
-      from: m.from,
-      receivedAt: m.receivedAt,
-      snippet: m.snippet,
-      attachments: m.pdfAttachments.map((a) => ({
-        filename: a.filename,
-        size: a.size,
-        attachmentId: a.attachmentId,
-        ...known.get(`${m.id}::${a.filename}`),
-      })),
-    }));
+  const withAttachments = messages.map((m) => ({
+    ...m,
+    attachments: m.attachments.map((a) => ({ ...a, ...known.get(`${m.id}::${a.filename}`) })),
+  }));
 
   return {
-    account: profile.email,
-    query: effectiveQuery,
+    account: 'n8n',
+    query: DEFAULT_GMAIL_QUERY,
     domain,
     activeCompanyName: contract?.customer.nameTh ?? null,
     domainMissing,
-    skipped: skipped.length,
+    skipped: 0,
     messages: withAttachments
       .filter((m) => !dismissed.has(m.id) && m.attachments.some((a) => !a.documentNo))
       .map((m) => ({ ...m, attachments: m.attachments.filter((a) => !a.documentNo) })),
@@ -165,7 +135,7 @@ export async function gmailInbox({
   };
 }
 
-/** ported (narrowed, see file header) from service.js readTimesheetFromEmail() */
+/** อ่านไฟล์ที่ n8n ส่งมา (เนื้ออีเมล + PDF จากที่เก็บของเรา) — ไม่ติดต่อ Gmail */
 export async function readTimesheetFromEmail({
   messageId,
   attachmentFilename,
@@ -191,22 +161,25 @@ export async function readTimesheetFromEmail({
   }
 > {
   if (!messageId) throw new GmailIntakeError('ต้องระบุอีเมลที่จะดึง');
-  if (!(await hasGmailAccess())) {
-    throw new GmailIntakeError('ยังไม่ได้เชื่อมต่อ Gmail — ใส่ GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN ใน .env');
-  }
-
-  const gmail = new GmailClient();
-  const message = await gmail.getMessage(messageId);
-
-  const target = attachmentFilename
-    ? message.pdfAttachments.find((a) => a.filename === attachmentFilename)
-    : message.pdfAttachments[0];
-  if (!target) throw new GmailIntakeError('อีเมลฉบับนี้ไม่มีไฟล์ PDF แนบมา');
+  const stored = await prisma.inboundEmail.findFirst({
+    where: { sourceEmailId: messageId, ...(attachmentFilename ? { fileName: attachmentFilename } : {}) },
+    orderBy: { id: 'asc' },
+  });
+  if (!stored) throw new GmailIntakeError('ไม่พบอีเมลฉบับนี้ในรายการที่ n8n ส่งมา', 404);
+  const pdf = await loadFile(stored.fileKey);
+  if (!pdf) throw new GmailIntakeError('หาไฟล์ PDF ของอีเมลฉบับนี้ในที่เก็บไฟล์ไม่เจอ', 404);
+  const message = {
+    subject: stored.subject ?? '',
+    from: stored.fromAddress ?? '',
+    date: stored.receivedAt,
+    receivedAt: stored.receivedAt,
+    body: stored.bodyText ?? '',
+  };
+  const target = { filename: stored.fileName };
 
   // อ่านเนื้ออีเมลกับอ่านไฟล์ PDF พร้อมกัน — สองอย่างนี้ไม่ขึ้นต่อกัน
-  const pdf = await gmail.getAttachment(messageId, target.attachmentId);
   const [emailMeta, sheet] = await Promise.all([
-    readApprovalEmail({ subject: message.subject, from: message.from, date: message.date, body: message.body }),
+    readApprovalEmail({ subject: message.subject, from: message.from, date: message.date as any, body: message.body }),
     readTimesheetFile({ fileBase64: pdf.toString('base64'), fileName: target.filename, contractId, readerId, abbyySkillId }),
   ]);
 
@@ -270,119 +243,25 @@ export async function undismissGmailMessage(messageId: string, { actor }: { acto
   return { dismissed: false };
 }
 
-/** ported from service.js listDismissedGmailMessages() */
+/** รายการที่ซ่อนไว้ — หัวเรื่อง/ผู้ส่งดึงจากที่เก็บของเราเอง ไม่ต้องไปถาม Gmail */
 export async function listDismissedGmailMessages() {
   const rows = await prisma.gmailDismissed.findMany({ orderBy: { dismissedAt: 'desc' } });
   if (!rows.length) return [];
-  if (!(await hasGmailAccess())) {
-    return rows.map((row) => ({
+  const mails = await prisma.inboundEmail.findMany({
+    where: { sourceEmailId: { in: rows.map((r) => r.messageId) } },
+    orderBy: { id: 'asc' },
+  });
+  const first = new Map<string, (typeof mails)[number]>();
+  for (const m of mails) if (!first.has(m.sourceEmailId)) first.set(m.sourceEmailId, m);
+  return rows.map((row) => {
+    const m = first.get(row.messageId);
+    return {
       id: row.messageId,
-      subject: null,
-      from: null,
-      receivedAt: null,
+      subject: m?.subject ?? null,
+      from: m?.fromAddress ?? null,
+      receivedAt: m?.receivedAt ?? null,
       dismissedBy: row.dismissedBy,
       dismissedAt: row.dismissedAt,
-    }));
-  }
-
-  const gmail = new GmailClient();
-  return Promise.all(
-    rows.map(async (row) => {
-      try {
-        const m = await gmail.getMessage(row.messageId);
-        return { id: row.messageId, subject: m.subject, from: m.from, receivedAt: m.receivedAt, dismissedBy: row.dismissedBy, dismissedAt: row.dismissedAt };
-      } catch {
-        return { id: row.messageId, subject: null, from: null, receivedAt: null, dismissedBy: row.dismissedBy, dismissedAt: row.dismissedAt };
-      }
-    }),
-  );
-}
-
-/**
- * ดึงอีเมลใหม่ทั้งหมดแล้วส่งเข้าระบบให้จบในเส้นเดียว — ใช้โดย n8n แทน Gmail Trigger เดิม (29 ก.ย. 69)
- *
- * **ทำไมย้ายมาไว้ที่นี่** — เดิม n8n เป็นคนคุยกับ Gmail เอง ซึ่งแปลว่าระบบมีสิทธิ์เข้าถึงกล่องเมล
- * เก็บอยู่สองที่ (ใน OBS หนึ่ง ใน n8n อีกหนึ่ง) วันที่สิทธิ์หลุดต้องตามไปต่อใหม่ทั้งสองที่ และหลุด
- * ไม่พร้อมกันด้วย · OBS ต้องมีสิทธิ์นี้อยู่แล้วเพราะฟีเจอร์ร่างอีเมลวางบิลใช้ Gmail API เหมือนกัน
- * ตัวที่อยู่ใน n8n จึงเป็นของซ้ำซ้อนล้วนๆ
- *
- * **เลิกกรองคำว่า "อนุมัติ" ที่ n8n แล้ว** — ด่านนั้นดูแค่เนื้อความ ไม่ดูหัวเรื่อง ทำให้อีเมลจริงของ
- * ลูกค้าหลายเจ้าตกด่านแล้วหายเงียบโดยไม่มีร่องรอย (เจอจริง 29 ก.ย. 69) ตอนนี้ปล่อยให้เข้ามาแล้วให้
- * ชั้นตรวจของระบบเป็นคนตัดสิน ซึ่งละเอียดกว่าและบันทึกไว้ว่าทำไมไม่ผ่าน
- *
- * อีเมลที่เคยอ่านไปแล้วถูกกรองออกตั้งแต่ใน `gmailInbox()` (เทียบจาก `sourceEmailId` + ชื่อไฟล์)
- * จึงเรียกซ้ำกี่ครั้งก็ไม่ประมวลผลซ้ำ
- */
-export interface GmailIngestOutcome {
-  messageId: string;
-  subject: string;
-  fileName: string;
-  ok: boolean;
-  /** ค่าที่ n8n ใช้ตัดสินว่าจะทำอะไรต่อ — รูปเดียวกับที่ POST /api/timesheets/ingest คืนมา */
-  nextAction?: string;
-  timesheetId?: string | null;
-  contractId?: string | null;
-  period?: string | null;
-  reason?: string | null;
-  error?: string;
-}
-
-export async function ingestNewGmailTimesheets({
-  max = 20,
-  ingest,
-}: {
-  max?: number;
-  /** ฉีดเข้ามาได้เพื่อให้เทสต์ไม่ต้องยิง OCR จริง — ปกติใช้ตัวจริงจาก ingestService */
-  ingest?: typeof ingestTimesheet;
-} = {}): Promise<{ scanned: number; processed: number; results: GmailIngestOutcome[] }> {
-  const inbox = await gmailInbox({ max });
-  const run = ingest ?? ingestTimesheet;
-  const gmail = new GmailClient();
-  const results: GmailIngestOutcome[] = [];
-
-  for (const message of inbox.messages) {
-    for (const attachment of message.attachments) {
-      const base = { messageId: message.id, subject: message.subject, fileName: attachment.filename };
-      try {
-        const bytes = await gmail.getAttachment(message.id, attachment.attachmentId);
-        /* เลขเอกสารจากตัวเลขยาวๆ ในหัวเรื่อง ตามที่ workflow เดิมทำ — ไม่เจอก็ใช้ id ของอีเมลแทน
-           ซึ่งไม่ซ้ำแน่นอนและตามกลับไปหาต้นทางได้ */
-        const documentNo = /(\d{9,12})/.exec(message.subject ?? '')?.[1] ?? message.id;
-        const outcome = await run({
-          documentNo,
-          fileBytes: bytes,
-          fileName: attachment.filename,
-          sourceEmailId: message.id,
-          sourceEmailSubject: message.subject,
-          receivedAt: message.receivedAt ?? new Date().toISOString(),
-          approvedBy: message.from ?? null,
-          actor: 'n8n',
-          submissionMethod: 'auto_gmail',
-          extractor: extractTimesheet,
-        } as any);
-        results.push({
-          ...base,
-          ok: true,
-          nextAction: (outcome as any).nextAction,
-          timesheetId: (outcome as any).timesheetId ?? null,
-          contractId: (outcome as any).contractId ?? null,
-          period: (outcome as any).period ?? null,
-          reason: (outcome as any).reason ?? null,
-        });
-      } catch (error: any) {
-        // ไฟล์เดียวพังต้องไม่ทำให้ทั้งรอบหยุด — ที่เหลือต้องถูกอ่านต่อจนครบ แล้วรายงานตัวที่พังกลับไป
-        results.push({ ...base, ok: false, error: String(error?.message ?? error).slice(0, 300) });
-      }
-    }
-  }
-
-  await logAudit({
-    actor: 'n8n',
-    action: 'gmail_auto_ingest',
-    entityType: 'gmail',
-    entityId: String(results.length),
-    detail: { scanned: inbox.messages.length, processed: results.length, failed: results.filter((r) => !r.ok).length },
+    };
   });
-
-  return { scanned: inbox.messages.length, processed: results.length, results };
 }

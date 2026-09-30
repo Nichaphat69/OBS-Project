@@ -4,8 +4,7 @@ import { sendOverdueTimesheetReminders } from '../lib/timesheetSubmissionService
 import { ingestTimesheet, IngestError } from '../lib/ingestService.js';
 import { extractTimesheet, ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
-import { ingestNewGmailTimesheets, GmailIntakeError } from '../lib/gmailService.js';
-import { GmailError } from '../lib/gmailClient.js';
+import { receiveInboundEmail, InboundEmailError } from '../lib/inboundEmailService.js';
 import { logExposedRequest } from '../lib/apiActivityLog.js';
 
 /** เส้นทางที่ n8n เรียกตรงเข้ามาโดยไม่มี session ใดๆ — เดิม (`src/server.js`'s `PUBLIC_API_PATTERNS`)
@@ -50,22 +49,15 @@ timesheetRemindersRouter.post('/ingest', logExposedRequest('n8n'), requireN8nSec
 });
 
 /**
- * ดึงอีเมลใหม่จากกล่องที่ระบบเชื่อมไว้ แล้วส่งเข้าระบบให้จบในครั้งเดียว (29 ก.ย. 69)
- *
- * แทน Gmail Trigger ใน n8n — เพื่อไม่ให้สิทธิ์เข้าถึงกล่องเมลถูกเก็บไว้สองที่ ดูเหตุผลเต็มที่
- * `ingestNewGmailTimesheets()` ใน gmailService.ts · n8n เรียกเส้นนี้ตามเวลาที่ตั้งไว้ แล้วเอา
- * `results[]` ไปแยกทีละรายการเข้า Switch เดิมที่ดู `nextAction` (รูปข้อมูลเหมือน /ingest ทุกประการ)
- *
- * เรียกซ้ำได้ไม่มีผลข้างเคียง — อีเมลที่อ่านไปแล้วถูกกรองออกตั้งแต่ชั้นที่ไล่รายการในกล่อง
- */
-timesheetRemindersRouter.post('/ingest-from-gmail', logExposedRequest('n8n'), requireN8nSecret, async (req, res) => {
+ * รับไฟล์ Timesheet จาก n8n "เก็บไว้รอคนกดอ่าน" (30 ก.ย. 69) — ไม่เรียกโมเดล ไม่ตั้งสถานะอะไร
+ * แค่เก็บไฟล์กับหัวเรื่อง/ผู้ส่ง/เนื้ออีเมลไว้ให้โผล่ในแท็บ "ดึงจาก Gmail" · ส่งซ้ำได้ (คืน duplicate: true)
+ * การอ่านเกิดตอนคนกดปุ่มเท่านั้น และการขออนุมัติวางบิลเข้า LINE ต้องรอหลังขั้น "ตรวจ Manday" จึงไม่ใช่
+ * หน้าที่ของ workflow สายนี้ */
+timesheetRemindersRouter.post('/receive-email', logExposedRequest('n8n'), requireN8nSecret, async (req, res) => {
   try {
-    const max = Number.isFinite(Number(req.body?.max)) ? Number(req.body.max) : undefined;
-    res.json(await ingestNewGmailTimesheets({ max }));
+    res.json(await receiveInboundEmail(req.body ?? {}));
   } catch (error) {
-    if (error instanceof GmailIntakeError || error instanceof GmailError) {
-      return res.status((error as any).status ?? 502).json({ error: error.message });
-    }
+    if (error instanceof InboundEmailError) return res.status(error.status).json({ error: error.message });
     throw error;
   }
 });

@@ -215,6 +215,26 @@ model Timesheet {
   @@map("timesheets")
 }
 
+// ── ไฟล์ Timesheet ที่ n8n ส่งเข้ามารอให้คนกดอ่าน (30 ก.ย. 69) ──
+// n8n อ่านกล่อง obs@ แล้วส่งมาเก็บไว้เฉยๆ ยังไม่ผ่านโมเดล — การอ่านเกิดตอนคนกดปุ่มในแท็บ "ดึงจาก Gmail"
+// หนึ่งแถวต่อหนึ่งไฟล์ PDF (อีเมลเดียวมีหลายไฟล์ได้) · sourceEmailId คือ id ของอีเมลใน Gmail
+model InboundEmail {
+  id            Int     @id @default(autoincrement())
+  sourceEmailId String  @map("source_email_id")
+  fileName      String  @map("file_name")
+  fileKey       String  @map("file_key")
+  fileSize      Int     @default(0) @map("file_size")
+  subject       String?
+  fromAddress   String? @map("from_address")
+  bodyText      String? @map("body_text")
+  receivedAt    String? @map("received_at")
+  createdAt     String  @map("created_at")
+
+  @@unique([sourceEmailId, fileName])
+  @@index([createdAt])
+  @@map("inbound_emails")
+}
+
 // ── อีเมล Gmail ที่กด "ซ่อน" ทิ้งจากรายการ ──
 model GmailDismissed {
   messageId    String @id @map("message_id")

@@ -7,7 +7,8 @@ n8n จึงไม่ต้องรู้กฎเลย แค่ส่งไ
 | Phase เดิม | ใครทำ |
 |---|---|
 | 1 · จับอีเมล ดึงไฟล์แนบ | **n8n** |
-| 1 · อ่านไฟล์ด้วย AI + บันทึก | OBS (`/api/timesheets/ingest`) |
+| 1 · รับไฟล์มาเก็บรอ | OBS (`/api/timesheets/receive-email`) — **ไม่อ่าน** (30 ก.ย. 69) |
+| 1 · อ่านไฟล์ด้วย AI | คนกดปุ่มในแท็บ "ดึงจาก Gmail" ของ OBS (`/api/gmail/read`) — `/ingest` เดิมยังอยู่แต่ workflow ไม่เรียกแล้ว |
 | 2 · ตรวจ Manday ทั้งหมด | OBS |
 | 4.2 · ขออนุมัติก่อนสร้างเอกสาร | OBS ส่งเข้า LINE (`/api/cycles/.../request-approval`) — n8n **ไม่เรียก** `/approve` ตรงๆ อีกแล้ว |
 | 3 · สร้างเอกสารใน FlowAccount | OBS หลังคนกด "อนุมัติ" ใน LINE (`/api/line/webhook` → `approveCycle()`) |
@@ -77,7 +78,16 @@ Workflows → Import from File → เลือก `01-obs-workflow.json`
 
 ## API ที่ n8n เรียก
 
+### `POST /api/timesheets/receive-email`
+
+(30 ก.ย. 69) สายอีเมลของ workflow เรียกตัวนี้ตัวเดียว — เก็บ PDF + หัวเรื่อง/ผู้ส่ง/เนื้ออีเมลไว้ในตาราง `inbound_emails`
+**ไม่เรียกโมเดล** ให้โผล่ในแท็บ "ดึงจาก Gmail" รอคนกดอ่าน · body: `sourceEmailId`, `fileName`, `fileBase64`,
+`subject`, `from`, `bodyText`, `receivedAt` · ส่งซ้ำได้ (ตอบ `duplicate: true`) · ไม่ใช่ PDF ตอบ 422
+OBS ไม่ได้อ่านกล่องเมลเอง — Gmail Trigger ใน n8n ผูกกับกล่อง `obs@` ที่พี่ๆ บัญชี forward เฉพาะอีเมล Timesheet เข้ามา
+
 ### `POST /api/timesheets/ingest`
+
+*(workflow ไม่ได้เรียกแล้วตั้งแต่ 30 ก.ย. 69 — เก็บไว้ใช้ทดสอบ/เรียกตรง)*
 
 รับไฟล์เข้าระบบครบวงจร — อ่านด้วยโมเดล vision ในเครื่อง → จับคู่พนักงาน → บันทึก → คำนวณ Manday
 

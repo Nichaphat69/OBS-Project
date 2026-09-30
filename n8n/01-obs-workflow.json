@@ -14,14 +14,14 @@
         },
         "simple": false,
         "filters": {
-          "q": "subject:(แจ้งอนุมัติเอกสาร TimeSheet) has:attachment filename:pdf"
+          "q": "subject:(timesheet OR timesheets OR \"time sheet\" OR \"time-sheet\" OR ตารางเข้างาน OR บันทึกเวลา) has:attachment filename:pdf"
         },
         "options": {
           "downloadAttachments": true
         }
       },
       "id": "gmail-trigger",
-      "name": "อีเมลแจ้งอนุมัติ Timesheet",
+      "name": "อีเมล Timesheet เข้ากล่อง obs@",
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1,
       "position": [
@@ -32,179 +32,49 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": false,
-            "version": 2
-          },
-          "combinator": "and",
-          "conditions": [
-            {
-              "leftValue": "={{ $json.text || $json.snippet || '' }}",
-              "rightValue": "อนุมัติ",
-              "operator": {
-                "type": "string",
-                "operation": "contains"
-              }
-            },
-            {
-              "leftValue": "={{ $json.text || $json.snippet || '' }}",
-              "rightValue": "ไม่อนุมัติ",
-              "operator": {
-                "type": "string",
-                "operation": "notContains"
-              }
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "gate-approved",
-      "name": "สถานะเป็น อนุมัติ เท่านั้น",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -140,
-        300
-      ],
-      "notes": "กันเอกสารที่ยังรออนุมัติหรือถูกปฏิเสธ ไม่ให้เข้าระบบ"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
+        "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const subject = $json.subject ?? '';\nconst bodyText = $json.text ?? '';\n\nconst isTimesheetEmail = /timesheet/i.test(subject) || /timesheet/i.test(bodyText);\nif (!isTimesheetEmail) {\n  throw new Error('อีเมลนี้ไม่เกี่ยวกับ Timesheet: ' + subject);\n}\n\nconst docNo = (subject.match(/(\\d{9,12})/) || bodyText.match(/(\\d{9,12})/) || [])[1] ?? $json.id;\n\nconst binaryKeys = Object.keys($binary ?? {});\nconst pdfKey = binaryKeys.find((k) => ($binary[k].fileName ?? '').toLowerCase().endsWith('.pdf'));\nif (!pdfKey) {\n  throw new Error('ไม่พบไฟล์แนบ .pdf ในอีเมลเลขที่ ' + docNo);\n}\n\nconst file = await this.helpers.getBinaryDataBuffer(0, pdfKey);\n\nreturn {\n  json: {\n    documentNo: docNo,\n    fileName: $binary[pdfKey].fileName,\n    fileBase64: file.toString('base64'),\n    sourceEmailId: $json.id ?? null,\n    receivedAt: $json.date ?? new Date().toISOString(),\n    approvedBy: 'Project Manager (TLI)',\n    actor: 'n8n'\n  }\n};"
+        "jsCode": "/* สายนี้ทำหน้าที่ \"ขนไฟล์\" อย่างเดียว (30 ก.ย. 69): เอา PDF ของอีเมล Timesheet ที่ forward เข้า obs@ ไปวางไว้ใน OBS\n   ไม่อ่านไม่ตัดสินอะไรเอง — การอ่านด้วยโมเดลเกิดตอนคนกดปุ่มในแท็บ \"ดึงจาก Gmail\" และการขออนุมัติวางบิลเข้า LINE\n   ต้องรอหลังขั้น \"ตรวจ Manday\" จึงไม่ใช่งานของสายนี้ (ตัวตรวจรอบ 09:00 ข้างล่างเป็นคนส่ง)\n   ไม่กรองเนื้อหาซ้ำตรงนี้: ตัวกรองหัวเรื่องอยู่ที่ Gmail Trigger แล้ว ถ้ากรองซ้ำด้วยเงื่อนไขอีกชุด อีเมลจริงที่หัวเรื่อง\n   ต่างจากที่คาดจะหายเงียบโดยไม่มีร่องรอย ปล่อยเข้ามาแล้วให้คนกด \"ซ่อน\" เอาดีกว่า */\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json;\n  const binary = items[i].binary ?? {};\n  const fromRaw = j.from?.text ?? j.from ?? j.From ?? null;\n  const from = typeof fromRaw === 'string' ? fromRaw : (fromRaw?.text ?? null);\n  const receivedAt = j.date\n    ? new Date(j.date).toISOString()\n    : (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : new Date().toISOString());\n  for (const key of Object.keys(binary)) {\n    const fileName = binary[key].fileName ?? '';\n    if (!fileName.toLowerCase().endsWith('.pdf')) continue;\n    const file = await this.helpers.getBinaryDataBuffer(i, key);\n    out.push({\n      json: {\n        sourceEmailId: j.id,\n        fileName,\n        fileBase64: file.toString('base64'),\n        subject: j.subject ?? j.Subject ?? '',\n        from,\n        bodyText: j.text ?? j.snippet ?? '',\n        receivedAt,\n      },\n    });\n  }\n}\nreturn out;"
       },
       "id": "prepare-payload",
-      "name": "เตรียมข้อมูลส่งเข้าระบบ",
+      "name": "เตรียมไฟล์ส่งเข้า OBS",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        80,
-        220
+        -60,
+        300
       ],
       "notes": "เลขเอกสารใช้เป็น documentNo — ยิงซ้ำได้ ระบบจะเขียนทับไม่สร้างซ้ำ"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:4301/api/timesheets/ingest",
+        "url": "=http://api:4301/api/timesheets/receive-email",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "timeout": 180000
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-secret",
+              "value": "ใส่ค่า N8N_SHARED_SECRET ที่นี่หลัง import (ห้ามเขียนลงไฟล์นี้)"
+            }
+          ]
         }
       },
       "id": "obs-ingest",
-      "name": "ส่งเข้าระบบ OBS (อ่าน+ตรวจ+คำนวณ)",
+      "name": "ส่งไฟล์เข้า OBS (เก็บไว้รอกดอ่าน)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        300,
-        220
+        240,
+        300
       ],
       "notes": "URL เขียนตรงเป็น localhost:4301 (apps/api ของสแต็กใหม่) ไว้แล้ว — แก้เองถ้า OBS อยู่คนละเครื่องหรือ n8n รันใน Docker · timeout 3 นาที เพราะต้องรอโมเดล vision ในเครื่องอ่าน PDF"
-    },
-    {
-      "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": {
-                  "version": 2
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.nextAction }}",
-                    "rightValue": "approve_cycle",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              },
-              "outputKey": "ครบรอบ พร้อมวางบิล"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "version": 2
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.nextAction }}",
-                    "rightValue": "wait_for_others",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              },
-              "outputKey": "ยังไม่ครบ รอคนอื่น"
-            }
-          ]
-        },
-        "options": {
-          "fallbackOutput": "extra",
-          "renameFallbackOutput": "ต้องให้คนแก้"
-        }
-      },
-      "id": "switch-next",
-      "name": "ระบบบอกว่าต้องทำอะไรต่อ",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
-      "position": [
-        520,
-        220
-      ],
-      "notes": "อ่านค่า nextAction ที่ระบบคืนมา ไม่ต้องคำนวณเงื่อนไขเองใน n8n"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://localhost:4301/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "id": "obs-request-approval",
-      "name": "ส่งขออนุมัติเข้า LINE",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        780,
-        100
-      ],
-      "notes": "ขั้น 4.2 — แค่ส่งสรุปเข้า LINE ให้คนกด ยังไม่สร้างร่างใน FlowAccount นะ · คนกดอนุมัติใน LINE แล้ว\nOBS เองเป็นคนสร้างร่าง (ดู /api/line/webhook ใน src/server.js) n8n ไฟล์นี้ไม่ต้องทำอะไรต่อ"
-    },
-    {
-      "parameters": {},
-      "id": "wait-noop",
-      "name": "รอ Timesheet คนที่เหลือ",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        780,
-        240
-      ]
-    },
-    {
-      "parameters": {},
-      "id": "notify-team",
-      "name": "แจ้งทีมให้เข้าไปแก้",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        780,
-        380
-      ],
-      "notes": "ข้อ 2.6 — 4 ส.ค. 69 OBS เองเป็นคนแจ้ง LINE ตอนเรียก /api/timesheets/ingest แล้ว (ดู notifyCheckFailed() ใน src/service.js เรียกจาก ingestTimesheet() ตอน nextAction=fix_mismatch) n8n ไฟล์นี้ไม่ต้องทำอะไรต่อ เหมือนกับโหนด \"ส่งขออนุมัติเข้า LINE\" ด้านบน"
     },
     {
       "parameters": {
@@ -229,8 +99,17 @@
     },
     {
       "parameters": {
-        "url": "=http://localhost:4301/api/cycles/ready",
-        "options": {}
+        "url": "=http://api:4301/api/cycles/ready",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-secret",
+              "value": "ใส่ค่า N8N_SHARED_SECRET ที่นี่หลัง import (ห้ามเขียนลงไฟล์นี้)"
+            }
+          ]
+        }
       },
       "id": "get-ready",
       "name": "ถามระบบว่ารอบไหนพร้อมวางบิล",
@@ -289,9 +168,18 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:4301/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
+        "url": "=http://api:4301/api/cycles/{{ $json.contractId }}/{{ $json.period }}/request-approval",
         "options": {
           "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-secret",
+              "value": "ใส่ค่า N8N_SHARED_SECRET ที่นี่หลัง import (ห้ามเขียนลงไฟล์นี้)"
+            }
+          ]
         }
       },
       "id": "request-approval",
@@ -318,76 +206,6 @@
     }
   ],
   "connections": {
-    "อีเมลแจ้งอนุมัติ Timesheet": {
-      "main": [
-        [
-          {
-            "node": "สถานะเป็น อนุมัติ เท่านั้น",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "สถานะเป็น อนุมัติ เท่านั้น": {
-      "main": [
-        [
-          {
-            "node": "เตรียมข้อมูลส่งเข้าระบบ",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
-      ]
-    },
-    "เตรียมข้อมูลส่งเข้าระบบ": {
-      "main": [
-        [
-          {
-            "node": "ส่งเข้าระบบ OBS (อ่าน+ตรวจ+คำนวณ)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "ส่งเข้าระบบ OBS (อ่าน+ตรวจ+คำนวณ)": {
-      "main": [
-        [
-          {
-            "node": "ระบบบอกว่าต้องทำอะไรต่อ",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "ระบบบอกว่าต้องทำอะไรต่อ": {
-      "main": [
-        [
-          {
-            "node": "ส่งขออนุมัติเข้า LINE",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "รอ Timesheet คนที่เหลือ",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "แจ้งทีมให้เข้าไปแก้",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "ทุกวันทำการ 09:00": {
       "main": [
         [
@@ -433,6 +251,28 @@
         [
           {
             "node": "แจ้งทีมว่าติดอะไรอยู่",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "อีเมล Timesheet เข้ากล่อง obs@": {
+      "main": [
+        [
+          {
+            "node": "เตรียมไฟล์ส่งเข้า OBS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "เตรียมไฟล์ส่งเข้า OBS": {
+      "main": [
+        [
+          {
+            "node": "ส่งไฟล์เข้า OBS (เก็บไว้รอกดอ่าน)",
             "type": "main",
             "index": 0
           }
