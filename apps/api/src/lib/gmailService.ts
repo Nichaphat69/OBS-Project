@@ -3,19 +3,17 @@
  *
  * (30 ก.ย. 69) เดิมไฟล์นี้ไปอ่านกล่อง Gmail ด้วย token ของ OBS เอง ซึ่งหลุดทุกครั้งที่เจ้าของกล่อง
  * เปลี่ยนรหัสผ่าน และทำให้ระบบเข้าถึงกล่องเมลส่วนตัวของแผนกบัญชีได้ทั้งกล่อง — ตอนนี้ OBS ไม่แตะ Gmail
- * ในเส้นทางนี้เลย: กล่อง obs@ อ่านโดย n8n (Gmail Trigger) แล้วส่งเฉพาะ PDF ของอีเมลที่หัวเรื่องเป็น
+ * ในเส้นทางนี้เลย: กล่อง support.obs@ อ่านโดย n8n (Gmail Trigger) แล้วส่งเฉพาะ PDF ของอีเมลที่หัวเรื่องเป็น
  * Timesheet มาที่ `POST /api/timesheets/receive-email` (ดู inboundEmailService.ts)
  *
- * `readTimesheetFromEmail()` ยังทำเหมือนเดิม: ให้โมเดลอ่านเนื้ออีเมลดึงสถานะอนุมัติ/เลขเอกสาร/ผู้อนุมัติ
- * แล้วบล็อกถ้าสถานะไม่ใช่ "อนุมัติ" เป๊ะๆ หรือเดือนในอีเมลไม่ตรงกับในไฟล์ — ต่างแค่ว่าเนื้ออีเมลกับไฟล์
- * มาจากที่เก็บของเราเอง ไม่ใช่ดึงจาก Gmail ตอนกด
+ * `readTimesheetFromEmail()` อ่านเฉพาะตัวไฟล์ PDF ที่เก็บไว้ (ABBYY/Clear Read ตามที่คนเลือก) — **ไม่ให้โมเดลอ่านเนื้ออีเมล
+ * ซ้ำ** เพื่อตรวจสถานะ "อนุมัติ"/เดือนอีกแล้ว เพราะ n8n คัดเฉพาะเมล Timesheet มาให้ และคนตรวจผลก่อนยืนยันอยู่แล้ว
  *
  * ฟีเจอร์ร่างอีเมลวางบิลยังใช้ Gmail API ผ่าน gmailClient.ts แยกต่างหาก ไม่เกี่ยวกับไฟล์นี้
  */
 import { prisma } from '@obs/db';
-import { thaiMonth, normalizePeriod } from '@obs/domain';
+import { thaiMonth } from '@obs/domain';
 import { readTimesheetFile, type ReadResult } from './uploadService.js';
-import { readApprovalEmail } from './llmEmailService.js';
 import { loadFile } from './fileStorage.js';
 import { logAudit } from './audit.js';
 
@@ -177,48 +175,36 @@ export async function readTimesheetFromEmail({
   };
   const target = { filename: stored.fileName };
 
-  // อ่านเนื้ออีเมลกับอ่านไฟล์ PDF พร้อมกัน — สองอย่างนี้ไม่ขึ้นต่อกัน
-  const [emailMeta, sheet] = await Promise.all([
-    readApprovalEmail({ subject: message.subject, from: message.from, date: message.date as any, body: message.body }),
-    readTimesheetFile({ fileBase64: pdf.toString('base64'), fileName: target.filename, contractId, readerId, abbyySkillId }),
-  ]);
+  // (30 ก.ย. 69) เลิกให้โมเดลอ่านเนื้ออีเมลซ้ำเพื่อตรวจสถานะ "อนุมัติ"/เดือน — flow เดิมทำเพราะ OBS ไปดึงเมล
+  // จากกล่องเอง จึงต้องตรวจเองว่าเมลนั้นคืออีเมลอนุมัติจริงไหม แต่ตอนนี้ n8n คัดเฉพาะเมล Timesheet ตามหัวเรื่อง
+  // แล้วส่งมา และคนเป็นคนกดอ่านทีละไฟล์พร้อมตรวจผลก่อนยืนยันเองอยู่แล้ว (อีกทั้ง production ไม่มีเครื่อง
+  // โมเดลในเครื่อง ขั้นนั้นจึงทำให้การอ่านล้มทุกไฟล์) — ส่วนที่ยังเหลือคือตรวจตัวไฟล์ตามปกติ
+  const sheet = await readTimesheetFile({ fileBase64: pdf.toString('base64'), fileName: target.filename, contractId, readerId, abbyySkillId });
 
-  const blockers = [...sheet.blockers];
-
-  // เอกสารข้อ 1.2 บังคับว่าต้องเป็น "อนุมัติ" เท่านั้นจึงเอาเข้าระบบได้ — เทียบตรงตัวเป๊ะๆ ห้ามใช้
-  // .includes เพราะ "รออนุมัติ" ก็มีคำว่า "อนุมัติ" อยู่ในนั้นเหมือนกัน
-  if (emailMeta.approvalStatus && emailMeta.approvalStatus !== 'อนุมัติ') {
-    blockers.push(`อีเมลระบุสถานะ "${emailMeta.approvalStatus}" ไม่ใช่ "อนุมัติ"`);
-  }
-
-  // เดือนในอีเมลกับในไฟล์ไม่ตรงกัน = หยิบไฟล์ผิดฉบับ ต้องให้คนดูก่อน — normalizePeriod ทั้งสองฝั่งก่อน
-  // เทียบ เพราะโมเดลในเครื่อง (ตัวเล็ก) บางทีตอบมาเป็น "มกราคม 2026" ดิบๆ แทน "2026-01" ตรงๆ
-  const emailPeriod = normalizePeriod(emailMeta.period);
-  if (emailPeriod && sheet.data.period && emailPeriod !== sheet.data.period) {
-    blockers.push(`อีเมลบอกรอบ ${emailMeta.period} แต่ในไฟล์เป็น ${sheet.data.period}`);
-  }
+  // เลขเอกสาร: ใช้ที่อ่านได้จากไฟล์ก่อน ไม่มีก็ดึงตัวเลขยาว 9-12 หลักจากหัวเรื่อง (เหมือนที่ workflow เดิมทำ)
+  const documentNo = (sheet.data as any)?.documentNo ?? /(\d{9,12})/.exec(message.subject)?.[1] ?? null;
 
   await logAudit({
-    actor: 'llm',
-    action: 'read_email_approval',
+    actor: 'system',
+    action: 'read_inbound_email',
     entityType: 'timesheet',
-    entityId: emailMeta.documentNo ?? messageId,
-    detail: { model: emailMeta.model, subject: message.subject, documentNo: emailMeta.documentNo, status: emailMeta.approvalStatus },
+    entityId: documentNo ?? messageId,
+    detail: { subject: message.subject, fileName: target.filename },
   });
 
   return {
     ...sheet,
-    blockers,
-    documentNo: (sheet.data as any)?.documentNo ?? emailMeta.documentNo ?? null,
-    approvedBy: emailMeta.approvedBy ?? null,
-    approvedAt: emailMeta.approvedAt ?? null,
+    blockers: [...sheet.blockers],
+    documentNo,
+    approvedBy: null,
+    approvedAt: null,
     sourceEmailId: messageId,
     email: {
       subject: message.subject,
       from: message.from,
       receivedAt: message.receivedAt,
       body: message.body.slice(0, 4000),
-      meta: emailMeta,
+      meta: null,
     },
   };
 }

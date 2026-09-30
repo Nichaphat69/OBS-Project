@@ -21,7 +21,7 @@
         }
       },
       "id": "gmail-trigger",
-      "name": "อีเมล Timesheet เข้ากล่อง obs@",
+      "name": "อีเมล Timesheet เข้ากล่อง support.obs@",
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1,
       "position": [
@@ -34,7 +34,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "/* สายนี้ทำหน้าที่ \"ขนไฟล์\" อย่างเดียว (30 ก.ย. 69): เอา PDF ของอีเมล Timesheet ที่ forward เข้า obs@ ไปวางไว้ใน OBS\n   ไม่อ่านไม่ตัดสินอะไรเอง — การอ่านด้วยโมเดลเกิดตอนคนกดปุ่มในแท็บ \"ดึงจาก Gmail\" และการขออนุมัติวางบิลเข้า LINE\n   ต้องรอหลังขั้น \"ตรวจ Manday\" จึงไม่ใช่งานของสายนี้ (ตัวตรวจรอบ 09:00 ข้างล่างเป็นคนส่ง)\n   ไม่กรองเนื้อหาซ้ำตรงนี้: ตัวกรองหัวเรื่องอยู่ที่ Gmail Trigger แล้ว ถ้ากรองซ้ำด้วยเงื่อนไขอีกชุด อีเมลจริงที่หัวเรื่อง\n   ต่างจากที่คาดจะหายเงียบโดยไม่มีร่องรอย ปล่อยเข้ามาแล้วให้คนกด \"ซ่อน\" เอาดีกว่า */\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json;\n  const binary = items[i].binary ?? {};\n  const fromRaw = j.from?.text ?? j.from ?? j.From ?? null;\n  const from = typeof fromRaw === 'string' ? fromRaw : (fromRaw?.text ?? null);\n  const receivedAt = j.date\n    ? new Date(j.date).toISOString()\n    : (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : new Date().toISOString());\n  for (const key of Object.keys(binary)) {\n    const fileName = binary[key].fileName ?? '';\n    if (!fileName.toLowerCase().endsWith('.pdf')) continue;\n    const file = await this.helpers.getBinaryDataBuffer(i, key);\n    out.push({\n      json: {\n        sourceEmailId: j.id,\n        fileName,\n        fileBase64: file.toString('base64'),\n        subject: j.subject ?? j.Subject ?? '',\n        from,\n        bodyText: j.text ?? j.snippet ?? '',\n        receivedAt,\n      },\n    });\n  }\n}\nreturn out;"
+        "jsCode": "/* สายนี้ทำหน้าที่ \"ขนไฟล์\" อย่างเดียว (30 ก.ย. 69): เอา PDF ของอีเมล Timesheet ที่ forward เข้า support.obs@ ไปวางไว้ใน OBS\n   ไม่อ่านไม่ตัดสินอะไรเอง — การอ่านด้วยโมเดลเกิดตอนคนกดปุ่มในแท็บ \"ดึงจาก Gmail\" และการขออนุมัติวางบิลเข้า LINE\n   ต้องรอหลังขั้น \"ตรวจ Manday\" จึงไม่ใช่งานของสายนี้ (ตัวตรวจรอบ 09:00 ข้างล่างเป็นคนส่ง)\n   ไม่กรองเนื้อหาซ้ำตรงนี้: ตัวกรองหัวเรื่องอยู่ที่ Gmail Trigger แล้ว ถ้ากรองซ้ำด้วยเงื่อนไขอีกชุด อีเมลจริงที่หัวเรื่อง\n   ต่างจากที่คาดจะหายเงียบโดยไม่มีร่องรอย ปล่อยเข้ามาแล้วให้คนกด \"ซ่อน\" เอาดีกว่า */\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json;\n  const binary = items[i].binary ?? {};\n  const fromRaw = j.from?.text ?? j.from ?? j.From ?? null;\n  const from = typeof fromRaw === 'string' ? fromRaw : (fromRaw?.text ?? null);\n  const receivedAt = j.date\n    ? new Date(j.date).toISOString()\n    : (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : new Date().toISOString());\n  for (const key of Object.keys(binary)) {\n    const fileName = binary[key].fileName ?? '';\n    if (!fileName.toLowerCase().endsWith('.pdf')) continue;\n    const file = await this.helpers.getBinaryDataBuffer(i, key);\n    out.push({\n      json: {\n        sourceEmailId: j.id,\n        fileName,\n        fileBase64: file.toString('base64'),\n        subject: j.subject ?? j.Subject ?? '',\n        from,\n        bodyText: j.text ?? j.snippet ?? '',\n        receivedAt,\n      },\n    });\n  }\n}\nreturn out;"
       },
       "id": "prepare-payload",
       "name": "เตรียมไฟล์ส่งเข้า OBS",
@@ -257,7 +257,7 @@
         ]
       ]
     },
-    "อีเมล Timesheet เข้ากล่อง obs@": {
+    "อีเมล Timesheet เข้ากล่อง support.obs@": {
       "main": [
         [
           {

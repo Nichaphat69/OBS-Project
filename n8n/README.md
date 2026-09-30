@@ -83,7 +83,7 @@ Workflows → Import from File → เลือก `01-obs-workflow.json`
 (30 ก.ย. 69) สายอีเมลของ workflow เรียกตัวนี้ตัวเดียว — เก็บ PDF + หัวเรื่อง/ผู้ส่ง/เนื้ออีเมลไว้ในตาราง `inbound_emails`
 **ไม่เรียกโมเดล** ให้โผล่ในแท็บ "ดึงจาก Gmail" รอคนกดอ่าน · body: `sourceEmailId`, `fileName`, `fileBase64`,
 `subject`, `from`, `bodyText`, `receivedAt` · ส่งซ้ำได้ (ตอบ `duplicate: true`) · ไม่ใช่ PDF ตอบ 422
-OBS ไม่ได้อ่านกล่องเมลเอง — Gmail Trigger ใน n8n ผูกกับกล่อง `obs@` ที่พี่ๆ บัญชี forward เฉพาะอีเมล Timesheet เข้ามา
+OBS ไม่ได้อ่านกล่องเมลเอง — Gmail Trigger ใน n8n ผูกกับกล่อง `support.obs@` ที่พี่ๆ บัญชี forward เฉพาะอีเมล Timesheet เข้ามา
 
 ### `POST /api/timesheets/ingest`
 
