@@ -39,6 +39,11 @@ function hasAnyMapping(map: TimesheetFieldMap | null): boolean {
   return !!map.monthYearSplit && !!(map.monthYearSplit.month || map.monthYearSplit.year);
 }
 
+/** ตัวห่อของตัวจัดการ Skill — ต้องอยู่ระดับไฟล์ ไม่ใช่ในตัวคอมโพเนนต์ (ดูเหตุผลที่คอมเมนต์ใน AbbyySkillsManager) */
+function Shell({ embedded, title, children }: { embedded?: boolean; title: string; children: React.ReactNode }) {
+  return embedded ? <div style={{ padding: '17px' }}>{children}</div> : <Card title={title}>{children}</Card>;
+}
+
 export default function AbbyySkillsManager({ embedded }: { embedded?: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -159,12 +164,11 @@ export default function AbbyySkillsManager({ embedded }: { embedded?: boolean })
 
   // ฝังอยู่ในแผงของหน้า "ตัวอ่าน Timesheet" แล้วไม่ต้องมีการ์ดซ้อนการ์ดอีกชั้น ใช้โค้ดชุดเดียวกัน
   // ทั้งสองที่ เพื่อไม่ให้สองทางเข้าค่อยๆ ต่างกันไปคนละทาง
-  const Shell = embedded
-    ? ({ children }: { children: React.ReactNode }) => <div style={{ padding: '17px' }}>{children}</div>
-    : ({ children }: { children: React.ReactNode }) => <Card title={tx('สารบัญ Skill ABBYY')}>{children}</Card>;
-
+  // ⚠️ ห้ามประกาศตัวห่อ (Shell) ไว้ข้างในฟังก์ชันนี้ — เดิมประกาศไว้ตรงนี้ ทำให้ทุกครั้งที่พิมพ์ลงช่องใดช่องหนึ่ง
+  // (setName/onChange) React เห็นเป็นคอมโพเนนต์ "ตัวใหม่" แล้วทิ้งทั้งฟอร์มสร้างใหม่ ช่องกรอกจึงเสียโฟกัสทุกตัวอักษร
+  // พิมพ์ต่อไม่ได้ (เจอจริง 1 ต.ค. 69 ทั้งช่องเพิ่ม Skill และช่องจับคู่ชื่อฟิลด์ที่อยู่ข้างใน) ย้ายออกไปไว้ระดับไฟล์แล้ว
   return (
-    <Shell>
+    <Shell embedded={embedded} title={tx('สารบัญ Skill ABBYY')}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14, marginBottom: 18, alignItems: 'end' }}>
         <label>
           <div className="ey">{tx('ชื่อ Skill')}</div>
