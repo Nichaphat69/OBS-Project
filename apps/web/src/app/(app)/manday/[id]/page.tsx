@@ -264,12 +264,18 @@ export default function ManadyDetailPage() {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<1 | 2 | 3>(1);
   const [calDay, setCalDay] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(`/api/timesheets/${params.id}`, { cache: 'no-store' });
-    if (res.ok) setSheet(await res.json());
+    try {
+      const res = await fetch(`/api/timesheets/${params.id}`, { cache: 'no-store' });
+      if (res.ok) setSheet(await res.json());
+      else setLoadError(res.status === 404 ? tx('ไม่พบ Timesheet นี้') : `${tx('โหลดไม่สำเร็จ')} (HTTP ${res.status})`);
+    } catch {
+      setLoadError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
+    }
   }
 
   useEffect(() => {
@@ -408,9 +414,13 @@ export default function ManadyDetailPage() {
   if (!sheet) {
     return (
       <>
-        <PageHeader eyebrow={tx('ตรวจ Manday')} title={tx('กำลังโหลด…')} />
+        <PageHeader eyebrow={tx('ตรวจ Manday')} title={loadError ?? tx('กำลังโหลด…')} />
         <Card>
-          <Loading rows={8} />
+          {loadError ? (
+            <button className="btn" onClick={() => { setLoadError(null); load(); }}>{tx('ลองใหม่')}</button>
+          ) : (
+            <Loading rows={8} />
+          )}
         </Card>
       </>
     );

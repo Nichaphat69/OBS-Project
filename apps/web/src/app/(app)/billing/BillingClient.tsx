@@ -100,15 +100,29 @@ export default function BillingClient() {
     }
   }
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  function load() {
+    setLoadError(null);
+    // ตอบไม่ใช่ 200 ต้องไม่เอาเนื้อหา (เช่น {error}) ไปใช้เป็นข้อมูล — เดิม data.contracts เป็น undefined
+    // แล้ว .map() ทำให้ทั้งหน้าขึ้น "Application error: a client-side exception" (1 ต.ค. 69)
     fetch('/api/contracts/active', { cache: 'no-store' })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((c: { id: string } | null) => {
-        const qs = c ? `?contractId=${encodeURIComponent(c.id)}` : '';
+        const qs = c?.id ? `?contractId=${encodeURIComponent(c.id)}` : '';
         return fetch(`/api/cycles${qs}`, { cache: 'no-store' });
       })
-      .then((r) => r.json())
-      .then(setData);
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: CyclesResult) => {
+        if (!Array.isArray(d?.contracts)) throw new Error('ข้อมูลรอบบิลไม่ถูกรูปแบบ');
+        setData(d);
+      })
+      .catch((e: Error) => setLoadError(e.message));
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!data) {
@@ -116,7 +130,14 @@ export default function BillingClient() {
       <>
         <PageHeader eyebrow={tx('ขั้นตอน 3 · วางบิล & ร่างอีเมล')} title={tx('วางบิล & ร่างอีเมล')} />
         <Card>
-          <Loading rows={6} />
+          {loadError ? (
+            <div style={{ padding: 24 }}>
+              <div style={{ color: 'var(--cr)', marginBottom: 12 }}>{tx('โหลดรอบบิลไม่สำเร็จ')} ({loadError})</div>
+              <button className="btn" onClick={load}>{tx('ลองใหม่')}</button>
+            </div>
+          ) : (
+            <Loading rows={6} />
+          )}
         </Card>
       </>
     );
