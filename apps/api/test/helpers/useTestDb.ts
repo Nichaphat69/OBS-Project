@@ -21,6 +21,3 @@ if (explicit) {
 
 // ชุดเทสต์ใช้ที่เก็บไฟล์ในหน่วยความจำ ไม่ต้องมีคอนเทนเนอร์ storage รันอยู่ (ดู lib/fileStorage.ts)
 process.env.STORAGE_DRIVER = 'memory';
-
-// กุญแจสำหรับเทสต์เท่านั้น — ของจริงมาจาก .env และห้ามใช้ค่านี้บนเครื่องที่ใช้งานจริง
-process.env.TOKEN_ENCRYPTION_KEY ??= '0'.repeat(64);

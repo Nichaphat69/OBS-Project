@@ -14,7 +14,6 @@
  * หรือยัง — ยังไม่ได้พอร์ต ดู MIGRATION_PLAN.md
  */
 import { loggedFetch } from './apiActivityLog.js';
-import { currentRefreshToken, recordUsage } from './gmailConnectionService.js';
 
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -115,25 +114,8 @@ export function buildMime({
   return Buffer.from(parts.join('\r\n'), 'utf8');
 }
 
-/**
- * ตั้งค่าฝั่งแอปครบหรือยัง — เช็คแค่ Client ID/Secret เท่านั้น **ไม่เช็ค refresh token**
- *
- * ตั้งแต่ 29 ก.ย. 69 refresh token ย้ายไปอยู่ในตาราง `gmail_connections` ซึ่งอ่านแบบ async ไม่ได้
- * จากฟังก์ชัน sync ตัวนี้ · จุดที่ต้องรู้จริงๆ ว่ามีสิทธิ์เข้าถึงกล่องไหม ให้ใช้ `hasGmailAccess()`
- * ด้านล่างแทน ส่วนตัวนี้ตอบแค่ว่า "แอปถูกตั้งค่าไว้ให้คุยกับ Google ได้หรือยัง"
- */
 export function hasGmailCredentials(): boolean {
-  return Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET);
-}
-
-/** มีสิทธิ์เข้าถึงกล่องเมลจริงหรือยัง — ดูทั้งกล่องที่เชื่อมไว้ในฐานข้อมูลและค่าเดิมใน .env */
-export async function hasGmailAccess(): Promise<boolean> {
-  if (!hasGmailCredentials()) return false;
-  try {
-    return Boolean(await currentRefreshToken());
-  } catch {
-    return false;
-  }
+  return Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN);
 }
 
 export interface GmailAttachment {
@@ -168,9 +150,7 @@ export class GmailClient {
   constructor({
     clientId = process.env.GMAIL_CLIENT_ID,
     clientSecret = process.env.GMAIL_CLIENT_SECRET,
-    // ไม่ดึงจาก .env ตรงนี้แล้ว — หาให้ตอนใช้งานจริงใน getAccessToken() เพราะต้องอ่านจากฐานข้อมูล
-    // ซึ่งเป็น async · ส่งเข้ามาเองได้อยู่ (เทสต์ใช้ทางนี้)
-    refreshToken,
+    refreshToken = process.env.GMAIL_REFRESH_TOKEN,
   }: { clientId?: string; clientSecret?: string; refreshToken?: string } = {}) {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
@@ -178,17 +158,11 @@ export class GmailClient {
   }
 
   async getAccessToken(): Promise<string> {
+    if (!this.clientId || !this.clientSecret || !this.refreshToken) {
+      throw new GmailError('ยังไม่ได้เชื่อมต่อ Gmail — รัน `npm run gmail:auth` แล้วใส่ค่าที่ได้ในไฟล์ .env', { status: 400 });
+    }
     if (this.token && Date.now() < this.tokenExpiresAt - 60_000) return this.token;
     if (this.refreshing) return this.refreshing;
-
-    // หากล่องที่เชื่อมไว้ตอนใช้งานจริง ไม่ใช่ตอนสร้าง instance — คนอาจเพิ่งกดเชื่อมไปเมื่อกี้
-    this.refreshToken ??= await currentRefreshToken();
-    if (!this.clientId || !this.clientSecret || !this.refreshToken) {
-      throw new GmailError(
-        'ยังไม่ได้เชื่อมต่อกล่องอีเมล — ไปที่เมนู "เชื่อมต่อ Gmail" แล้วกดเชื่อมต่อด้วยบัญชีเจ้าของกล่อง',
-        { status: 400 },
-      );
-    }
 
     this.refreshing = (async () => {
       const response = await fetch(OAUTH_TOKEN_URL, {
@@ -204,16 +178,12 @@ export class GmailClient {
 
       const body: any = await safeJson(response);
       if (!response.ok) {
-        // จด "หลุดเพราะอะไร" ไว้กับกล่องที่เชื่อมอยู่ ให้หน้าจอบอกเองได้โดยไม่ต้องรอให้คนมากดแล้วเจอ
-        const reason = body?.error_description ?? body?.error ?? `HTTP ${response.status}`;
-        void recordUsage(false, `Google ปฏิเสธ: ${reason}`);
-        throw new GmailError(
-          'สิทธิ์เข้าถึงกล่องอีเมลหมดอายุหรือถูกเพิกถอนแล้ว — ไปที่เมนู "เชื่อมต่อ Gmail" แล้วกดเชื่อมต่อใหม่',
-          { status: response.status, body },
-        );
+        throw new GmailError('ขอ access token จาก Google ไม่สำเร็จ — refresh token อาจหมดอายุ ให้รัน `npm run gmail:auth` ใหม่', {
+          status: response.status,
+          body,
+        });
       }
 
-      void recordUsage(true);
       this.token = body.access_token;
       this.tokenExpiresAt = Date.now() + Number(body.expires_in ?? 3600) * 1000;
       return this.token as string;

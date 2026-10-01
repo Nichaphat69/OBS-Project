@@ -10,7 +10,7 @@
  * /messages/send — ห้ามลบเทสตัวนั้น
  */
 import { prisma } from '@obs/db';
-import { GmailClient, hasGmailAccess } from './gmailClient.js';
+import { GmailClient, hasGmailCredentials } from './gmailClient.js';
 import { FlowAccountClient } from './flowaccountClient.js';
 import { previewCycleInvoice } from './cyclesService.js';
 import { getSetting } from './dashboardService.js';
@@ -211,7 +211,7 @@ export async function syncEmailSent(
     select: { id: true, documentNo: true, period: true, emailSentAt: true, gmailThreadId: true },
   });
   if (!inv || inv.emailSentAt || !inv.gmailThreadId) return false;
-  if (!client && !(await hasGmailAccess())) return false;
+  if (!client && !hasGmailCredentials()) return false;
 
   try {
     const gmail = client ?? new GmailClient();
