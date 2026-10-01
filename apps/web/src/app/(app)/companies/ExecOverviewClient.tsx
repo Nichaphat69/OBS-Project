@@ -4,9 +4,15 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, ErrorState, Kpi, Loading, PageHeader, ProgressCell } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
+import { isEmptyScope, useScope } from '../../../lib/scope';
+import { ScopeSummary, contractRange } from '../../../components/ScopeFilterBar';
 
 interface ContractCycles {
   id: string;
+  poNo: string;
+  startDate?: string;
+  endDate?: string;
+  employees?: Array<{ id: string; nameTh: string }>;
   customerName: string;
   projectName: string;
   headcount: number;
@@ -28,6 +34,7 @@ function money(n: number) {
 export default function ExecOverviewClient() {
   const router = useRouter();
   const { tx } = useLang();
+  const { filters } = useScope();
   const [contracts, setContracts] = useState<ContractCycles[] | null>(null);
   const [employees, setEmployees] = useState<EmployeeRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,15 +80,19 @@ export default function ExecOverviewClient() {
   }
 
   const totalValue = contracts.reduce((sum, c) => sum + (c.contractValue ?? 0), 0);
+  // ไม่เลือกตัวกรองเลย = พนักงานทั้งระบบ (รวมคนที่ยังไม่ผูกสัญญา) · เลือกแล้ว = นับเฉพาะพนักงานในสัญญาที่กรองไว้
+  const employeeCount = isEmptyScope(filters) ? employees.length : contracts.reduce((sum, c) => sum + c.headcount, 0);
   const totalBilled = contracts.reduce((sum, c) => sum + (c.billedValue ?? 0), 0);
 
   return (
     <>
       <PageHeader eyebrow={tx('ผู้บริหาร')} title={tx('ภาพรวมทุกบริษัท')} subtitle={tx('ข้อมูลรวมทุกบริษัทพร้อมกัน อัปเดตแบบเรียลไทม์')} />
 
+      <ScopeSummary />
+
       <div className="kpis">
         <Kpi icon="building" label={tx('บริษัททั้งหมด')} value={contracts.length} />
-        <Kpi icon="users" label={tx('พนักงานทั้งหมด')} value={employees.length} />
+        <Kpi icon="users" label={tx('พนักงานทั้งหมด')} value={employeeCount} />
         <Kpi icon="money" label={tx('มูลค่าสัญญารวม')} value={money(totalValue)} caption={`${tx('วางบิลแล้ว')} ${money(totalBilled)} ${tx('บาท')}`} tone="a" />
       </div>
 
@@ -91,8 +102,9 @@ export default function ExecOverviewClient() {
             <thead>
               <tr>
                 <th>{tx('บริษัท')}</th>
+                <th>{tx('เลขที่ PO')}</th>
                 <th>{tx('โครงการ')}</th>
-                <th className="r">{tx('พนักงาน')}</th>
+                <th>{tx('พนักงาน')}</th>
                 <th className="r">{tx('มูลค่าสัญญา')}</th>
                 <th className="r">{tx('วางบิลแล้ว')}</th>
                 <th>{tx('ความคืบหน้า')}</th>
@@ -102,8 +114,12 @@ export default function ExecOverviewClient() {
               {contracts.map((c) => (
                 <tr key={c.id} className="rw" onClick={() => router.push(`/companies/${encodeURIComponent(c.id)}`)}>
                   <td>{c.customerName}</td>
-                  <td>{c.projectName}</td>
-                  <td className="r n">{c.headcount}</td>
+                  <td className="n">{c.poNo}</td>
+                  <td>
+                    {c.projectName}
+                    {c.startDate && c.endDate && <div className="sub">{contractRange({ startDate: c.startDate, endDate: c.endDate })}</div>}
+                  </td>
+                  <td>{c.employees && c.employees.length > 0 ? c.employees.map((e) => e.nameTh).join(', ') : c.headcount}</td>
                   <td className="r n">{money(c.contractValue)}</td>
                   <td className="r n">{money(c.billedValue)}</td>
                   <td>
@@ -113,7 +129,7 @@ export default function ExecOverviewClient() {
               ))}
               {contracts.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--mut)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', color: 'var(--mut)' }}>
                     {tx('ยังไม่มีสัญญาในระบบ')}
                   </td>
                 </tr>

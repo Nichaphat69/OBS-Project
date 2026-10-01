@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Card, EmptyState, Kpi, Loading, PageHeader, PoTag, ProgressCell, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
+import { useScope } from '../../../lib/scope';
+import { contractRange } from '../../../components/ScopeFilterBar';
 
 interface PeriodEmployee {
   employeeId: string;
@@ -87,6 +89,7 @@ function money(n: number) {
 
 export default function DashboardClient({ data, nameTh }: { data: DashboardData; nameTh: string }) {
   const { tx, lang, formatPeriod } = useLang();
+  const { contracts: scopeContracts } = useScope();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [employeesByKey, setEmployeesByKey] = useState<Record<string, PeriodEmployee[] | 'loading' | 'error'>>({});
 
@@ -125,7 +128,9 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
           <EmptyState label={tx('ไม่มีสัญญา')} />
         ) : (
           <div className="constrips">
-            {data.contracts.map((c) => (
+            {data.contracts.map((c) => {
+              const opt = scopeContracts.find((x) => x.id === c.id);
+              return (
               <div key={c.id} className="constrip">
                 <div className="cf">
                   <span className="lbl">{tx('เลขที่ PO')}</span>
@@ -140,12 +145,22 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                   <b>{c.projectName}</b>
                 </div>
                 <div className="cf">
-                  <span className="lbl">&nbsp;</span>
-                  <span className="hc">
+                  <span className="lbl">{tx('พนักงาน')}</span>
+                  <span className="hc" title={opt ? opt.employees.map((e) => e.nameTh).join(', ') : undefined}>
                     <Icon name="users" className="sm" />
-                    {c.headcount} {tx('คน')}
+                    {opt && opt.employees.length > 0
+                      ? opt.employees.length <= 2
+                        ? opt.employees.map((e) => e.nameTh).join(', ')
+                        : `${opt.employees[0].nameTh} +${opt.employees.length - 1}`
+                      : `${c.headcount} ${tx('คน')}`}
                   </span>
                 </div>
+                {opt && (
+                  <div className="cf">
+                    <span className="lbl">{tx('ช่วงสัญญา')}</span>
+                    <span>{contractRange(opt)}</span>
+                  </div>
+                )}
                 <div className="cf">
                   <span className="lbl">{tx('ความคืบหน้า')}</span>
                   <ProgressCell percent={c.progress} fraction={`${c.monthsBilled}/${c.monthsTotal} (${c.progress}%)`} />
@@ -155,7 +170,8 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                   <b className="n cv">{money(c.remainingValue)}</b>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

@@ -166,9 +166,16 @@ const LIST_ROW_SELECT = {
   contract: { include: { customer: true } },
 } as const;
 
-export async function listTimesheets({ contractId }: { contractId?: string } = {}): Promise<TimesheetListResult> {
+export async function listTimesheets(
+  { contractId, contractIds, employeeId }: { contractId?: string; contractIds?: string[] | null; employeeId?: string | null } = {},
+): Promise<TimesheetListResult> {
+  // contractIds = ขอบเขตจากตัวกรอง site/PO/พนักงาน (หลายสัญญาได้) · contractId = สัญญาเดียวแบบเดิม
+  const ids = contractIds ?? (contractId ? [contractId] : null);
   const rows = await prisma.timesheet.findMany({
-    where: contractId ? { contractId } : undefined,
+    where: {
+      ...(ids ? { contractId: { in: ids } } : {}),
+      ...(employeeId ? { employeeId } : {}),
+    },
     select: LIST_ROW_SELECT,
     orderBy: { receivedAt: 'desc' },
   });

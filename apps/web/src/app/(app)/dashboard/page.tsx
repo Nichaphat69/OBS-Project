@@ -10,17 +10,10 @@ export default async function DashboardPage() {
   if (user.role === 'user') redirect('/my-progress');
   if (user.role === 'executive') redirect('/companies');
 
-  const activeRes = await fetch(`${apiBaseUrl()}/api/contracts/active`, {
-    headers: { cookie: cookieHeader },
-    cache: 'no-store',
-  });
-  // เรียก /api/dashboard ไม่ได้บริษัทที่ active ก็ยังโหลดหน้าต่อได้ (แค่ไม่กรองตามบริษัท) — ผิดจาก
-  // /api/dashboard เองที่ถ้าพังจริงๆ ควรโยน error ให้ Next แสดงหน้า error แทนที่จะส่ง data พังๆ ต่อให้
-  // DashboardClient ซึ่งไม่ได้ออกแบบมารับมือกับ shape ที่ไม่ครบ
-  const active: { id: string } | null = activeRes.ok ? await activeRes.json() : null;
-  const qs = active ? `?contractId=${encodeURIComponent(active.id)}` : '';
-
-  const res = await fetch(`${apiBaseUrl()}/api/dashboard${qs}`, {
+  // ขอบเขต (site · PO · พนักงาน) ไม่ได้แนบเป็น query — อยู่ใน cookie obs_scope ที่แนบไปกับ cookieHeader แล้ว
+  // เซิร์ฟเวอร์อ่านเองและตั้งค่าเริ่มต้นให้ (ไม่เลือกอะไร = สัญญาที่กำลังดำเนินการอยู่ ไม่ใช่ทุกบริษัท) ถ้า
+  // /api/dashboard พังจริงๆ ให้โยน error ให้ Next แสดงหน้า error แทนที่จะส่ง data พังๆ ต่อให้ DashboardClient
+  const res = await fetch(`${apiBaseUrl()}/api/dashboard`, {
     headers: { cookie: cookieHeader },
     cache: 'no-store',
   });

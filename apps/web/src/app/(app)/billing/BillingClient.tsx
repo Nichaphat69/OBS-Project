@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
+import { ScopeSummary, contractRange } from '../../../components/ScopeFilterBar';
 
 interface CyclePeriod {
   contractId: string;
@@ -54,6 +55,9 @@ interface ContractCycles {
   monthsBilled: number;
   progress: number;
   periods: CyclePeriod[];
+  employees?: Array<{ id: string; nameTh: string; position: string }>;
+  startDate?: string;
+  endDate?: string;
 }
 
 interface CyclesResult {
@@ -106,12 +110,8 @@ export default function BillingClient() {
     setLoadError(null);
     // ตอบไม่ใช่ 200 ต้องไม่เอาเนื้อหา (เช่น {error}) ไปใช้เป็นข้อมูล — เดิม data.contracts เป็น undefined
     // แล้ว .map() ทำให้ทั้งหน้าขึ้น "Application error: a client-side exception" (1 ต.ค. 69)
-    fetch('/api/contracts/active', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((c: { id: string } | null) => {
-        const qs = c?.id ? `?contractId=${encodeURIComponent(c.id)}` : '';
-        return fetch(`/api/cycles${qs}`, { cache: 'no-store' });
-      })
+    // ขอบเขต site/PO/พนักงานอยู่ใน cookie obs_scope ที่แถบบนตั้งไว้ เซิร์ฟเวอร์อ่านเอง ไม่ต้องแนบ query
+    fetch('/api/cycles', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: CyclesResult) => {
         if (!Array.isArray(d?.contracts)) throw new Error('ข้อมูลรอบบิลไม่ถูกรูปแบบ');
@@ -151,11 +151,13 @@ export default function BillingClient() {
         subtitle={tx('ดูสถานะแต่ละรอบบิล เปิดพรีวิวใบแจ้งหนี้และร่างอีเมลก่อนอนุมัติ')}
       />
 
+      <ScopeSummary />
+
       {data.contracts.map((contract) => (
         <Card
           key={contract.id}
-          title={`${contract.poNo} — ${contract.customerName}`}
-          right={<span>{contract.projectName}</span>}
+          title={`PO ${contract.poNo} — ${contract.customerName}`}
+          right={<span>{contract.projectName}{contract.startDate && contract.endDate ? ` · ${contractRange({ startDate: contract.startDate, endDate: contract.endDate })}` : ''}</span>}
           flush
         >
           <div style={{ display: 'flex', gap: 32, padding: '18px 24px', borderBottom: '1px solid var(--hair)', flexWrap: 'wrap' }}>
@@ -163,7 +165,10 @@ export default function BillingClient() {
             <Stat label={tx('วางบิลแล้ว')} value={`${money(contract.billedValue)} ${tx('บาท')}`} />
             <Stat label={tx('คงเหลือ')} value={`${money(contract.remainingValue)} ${tx('บาท')}`} />
             <Stat label={tx('รอบบิล')} value={`${contract.monthsBilled} / ${contract.monthsTotal}`} />
-            <Stat label={tx('พนักงาน')} value={`${contract.headcount} ${tx('คน')}`} />
+            <Stat
+              label={tx('พนักงาน')}
+              value={contract.employees && contract.employees.length > 0 ? contract.employees.map((e) => e.nameTh).join(', ') : `${contract.headcount} ${tx('คน')}`}
+            />
           </div>
           <div className="tw">
             <table>

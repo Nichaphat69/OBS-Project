@@ -507,14 +507,17 @@ interface DashboardSheet {
   discount: number;
   lineAmount: number | null;
   check: CheckStamp;
+  // 1 ต.ค. 69 — ขอบเขตหลายสัญญาพร้อมกัน (ตัวกรอง site/PO/พนักงาน) ต้องบอกได้ว่ารายการเป็นของ site/PO ไหน
+  customerName: string;
+  poNo: string;
 }
 
 /** ported from service.js listTimesheets()/shapeTimesheetRow() — narrowed to only the fields
  * the dashboard endpoint reads (full CRUD timesheet listing stays in src/service.js for now). */
-async function listTimesheetsForDashboard(contractId?: string | null): Promise<DashboardSheet[]> {
+async function listTimesheetsForDashboard(contractIds: string[] | null): Promise<DashboardSheet[]> {
   const rows = await prisma.timesheet.findMany({
-    where: contractId ? { contractId } : undefined,
-    include: { employee: true },
+    where: contractIds ? { contractId: { in: contractIds } } : undefined,
+    include: { employee: true, contract: { include: { customer: true } } },
     orderBy: { receivedAt: 'desc' },
   });
 
@@ -533,6 +536,8 @@ async function listTimesheetsForDashboard(contractId?: string | null): Promise<D
       discount: computed?.discount ?? 0,
       lineAmount: computed?.lineAmount ?? null,
       check: stamp,
+      customerName: row.contract.customer.nameTh,
+      poNo: row.contract.poNo,
     });
   }
   return out;
@@ -545,9 +550,9 @@ interface InvoiceRow {
 }
 
 /** ported from service.js invoiceRows() */
-async function invoiceRows(contractId?: string | null): Promise<InvoiceRow[]> {
+async function invoiceRows(contractIds: string[] | null): Promise<InvoiceRow[]> {
   const rows = await prisma.invoice.findMany({
-    where: contractId ? { contractId } : undefined,
+    where: contractIds ? { contractId: { in: contractIds } } : undefined,
     orderBy: { documentDate: 'desc' },
   });
   return rows.map((r) => ({ contractId: r.contractId, status: r.status, paymentAmount: r.paymentAmount }));
@@ -648,10 +653,12 @@ export interface DashboardResult {
  * ภาพรวมทั้งระบบ — ported from service.js dashboard(). ไม่ระบุ contractId = รวมทุกสัญญา
  * ระบุ contractId = กรองเหลือแค่สัญญาของ "บริษัทที่กำลังดำเนินการอยู่" ที่เลือกจากแถบบน
  */
-export async function dashboard(contractId?: string | null): Promise<DashboardResult> {
+export async function dashboard(scope?: string | string[] | null): Promise<DashboardResult> {
+  // รับได้ทั้งสัญญาเดียว (ของเดิม) และรายการสัญญา (ตัวกรอง site/PO/พนักงาน) — null = ทุกสัญญา
+  const contractIds: string[] | null = Array.isArray(scope) ? scope : scope ? [scope] : null;
   const today = isoToday();
-  const sheets = await listTimesheetsForDashboard(contractId);
-  const invoices = await invoiceRows(contractId);
+  const sheets = await listTimesheetsForDashboard(contractIds);
+  const invoices = await invoiceRows(contractIds);
 
   const byStatus: Record<string, number> = {};
   for (const sheet of sheets) byStatus[sheet.status] = (byStatus[sheet.status] ?? 0) + 1;
@@ -661,7 +668,7 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
   const leaveDeduction = sheets.reduce((sum, s) => sum + (s.discount ?? 0), 0);
 
   const allContracts = await listContracts();
-  const filteredContracts = allContracts.filter((c) => (contractId ? c.id === contractId : true));
+  const filteredContracts = allContracts.filter((c) => (contractIds ? contractIds.includes(c.id) : true));
 
   const contracts = [];
   for (const contract of filteredContracts) {
@@ -682,7 +689,7 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
     });
   }
 
-  const series = (await monthlySeries()).filter((s) => (contractId ? s.contractId === contractId : true));
+  const series = (await monthlySeries()).filter((s) => (contractIds ? contractIds.includes(s.contractId) : true));
   const billedSeries = series.filter((s) => s.billed > 0);
   const latest = billedSeries[billedSeries.length - 1] ?? null;
   const previous = billedSeries[billedSeries.length - 2] ?? null;
@@ -701,10 +708,10 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
   });
   const employeeFileTasks = [];
   for (const f of employeeFiles) {
-    if (contractId) {
+    if (contractIds) {
       if (!f.employeeId || !f.period) continue;
       const inContract = await prisma.assignment.findFirst({
-        where: { employeeId: f.employeeId, contractId, status: 'active', startDate: { lte: `${f.period}-01` }, endDate: { gte: `${f.period}-01` } },
+        where: { employeeId: f.employeeId, contractId: { in: contractIds }, status: 'active', startDate: { lte: `${f.period}-01` }, endDate: { gte: `${f.period}-01` } },
         select: { employeeId: true },
       });
       if (!inContract) continue;
@@ -730,13 +737,13 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
       .map((s) => ({
         step: 2, level: 'critical',
         title: 'Timesheet ตรวจไม่ผ่าน',
-        detail: `${s.employeeName} รอบ ${s.periodLabel} — ${s.statusReason ?? 'ข้อมูลไม่ตรงปฏิทิน'}`,
+        detail: `${s.employeeName} · ${s.customerName} · PO ${s.poNo} · รอบ ${s.periodLabel} — ${s.statusReason ?? 'ข้อมูลไม่ตรงปฏิทิน'}`,
         link: { view: 'detail', id: s.id },
       })),
     ...waitingCheck.map((s) => ({
       step: 2, level: 'warn',
       title: 'รอตรวจ Manday',
-      detail: `${s.employeeName} รอบ ${s.periodLabel} — ${money(s.lineAmount ?? 0)} บาท`,
+      detail: `${s.employeeName} · ${s.customerName} · PO ${s.poNo} · รอบ ${s.periodLabel} — ${money(s.lineAmount ?? 0)} บาท`,
       link: { view: 'detail', id: s.id },
     })),
     ...allPeriods
@@ -745,7 +752,7 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
       .map((p) => ({
         step: 3, level: 'info',
         title: 'รออนุมัติวางบิล',
-        detail: `${p.customerName} รอบ ${p.periodLabel} — ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
+        detail: `${p.customerName} · PO ${p.poNo} · รอบ ${p.periodLabel} — ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
         link: { view: 'cycle', contractId: p.contractId, period: p.period },
       })),
     // รอ Timesheet — บอกจำนวน (ส่งแล้ว/ทั้งหมด) + รายชื่อคนที่ยังไม่ส่งตรงๆ (เจ้าของระบบสั่ง 24 ก.ย. 69)
@@ -757,7 +764,7 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
       .map((p) => ({
         step: 1, level: 'warn',
         title: 'รอ Timesheet',
-        detail: `${p.customerName} รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
+        detail: `${p.customerName} · PO ${p.poNo} · รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
         link: null,
       })),
   ];
@@ -766,7 +773,7 @@ export async function dashboard(contractId?: string | null): Promise<DashboardRe
   // บริษัทปนกัน) เปลี่ยนเป็น "Timesheet ที่เข้ามาในสัญญานี้" ว่าใครส่ง รอบบิลไหน ช่องทางไหน (24 ก.ย. 69
   // ตามที่ขอ "แสดงกิจกรรมของสัญญานี้เท่านั้น ว่ามีพนักงานคนไหนส่ง Timesheet รอบบิลไหนเข้ามาแล้วบ้าง")
   const recentSheets = await prisma.timesheet.findMany({
-    where: contractId ? { contractId } : undefined,
+    where: contractIds ? { contractId: { in: contractIds } } : undefined,
     include: { employee: true, contract: { include: { customer: true } } },
     orderBy: { receivedAt: 'desc' },
     take: 12,

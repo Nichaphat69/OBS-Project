@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Card, Loading, PageHeader, ReadModelTag, StatusPill, Tag, TabStrip } from '../../../components/ui';
 import { useReadModelNameMap } from '../../../components/readModelNames';
 import { Icon } from '../../../components/Icon';
+import { ScopeSummary } from '../../../components/ScopeFilterBar';
 import { useLang } from '../../../lib/language';
 
 interface TimesheetListItem {
@@ -72,7 +73,6 @@ function matchesTab(item: TimesheetListItem, tab: string): boolean {
 export default function MandayClient() {
   const { tx } = useLang();
   const [data, setData] = useState<ListResult | null>(null);
-  const [scopeName, setScopeName] = useState<string | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('needsReview');
   const [search, setSearch] = useState('');
   const [yearFilter, setYearFilter] = useState('');
@@ -82,25 +82,14 @@ export default function MandayClient() {
   const readModelNames = useReadModelNameMap();
 
   /**
-   * ไม่ส่ง `contractId` ขึ้นไปแล้วโดยตั้งใจ — ให้เซิร์ฟเวอร์เลือกสัญญาที่กำลังดำเนินการอยู่เอง
-   *
-   * ของเดิมหน้านี้ดึงสัญญา active มาแล้วแนบไปเอง ซึ่งแปลว่าถ้าหน้าดึงมาไม่ทัน/ดึงพลาด มันจะกลายเป็น
-   * "ขอทุกบริษัท" คือ**พลาดแล้วขอบเขตกว้างขึ้น** ซึ่งผิดทิศสำหรับข้อมูลค่าจ้างรายคน (เจอจริง: เลือก ปตท.
-   * อยู่แต่รายการขึ้นพนักงานไทยประกันชีวิตมาด้วย) ตอนนี้ฝั่งเซิร์ฟเวอร์ตั้งค่าเริ่มต้นให้แล้ว หน้านี้จึงไม่ควร
-   * ส่งค่าที่อาจเก่ากว่าของจริงไปทับ
-   *
-   * ชื่อบริษัทที่โชว์ยึด `scope.contractId` ที่เซิร์ฟเวอร์ตอบกลับมาเป็นหลัก แล้วค่อยหาชื่อจากสัญญา active
-   * ถ้า id ไม่ตรงกันแปลว่าเพิ่งมีการสลับบริษัทคาบเกี่ยวกัน — โชว์ชื่อไม่ได้ ดีกว่าโชว์ชื่อผิด
+   * ขอบเขต (site · PO · พนักงาน) ไม่ได้ส่งเป็น query จากหน้านี้ — ตัวกรองบนแถบบนเก็บไว้ใน cookie แล้วเซิร์ฟเวอร์อ่านเอง
+   * (apps/api scopeService.ts) ไม่เลือกอะไรเลย = สัญญาที่กำลังดำเนินการอยู่ ตามหลักเดิมที่ว่า "พลาดแล้วต้องแคบลง
+   * ไม่ใช่กว้างขึ้น" (เจอจริง 17 ก.ย. 69) หน้านี้จึงไม่ต้องรู้ว่าตัวกรองคืออะไร และ mount ใหม่เองเมื่อตัวกรองเปลี่ยน
    */
   async function load() {
-    const [listRes, activeRes] = await Promise.all([
-      fetch('/api/timesheets', { cache: 'no-store' }),
-      fetch('/api/contracts/active', { cache: 'no-store' }),
-    ]);
-    const list: ListResult = await listRes.json();
-    const active: { id: string; customerName: string } | null = await activeRes.json().catch(() => null);
-    setData(list);
-    setScopeName(active && active.id === list.scope?.contractId ? active.customerName : null);
+    const listRes = await fetch('/api/timesheets', { cache: 'no-store' });
+    if (!listRes.ok) return;
+    setData(await listRes.json());
   }
 
   useEffect(() => {
@@ -175,22 +164,7 @@ export default function MandayClient() {
     <>
       <PageHeader eyebrow={tx('ขั้นตอน 2 · ตรวจ Manday')} title={tx('ตรวจ Manday')} subtitle={tx('ตรวจผลคำนวณ Manday แล้วยืนยันหรือตีกลับให้แก้ไข')} />
 
-      {/* บอกขอบเขตที่เซิร์ฟเวอร์ใช้จริง — ก่อนหน้านี้หน้านี้ไม่เคยบอก คนจึงต้องเดาจากรายชื่อที่เห็น
-          และนั่นคือเหตุผลที่รายการข้ามบริษัทอยู่นานโดยไม่มีใครจับได้ */}
-      {data.scope && (
-        <div className={data.scope.allCompanies ? 'scopebar all' : 'scopebar'}>
-          <Icon name={data.scope.allCompanies ? 'info' : 'building'} />
-          <span>
-            {data.scope.allCompanies ? (
-              <b>{tx('กำลังดูข้ามทุกบริษัท')}</b>
-            ) : (
-              <>
-                {tx('กำลังดูเฉพาะ')} <b>{scopeName ?? tx('บริษัทที่กำลังดำเนินการอยู่')}</b>
-              </>
-            )}
-          </span>
-        </div>
-      )}
+      <ScopeSummary />
 
       <TabStrip
         tabs={TABS.map((t) => ({ key: t.key, label: t.label, count: data.counts[t.key] }))}
@@ -242,7 +216,8 @@ export default function MandayClient() {
             </div>
             <div className="bd">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <Tag tone="mu">{item.periodLabel}</Tag>
+                <Tag tone="pr">{tx('รอบ')} {item.periodLabel}</Tag>
+                <Tag tone="mu">PO {item.contract.poNo}</Tag>
                 <Tag tone="mu">{tx('เลขที่')} {item.id}</Tag>
                 {/* กล่องข้อความแยกทีละวัน ไม่รวมเป็นบรรทัดเดียวคั่นจุลภาค — เดือนที่ลาหลายวันจะได้ไม่ต้อง
                     ไล่อ่านทีละคำ (18 ก.ย. 69 ตามที่เจ้าของระบบขอ) */}
@@ -254,7 +229,7 @@ export default function MandayClient() {
                 <ReadModelTag model={item.readModel} nameMap={readModelNames} />
               </div>
               <div className="sub" style={{ marginBottom: 14 }}>
-                {tx('รับเมื่อ')} {item.receivedAt?.slice(0, 10)} · {item.contract.customerName} · {item.contract.projectName}
+                {tx('รับเมื่อ')} {item.receivedAt?.slice(0, 10)} · <b>{item.contract.customerName}</b> · PO {item.contract.poNo} · {item.contract.projectName}
               </div>
 
               <table style={{ minWidth: 0 }}>

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
-import { requireAdmin, requireAdminIfSession, requireNotUser, requireExecutiveWhenUnscoped } from '../lib/requireRole.js';
+import { requireAdmin, requireAdminIfSession, requireNotUser } from '../lib/requireRole.js';
+import { requestScope } from '../lib/scopeService.js';
 import { requireN8nSecret, requireAuthOrN8nSecret } from '../lib/n8nAuth.js';
 import { logExposedRequest } from '../lib/apiActivityLog.js';
 import {
@@ -57,9 +58,11 @@ cyclesRouter.use(requireAuth);
 // เพิ่ม requireExecutiveWhenUnscoped (15 ก.ย. 69 รอบสอง) — `/` ไม่ระบุ contractId = ข้อมูลรวมทุกบริษัท
 // เดิม admin/accounting เรียกแบบนี้ได้ผ่านหน้า /billing แต่หน้านั้นแก้ให้ส่ง contractId เสมอแล้ว (ฝั่ง
 // frontend) เหลือแค่ role 'executive' เท่านั้นที่ควรขอแบบไม่ระบุได้จริงตาม policy ใหม่
-cyclesRouter.get('/', requireNotUser, requireExecutiveWhenUnscoped, async (req, res) => {
-  const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
-  res.json(await listBillingCycles(contractId));
+cyclesRouter.get('/', requireNotUser, async (req, res) => {
+  // requestScope() เป็นคนบังคับกติกานี้แทน requireExecutiveWhenUnscoped เดิม: ไม่เลือกตัวกรองเลย →
+  // admin/บัญชีได้สัญญาที่กำลังดำเนินการอยู่ (แคบลง) มีแต่ executive ที่ได้ "ทุกบริษัท" (contractIds = null)
+  const { contractIds } = await requestScope(req);
+  res.json(await listBillingCycles(contractIds));
 });
 
 /* ใช้ cycleDetail() ไม่ใช่ previewCycleInvoice() ตรงๆ เพราะต้องแวะเช็คกล่อง Gmail ก่อนว่าร่างถูกกดส่ง

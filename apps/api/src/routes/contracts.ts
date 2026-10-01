@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin, requireNotUser } from '../lib/requireRole.js';
+import { listFilterOptions } from '../lib/scopeService.js';
 import { listContracts, getActiveContract, setActiveContract, deactivateContract, ContractActionError } from '../lib/dashboardService.js';
 import {
   ContractMasterError,
@@ -33,6 +34,12 @@ contractsRouter.get('/', requireNotUser, async (_req, res) => {
  * ตั้งแต่หน้าอัปโหลดแยกโหมดพนักงานออกมา (ดู UploadClient.tsx) และแถบบนของ role "user" ก็ไม่มี
  * ตัวเลือกบริษัทให้เลือกอยู่แล้ว
  */
+/** ตัวเลือกของตัวกรอง site · PO · พนักงาน บนแถบบน (ทุกสัญญาพร้อมรายชื่อพนักงาน) — ต้องมาก่อน `/:id/...` เส้นอื่น
+ * และเปิดให้ executive ด้วย เพราะ executive ก็ใช้ตัวกรองนี้แยกดูตามบริษัท/PO (ไม่มีข้อมูลการเงินในก้อนนี้) */
+contractsRouter.get('/filter-options', requireNotUser, async (_req, res) => {
+  res.json(await listFilterOptions());
+});
+
 contractsRouter.get('/active', requireNotUser, async (_req, res) => {
   res.json(await getActiveContract());
 });

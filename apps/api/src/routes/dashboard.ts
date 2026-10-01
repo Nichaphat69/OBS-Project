@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
 import { dashboard } from '../lib/dashboardService.js';
+import { requestScope } from '../lib/scopeService.js';
 
 export const dashboardRouter = Router();
 
@@ -10,7 +11,7 @@ export const dashboardRouter = Router();
 // เพิ่มเติม) ตรงกับหน้า "แดชบอร์ด" ใน nav ที่จำกัด admin/accounting เท่านั้นอยู่แล้ว — เปลี่ยนมาใช้
 // requireAuth+requireAdmin แบบเดียวกับ route อื่นทั้งหมดแทนการเช็ค session มือเอง
 dashboardRouter.get('/', requireAuth, requireAdmin, async (req, res) => {
-  const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
-  const data = await dashboard(contractId ?? null);
+  const { contractIds } = await requestScope(req);
+  const data = await dashboard(contractIds);
   res.json(data);
 });

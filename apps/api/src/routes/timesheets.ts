@@ -16,7 +16,7 @@ import { ManualSheetError } from '@obs/domain';
 import { readTimesheetFile, confirmTimesheet, logAiRead, UploadError } from '../lib/uploadService.js';
 import { ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
-import { getActiveContract } from '../lib/dashboardService.js';
+import { requestScope } from '../lib/scopeService.js';
 import { SpreadsheetExtractionError } from '../lib/spreadsheetExtractionService.js';
 import { checkTimesheetAgainstHrdd, HrddCompareError } from '../lib/hrddCompareService.js';
 import { enqueueFiles, enqueueExisting, ReadQueueError } from '../lib/readQueueService.js';
@@ -43,17 +43,18 @@ timesheetsRouter.use(requireAuth);
  * ต้องการดูข้ามบริษัทจริงๆ ให้ส่ง `?all=1` มาอย่างชัดเจน — ตั้งใจให้เป็นการกระทำที่ต้องเขียนออกมา
  */
 timesheetsRouter.get('/', requireAdmin, async (req, res) => {
-  const explicit = typeof req.query.contractId === 'string' && req.query.contractId ? req.query.contractId : null;
-  const wantsAll = req.query.all === '1' || req.query.all === 'true';
-
-  let contractId = explicit ?? undefined;
-  if (!explicit && !wantsAll) {
-    const active = await getActiveContract();
-    contractId = active?.id;
-  }
-
-  const result = await listTimesheets({ contractId });
-  res.json({ ...result, scope: { contractId: contractId ?? null, allCompanies: !contractId } });
+  // ขอบเขตมาจากตัวกรอง site/PO/พนักงานบนแถบบน (query หรือ cookie obs_scope — ดู scopeService.ts) ไม่ระบุอะไร
+  // เลย = สัญญาที่กำลังดำเนินการอยู่ ส่วน `?all=1` ยังต้องเขียนออกมาชัดเจนเหมือนเดิม
+  const { filters, contractIds } = await requestScope(req, { allowAll: true });
+  const result = await listTimesheets({ contractIds, employeeId: filters.employeeId });
+  res.json({
+    ...result,
+    scope: {
+      contractId: contractIds && contractIds.length === 1 ? contractIds[0] : null,
+      contractIds,
+      allCompanies: contractIds === null,
+    },
+  });
 });
 
 timesheetsRouter.get('/:id', requireAdmin, async (req, res) => {

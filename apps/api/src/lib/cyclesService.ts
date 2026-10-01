@@ -34,10 +34,18 @@ import { webBase } from './timesheetSubmissionService.js';
 import { draftBillingEmail } from './llmEmailService.js';
 import { storeFile } from './fileStorage.js';
 
-export async function listBillingCycles(contractId?: string) {
+export async function listBillingCycles(scope?: string | string[] | null) {
   const today = isoToday();
   const allContracts = await listContracts();
-  const filtered = contractId ? allContracts.filter((c) => c.id === contractId) : allContracts;
+  // สัญญาเดียว (ของเดิม) หรือรายการสัญญาจากตัวกรอง site/PO/พนักงาน — null/ไม่ระบุ = ทุกสัญญา
+  const ids = Array.isArray(scope) ? scope : scope ? [scope] : null;
+  const filtered = ids ? allContracts.filter((c) => ids.includes(c.id)) : allContracts;
+  // รายชื่อพนักงานของแต่ละสัญญา — หน้ารอบบิลต้องบอกได้ว่ารอบนี้เป็นของใคร
+  const assignmentRows = await prisma.assignment.findMany({
+    where: { contractId: { in: filtered.map((c) => c.id) } },
+    include: { employee: true },
+    orderBy: { startDate: 'asc' },
+  });
 
   const contracts = [];
   for (const contract of filtered) {
@@ -48,6 +56,9 @@ export async function listBillingCycles(contractId?: string) {
 
     contracts.push({
       ...contract,
+      employees: assignmentRows
+        .filter((a) => a.contractId === contract.id)
+        .map((a) => ({ id: a.employeeId, nameTh: a.employee.nameTh, position: a.employee.invoicePosition })),
       monthsTotal: periods.length,
       monthsBilled: billed.length,
       contractValue,

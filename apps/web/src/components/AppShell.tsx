@@ -9,6 +9,8 @@ import { unreadCount, NOTIF_READ_EVENT } from '../lib/notifRead';
 import { useToast } from './Overlays';
 import { useLang } from '../lib/language';
 import { NAV } from '../lib/nav';
+import { ScopeProvider, useScope } from '../lib/scope';
+import { ScopeFilterBar } from './ScopeFilterBar';
 
 /** ย่อ/กางเมนูข้าง — ported from public/app.js's `SIDE_KEY`/`applySideState()`. จำสถานะไว้ใน
  * localStorage เพราะเป็นความชอบของคนใช้ ไม่ใช่ข้อมูลของระบบ */
@@ -26,26 +28,25 @@ interface PulseData {
   role: string;
 }
 
-interface ContractOption {
-  id: string;
-  customerName: string;
-  projectName: string;
-  status: string;
+/** ตัวกรอง site/PO/พนักงานอยู่ใน context ตัวเดียวทั้งแถบบนและเนื้อหา — เปลี่ยนแล้วสั่ง server component โหลดใหม่
+ * (router.refresh) และให้เนื้อหาของหน้า mount ใหม่ผ่าน key={version} เพื่อให้ client component ที่ fetch เองตามไปด้วย */
+export function AppShell(props: { user: { nameTh: string; role: string }; children: React.ReactNode }) {
+  const router = useRouter();
+  return (
+    <ScopeProvider role={props.user.role} onChange={() => router.refresh()}>
+      <AppShellInner {...props} />
+    </ScopeProvider>
+  );
 }
 
-function ctxLabel(c: ContractOption): string {
-  return `${c.customerName} — ${c.projectName}`;
-}
-
-const isStaff = (role: string) => role === 'admin' || role === 'accounting';
-
-export function AppShell({
+function AppShellInner({
   user,
   children,
 }: {
   user: { nameTh: string; role: string };
   children: React.ReactNode;
 }) {
+  const { version: scopeVersion, reloadOptions } = useScope();
   const pathname = usePathname();
   const router = useRouter();
   const { lang, setLang, tx } = useLang();
@@ -59,9 +60,6 @@ export function AppShell({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [pulseData, setPulseData] = useState<PulseData | null>(null);
-  const [contracts, setContracts] = useState<ContractOption[] | null>(null);
-  const [ctxOpen, setCtxOpen] = useState(false);
-  const ctxWrapRef = useRef<HTMLDivElement>(null);
   const nudgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, bumpReadTick] = useState(0);
 
@@ -103,16 +101,14 @@ export function AppShell({
     }
   }
 
-  // ปิดแผงลอย (ตัวสลับบริษัท/เมนูบัญชี) เมื่อคลิกนอกกรอบ/กด Escape — ตรงกับ closeCtx()/closeWho() ของต้นฉบับ
+  // ปิดเมนูบัญชี เมื่อคลิกนอกกรอบ/กด Escape — ตรงกับ closeCtx()/closeWho() ของต้นฉบับ
   useEffect(() => {
-    if (!ctxOpen && !whoOpen) return;
+    if (!whoOpen) return;
     function onDocClick(e: MouseEvent) {
-      if (ctxOpen && ctxWrapRef.current && !ctxWrapRef.current.contains(e.target as Node)) setCtxOpen(false);
       if (whoOpen && whoWrapRef.current && !whoWrapRef.current.contains(e.target as Node)) setWhoOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        setCtxOpen(false);
         setWhoOpen(false);
       }
     }
@@ -122,7 +118,7 @@ export function AppShell({
       document.removeEventListener('click', onDocClick);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [ctxOpen, whoOpen]);
+  }, [whoOpen]);
 
   const loadPulse = useCallback(async () => {
     try {
@@ -134,20 +130,9 @@ export function AppShell({
     }
   }, []);
 
-  const loadContracts = useCallback(async () => {
-    try {
-      const res = await fetch('/api/contracts', { cache: 'no-store' });
-      if (!res.ok) return;
-      setContracts(await res.json());
-    } catch {
-      setContracts([]);
-    }
-  }, []);
-
   // pulse ทุก 60 วิ (SSE ด้านล่างช่วยให้ทันทีอีกทาง อันนี้กันพลาดเผื่อสายขาด)
   useEffect(() => {
     loadPulse();
-    loadContracts();
     const timer = setInterval(loadPulse, 60_000);
     function onVisibility() {
       if (!document.hidden) loadPulse();
@@ -157,14 +142,14 @@ export function AppShell({
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [loadPulse, loadContracts]);
+  }, [loadPulse]);
 
   // รายชื่อบริษัท/สัญญาในดรอปดาวน์แถบบน โหลดครั้งเดียวตอน mount (AppShell เป็น layout ที่ไม่รู้ว่ามี
   // การสร้าง/แก้บริษัทใหม่เกิดขึ้นที่หน้าอื่นระหว่างนั้น) — SSE ด้านล่างช่วย refetch ให้ทันทีอีกทาง แต่พอร์ต
   // ตรงของ SSE อาจถูกบล็อก/ไม่เปิดในบางดีพลอย (เช่นหลัง reverse proxy) ทำให้ดรอปดาวน์ค้างว่างจนกว่าจะ
   // รีเฟรชหน้าเอง — กันพลาดด้วยการ refetch ทุกครั้งที่เปลี่ยนหน้าเช่นกัน ไม่ต้องพึ่ง SSE อย่างเดียว
   useEffect(() => {
-    loadContracts();
+    reloadOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
@@ -182,7 +167,7 @@ export function AppShell({
       if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
       nudgeTimer.current = setTimeout(() => {
         loadPulse();
-        loadContracts();
+        reloadOptions();
         router.refresh();
       }, 200);
     }
@@ -202,33 +187,6 @@ export function AppShell({
     }
   }
 
-  async function switchContract(contractId: string) {
-    setCtxOpen(false);
-    const current = contracts?.find((c) => c.status === 'active');
-    if (contractId === current?.id) return;
-    const target = contracts?.find((c) => c.id === contractId);
-    try {
-      const res = await fetch(`/api/contracts/${encodeURIComponent(contractId)}/active`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ active: true }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast(data?.error ?? tx('สลับบริษัทไม่สำเร็จ'), true);
-        return;
-      }
-      setContracts((list) => list?.map((c) => ({ ...c, status: c.id === contractId ? 'active' : 'inactive' })) ?? null);
-      // สลับบริษัทแล้วพากลับหน้าแดชบอร์ดของบริษัทใหม่เสมอ — หน้ารายละเอียดเดิมอาจเป็นของบริษัทอื่น
-      router.push('/dashboard');
-      router.refresh();
-      loadPulse();
-      void target;
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    }
-  }
-
   const initials = user.nameTh.trim().slice(0, 1) || '?';
   const roleLabel: Record<string, string> = {
     admin: 'ผู้ดูแลระบบ',
@@ -237,7 +195,6 @@ export function AppShell({
     executive: 'ผู้บริหาร',
   };
 
-  const activeContract = contracts?.find((c) => c.status === 'active') ?? null;
   const bellUnread = pulseData ? unreadCount(pulseData.feed.items) : 0;
   const badgeValue: Record<string, number> = {
     queue: pulseData?.needsAction ?? 0,
@@ -265,38 +222,9 @@ export function AppShell({
         </div>
         <div className="gap" />
 
-        {isStaff(user.role) && contracts && contracts.length > 0 && (
-          <div className="ctxwrap" ref={ctxWrapRef}>
-            <button
-              type="button"
-              className="ctxbtn"
-              aria-haspopup="listbox"
-              aria-expanded={ctxOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                setCtxOpen((v) => !v);
-              }}
-            >
-              <Icon name="bld" className="sm" />
-              <span className="ctx-label">{activeContract ? ctxLabel(activeContract) : tx('ยังไม่มีบริษัทที่เลือก')}</span>
-              <Icon name="cd" className="sm cv" />
-            </button>
-            {ctxOpen && (
-              <div className="ctxpop" role="listbox" aria-label={tx('เลือกบริษัท/สัญญาที่กำลังดำเนินการอยู่')}>
-                {contracts.map((c) => {
-                  const on = c.id === activeContract?.id;
-                  return (
-                    <button key={c.id} type="button" className={`ctx-item${on ? ' on' : ''}`} role="option" aria-selected={on} onClick={() => switchContract(c.id)}>
-                      <span className="chk">{on && <Icon name="chk" className="sm" />}</span>
-                      <span className="tx">
-                        <b>{c.customerName}</b>
-                        <span>{c.projectName}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+        {user.role !== 'user' && (
+          <div className="scopef-top">
+            <ScopeFilterBar />
           </div>
         )}
 
@@ -389,7 +317,12 @@ export function AppShell({
         </aside>
 
         <div className="frame">
-          <main className="page">{children}</main>
+          {user.role !== 'user' && (
+            <div className="scopef-strip">
+              <ScopeFilterBar />
+            </div>
+          )}
+          <main className="page" key={scopeVersion}>{children}</main>
         </div>
       </div>
     </>

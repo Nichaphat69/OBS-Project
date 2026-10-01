@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { requestScope } from '../lib/scopeService.js';
+import { prisma } from '@obs/db';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
 import {
@@ -38,7 +40,16 @@ gmailRouter.use(requireAdmin);
 gmailRouter.get('/inbox', async (req, res) => {
   try {
     const query = typeof req.query.query === 'string' ? req.query.query : undefined;
-    const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
+    // กรองตามโดเมนอีเมลของลูกค้า — ได้ผลเมื่อขอบเขตตัวกรอง (site/PO/พนักงาน) ชี้ไปที่ลูกค้าเดียวเท่านั้น หลายลูกค้าพร้อมกัน
+    // (เช่น executive ไม่เลือกตัวกรอง) หรือขอ `?all=1` อย่างชัดเจน = ไม่กรองตามโดเมน
+    let contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
+    if (!contractId && req.query.all !== '1') {
+      const { contractIds } = await requestScope(req);
+      if (contractIds && contractIds.length > 0) {
+        const owners = await prisma.contract.findMany({ where: { id: { in: contractIds } }, select: { customerId: true } });
+        if (new Set(owners.map((o) => o.customerId)).size === 1) contractId = contractIds[0];
+      }
+    }
     const max = req.query.max ? Number(req.query.max) : undefined;
     res.json(await gmailInbox({ query, contractId, max }));
   } catch (error) {

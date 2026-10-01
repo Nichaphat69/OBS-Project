@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Loading, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useToast, usePdfPreview } from '../../../components/Overlays';
@@ -8,6 +8,7 @@ import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPick
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
 import { QueueStatusCard } from '../../../components/QueueStatusCard';
 import { useLang } from '../../../lib/language';
+import { matching, useScope } from '../../../lib/scope';
 
 interface InboxAttachment {
   filename: string;
@@ -58,7 +59,13 @@ export default function GmailTab() {
   const { tx } = useLang();
   const toast = useToast();
   const openPdfPreview = usePdfPreview();
-  const [activeContract, setActiveContract] = useState<ActiveContract | null | undefined>(undefined);
+  // ลูกค้าเดียวที่ตัวกรองบนแถบบนชี้อยู่ (ใช้ผูกโดเมนอีเมลให้ลูกค้านั้น) — หลายลูกค้า/ไม่ได้เลือก = null
+  const { contracts: scopeContracts, filters: scopeFilters, ready: scopeReady } = useScope();
+  const activeContract = useMemo<ActiveContract | null | undefined>(() => {
+    if (!scopeReady) return undefined;
+    const cs = matching(scopeContracts, scopeFilters);
+    return cs.length > 0 && new Set(cs.map((c) => c.customerId)).size === 1 ? { id: cs[0].id, customerId: cs[0].customerId } : null;
+  }, [scopeReady, scopeContracts, scopeFilters]);
   const [showAll, setShowAll] = useState(false);
   const [inbox, setInbox] = useState<InboxResult | null>(null);
   const [aiReadIds, setAiReadIds] = useState<Map<string, number>>(new Map());
@@ -81,13 +88,8 @@ export default function GmailTab() {
 
   function load() {
     setError(null);
-    fetch('/api/contracts/active', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((c: ActiveContract | null) => {
-        setActiveContract(c);
-        const qs = c && !showAll ? `?contractId=${encodeURIComponent(c.id)}` : '';
-        return fetch(`/api/gmail/inbox${qs}`, { cache: 'no-store' });
-      })
+    // ขอบเขตลูกค้ามาจากตัวกรอง site/PO/พนักงานบนแถบบน (cookie obs_scope — เซิร์ฟเวอร์อ่านเอง) ไม่ต้องแนบ contractId
+    fetch(`/api/gmail/inbox${showAll ? '?all=1' : ''}`, { cache: 'no-store' })
       .then(async (r) => {
         const data = await r.json();
         if (!r.ok) {
