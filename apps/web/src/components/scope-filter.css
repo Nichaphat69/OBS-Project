@@ -207,3 +207,25 @@
     right: auto;
   }
 }
+
+/* ตัวกรอง PO ช่องเดียว (2 ต.ค. 69): แถบค้นหาอยู่หัวแผง รายการแนะนำเลื่อนได้ แถวที่เลือกด้วยคีย์บอร์ดมีพื้น */
+.scopef-head .scope-search {
+  flex: 1;
+  margin: 0;
+  width: auto;
+  height: 38px;
+}
+.scopef-panel .scopef-list {
+  max-height: min(56vh, 420px);
+  padding: 0 8px 8px;
+}
+.scopef-panel .ctx-item.hi {
+  background: var(--hov);
+}
+.scopef-panel .ctx-item .tx em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--brand-d);
+  background: var(--tint);
+  border-radius: 3px;
+}

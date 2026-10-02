@@ -44,7 +44,8 @@ function readCookie(): Chosen {
     if (!hit) return null;
     const o = JSON.parse(decodeURIComponent(hit.slice(SCOPE_COOKIE.length + 1)));
     // ไม่อ่าน employeeId — ตัวกรองพนักงานเอาออกจาก UI แล้ว (1 ต.ค. 69) cookie เก่าที่ยังมีค่านี้ต้องไม่กรองแบบมองไม่เห็น
-    const f = { customerId: o?.customerId ?? null, contractId: o?.contractId ?? null, employeeId: null };
+    // ไม่อ่าน customerId/employeeId — ตัวกรองเหลือแค่ PO (2 ต.ค. 69) cookie เก่าที่ยังมีค่าเหล่านี้ต้องไม่กรองแบบมองไม่เห็น
+    const f = { customerId: null, contractId: o?.contractId ?? null, employeeId: null };
     if (isEmptyScope(f)) return o?.all === true ? 'all' : null;
     return f;
   } catch {

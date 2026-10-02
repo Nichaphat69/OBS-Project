@@ -43,7 +43,8 @@ export function parseScopeCookie(raw: unknown): ScopeFilters {
     const o = JSON.parse(raw);
     // employeeId จาก cookie ไม่รับแล้ว — ตัวกรองพนักงานเอาออกจากแถบบน (1 ต.ค. 69) ค่าเก่าที่ค้างอยู่ต้องไม่กรองเงียบๆ
     // (ยังรับผ่าน query string แบบระบุชัดเจนอยู่ เผื่อใช้เรียก API ตรง)
-    return { customerId: str(o?.customerId), contractId: str(o?.contractId), employeeId: null };
+    // รับแค่ contractId จาก cookie — ตัวกรอง Site/พนักงานเอาออกจากแถบบนแล้ว (2 ต.ค. 69) ค่าเก่าที่ค้างอยู่ต้องไม่กรองเงียบๆ
+    return { customerId: null, contractId: str(o?.contractId), employeeId: null };
   } catch {
     return EMPTY;
   }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './scope-filter.css';
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
-import { matching, useScope, type FilterContract, type ScopeKey } from '../lib/scope';
+import { useScope, type FilterContract } from '../lib/scope';
 
 const MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 function thaiMonthYear(iso: string) {
@@ -13,153 +13,159 @@ function thaiMonthYear(iso: string) {
 }
 export const contractRange = (c: Pick<FilterContract, 'startDate' | 'endDate'>) => `${thaiMonthYear(c.startDate)} – ${thaiMonthYear(c.endDate)}`;
 
-interface Option {
-  value: string;
-  title: string;
-  sub?: string;
-  /** ข้อความที่ใช้ค้นหา */
-  hay: string;
-}
-
-/** รายการเลือกหนึ่งช่องในแผงตัวกรอง (ไม่ใช่ popup แยก) — มีช่องค้นหาเมื่อตัวเลือกเยอะ */
-function FilterSection({
-  label,
-  selectedValue,
-  options,
-  allLabel,
-  onPick,
-  searchPlaceholder,
-}: {
-  label: string;
-  selectedValue: string | null;
-  options: Option[];
-  allLabel: string;
-  onPick: (value: string | null) => void;
-  searchPlaceholder: string;
-}) {
-  const { tx } = useLang();
-  const [q, setQ] = useState('');
-  const shown = q.trim() ? options.filter((o) => o.hay.toLowerCase().includes(q.trim().toLowerCase())) : options;
+/** ไฮไลต์ส่วนที่ตรงกับที่พิมพ์ในเลข PO — ให้เห็นว่ารายการแนะนำตรงกับตัวอักษรไหน */
+function Highlight({ text, q }: { text: string; q: string }) {
+  const needle = q.trim();
+  const at = needle ? text.toLowerCase().indexOf(needle.toLowerCase()) : -1;
+  if (at < 0) return <>{text}</>;
   return (
-    <div className="scopef-sec">
-      <div className="scopef-lbl">{label}</div>
-      {options.length > 6 && (
-        <input className="scope-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder} />
-      )}
-      <div className="scopef-list" role="listbox" aria-label={label}>
-        <button type="button" className={`ctx-item${!selectedValue ? ' on' : ''}`} role="option" aria-selected={!selectedValue} onClick={() => onPick(null)}>
-          <span className="chk">{!selectedValue && <Icon name="chk" className="sm" />}</span>
-          <span className="tx">
-            <b>{allLabel}</b>
-          </span>
-        </button>
-        {shown.map((o) => {
-          const on = o.value === selectedValue;
-          return (
-            <button key={o.value} type="button" className={`ctx-item${on ? ' on' : ''}`} role="option" aria-selected={on} onClick={() => onPick(o.value)}>
-              <span className="chk">{on && <Icon name="chk" className="sm" />}</span>
-              <span className="tx">
-                <b>{o.title}</b>
-                {o.sub && <span>{o.sub}</span>}
-              </span>
-            </button>
-          );
-        })}
-        {shown.length === 0 && <div className="scope-empty">{tx('ไม่พบรายการที่ตรงกับตัวกรองอื่นที่เลือกไว้')}</div>}
-      </div>
-    </div>
+    <>
+      {text.slice(0, at)}
+      <em>{text.slice(at, at + needle.length)}</em>
+      {text.slice(at + needle.length)}
+    </>
   );
 }
 
-/** ตัวกรอง site · เลขที่ PO รวมเป็นปุ่มเดียว (1 ต.ค. 69) — กดแล้วเปิดแผงที่มีสองช่อง เลือกช่องใดช่องหนึ่งก็พอ ไม่มีช่องพนักงานเพราะสัญญา (PO) หนึ่งใบมีพนักงานได้หลายคน กรองที่ PO ก็ได้ทุกคนใน PO นั้นแล้ว
- * ช่องที่เหลือแสดง "ทั้งหมด" ภายใต้ช่องที่เลือก แผงไม่ปิดเองหลังเลือก จะได้เห็นว่าอีกสองช่องเหลือตัวเลือกอะไรบ้าง */
+/** ตัวกรองเดียวคือ "เลขที่ PO" (2 ต.ค. 69 — เดิมมี Site + PO) พิมพ์ค้นหาได้ มีรายการแนะนำขึ้นตามที่พิมพ์ พร้อมชื่อบริษัท
+ * และระยะสัญญากำกับ เลือกแล้วทุกหน้าในระบบเป็นข้อมูลของ PO นั้น (ผ่าน cookie obs_scope ดู lib/scope.tsx) —
+ * เลือกด้วยเมาส์ หรือพิมพ์แล้วใช้ ↑ ↓ Enter ก็ได้ */
 export function ScopeFilterBar() {
   const { tx } = useLang();
   const { contracts, filters, isDefault, isExecutive, setFilter, reset, ready } = useScope();
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [hi, setHi] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
     document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
+    return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  const sites = useMemo<Option[]>(() => {
-    const seen = new Map<string, { name: string; n: number }>();
-    for (const c of matching(contracts, filters, 'customerId')) {
-      const e = seen.get(c.customerId);
-      seen.set(c.customerId, { name: c.customerName, n: (e?.n ?? 0) + 1 });
-    }
-    return [...seen].map(([value, v]) => ({ value, title: v.name, sub: `${v.n} ${tx('สัญญา')}`, hay: v.name }));
-  }, [contracts, filters, tx]);
-
-  const pos = useMemo<Option[]>(
-    () =>
-      matching(contracts, filters, 'contractId').map((c) => ({
-        value: c.id,
-        title: `PO ${c.poNo}`,
-        sub: `${c.customerName} · ${c.projectName} · ${contractRange(c)}`,
-        hay: `${c.poNo} ${c.customerName} ${c.projectName} ${c.contractNo ?? ''}`,
-      })),
-    [contracts, filters],
-  );
+  // เลข PO ที่ขึ้นต้นด้วยที่พิมพ์ มาก่อน แล้วค่อยตามด้วยที่มีคำนั้นอยู่ตรงอื่น (เลข PO / บริษัท / โครงการ / เลขสัญญา)
+  const options = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const list = contracts.filter(
+      (c) => !needle || `${c.poNo} ${c.customerName} ${c.projectName} ${c.contractNo ?? ''}`.toLowerCase().includes(needle),
+    );
+    const rank = (c: FilterContract) => (!needle ? 0 : c.poNo.toLowerCase().startsWith(needle) ? 0 : c.poNo.toLowerCase().includes(needle) ? 1 : 2);
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }, [contracts, q]);
 
   if (!ready || contracts.length === 0) return null;
 
-  const site = contracts.find((c) => c.customerId === filters.customerId)?.customerName ?? null;
-  const po = contracts.find((c) => c.id === filters.contractId)?.poNo ?? null;
-  const parts = [site, po ? `PO ${po}` : null].filter(Boolean) as string[];
-  const nSet = parts.length;
-  const summary = parts.length ? parts.join(' · ') : tx('ทุกบริษัท');
-  const pick = (key: ScopeKey) => (v: string | null) => setFilter(key, v);
+  const current = contracts.find((c) => c.id === filters.contractId) ?? null;
+  // ตัวเลือกแรกในรายการ = "ทุก PO" (index 0) ตามด้วย PO ที่ตรง (index 1…) — แสดง "ทุก PO" เฉพาะตอนยังไม่ได้พิมพ์
+  const showAll = !q.trim();
+  const total = options.length + (showAll ? 1 : 0);
+
+  function close() {
+    setOpen(false);
+    setQ('');
+    setHi(0);
+  }
+  function choose(id: string | null) {
+    setFilter('contractId', id);
+    close();
+  }
+  function onKey(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') return close();
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHi((h) => Math.min(h + 1, total - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHi((h) => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showAll) choose(hi === 0 ? null : options[hi - 1]?.id ?? null);
+      else if (options[hi]) choose(options[hi].id);
+    }
+  }
 
   return (
     <div className="scopef" role="group" aria-label={tx('ตัวกรอง')} ref={ref}>
       <button
         type="button"
-        className={`ctxbtn scopef-btn${nSet ? ' set' : ''}${nSet && isDefault ? ' dflt' : ''}`}
-        aria-haspopup="dialog"
+        className={`ctxbtn scopef-btn${current ? ' set' : ''}${current && isDefault ? ' dflt' : ''}`}
+        aria-haspopup="listbox"
         aria-expanded={open}
-        title={summary}
-        onClick={() => setOpen((v) => !v)}
+        title={current ? `PO ${current.poNo} · ${current.customerName}` : tx('ทุก PO')}
+        onClick={() => {
+          if (open) return close();
+          setOpen(true);
+          setTimeout(() => inputRef.current?.focus(), 0);
+        }}
       >
         <Icon name="search" className="sm" />
         <span className="ctx-label">
-          <small>{tx('ตัวกรอง')}{nSet > 0 ? ` (${nSet})` : ''}</small>
-          <b>{summary}</b>
+          <small>{tx('เลขที่ PO')}</small>
+          <b>{current ? `PO ${current.poNo} · ${current.customerName}` : tx('ทุก PO')}</b>
         </span>
         <Icon name="cd" className="sm cv" />
       </button>
       {open && (
-        <div className="scopef-panel" role="dialog" aria-label={tx('ตัวกรอง')}>
+        <div className="scopef-panel" role="dialog" aria-label={tx('เลขที่ PO')}>
           <div className="scopef-head">
-            <b>{tx('ตัวกรอง')}</b>
-            <span className="sub">{tx('เลือกช่องใดช่องหนึ่งก็ได้ ช่องที่ไม่เลือกคือทั้งหมด')}</span>
+            <input
+              ref={inputRef}
+              className="scope-search"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setHi(0);
+              }}
+              onKeyDown={onKey}
+              placeholder={tx('พิมพ์เลข PO / ชื่อบริษัท เพื่อค้นหา…')}
+              inputMode="search"
+              autoComplete="off"
+              role="combobox"
+              aria-expanded
+              aria-controls="scopef-po-list"
+            />
             {!isDefault && (
-              <button type="button" className="scope-clear" onClick={reset} title={tx(isExecutive ? 'ล้างตัวกรอง — ดูทุกบริษัท' : 'กลับไปค่าเริ่มต้น — สัญญาที่กำลังดำเนินการอยู่')}>
+              <button type="button" className="scope-clear" onClick={() => { reset(); close(); }} title={tx(isExecutive ? 'ล้างตัวกรอง — ดูทุกบริษัท' : 'กลับไปค่าเริ่มต้น — สัญญาที่กำลังดำเนินการอยู่')}>
                 {tx('ล้าง')}
               </button>
             )}
           </div>
-          <div className="scopef-body">
-            <FilterSection label={tx('Site / บริษัท')} selectedValue={filters.customerId} options={sites} allLabel={tx('ทุก site')} onPick={pick('customerId')} searchPlaceholder={tx('ค้นหา site…')} />
-            <FilterSection label={tx('เลขที่ PO')} selectedValue={filters.contractId} options={pos} allLabel={tx('ทุก PO')} onPick={pick('contractId')} searchPlaceholder={tx('ค้นหาเลข PO / โครงการ…')} />
-          </div>
-          <div className="scopef-foot">
-            <button type="button" className="btn sm" onClick={() => setOpen(false)}>
-              {tx('เสร็จ')}
-            </button>
+          <div className="scopef-list" id="scopef-po-list" role="listbox">
+            {showAll && (
+              <button type="button" className={`ctx-item${hi === 0 ? ' hi' : ''}${!current ? ' on' : ''}`} role="option" aria-selected={!current} onMouseEnter={() => setHi(0)} onClick={() => choose(null)}>
+                <span className="chk">{!current && <Icon name="chk" className="sm" />}</span>
+                <span className="tx">
+                  <b>{tx('ทุก PO')}</b>
+                  <span>{tx('ดูข้อมูลของทุกบริษัท')}</span>
+                </span>
+              </button>
+            )}
+            {options.map((c, idx) => {
+              const index = idx + (showAll ? 1 : 0);
+              const on = c.id === current?.id;
+              return (
+                <button key={c.id} type="button" className={`ctx-item${hi === index ? ' hi' : ''}${on ? ' on' : ''}`} role="option" aria-selected={on} onMouseEnter={() => setHi(index)} onClick={() => choose(c.id)}>
+                  <span className="chk">{on && <Icon name="chk" className="sm" />}</span>
+                  <span className="tx">
+                    <b>
+                      PO <Highlight text={c.poNo} q={q} />
+                    </b>
+                    <span>
+                      <Highlight text={c.customerName} q={q} /> · {contractRange(c)}
+                    </span>
+                    <span>
+                      <Highlight text={c.projectName} q={q} />
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {options.length === 0 && <div className="scope-empty">{tx('ไม่พบ PO ที่ตรงกับ')} “{q}”</div>}
           </div>
         </div>
       )}
@@ -173,9 +179,8 @@ export function ScopeSummary() {
   const { tx } = useLang();
   const { contracts, filters, ready } = useScope();
   if (!ready || contracts.length === 0) return null;
-  const site = filters.customerId ? contracts.find((c) => c.customerId === filters.customerId)?.customerName : null;
   const po = filters.contractId ? contracts.find((c) => c.id === filters.contractId) : null;
-  const all = !site && !po;
+  const all = !po;
   return (
     <div className={all ? 'scopebar all' : 'scopebar'}>
       <Icon name={all ? 'info' : 'building'} />
@@ -184,11 +189,11 @@ export function ScopeSummary() {
           <b>{tx('กำลังดูข้ามทุกบริษัท')}</b>
         ) : (
           <>
-            {tx('กำลังดู')} <b>{site ?? tx('ทุก site')}</b>
+            {tx('กำลังดู')} <b>PO {po!.poNo}</b>
             {' · '}
-            <b>{po ? `PO ${po.poNo}` : tx('ทุก PO')}</b>
-            {po && <span style={{ opacity: 0.75 }}> ({contractRange(po)})</span>}
-            {po && po.employees.length > 0 && <span style={{ opacity: 0.75 }}> · {tx('พนักงาน')} {po.employees.map((e) => e.nameTh).join(', ')}</span>}
+            <b>{po!.customerName}</b>
+            <span style={{ opacity: 0.75 }}> ({contractRange(po!)})</span>
+            {po!.employees.length > 0 && <span style={{ opacity: 0.75 }}> · {tx('พนักงาน')} {po!.employees.map((e) => e.nameTh).join(', ')}</span>}
           </>
         )}
       </span>
