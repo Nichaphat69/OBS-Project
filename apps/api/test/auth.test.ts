@@ -250,6 +250,19 @@ test('registerUser สร้างบัญชีได้ แต่ active=0 �
   assert.equal(listed.role, 'user');
 });
 
+test('registerUser อีเมลที่เป็นอีเมลของบัญชีเดิม (username ไม่ใช่อีเมล) → ปฏิเสธ 409 ไม่สร้างบัญชีซ้ำ (QA AUTH-009)', async () => {
+  await prisma.user.deleteMany({ where: { OR: [{ username: 'qa_accounting' }, { email: 'qa_accounting@example.com' }] } });
+  await createUser({ username: 'qa_accounting', nameTh: 'บัญชีเดิม', password: 'longenough1', role: 'accounting', actor: 'ทดสอบ' });
+  await prisma.user.update({ where: { username: 'qa_accounting' }, data: { email: 'qa_accounting@example.com' } });
+  const before = await prisma.user.count();
+
+  await assert.rejects(
+    () => registerUser({ email: 'QA_Accounting@example.com', nameTh: 'คนสมัครซ้ำ', password: 'longenough1' }),
+    (e: any) => e.status === 409 && /มีบัญชี/.test(e.message),
+  );
+  assert.equal(await prisma.user.count(), before, 'ต้องไม่เกิดบัญชีใหม่');
+});
+
 test('registerUser อีเมลรูปแบบผิด → error 400', async () => {
   await assert.rejects(
     () => registerUser({ email: 'ไม่ใช่อีเมล', nameTh: 'x', password: 'longenough1' }),

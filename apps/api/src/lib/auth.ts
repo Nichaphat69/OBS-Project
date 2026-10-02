@@ -141,7 +141,9 @@ export async function registerUser({ email, nameTh, password }: { email: string;
   if (!EMAIL_RE.test(normalizedEmail)) throw new AuthError('รูปแบบอีเมลไม่ถูกต้อง');
   if (password.length < 8) throw new AuthError('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร');
 
-  const existing = await prisma.user.findUnique({ where: { username: normalizedEmail } });
+  // เช็คทั้ง username และคอลัมน์ email (ไม่ใช่แค่ username) เหมือนตอนล็อกอิน/Google login — บัญชีที่ username ไม่ใช่อีเมล
+  // (เช่น "qa_accounting" ที่มีอีเมล qa_accounting@example.com) เดิมเช็คไม่เจอ แล้วสร้างบัญชีซ้ำอีเมลเดียวกันได้ (QA AUTH-009, 2 ต.ค. 69)
+  const existing = await findUserByLoginEmail(normalizedEmail);
   if (existing) throw new AuthError('มีบัญชีที่ใช้อีเมลนี้อยู่แล้ว', 409);
 
   const { salt, hash } = hashSecret(password);
