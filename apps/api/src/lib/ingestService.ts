@@ -438,6 +438,7 @@ export async function ingestTimesheet({
   // เก็บไฟล์ก่อนเปิด transaction — ถ้าเก็บข้างในจะถือ transaction ค้างไว้ตลอดเวลาที่เรียกผ่านเครือข่าย
   const sourceFileKey = fileBytes ? await storeFile('timesheet', fileBytes, { fileName }) : null;
 
+  let superseded: Array<{ id: string }> = [];
   await prisma.$transaction(async (tx) => {
     await tx.leaveDay.deleteMany({ where: { timesheetId: documentNo } });
     await tx.timesheetDay.deleteMany({ where: { timesheetId: documentNo } });
@@ -548,7 +549,43 @@ export async function ingestTimesheet({
     for (const ot of data.otDays ?? []) {
       await tx.overtimeDay.create({ data: { timesheetId: documentNo, date: ot.date, hours: Number(ot.hours) } });
     }
+
+    // ⚠️ 1 ต.ค. 69 — พนักงาน 1 คน + สัญญา 1 ใบ + รอบเดือน 1 รอบ มี Timesheet ที่ใช้งานได้ "ใบเดียว" เท่านั้น
+    // เดิมอัปโหลดไฟล์เดิมซ้ำ (ได้เลขเอกสารใหม่ทุกครั้ง) จะเกิด Timesheet คู่ แล้วขั้นวางบิลหยิบมาทั้งคู่ ใบแจ้งหนี้
+    // ได้บรรทัดของคนเดียวกันสองบรรทัด ใบใหม่แทนที่ใบเก่าที่ยังไม่วางบิล โดยตั้งใบเก่าเป็น "ตีกลับ" พร้อมเหตุผล
+    // (ไม่ลบทิ้ง จึงยังย้อนดูได้ และไม่ส่ง LINE ถึงพนักงานเพราะไม่ใช่การตีกลับจริง) ใบที่วางบิลแล้วไม่แตะ —
+    // ถูกกันไปตั้งแต่ด้านบนด้วย ALREADY_BILLED
+    superseded = await tx.timesheet.findMany({
+      where: {
+        contractId: assignment.contractId,
+        employeeId: employee.id,
+        period,
+        id: { not: documentNo },
+        status: { notIn: ['billed', 'rejected'] },
+      },
+      select: { id: true },
+    });
+    if (superseded.length > 0) {
+      await tx.timesheet.updateMany({
+        where: { id: { in: superseded.map((x) => x.id) } },
+        data: {
+          status: 'rejected',
+          statusReason: `ซ้ำ — ถูกแทนที่ด้วยฉบับใหม่ ${documentNo}`,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
   });
+
+  for (const old of superseded) {
+    await logAudit({
+      actor,
+      action: 'timesheet_superseded',
+      entityType: 'timesheet',
+      entityId: old.id,
+      detail: { replacedBy: documentNo, employeeId: employee.id, period },
+    });
+  }
 
   await logAudit({
     actor,

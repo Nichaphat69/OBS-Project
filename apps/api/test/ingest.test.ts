@@ -581,3 +581,57 @@ test('ลาเต็มวัน (ไม่ส่ง hours) ตอน ingest �
   assert.equal(rows.length, 1);
   assert.equal(rows[0].hours, null);
 });
+
+test('อัปโหลด Timesheet ของคนเดิม+รอบเดิมซ้ำ → ใบเก่าที่ยังไม่วางบิลถูกแทนที่ ใช้งานได้ใบเดียว (1 ต.ค. 69)', async () => {
+  const run = (documentNo: string) =>
+    ingestTimesheet({
+      documentNo,
+      fileBytes: Buffer.from('ไฟล์ปลอม'),
+      expectedPeriod: '2026-04',
+      extractor: stubExtractor(
+        fakeAprilWithLeave({ employeeName: 'Sunee Maneekasemsuk', position: 'Senior Project Manager', leaveEntries: [{ date: '2026-04-09' }] }),
+      ),
+    });
+
+  const first = await run('2026040301');
+  const second = await run('2026040302');
+  assert.equal(second.created, true);
+
+  const rows = await prisma.timesheet.findMany({
+    where: { employeeId: second.employee!.id, period: '2026-04', id: { in: ['2026040301', '2026040302'] } },
+    orderBy: { id: 'asc' },
+  });
+  const active = rows.filter((r) => r.status !== 'rejected');
+  assert.equal(active.length, 1, 'ต้องเหลือใบใช้งานได้ใบเดียวต่อคน/สัญญา/รอบ');
+  assert.equal(active[0].id, '2026040302', 'ใบใหม่ชนะ');
+  const old = rows.find((r) => r.id === first.timesheetId)!;
+  assert.equal(old.status, 'rejected');
+  assert.match(old.statusReason ?? '', /ซ้ำ — ถูกแทนที่ด้วยฉบับใหม่ 2026040302/);
+});
+
+test('ข้อมูลที่ซ้ำอยู่ก่อนแก้ → ใบแจ้งหนี้ยังได้บรรทัดเดียวต่อคน ไม่เบิ้ล (1 ต.ค. 69)', async () => {
+  const mine = (await prisma.timesheet.findFirst({ where: { id: '2026040302' } }))!;
+  // จำลองข้อมูลเก่าที่ซ้ำอยู่แล้วในฐานข้อมูล (เกิดก่อนมีกฎแทนที่ตอนรับเข้า) — ใบ verified สองใบของคนเดียวกัน/รอบเดียวกัน
+  await prisma.timesheet.create({
+    data: {
+      id: '2026040399',
+      contractId: mine.contractId,
+      employeeId: mine.employeeId,
+      period: mine.period,
+      receivedAt: '2026-05-01T00:00:00Z',
+      status: 'verified',
+      computed: mine.computed ?? undefined,
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-01T00:00:00Z',
+    },
+  });
+  await prisma.timesheet.update({ where: { id: mine.id }, data: { status: 'verified' } });
+
+  const preview = await previewCycleInvoice(mine.contractId, mine.period);
+  const forThisEmployee = preview.entries.filter((e) => e.employee.id === mine.employeeId);
+  assert.equal(forThisEmployee.length, 1, 'ต้องมีรายการของคนนี้ในใบแจ้งหนี้ครั้งเดียว');
+  assert.ok(
+    (preview.warnings as Array<{ id: string }>).some((w) => w.id === 'duplicate_timesheet'),
+    'ต้องเตือนว่าพบ Timesheet ซ้ำ',
+  );
+});

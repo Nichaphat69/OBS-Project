@@ -201,9 +201,23 @@ export async function previewCycleInvoice(contractId: string, period: string): P
     customer: contract.customer,
   };
 
-  const sheetsRaw = await prisma.timesheet.findMany({
+  const sheetsAll = await prisma.timesheet.findMany({
     where: { contractId, period, status: { in: ['verified', 'approved', 'billed'] } },
   });
+
+  // ⚠️ 1 ต.ค. 69 — พนักงานคนเดียวกันต้องมี Timesheet ได้ใบเดียวต่อรอบ ไม่งั้นใบแจ้งหนี้จะได้บรรทัดซ้ำและยอดเบิ้ล
+  // (เกิดจริงเมื่ออัปโหลดไฟล์เดิมซ้ำ) ตอนรับเข้าระบบ ingestTimesheet() ตัดใบเก่าออกให้แล้ว ตรงนี้เป็นด่านสุดท้าย
+  // กันข้อมูลที่ซ้ำอยู่ก่อนแก้: เลือกใบที่วางบิลแล้วก่อน ไม่งั้นเอาใบที่รับล่าสุด ใบที่เหลือไม่เข้าใบแจ้งหนี้
+  // (คนที่มี OT มี 2 บรรทัดในใบเดียวได้ตามปกติ — เพราะ 1 ใบ Timesheet ต่อ 2 บรรทัด ไม่ใช่ 2 ใบ Timesheet)
+  const pickOne = new Map<string, (typeof sheetsAll)[number]>();
+  const rank = (t: (typeof sheetsAll)[number]) => `${t.status === 'billed' ? '1' : '0'}|${t.receivedAt}|${t.createdAt}|${t.id}`;
+  for (const t of sheetsAll) {
+    if (!t.employeeId) continue;
+    const cur = pickOne.get(t.employeeId);
+    if (!cur || rank(t) > rank(cur)) pickOne.set(t.employeeId, t);
+  }
+  const sheetsRaw = sheetsAll.filter((t) => !t.employeeId || pickOne.get(t.employeeId)?.id === t.id);
+  const droppedDuplicates = sheetsAll.filter((t) => t.employeeId && pickOne.get(t.employeeId)?.id !== t.id);
 
   const cycle = await getCycleStatus(contractId, period);
   const periodLabel = thaiMonth(period);
@@ -296,11 +310,22 @@ export async function previewCycleInvoice(contractId: string, period: string): P
     }
   }
 
-  const warnings = entries.flatMap((entry) =>
+  const warnings: Array<{ employee: string; id: string; severity: string; title: string; detail: string }> = entries.flatMap((entry) =>
     (entry.manday?.checks ?? [])
       .filter((c: any) => c.severity === SEVERITY.WARN)
       .map((c: any) => ({ employee: entry.employee.nameTh, ...c })),
   );
+  for (const dup of droppedDuplicates) {
+    const kept = pickOne.get(dup.employeeId!)!;
+    const entry = entries.find((e) => e.employee.id === dup.employeeId);
+    warnings.push({
+      employee: entry?.employee.nameTh ?? dup.rawEmployeeName ?? '',
+      id: 'duplicate_timesheet',
+      severity: SEVERITY.WARN,
+      title: 'พบ Timesheet ซ้ำของคนเดียวกันในรอบนี้',
+      detail: `ใช้ฉบับ ${kept.id} วางบิล ไม่นับฉบับ ${dup.id}`,
+    });
+  }
 
   const existing = await prisma.invoice.findUnique({ where: { contractId_period: { contractId, period } } });
   const emailDraft = existing?.emailDraft
@@ -567,7 +592,24 @@ async function saveInvoice({
 
 /** ported from service.js approveCycle() — creates the real billing-note draft via FlowAccount
  * (sandbox, per current .env), persists it, and marks the cycle's timesheets 'billed'. */
+/** รอบบิลที่กำลังอนุมัติอยู่ตอนนี้ — กดยืนยันซ้ำ/สองคนกดพร้อมกันต้องไม่สร้างเอกสารใน FlowAccount สองใบ (API รันตัวเดียว
+ * ล็อกในหน่วยความจำจึงพอ) ด่านเช็ก existing ด้านล่างกันได้เฉพาะกรณีที่ใบแรกบันทึกเสร็จแล้ว */
+const approvingNow = new Set<string>();
+
 export async function approveCycle(contractId: string, period: string, { actor }: { actor: string }) {
+  const lockKey = `${contractId}:${period}`;
+  if (approvingNow.has(lockKey)) {
+    throw new CycleActionError('รอบบิลนี้กำลังถูกยืนยันวางบิลอยู่ — รอสักครู่แล้วรีเฟรชดูผล ไม่ต้องกดซ้ำ', 409);
+  }
+  approvingNow.add(lockKey);
+  try {
+    return await approveCycleUnlocked(contractId, period, { actor });
+  } finally {
+    approvingNow.delete(lockKey);
+  }
+}
+
+async function approveCycleUnlocked(contractId: string, period: string, { actor }: { actor: string }) {
   const preview = await previewCycleInvoice(contractId, period);
 
   if (!preview.invoice) {
