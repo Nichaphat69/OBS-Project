@@ -105,6 +105,8 @@ export interface ContractSummary {
   headcount: number;
   monthlyTotal: number;
   status: string;
+  /** บริษัทของสัญญานี้ผูกกับ FlowAccount แล้วหรือยัง — ถ้าผูกแล้วพนักงาน/เรทแก้เองไม่ได้ ต้องใช้ปุ่ม "ซิงก์จาก FlowAccount" */
+  flowaccountLinked: boolean;
 }
 
 /** ported from service.js listContracts() — headcount/monthlyTotal count/sum ALL assignments
@@ -137,6 +139,7 @@ export async function listContracts(): Promise<ContractSummary[]> {
     whtRate: c.whtRate,
     abbyySkillId: c.abbyySkillId,
     headcount: c.assignments.length,
+    flowaccountLinked: Boolean(c.customer.flowaccountContactId),
     monthlyTotal: round2(c.assignments.reduce((sum, a) => sum + a.monthlyRate, 0)),
     status: c.status,
   }));
@@ -260,6 +263,29 @@ export async function checkStamp(timesheetId: string, computed: any): Promise<Ch
   return { checked: !stale, stale, at: entry.at, by: entry.actor };
 }
 
+/**
+ * เลือก Timesheet ที่ "ใช้งานจริง" หนึ่งใบต่อพนักงานในรอบหนึ่ง — ใบที่ตีกลับ (rejected) ไม่นับเลย และถ้าคนเดียวกันมีหลายใบ
+ * (เช่นอัปโหลดซ้ำ ก่อนมีกฎแทนที่ตอนรับเข้า) เอาใบที่วางบิลแล้วก่อน ไม่งั้นใบที่รับล่าสุด
+ *
+ * ใช้ร่วมกันทุกจุดที่รวมยอด/นับสถานะของรอบบิล (หน้ารอบบิล · แดชบอร์ด · ใบแจ้งหนี้) เพื่อให้ตัวเลขตรงกันหมด — เดิมแต่ละจุดหยิบ
+ * ทุกใบมารวมกัน ยอดเลยเบิ้ลและรอบบิลค้าง "กำลังตรวจ" เพราะใบตีกลับไม่มีวันถูกกดยืนยัน (QA BILLING-001, 2 ต.ค. 69)
+ */
+export function pickOnePerEmployee<T extends { id: string; employeeId: string | null; status: string; receivedAt: string; createdAt: string }>(
+  rows: T[],
+): { kept: T[]; dropped: T[] } {
+  const live = rows.filter((r) => r.status !== 'rejected');
+  const best = new Map<string, T>();
+  const rank = (t: T) => `${t.status === 'billed' ? '1' : '0'}|${t.receivedAt}|${t.createdAt}|${t.id}`;
+  for (const t of live) {
+    if (!t.employeeId) continue;
+    const cur = best.get(t.employeeId);
+    if (!cur || rank(t) > rank(cur)) best.set(t.employeeId, t);
+  }
+  const kept = live.filter((t) => !t.employeeId || best.get(t.employeeId)?.id === t.id);
+  const dropped = live.filter((t) => t.employeeId && best.get(t.employeeId)?.id !== t.id);
+  return { kept, dropped };
+}
+
 export interface CyclePeriod {
   contractId: string;
   poNo: string;
@@ -300,10 +326,12 @@ export async function contractCycles(contractId: string, today: string = isoToda
 
   for (const period of periods) {
     const cycle = await getCycleStatus(contractId, period);
-    const sheets = await prisma.timesheet.findMany({
-      where: { contractId, period },
-      select: { id: true, status: true, computed: true },
-    });
+    const sheets = pickOnePerEmployee(
+      await prisma.timesheet.findMany({
+        where: { contractId, period },
+        select: { id: true, status: true, computed: true, employeeId: true, receivedAt: true, createdAt: true },
+      }),
+    ).kept;
 
     let unchecked = 0;
     for (const s of sheets) {

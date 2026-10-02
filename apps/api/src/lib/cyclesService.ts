@@ -24,6 +24,7 @@ import {
   getSetting,
   isoToday,
   listContracts,
+  pickOnePerEmployee,
 } from './dashboardService.js';
 import { getTimesheet } from './timesheetsService.js';
 import { FlowAccountClient, type FlowAccountDocumentType } from './flowaccountClient.js';
@@ -207,17 +208,10 @@ export async function previewCycleInvoice(contractId: string, period: string): P
 
   // ⚠️ 1 ต.ค. 69 — พนักงานคนเดียวกันต้องมี Timesheet ได้ใบเดียวต่อรอบ ไม่งั้นใบแจ้งหนี้จะได้บรรทัดซ้ำและยอดเบิ้ล
   // (เกิดจริงเมื่ออัปโหลดไฟล์เดิมซ้ำ) ตอนรับเข้าระบบ ingestTimesheet() ตัดใบเก่าออกให้แล้ว ตรงนี้เป็นด่านสุดท้าย
-  // กันข้อมูลที่ซ้ำอยู่ก่อนแก้: เลือกใบที่วางบิลแล้วก่อน ไม่งั้นเอาใบที่รับล่าสุด ใบที่เหลือไม่เข้าใบแจ้งหนี้
+  // กันข้อมูลที่ซ้ำอยู่ก่อนแก้ — ตัวเลือกเดียวกับหน้ารอบบิล/แดชบอร์ด (pickOnePerEmployee) ตัวเลขจะได้ตรงกันทุกที่
   // (คนที่มี OT มี 2 บรรทัดในใบเดียวได้ตามปกติ — เพราะ 1 ใบ Timesheet ต่อ 2 บรรทัด ไม่ใช่ 2 ใบ Timesheet)
-  const pickOne = new Map<string, (typeof sheetsAll)[number]>();
-  const rank = (t: (typeof sheetsAll)[number]) => `${t.status === 'billed' ? '1' : '0'}|${t.receivedAt}|${t.createdAt}|${t.id}`;
-  for (const t of sheetsAll) {
-    if (!t.employeeId) continue;
-    const cur = pickOne.get(t.employeeId);
-    if (!cur || rank(t) > rank(cur)) pickOne.set(t.employeeId, t);
-  }
-  const sheetsRaw = sheetsAll.filter((t) => !t.employeeId || pickOne.get(t.employeeId)?.id === t.id);
-  const droppedDuplicates = sheetsAll.filter((t) => t.employeeId && pickOne.get(t.employeeId)?.id !== t.id);
+  const { kept: sheetsRaw, dropped: droppedDuplicates } = pickOnePerEmployee(sheetsAll);
+  const pickOne = new Map(sheetsRaw.filter((t) => t.employeeId).map((t) => [t.employeeId!, t]));
 
   const cycle = await getCycleStatus(contractId, period);
   const periodLabel = thaiMonth(period);

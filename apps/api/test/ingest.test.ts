@@ -635,3 +635,25 @@ test('ข้อมูลที่ซ้ำอยู่ก่อนแก้ → 
     'ต้องเตือนว่าพบ Timesheet ซ้ำ',
   );
 });
+
+test('หน้ารอบบิล: ใบตีกลับ/ใบซ้ำไม่ถูกรวมยอด และไม่ทำให้รอบค้างสถานะ "กำลังตรวจ" (QA BILLING-001, 2 ต.ค. 69)', async () => {
+  // ต่อจากสองเทสต์ก่อนหน้า: คนเดียวกัน/รอบ 2026-04 มีใบตีกลับ (ถูกแทนที่) 2 ใบ + ใบที่ใช้งานอยู่ 2 ใบ (ซ้ำที่จำลองไว้)
+  const mine = (await prisma.timesheet.findUnique({ where: { id: '2026040302' } }))!;
+  const live = await prisma.timesheet.findMany({
+    where: { contractId: mine.contractId, employeeId: mine.employeeId, period: mine.period, status: { not: 'rejected' } },
+  });
+  assert.ok(live.length >= 2, 'ต้องมีใบซ้ำที่ยังไม่ตีกลับให้ทดสอบ');
+
+  const amount = (t: { computed: unknown }) => (t.computed as any)?.lineAmount ?? 0;
+  const allLive = await prisma.timesheet.findMany({
+    where: { contractId: mine.contractId, period: mine.period, status: { not: 'rejected' } },
+  });
+  // ยอดที่ถูกต้อง = ยอดของทุกใบที่ใช้งานอยู่ หักส่วนที่เบิ้ลของคนที่ซ้ำ (เหลือใบล่าสุดใบเดียวของคนนั้น)
+  const keptOfMine = [...live].sort((a, b) => (a.receivedAt < b.receivedAt ? 1 : -1))[0];
+  const expected = allLive.reduce((sum, t) => sum + amount(t), 0) - live.reduce((sum, t) => sum + amount(t), 0) + amount(keptOfMine);
+
+  const cycles = await contractCycles(mine.contractId);
+  const row = cycles.find((c) => c.period === mine.period)!;
+  assert.equal(Math.round((row.value ?? 0) * 100), Math.round(expected * 100), 'ยอดต้องนับคนนี้ครั้งเดียว ไม่รวมใบซ้ำ/ใบตีกลับ');
+  assert.ok(row.value !== allLive.reduce((sum, t) => sum + amount(t), 0), 'ต้องไม่เท่ากับยอดที่รวมใบซ้ำ');
+});
