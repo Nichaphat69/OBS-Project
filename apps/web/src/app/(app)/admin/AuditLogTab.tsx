@@ -30,6 +30,9 @@ export default function AuditLogTab() {
   function load() {
     setLoading(true);
     setError(null);
+    // ล้างแถวเดิมก่อนโหลดหน้าใหม่ — เดิมแถวของหน้าก่อนค้างอยู่จนกว่าข้อมูลหน้าใหม่จะมา ช่วงนั้นดูเหมือน "กดหน้าถัดไปแล้ว
+    // ยังเป็นแถวแรกของหน้า 1" (QA ADMIN-011, 1 ต.ค. 69 — เซิร์ฟเวอร์/พร็อกซีแบ่งหน้าถูกอยู่แล้ว ตรวจกับ 125 แถวแล้ว)
+    setRows(null);
     fetch(`/api/audit-log?page=${page}&pageSize=${PAGE_SIZE}`, { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) {
@@ -116,11 +119,11 @@ export default function AuditLogTab() {
       )}
       {!error && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
-          <button type="button" className="btn ghost sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+          <button type="button" className="btn ghost sm" disabled={loading || page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             ‹
           </button>
           <span className="sub">{page} / {totalPages}</span>
-          <button type="button" className="btn ghost sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+          <button type="button" className="btn ghost sm" disabled={loading || page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
             ›
           </button>
         </div>

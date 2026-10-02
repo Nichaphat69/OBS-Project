@@ -369,6 +369,9 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
 
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
   const needsFile = !submitOnly || method === 'self_obs';
+  // ไม่มีรอบบิลให้ส่งเลย (โหลดเสร็จแล้วและว่าง) → ซ่อนช่องวิธีส่ง/ช่องวางไฟล์/ปุ่มส่งทั้งหมด เหลือแค่ข้อความบอก — เดิมยังโชว์ครบ
+  // ทั้งที่ส่งอะไรไม่ได้ (QA SUBMETH-007, 1 ต.ค. 69)
+  const noCycles = submitOnly && options !== null && !optionsError && options.length === 0;
 
   return (
     <Card
@@ -398,6 +401,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
               </select>
             )}
           </label>
+          {!noCycles && (
           <label>
             {tx('วิธีส่ง')}
             <select value={method} onChange={(e) => { setMethod(e.target.value as SubmitMethod); setError(null); }} disabled={processing}>
@@ -409,10 +413,11 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
             </select>
             <span className="sub" style={{ fontWeight: 400 }}>{tx(SUBMIT_METHODS.find((m) => m.value === method)!.hint)}</span>
           </label>
+          )}
         </div>
       )}
       {/* ส่งทางอีเมล/ให้ผู้ดูแลส่ง = ไม่มีไฟล์มาทางนี้ ซ่อนช่องเลือกไฟล์ไปเลย */}
-      {needsFile && (files.length === 0 ? (
+      {!noCycles && needsFile && (files.length === 0 ? (
         <div
           className={`dropzone${dragOver ? ' over' : ''}`}
           onClick={() => fileRef.current?.click()}
@@ -498,6 +503,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
         </div>
       )}
 
+      {!noCycles && (
       <button
         className="btn pri lg full"
         style={{ marginTop: 14 }}
@@ -515,6 +521,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
                 ? tx('แจ้งให้ผู้ดูแลเป็นคนส่ง')
                 : tx('ส่ง Timesheet นี้')}
       </button>
+      )}
 
       {error && <div style={{ color: 'var(--cr)', marginTop: 14 }}>{error}</div>}
     </Card>
