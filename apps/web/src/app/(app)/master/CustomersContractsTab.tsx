@@ -33,6 +33,8 @@ interface ContractRow {
   headcount: number;
   monthlyTotal: number;
   status: string;
+  /** บริษัทผูก FlowAccount แล้ว → พนักงาน/เรทแก้เองไม่ได้ ใช้ปุ่มซิงก์แทน */
+  flowaccountLinked?: boolean;
 }
 /** บริษัทที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลย — ดู GET /api/customers/without-contract */
 interface CustomerWithoutContract {
@@ -295,6 +297,37 @@ export default function CustomersContractsTab() {
     }
   }
 
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  /** ปุ่ม "ซิงก์จาก FlowAccount" (QA EMPLOCK-003, 1 ต.ค. 69) — ข้อความ "แก้เองไม่ได้ ใช้ปุ่มซิงก์แทน" เคยชี้ไปที่ปุ่มที่ไม่มีใน
+   * หน้าจอเลย (มีแต่ endpoint ฝั่ง API) ซิงก์เพิ่ม/อัปเดตเรท/ปิดสถานะพนักงานของสัญญานี้ให้ตรงกับใบเสนอราคาล่าสุดใน FlowAccount */
+  async function syncFromFlowAccount(contract: ContractRow) {
+    const ok = await confirm({
+      iconName: 'rf',
+      title: tx('ซิงก์พนักงานจาก FlowAccount?'),
+      message: `"${contract.poNo} — ${contract.projectName}" ${tx('จะเพิ่ม/ปรับเรท/ปิดสถานะพนักงานในสัญญานี้ให้ตรงกับใบเสนอราคาล่าสุดของบริษัทนี้ใน FlowAccount')}`,
+      confirmLabel: tx('ซิงก์'),
+    });
+    if (!ok) return;
+    setSyncingId(contract.id);
+    try {
+      const res = await fetch(`/api/contracts/${encodeURIComponent(contract.id)}/sync-flowaccount`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data?.error ?? tx('ซิงก์ไม่สำเร็จ'), true);
+        return;
+      }
+      toast(
+        `${tx('ซิงก์แล้ว')}: ${tx('เพิ่ม')} ${data.created?.length ?? 0} · ${tx('ปรับเรท')} ${data.updated?.length ?? 0} · ${tx('ปิดสถานะ')} ${data.deactivated?.length ?? 0} · ${tx('ไม่เปลี่ยน')} ${data.unchanged ?? 0}`,
+      );
+      load();
+    } catch {
+      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
+    } finally {
+      setSyncingId(null);
+    }
+  }
+
   async function deleteContract(contract: ContractRow) {
     const ok = await confirm({
       iconName: 'trash-solid',
@@ -444,6 +477,12 @@ export default function CustomersContractsTab() {
                   <span className="tk" />
                   <span className="tl">{c.status === 'active' ? tx('กำลังดำเนินการ') : tx('ปิดอยู่')}</span>
                 </label>
+                {c.flowaccountLinked && (
+                  <button className="btn sm" disabled={syncingId === c.id} title={tx('ซิงก์รายชื่อและเรทพนักงานจากใบเสนอราคาล่าสุดใน FlowAccount')} onClick={() => syncFromFlowAccount(c)}>
+                    <Icon name="rf" />
+                    <span>{syncingId === c.id ? tx('กำลังซิงก์…') : tx('ซิงก์จาก FlowAccount')}</span>
+                  </button>
+                )}
                 <button className="btn sm icon" title={tx('แก้ไขข้อมูลสัญญา')} aria-label={tx('แก้ไข')} onClick={() => setEditContractId(c.id)}>
                   <Icon name="edit" />
                 </button>
