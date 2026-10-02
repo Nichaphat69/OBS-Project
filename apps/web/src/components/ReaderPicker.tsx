@@ -65,10 +65,13 @@ export function ReaderPickerBar({ picker, disabled }: { picker: ReaderPickerStat
 
   if (readers.length === 0) return null;
 
+  // จัดเป็นตาราง 2 คอลัมน์ (ป้าย | ตัวควบคุม) — Skill ของ ABBYY ขึ้น "แถวล่าง ตรงใต้ปุ่มตัวอ่าน" ไม่ใช่ต่อท้ายปุ่ม Clear Read
+  // ที่เดิมทำให้ดูเหมือน Skill เป็นของ Clear Read (เจ้าของระบบทัก 2 ต.ค. 69) ป้ายสองแถวอยู่คอลัมน์เดียวกัน ปุ่มกับช่องเลือกจึงชิดซ้ายตรงกัน
+  const lblStyle = { fontSize: 12.5, fontWeight: 600, color: 'var(--ink2)', whiteSpace: 'nowrap' } as const;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 12, rowGap: 10, alignItems: 'center' }}>
+      <span style={lblStyle}>{tx('อ่านด้วย')}</span>
       <div className="readerpick" style={{ margin: 0 }}>
-        <span className="lbl">{tx('อ่านด้วย')}</span>
         {readers.map((r) => {
           const slowHint = r.id === 'clear-read' ? tx('Clear Read อ่านช้ากว่า ABBYY มาก — ราว 3 นาทีต่อหนึ่งหน้า') : undefined;
           return (
@@ -87,20 +90,22 @@ export function ReaderPickerBar({ picker, disabled }: { picker: ReaderPickerStat
       </div>
 
       {chosenReaderId === 'abbyy' && skills.length > 0 && (
-        <div className="readeropt" style={{ margin: 0 }}>
-          <label className="lbl" htmlFor="bulk-abbyy-skill">{tx('Skill ที่ใช้อ่าน')}</label>
-          <select
-            id="bulk-abbyy-skill"
-            value={abbyySkillId ?? ''}
-            disabled={disabled}
-            onChange={(e) => setAbbyySkillId(e.target.value || null)}
-          >
-            <option value="">{tx('ตาม Skill ที่ผูกกับสัญญานี้')}</option>
-            {skills.map((s) => (
-              <option key={s.skillId} value={s.skillId}>{s.name}</option>
-            ))}
-          </select>
-        </div>
+        <>
+          <label style={lblStyle} htmlFor="bulk-abbyy-skill">{tx('Skill ที่ใช้อ่าน')}</label>
+          <div className="readeropt" style={{ margin: 0 }}>
+            <select
+              id="bulk-abbyy-skill"
+              value={abbyySkillId ?? ''}
+              disabled={disabled}
+              onChange={(e) => setAbbyySkillId(e.target.value || null)}
+            >
+              <option value="">{tx('ตาม Skill ที่ผูกกับสัญญานี้')}</option>
+              {skills.map((s) => (
+                <option key={s.skillId} value={s.skillId}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
     </div>
   );
