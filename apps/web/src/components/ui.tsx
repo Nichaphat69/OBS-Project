@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
 import { BackButton } from './BackButton';
+import './kpi.css';
 
 /** แถบสลับแท็บทรงเส้นใต้ (ไม่ใช่ปุ่ม) — ใช้แทน `.btn.sm`/`.btn.pri` ที่แต่ละหน้า (ตรวจ Manday/บันทึกการส่ง/
  * ข้อมูลหลัก/จัดการระบบ/อัปโหลด Timesheet) เคยประกอบเองซ้ำๆ กันมาก่อน (เจ้าของระบบสั่ง 21 ก.ย. 69 "อยากได้
@@ -108,19 +109,45 @@ export function Kpi({
   caption?: string;
   tone?: KpiTone;
 }) {
+  // ค่าที่เป็นข้อความตัวเลขจัดรูปแล้ว ("110,000.00") แยกทศนิยมออกมาเป็นตัวเล็กจาง ให้ตัวเลขหลักเด่นกว่า — ค่าที่เป็น
+  // องค์ประกอบ (เช่นป้ายสถานะ) ไม่แยก ไม่ไล่เฉด (ไล่เฉดด้วย background-clip จะทำให้ข้อความข้างในโปร่งใส)
+  const isText = typeof value === 'string' || typeof value === 'number';
+  let main: React.ReactNode = value;
+  let dec: string | null = null;
+  if (typeof value === 'string') {
+    const m = /^(.*?)(\.\d+)$/.exec(value);
+    if (m) {
+      main = m[1];
+      dec = m[2];
+    }
+  }
   return (
-    <div className={`kpi${tone ? ` ${tone}` : ''}`}>
-      <div className="kh">
-        <span className="ic">
+    <div className={`kx${tone ? ` kx-${tone}` : ''}`}>
+      <span className="kx-glow" aria-hidden="true" />
+      <Icon name={icon} className="kx-wm" />
+      <div className="kx-top">
+        <div className="kx-t">
+          {eyebrow && <span className="kx-e">{eyebrow}</span>}
+          <span className="kx-l">{label}</span>
+        </div>
+        <span className="kx-ic" aria-hidden="true">
           <Icon name={icon} />
         </span>
-        <div className="kt">
-          {eyebrow && <span className="ke">{eyebrow}</span>}
-          <span className="kl">{label}</span>
-        </div>
       </div>
-      <span className="kv">{value}</span>
-      {caption && <span className="kf">{caption}</span>}
+      {isText ? (
+        <div className="kx-v">
+          <span className="kx-int">{main}</span>
+          {dec && <span className="kx-dec">{dec}</span>}
+        </div>
+      ) : (
+        <div className="kx-node">{value}</div>
+      )}
+      {caption && (
+        <span className="kx-cap">
+          <i aria-hidden="true" />
+          {caption}
+        </span>
+      )}
     </div>
   );
 }

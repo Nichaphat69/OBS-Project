@@ -1,0 +1,238 @@
+/* การ์ดตัวเลขสรุป (Kpi) — ดีไซน์ใหม่ 6 ต.ค. 69 ตามที่เจ้าของระบบสั่ง "ทันสมัย ไม่โหลๆ"
+   ⚠️ ข้อจำกัดจากประวัติ: เจ้าของระบบเคยตีกลับการ์ดแบบไล่สีเต็มใบ 2 รอบ (21 ก.ย. 69, ดู globals.css ส่วน KPI) จึงยึด "พื้นขาวสะอาด"
+   แล้วยกระดับด้วยรายละเอียด: ตัวเลขใหญ่ไล่เฉด + ทศนิยมจาง · แสงเรืองมุมการ์ด · ไอคอนกระจก · ป้ายคำอธิบายแบบแคปซูล · ลายน้ำไอคอน ·
+   ขยับตอนเข้า/ตอนชี้ — ไม่ระบายสีทั้งใบ · ใช้คลาส .kx ใหม่ทั้งหมด ไม่แตะ .kpi เดิม (หน้า "บันทึกการส่ง" ยังใช้อยู่) */
+
+.kx {
+  /* โทนสี (ตั้งต่อโทนด้านล่าง): --a สีหลัก · --b สีอ่อนของเฉดคู่ · --ink สีเข้มปลายเฉดของตัวเลข */
+  --a: #288adb;
+  --b: #86c3ff;
+  --ink: #0b3a6b;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 188px;
+  padding: 22px 24px 20px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #ffffff 58%, color-mix(in srgb, var(--a) 5%, #ffffff) 100%);
+  border: 1px solid color-mix(in srgb, var(--a) 16%, #e6e9ef);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 18px 34px -22px color-mix(in srgb, var(--a) 55%, transparent);
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.28s ease, border-color 0.28s ease;
+  animation: kx-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.kx:nth-child(2) { animation-delay: 0.07s; }
+.kx:nth-child(3) { animation-delay: 0.14s; }
+.kx:nth-child(4) { animation-delay: 0.21s; }
+.kx:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--a) 34%, #e6e9ef);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 4px rgba(16, 24, 40, 0.05),
+    0 26px 44px -22px color-mix(in srgb, var(--a) 70%, transparent);
+}
+
+/* แสงเรืองมุมขวาบน — จางๆ ไม่ใช่การระบายสี */
+.kx-glow {
+  position: absolute;
+  z-index: -1;
+  top: -96px;
+  right: -76px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, color-mix(in srgb, var(--b) 46%, transparent), transparent 66%);
+  filter: blur(6px);
+  pointer-events: none;
+  transition: transform 0.5s ease, opacity 0.5s ease;
+}
+.kx:hover .kx-glow {
+  transform: scale(1.12) translate(-6px, 6px);
+}
+
+/* ลายน้ำไอคอนมุมขวาล่าง (.kx .kx-wm = ความเฉพาะเจาะจงสูงกว่า .i ทั่วไป ไม่ขึ้นกับลำดับโหลด CSS) */
+.kx .kx-wm {
+  position: absolute;
+  z-index: -1;
+  right: -12px;
+  bottom: -20px;
+  width: 124px;
+  height: 124px;
+  color: var(--a);
+  opacity: 0.07;
+  transform: rotate(-12deg);
+  pointer-events: none;
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.45s ease;
+}
+.kx:hover .kx-wm {
+  transform: rotate(-6deg) scale(1.06);
+  opacity: 0.11;
+}
+
+.kx-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.kx-t {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.kx-e {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--a);
+}
+.kx-l {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475467;
+  line-height: 1.35;
+}
+
+/* ไอคอนทรงสี่เหลี่ยมมนแบบกระจก */
+.kx-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  color: #ffffff;
+  background: linear-gradient(145deg, var(--a) 0%, color-mix(in srgb, var(--b) 78%, var(--a)) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px color-mix(in srgb, var(--ink) 14%, transparent),
+    0 10px 20px -8px color-mix(in srgb, var(--a) 80%, transparent);
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.kx-ic svg {
+  width: 22px;
+  height: 22px;
+}
+.kx:hover .kx-ic {
+  transform: rotate(-6deg) scale(1.06);
+}
+
+/* ตัวเลขหลัก */
+.kx-v {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-top: 20px;
+  min-width: 0;
+}
+.kx-int {
+  font-size: clamp(38px, 3.4vw, 48px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, var(--ink) 0%, var(--a) 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.kx-dec {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--a) 42%, #98a2b3);
+}
+/* ค่าที่เป็นองค์ประกอบ (เช่นป้ายสถานะ) ไม่ใช้ตัวเลขใหญ่/ไล่เฉด */
+.kx-node {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* คำอธิบายใต้ตัวเลข แบบแคปซูล */
+.kx-cap {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: auto;
+  padding: 6px 13px 6px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--a) 8%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--a) 13%, transparent);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #475467;
+}
+.kx-v + .kx-cap,
+.kx-node + .kx-cap {
+  margin-top: 18px;
+}
+.kx-cap i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--a);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--a) 22%, transparent);
+}
+
+/* ── โทนสี ── */
+.kx-w { --a: #f08c1a; --b: #ffc27a; --ink: #8a3b07; }  /* รอ/ต้องทำ — อำพัน */
+.kx-g { --a: #10a876; --b: #7ae8c0; --ink: #065a3f; }  /* พร้อม/สำเร็จ — เขียวมรกต */
+.kx-c { --a: #0aa5c9; --b: #7de3f5; --ink: #0d5468; }  /* ข้อมูลทั่วไป — ฟ้าน้ำทะเล */
+/* การ์ดเด่น (ยอดเงิน/สถานะหลัก) — น้ำเงินครามหรูขึ้น มีขอบสว่างและแสงแรงกว่า แต่ยังพื้นขาว */
+.kx-a {
+  --a: #3d63e0;
+  --b: #8aa8ff;
+  --ink: #1b2a85;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--a) 9%, #ffffff) 0%, #ffffff 62%);
+  border-color: color-mix(in srgb, var(--a) 28%, #e6e9ef);
+}
+.kx-a .kx-glow {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle at 35% 35%, color-mix(in srgb, var(--b) 58%, transparent), transparent 66%);
+}
+
+@keyframes kx-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kx,
+  .kx-glow,
+  .kx-wm,
+  .kx-ic {
+    animation: none;
+    transition: none;
+  }
+}
+@media (max-width: 620px) {
+  .kx {
+    min-height: 0;
+    padding: 18px 18px 16px;
+    border-radius: 20px;
+  }
+  .kx-int {
+    font-size: 38px;
+  }
+}
