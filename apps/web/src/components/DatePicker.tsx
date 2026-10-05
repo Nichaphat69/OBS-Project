@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 
 /** ปฏิทินเลือกวันที่ทรง Material Design 3 (เจ้าของระบบสั่ง 22 ก.ย. 69 — อ้างอิงจาก m3.material.io/
@@ -53,32 +54,61 @@ export function DatePicker({
 }) {
   const [open, setOpen] = useState(false);
   const [openUp, setOpenUp] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const today = new Date();
   const parsed = parseIso(value);
   const [viewY, setViewY] = useState(parsed?.y ?? today.getFullYear());
   const [viewM, setViewM] = useState(parsed?.m ?? today.getMonth());
 
-  // เปิดทีไร กลับไปแสดงเดือนของค่าที่เลือกอยู่เสมอ (ไม่ค้างเดือนที่เพิ่งเลื่อนดูค้างไว้จากรอบก่อน) และเช็ค
-  // ว่าพื้นที่ใต้ปุ่มพอวางปฏิทินเต็มใบไหม (~380px) ถ้าไม่พอให้เปิดขึ้นด้านบนแทน — เจอจริง 22 ก.ย. 69: ฟอร์ม
-  // ยาว ปุ่มอยู่ใกล้ขอบล่างจอ ปฏิทินเปิดลงด้านล่างเลยโดนตัดครึ่ง มองไม่เห็นแถวท้ายๆ
+  // เปิดทีไร กลับไปแสดงเดือนของค่าที่เลือกอยู่เสมอ (ไม่ค้างเดือนที่เพิ่งเลื่อนดูค้างไว้จากรอบก่อน)
   useEffect(() => {
     if (!open) return;
     const p = parseIso(value);
     setViewY(p?.y ?? today.getFullYear());
     setViewM(p?.m ?? today.getMonth());
-    const rect = wrapRef.current?.getBoundingClientRect();
-    if (rect) {
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUp(spaceBelow < 380 && rect.top > spaceBelow);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // วางปฏิทินเป็น fixed นอกการ์ดฟอร์ม (portal ไปที่ body) — 5 ต.ค. 69 เจ้าของระบบทัก "ปฏิทินโดนตัดท่อน": เดิมปฏิทินเป็น
+  // absolute อยู่ในการ์ดที่ตัดส่วนเกิน (overflow) ต่อให้ในจอยังมีที่ว่างเหลือ ขอบการ์ดก็ตัดแถวท้ายๆ ทิ้ง · ตำแหน่งคำนวณจากปุ่ม
+  // ใต้ปุ่มถ้าที่พอ ไม่พอก็เปิดขึ้นบน ไม่พอทั้งสองทางก็ชิดขอบจอ — และคำนวณใหม่ทุกครั้งที่เลื่อนหน้า/ย่อขยายหน้าต่าง/เปลี่ยนเดือน
+  // (เดือนมี 5–6 แถว ความสูงต่างกัน)
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const trigger = wrapRef.current?.getBoundingClientRect();
+      const panel = panelRef.current?.getBoundingClientRect();
+      if (!trigger) return;
+      const h = panel?.height ?? 380;
+      const w = panel?.width ?? 300;
+      const gap = 8;
+      const spaceBelow = window.innerHeight - trigger.bottom - gap;
+      const spaceAbove = trigger.top - gap;
+      let top: number;
+      if (spaceBelow >= h) top = trigger.bottom + gap;
+      else if (spaceAbove >= h) top = trigger.top - h - gap;
+      else top = Math.max(gap, window.innerHeight - h - gap);
+      const left = Math.max(gap, Math.min(trigger.left, window.innerWidth - w - gap));
+      setOpenUp(top < trigger.top);
+      setPos((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, viewY, viewM]);
 
   useEffect(() => {
     if (!open) return;
     function onDocMouseDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // ปฏิทินอยู่นอก wrapRef (portal) จึงต้องเช็คทั้งปุ่มและตัวปฏิทิน ไม่งั้นกดในปฏิทินแล้วปิดทันที
+      if (wrapRef.current && !wrapRef.current.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
@@ -139,8 +169,15 @@ export function DatePicker({
         {label ? <span>{label}</span> : <span className="dpk-placeholder">{ariaLabel ?? 'เลือกวันที่'}</span>}
       </button>
 
-      {open && (
-        <div className={`dpk-panel${openUp ? ' up' : ''}`} role="dialog" aria-label={ariaLabel ?? 'เลือกวันที่'}>
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={panelRef}
+          className={`dpk-panel${openUp ? ' up' : ''}`}
+          role="dialog"
+          aria-label={ariaLabel ?? 'เลือกวันที่'}
+          // fixed ทับ absolute ของคลาส (ตำแหน่งจริงคำนวณด้านบน) · ซ่อนไว้จนกว่าจะวัดตำแหน่งเสร็จ กันปฏิทินวาบที่มุมจอ
+          style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0, bottom: 'auto', zIndex: 1000, visibility: pos ? 'visible' : 'hidden' }}
+        >
           <div className="dpk-head">
             <button type="button" className="dpk-nav" onClick={goPrevMonth} aria-label="เดือนก่อนหน้า">
               <Icon name="chev" className="sm" style={{ transform: 'rotate(90deg)' }} />
@@ -207,7 +244,8 @@ export function DatePicker({
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
