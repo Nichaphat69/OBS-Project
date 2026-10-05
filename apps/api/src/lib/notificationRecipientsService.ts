@@ -68,7 +68,15 @@ export async function lineAdminTargets(): Promise<string[]> {
 /** ported from service.js notificationEmailTargets() — อีเมลปลายทางทุกคนที่บอกพนักงานให้ส่ง
  * Timesheet ไปเมื่อเลือก "ส่งผ่าน Email" */
 export async function notificationEmailTargets(): Promise<string[]> {
-  return (await listNotificationRecipients()).filter((r) => r.channel === 'email').map((r) => r.target);
+  // 5 ต.ค. 69 — เจ้าของระบบเอาหน้า "ผู้รับแจ้งเตือน (เพิ่มเอง)" ออกจากหน้าจัดการระบบ (แต่ละ role ผูกไลน์รับแจ้งเตือนเองแล้ว)
+  // แต่รายชื่อนี้เป็นที่เดียวที่เก็บ "อีเมลปลายทางที่บอกพนักงานให้ส่ง Timesheet" ด้วย จึงย้ายไปตั้งผ่าน env NOTIFICATION_EMAIL_TARGETS
+  // (คั่นด้วยจุลภาค) แทน — รายการเก่าที่เคยเก็บไว้ในฐานข้อมูลยังอ่านรวมให้ ไม่ทำให้ของเดิมหาย
+  const fromEnv = (process.env.NOTIFICATION_EMAIL_TARGETS ?? '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter((e) => EMAIL_RE.test(e));
+  const legacy = (await listNotificationRecipients()).filter((r) => r.channel === 'email').map((r) => r.target);
+  return [...new Set([...fromEnv, ...legacy])];
 }
 
 export async function addNotificationRecipient({

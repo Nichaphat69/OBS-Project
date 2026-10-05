@@ -21,17 +21,6 @@ interface EmployeeOption {
   nameTh: string;
   customerName: string | null;
 }
-interface Recipient {
-  id: number;
-  channel: 'line' | 'email';
-  label: string;
-  target: string;
-}
-interface KnownLineUser {
-  userId: string;
-  lastSeenAt: string | null;
-  displayName: string | null;
-}
 
 const ROLES = ['user', 'accounting', 'admin', 'executive'];
 const ROLE_LABEL: Record<string, string> = { admin: 'admin', accounting: 'บัญชี', user: 'พนักงาน', executive: 'ผู้บริหาร' };
@@ -44,14 +33,14 @@ const ROLE_NOTIFY_LABEL: Record<string, string> = {
   user: 'เช็คสถานะ/ส่ง Timesheet ผ่านแชทบอท LINE',
   executive: '—',
 };
-const CHANNEL_LABEL: Record<string, string> = { line: 'LINE', email: 'อีเมล' };
 
 /**
  * "ผู้ใช้ระบบ" — รวมเข้ากับแท็บ "ผู้รับแจ้งเตือน" เดิมทั้งหมดแล้ว (25 ก.ย. 69 ตามที่ขอ "หน้านี้รวมกับ
  * ผู้รับแจ้งเตือนเลย") เหตุผล: ตารางผู้ใช้กับตารางสถานะผูกไลน์ที่แยกกันอยู่ก่อนหน้านี้คือข้อมูลชุดเดียวกัน
  * (คนเดียวกัน) แค่คนละมุมมอง — เดิม "ใครเป็นใคร" (StaffLineStatusTable) เห็นแค่ admin/accounting เท่านั้น
  * (role 'user' ไม่เคยโผล่เลยทั้งที่ผูกไลน์ได้เหมือนกันผ่าน Employee.lineUserId) มาแสดงรวมในตารางเดียวที่นี่
- * ให้ครบทุก role แทน ส่วนฟอร์ม "เพิ่มผู้รับแจ้งเตือนเอง" (คนนอกระบบ/อีเมลแผนก) ย้ายมาไว้ด้านล่างสุด
+ * ให้ครบทุก role แทน — ส่วนฟอร์ม "เพิ่มผู้รับแจ้งเตือนเอง" เอาออกแล้ว (5 ต.ค. 69 ตามที่เจ้าของระบบสั่ง: แต่ละ role ผูกไลน์รับแจ้งเตือน
+ * ตาม role เอง ไม่ต้องให้แอดมินเพิ่มให้)
  */
 export default function UsersTab({ currentUsername }: { currentUsername: string }) {
   const toast = useToast();
@@ -76,15 +65,6 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
   const [editNameEn, setEditNameEn] = useState('');
   const [savingName, setSavingName] = useState(false);
 
-  // ── ผู้รับแจ้งเตือนที่เพิ่มเอง (ย้ายมาจาก NotificationRecipientsTab.tsx) ──
-  const [recipients, setRecipients] = useState<Recipient[] | null>(null);
-  const [knownLineUsers, setKnownLineUsers] = useState<KnownLineUser[]>([]);
-  const [recipientError, setRecipientError] = useState<string | null>(null);
-  const [channel, setChannel] = useState<'line' | 'email'>('line');
-  const [label, setLabel] = useState('');
-  const [target, setTarget] = useState('');
-  const [addingRecipient, setAddingRecipient] = useState(false);
-
   function load() {
     setError(null);
     fetch('/api/users', { cache: 'no-store' })
@@ -99,31 +79,12 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
   }
 
-  function loadRecipients() {
-    setRecipientError(null);
-    fetch('/api/notification-recipients', { cache: 'no-store' })
-      .then(async (r) => {
-        if (!r.ok) {
-          const data = await r.json().catch(() => ({}));
-          setRecipientError(data.error ?? tx('โหลดข้อมูลไม่สำเร็จ'));
-          return;
-        }
-        setRecipients(await r.json());
-      })
-      .catch(() => setRecipientError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
-  }
-
   useEffect(() => {
     load();
     fetch('/api/employees', { cache: 'no-store' })
       .then((r) => r.json())
       .then(setEmployees)
       .catch(() => setEmployees([]));
-    loadRecipients();
-    fetch('/api/line/known-users', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then(setKnownLineUsers)
-      .catch(() => setKnownLineUsers([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -274,65 +235,6 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
     } catch {
       toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
     }
-  }
-
-  async function addRecipient() {
-    if (!target.trim()) {
-      toast(tx('ต้องระบุปลายทาง (LINE user ID หรืออีเมล)'), true);
-      return;
-    }
-    setAddingRecipient(true);
-    try {
-      const res = await fetch('/api/notification-recipients', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ channel, label: label.trim() || undefined, target: target.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast(data.error ?? tx('เพิ่มไม่สำเร็จ'), true);
-        return;
-      }
-      toast(`${tx('เพิ่ม')} "${data.label ?? data.target}"`);
-      setLabel('');
-      setTarget('');
-      loadRecipients();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    } finally {
-      setAddingRecipient(false);
-    }
-  }
-
-  async function removeRecipient(r: Recipient) {
-    const ok = await confirm({
-      title: tx('ลบผู้รับแจ้งเตือนนี้?'),
-      message: (
-        <>
-          {tx('ผู้รับแจ้งเตือน')} &quot;<b>{r.label}</b>&quot; {tx('จะไม่ได้รับการแจ้งเตือนอีกต่อไป')}
-        </>
-      ),
-      confirmLabel: tx('ลบ'),
-    });
-    if (!ok) return;
-    try {
-      const res = await fetch(`/api/notification-recipients/${r.id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) {
-        toast(data.error ?? tx('ลบไม่สำเร็จ'), true);
-        return;
-      }
-      toast(tx('ลบแล้ว'));
-      loadRecipients();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    }
-  }
-
-  function displayRecipientLabel(r: Recipient): string {
-    if (r.channel !== 'line') return r.label;
-    const known = knownLineUsers.find((k) => k.userId === r.target);
-    return known?.displayName ?? r.label;
   }
 
   return (
@@ -563,79 +465,6 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
         <div className="sub" style={{ padding: '14px 4px 0' }}>
           {tx('แต่ละคนผูกไลน์ของตัวเองได้จากเมนู "เชื่อมต่อ LINE" — ไม่ต้องมาผูกให้ที่นี่')}
         </div>
-      </Card>
-
-      <Card
-        title={tx('ผู้รับแจ้งเตือน (เพิ่มเอง)')}
-        right={<span className="sub">{tx('เผื่อกรณีพิเศษ เช่น อีเมลแผนก/LINE กลุ่ม — บัญชีในระบบผูกไลน์เองได้แล้วด้านบน ไม่ต้องเพิ่มซ้ำที่นี่')}</span>}
-      >
-        <div className="frm auto" style={{ marginBottom: 18 }}>
-          <label>
-            {tx('ช่องทาง')}
-            <select value={channel} onChange={(e) => setChannel(e.target.value as 'line' | 'email')}>
-              <option value="line">LINE</option>
-              <option value="email">{tx('อีเมล')}</option>
-            </select>
-          </label>
-          <label>
-            {tx('ชื่อ (แสดงในรายการ)')}
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="เช่น นิชา" />
-          </label>
-          <label>
-            {tx('ปลายทาง')}
-            <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="LINE user ID หรืออีเมล" />
-          </label>
-          <button className="btn pri" disabled={addingRecipient} onClick={addRecipient}>
-            {addingRecipient ? tx('กำลังเพิ่ม…') : `+ ${tx('เพิ่ม')}`}
-          </button>
-        </div>
-
-        {recipientError ? (
-          <ErrorState message={recipientError} onRetry={loadRecipients} />
-        ) : (
-        <div className="tw">
-          <table>
-            <thead>
-              <tr>
-                <th>{tx('ช่องทาง')}</th>
-                <th>{tx('ชื่อ')}</th>
-                <th>{tx('ปลายทาง')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {recipients?.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Tag tone="mu">{tx(CHANNEL_LABEL[r.channel])}</Tag>
-                  </td>
-                  <td>{displayRecipientLabel(r)}</td>
-                  <td className="sub">{r.target}</td>
-                  <td>
-                    <button className="btn ghost sm" onClick={() => removeRecipient(r)} style={{ color: 'var(--cr)' }}>
-                      {tx('ลบ')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!recipients && (
-                <tr>
-                  <td colSpan={4}>
-                    <Loading rows={4} />
-                  </td>
-                </tr>
-              )}
-              {recipients && recipients.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', color: 'var(--mut)' }}>
-                    {tx('ยังไม่มีผู้รับแจ้งเตือน')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        )}
       </Card>
     </>
   );

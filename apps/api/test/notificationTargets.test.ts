@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { prisma } from '@obs/db';
 
 import { seedFixtures } from './helpers/testDb.js';
-import { lineAdminTargets, lineApproverTargets } from '../src/lib/notificationRecipientsService.js';
+import { lineAdminTargets, lineApproverTargets, notificationEmailTargets } from '../src/lib/notificationRecipientsService.js';
 
 await seedFixtures();
 
@@ -68,5 +68,20 @@ test('บัญชี admin/accounting ที่ผูกไลน์เอง�
     await prisma.user.deleteMany({ where: { username: { in: ['test-admin-linked', 'test-accounting-linked'] } } });
     if (beforeAdmin === undefined) delete process.env.LINE_ADMIN_TARGET; else process.env.LINE_ADMIN_TARGET = beforeAdmin;
     if (beforeApprover === undefined) delete process.env.LINE_APPROVER_TARGET; else process.env.LINE_APPROVER_TARGET = beforeApprover;
+  }
+});
+
+test('notificationEmailTargets อ่านอีเมลปลายทางจาก env NOTIFICATION_EMAIL_TARGETS (หลังเอาหน้าผู้รับแจ้งเตือนออก)', async () => {
+  const before = process.env.NOTIFICATION_EMAIL_TARGETS;
+  try {
+    process.env.NOTIFICATION_EMAIL_TARGETS = ' billing@example.com , ไม่ใช่อีเมล, ops@example.com,billing@example.com ';
+    const targets = await notificationEmailTargets();
+    assert.ok(targets.includes('billing@example.com'));
+    assert.ok(targets.includes('ops@example.com'));
+    assert.ok(!targets.includes('ไม่ใช่อีเมล'), 'ข้อความที่ไม่ใช่อีเมลต้องถูกข้าม');
+    assert.equal(targets.filter((t) => t === 'billing@example.com').length, 1, 'ซ้ำต้องเหลืออันเดียว');
+  } finally {
+    if (before === undefined) delete process.env.NOTIFICATION_EMAIL_TARGETS;
+    else process.env.NOTIFICATION_EMAIL_TARGETS = before;
   }
 });
