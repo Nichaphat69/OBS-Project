@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from 'react';
 import Link from 'next/link';
-import { Card, EmptyState, Kpi, Loading, PageHeader, PoTag, ProgressCell, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
+import { Card, EmptyState, Kpi, Loading, PageHeader, PoTag, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
 import { useScope } from '../../../lib/scope';
@@ -161,10 +161,6 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                     <span>{contractRange(opt)}</span>
                   </div>
                 )}
-                <div className="cf">
-                  <span className="lbl">{tx('ความคืบหน้า')}</span>
-                  <ProgressCell percent={c.progress} fraction={`${c.monthsBilled}/${c.monthsTotal} (${c.progress}%)`} />
-                </div>
                 <div className="cf end">
                   <span className="lbl">{tx('มูลค่าคงเหลือ')}</span>
                   <b className="n cv">{money(c.remainingValue)}</b>
