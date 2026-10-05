@@ -110,7 +110,7 @@ export function Kpi({
   tone?: KpiTone;
 }) {
   // ค่าที่เป็นข้อความตัวเลขจัดรูปแล้ว ("110,000.00") แยกทศนิยมออกมาเป็นตัวเล็กจาง ให้ตัวเลขหลักเด่นกว่า — ค่าที่เป็น
-  // องค์ประกอบ (เช่นป้ายสถานะ) ไม่แยก ไม่ไล่เฉด (ไล่เฉดด้วย background-clip จะทำให้ข้อความข้างในโปร่งใส)
+  // องค์ประกอบ (เช่นป้ายสถานะ) ไม่แยก ใช้ขนาดตัวหนังสือปกติ
   const isText = typeof value === 'string' || typeof value === 'number';
   let main: React.ReactNode = value;
   let dec: string | null = null;
@@ -123,7 +123,6 @@ export function Kpi({
   }
   return (
     <div className={`kx${tone ? ` kx-${tone}` : ''}`}>
-      <span className="kx-glow" aria-hidden="true" />
       <Icon name={icon} className="kx-wm" />
       <div className="kx-top">
         <div className="kx-t">
