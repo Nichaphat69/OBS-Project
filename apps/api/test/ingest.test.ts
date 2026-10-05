@@ -178,7 +178,7 @@ test('ครบทุกคนแต่ยังไม่มีคนกดย�
   assert.ok(preview.blockers.every((b) => b.includes('ยังไม่มีคนกดยืนยัน')));
 
   const feb = (await contractCycles('CT-26B0113')).find((c) => c.period === '2026-02')!;
-  assert.equal(feb.state, 'checking', 'สถานะรอบบิลต้องเป็น "รอคนตรวจ" ไม่ใช่ "รออนุมัติ"');
+  assert.equal(feb.state, 'checking', 'สถานะรอบบิลต้องเป็น "ตรวจ Manday" (checking) ไม่ใช่ "รออนุมัติ"');
   assert.equal(feb.uncheckedCount, 2);
 
   assert.equal(
