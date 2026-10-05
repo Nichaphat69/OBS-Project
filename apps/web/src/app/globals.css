@@ -3271,8 +3271,8 @@ td .nm {
 }
 .back:hover { text-decoration: underline; }
 
-/* แถบขั้นตอน (2 ต.ค. 69 ตามที่ขอ: ไม่เอาคำว่า STEP 01/02 ไม่เอาสี่เหลี่ยม) — โหนดเป็นวงกลมสีเดียว
-   เสร็จแล้ว = เขียวพร้อมเครื่องหมายถูก · ขั้นปัจจุบัน = #288adb มีวงเรืองแสงอ่อน · ยังไม่ถึง = ขาวขอบเทา */
+/* แถบขั้นตอน (2 ต.ค. 69 ตามที่ขอ: ไม่เอาคำว่า STEP 01/02 ไม่เอาสี่เหลี่ยม · 5 ต.ค. 69: ไม่เอาสีเขียวกับเครื่องหมายถูก)
+   โหนดเป็นวงกลม ใส่ไอคอนประจำขั้นนั้น: เสร็จแล้ว = #288adb · ขั้นปัจจุบัน = #288adb มีวงเรืองแสงอ่อน · ยังไม่ถึง = ขาวขอบเทา */
 .prog {
   display: flex; align-items: flex-start; padding: 28px 26px 24px; background: var(--paper);
   border: 1px solid var(--m3-outline); border-radius: var(--m3-shape-lg); margin-bottom: 22px;
@@ -3289,7 +3289,7 @@ td .nm {
 }
 .pstep .cir svg { width: 22px; height: 22px; }
 .pstep.dn .cir {
-  background: var(--ok); border-color: var(--ok); color: #fff;
+  background: #288adb; border-color: #288adb; color: #fff;
 }
 .pstep.cu .cir {
   background: #288adb; border-color: #288adb; color: #fff;
@@ -3299,7 +3299,7 @@ td .nm {
 .pstep.dn .pl { color: var(--ink2); }
 .pstep.cu .pl { color: #1f78c4; }
 .pline { flex: 1; min-width: 26px; height: 3px; border-radius: 3px; background: var(--rule); margin: 23px 6px 0; }
-.pline.dn { background: var(--ok); }
+.pline.dn { background: #288adb; }
 
 .tabs {
   display: flex; gap: 4px; border-bottom: 1px solid var(--rule);

@@ -511,7 +511,11 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
         disabled={processing || (needsFile && files.length === 0) || (submitOnly && !selected)}
         onClick={!submitOnly ? doProcessBatch : needsFile ? doSubmit : doDeclare}
       >
-        <Icon name={submitOnly ? 'send' : 'chk'} />{' '}
+        {submitOnly && (
+          <>
+            <Icon name="send" />{' '}
+          </>
+        )}
         {!submitOnly
           ? processing ? tx('กำลังเข้าคิว…') : tx('Process Documents')
           : processing

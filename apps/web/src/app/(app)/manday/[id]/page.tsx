@@ -448,24 +448,26 @@ export default function ManadyDetailPage() {
         </div>
       </div>
 
+      {/* แถบขั้นตอน: ขั้นที่เสร็จแล้ว = วงกลมน้ำเงิน + ไอคอนประจำขั้นนั้น (ไม่ใช้สีเขียว/เครื่องหมายถูก) · ขั้นปัจจุบัน = น้ำเงินมีวงเรืองแสง ·
+          ขั้นที่ยังไม่ถึง = เทาอ่อน (5 ต.ค. 69 ตามที่สั่ง) */}
       <div className="prog">
         <div className="pstep dn">
           <span className="cir">
-            <Icon name="chk" />
+            <Icon name="up" />
           </span>
           <span className="pl">{tx('อัปโหลด · ระบบอ่านไฟล์')}</span>
         </div>
         <div className="pline dn" />
         <div className={`pstep ${step >= 3 ? 'dn' : 'cu'}`}>
           <span className="cir">
-            <Icon name={step >= 3 ? 'chk' : 'list-chk'} />
+            <Icon name="list-chk" />
           </span>
           <span className="pl">{tx('ตรวจ Manday')}</span>
         </div>
         <div className={`pline ${step >= 3 ? 'dn' : ''}`} />
         <div className={`pstep ${step === 3 ? 'cu' : step > 3 ? 'dn' : ''}`}>
           <span className="cir">
-            <Icon name={step > 3 ? 'chk' : 'money'} />
+            <Icon name="money" />
           </span>
           <span className="pl">{tx('วางบิล FlowAccount')}</span>
         </div>
@@ -958,7 +960,7 @@ export default function ManadyDetailPage() {
             </Link>
           ) : (
             <button className="btn pri" disabled={busy || failures.length > 0} onClick={doCheck}>
-              <Icon name="chk" /> {tx('ยืนยันว่าตรวจแล้ว')}
+              {tx('ยืนยันว่าตรวจแล้ว')}
             </button>
           ))}
       </div>
