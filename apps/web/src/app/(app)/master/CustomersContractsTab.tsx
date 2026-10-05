@@ -171,95 +171,6 @@ function pctPrecise(rate: number) {
   return Math.round(rate * 10000) / 100;
 }
 
-/** ช่องอัตราหัก ณ ที่จ่าย พร้อมปุ่มดินสอแก้เฉพาะช่องนี้ — เดิมมีแต่ตัวเลขปัดเศษเต็ม (Math.round) ล้วนๆ
- * แก้ค่าละเอียด (เช่น 1.58%) ไม่ได้เลยนอกจากเปิดฟอร์ม "แก้ไขข้อมูลสัญญา" ทั้งใบซึ่งต้องกรอกทุกช่อง
- * ยิงตรงไปที่ PATCH /:id/wht-rate (จุดเดียวกับที่หน้าอัปโหลด/ตรวจ Timesheet ใช้อยู่แล้ว) ไม่ผ่าน
- * updateContract() แบบ full-replace — validation 0–30% อยู่ฝั่ง server (updateContractWhtRate) แล้ว */
-function WhtRateCell({ contract, onSaved }: { contract: ContractRow; onSaved: () => void }) {
-  const toast = useToast();
-  const { tx } = useLang();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(String(pctPrecise(contract.whtRate)));
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    const pct = Number(value);
-    if (!Number.isFinite(pct) || pct < 0 || pct > 30) {
-      toast(tx('อัตราหัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–30%'), true);
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/contracts/${encodeURIComponent(contract.id)}/wht-rate`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ whtRate: pct / 100 }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(data?.error ?? tx('บันทึกไม่สำเร็จ'), true);
-        return;
-      }
-      toast(tx('บันทึกอัตราหัก ณ ที่จ่ายแล้ว'));
-      setEditing(false);
-      onSaved();
-    } catch {
-      toast(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'), true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!editing) {
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        {pctPrecise(contract.whtRate)}%
-        <button
-          type="button"
-          className="btn sm icon"
-          title={tx('แก้อัตราหัก ณ ที่จ่าย')}
-          aria-label={tx('แก้ไข')}
-          onClick={() => {
-            setValue(String(pctPrecise(contract.whtRate)));
-            setEditing(true);
-          }}
-        >
-          <Icon name="edit" />
-        </button>
-      </span>
-    );
-  }
-
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <input
-        type="number"
-        min={0}
-        max={30}
-        step={0.01}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        autoFocus
-        style={{
-          width: 64,
-          height: 30,
-          borderRadius: 'var(--r-ctl)',
-          border: '1px solid var(--rule)',
-          padding: '0 8px',
-          fontSize: 12.5,
-        }}
-      />
-      %
-      <button type="button" className="btn sm pri" disabled={saving} onClick={save}>
-        {tx('บันทึก')}
-      </button>
-      <button type="button" className="btn sm ghost" disabled={saving} onClick={() => setEditing(false)}>
-        {tx('ยกเลิก')}
-      </button>
-    </span>
-  );
-}
-
 /** ported from public/app.js's renderMaster() tab 2 (บริษัท & สัญญา) + renderCustomerAddForm()/
  * renderContractEditForm() */
 export default function CustomersContractsTab() {
@@ -541,9 +452,8 @@ export default function CustomersContractsTab() {
                 <dt>VAT</dt>
                 <dd className="n">{Math.round(c.vatRate * 100)}%</dd>
                 <dt>{tx('หัก ณ ที่จ่าย')}</dt>
-                <dd className="n">
-                  <WhtRateCell contract={c} onSaved={load} />
-                </dd>
+                {/* ตัวเลขอย่างเดียว ไม่มีปุ่มดินสอแก้ตรงนี้ (5 ต.ค. 69 เจ้าของระบบสั่งเอาออก) — แก้ผ่านฟอร์ม "แก้ไขข้อมูลสัญญา" ด้านบนของการ์ด */}
+                <dd className="n">{pctPrecise(c.whtRate)}%</dd>
                 <dt>{tx('เครดิต')}</dt>
                 <dd className="n">{c.creditDays} {tx('วัน')}</dd>
                 <dt>{tx('ผู้ประสานงาน')}</dt>
