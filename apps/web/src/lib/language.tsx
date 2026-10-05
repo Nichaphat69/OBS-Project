@@ -24,6 +24,15 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  'ไม่แน่ใจ: เว้นว่างไว้ ระบบจะใช้ชื่อมาตรฐานของตัวอ่านเอง': 'Not sure: leave it blank and the system uses the reader\'s standard name',
+  'ถ้าเอกสารไม่มีฟิลด์นั้นเลย: กด "ไม่มีในฟอร์ม" ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ': 'If the document does not have the field at all: press "Not in the form" and the system will not warn that it is missing',
+  'ช่องตรงกลาง: พิมพ์ชื่อที่เอกสารของบริษัทนี้เรียกฟิลด์นั้น (ดูจากเอกสารจริง)': 'Middle column: type what this company\'s document calls the field (check a real document)',
+  'ชื่อที่เอกสารของบริษัทเรียก': 'Name used in the company\'s document',
+  'ฟิลด์ที่ระบบต้องการ': 'Field the system needs',
+  'พบ': 'Found',
+  'วิธีใช้': 'How to use',
+  'ฟิลด์ที่ตั้งค่าแล้ว': 'fields set',
+  'มีฟิลด์นี้ในฟอร์ม': 'Field is in the form',
   // ── error states ทั่วไป (ใช้ร่วมกันหลายหน้า — ดู components/ui.tsx's ErrorState) ──
   โหลดข้อมูลไม่สำเร็จ: 'Failed to load data',
   เกิดข้อผิดพลาด: 'Something went wrong',
