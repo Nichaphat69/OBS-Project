@@ -84,6 +84,9 @@ model Contract {
   quotationSubTotal   Float?   @map("quotation_sub_total")
   quotationDiscount   Float?   @map("quotation_discount")
   quotationGrandTotal Float?   @map("quotation_grand_total")
+  // ช่องที่ดึงมาจาก FlowAccount ตอนสร้างสัญญา (JSON array ของชื่อช่อง เช่น ["customerNameTh","taxId"]) — ช่องเหล่านี้
+  // แก้เองไม่ได้ทั้งหน้าเว็บและ API (ดู lib/faLockedFields.ts) · null = สัญญาที่สร้างก่อนมีฟีเจอร์นี้
+  faLockedFields      String?  @map("fa_locked_fields")
 
   customer    Customer     @relation(fields: [customerId], references: [id])
   assignments Assignment[]

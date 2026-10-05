@@ -5284,3 +5284,17 @@ tbody tr.sel td {
   .fm-row { grid-template-columns: 1fr; }
   .fm-act { justify-content: flex-start; }
 }
+
+/* ช่องที่ดึงมาจาก FlowAccount (ล็อก แก้/พิมพ์เพิ่มไม่ได้ — 5 ต.ค. 69) — ฟอร์มเพิ่มบริษัทและฟอร์มแก้สัญญา */
+.frm input[readonly]:not(.err),
+.frm select:disabled {
+  background: var(--sunk);
+  color: var(--mut);
+  cursor: not-allowed;
+}
+.frm input[readonly]:focus { box-shadow: none; border-color: var(--rule); }
+.fa-lockhint {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 5px;
+  font-size: 12px; color: var(--mut); line-height: 1.4;
+}
+.fa-lockhint svg { width: 13px; height: 13px; flex: none; }

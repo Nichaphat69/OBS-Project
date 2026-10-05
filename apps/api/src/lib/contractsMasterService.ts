@@ -9,6 +9,13 @@ import { round2 } from '@obs/domain';
 import { getActiveContract, getSetting, listContracts, type ContractSummary } from './dashboardService.js';
 import { FlowAccountClient } from './flowaccountClient.js';
 import { logAudit } from './audit.js';
+import {
+  FA_FIELD_LABELS,
+  changedLockedKeys,
+  effectiveLockedKeys,
+  sanitizeLockedKeys,
+  serializeLockedKeys,
+} from './faLockedFields.js';
 
 export class ContractMasterError extends Error {
   status: number;
@@ -322,6 +329,8 @@ export interface CreateContractInput {
   quotationSubTotal?: number | null;
   quotationDiscount?: number | null;
   quotationGrandTotal?: number | null;
+  /** ช่องที่ดึงมาจาก FlowAccount (หน้าเว็บส่งมาตอนเลือกบริษัทจากใบเสนอราคา) — แก้เองไม่ได้ ดู faLockedFields.ts */
+  faLockedFields?: unknown;
   actor: string;
 }
 
@@ -350,6 +359,7 @@ export async function createContract({
   quotationSubTotal = null,
   quotationDiscount = null,
   quotationGrandTotal = null,
+  faLockedFields = null,
   actor,
 }: CreateContractInput): Promise<ContractSummary | undefined> {
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
@@ -389,6 +399,8 @@ export async function createContract({
       quotationSubTotal: quotationSubTotal ?? null,
       quotationDiscount: quotationDiscount ?? null,
       quotationGrandTotal: quotationGrandTotal ?? null,
+      // ล็อกได้เฉพาะบริษัทที่ผูก FlowAccount จริง — คนอื่นส่งรายการมาก็ไม่เก็บ (ไม่มีอะไรให้ล็อก)
+      faLockedFields: customer.flowaccountContactId ? serializeLockedKeys(sanitizeLockedKeys(faLockedFields)) : null,
       createdAt: new Date().toISOString(),
     },
   });
@@ -452,6 +464,43 @@ export async function updateContract(input: UpdateContractInput): Promise<Contra
   }
   if (!customerNameTh || !taxId) {
     throw new ContractMasterError('ต้องระบุชื่อบริษัทและเลขผู้เสียภาษีให้ครบ');
+  }
+
+  // ช่องที่ดึงมาจาก FlowAccount แก้เองไม่ได้ (5 ต.ค. 69) — ตรวจก่อนเขียนอะไรลงฐานข้อมูล ไม่ใช่แค่ล็อกที่หน้าเว็บ
+  // เทียบเฉพาะคีย์ที่ส่งมาจริง · ค่าเท่าเดิมผ่าน (หน้าเว็บส่งทุกช่องมาเสมอ ช่องที่ล็อกจึงมาด้วยค่าเดิม)
+  const customerRow = await prisma.customer.findUnique({ where: { id: contract.customerId } });
+  if (customerRow) {
+    const locked = effectiveLockedKeys(contract.faLockedFields, customerRow);
+    const changed = changedLockedKeys(
+      locked,
+      {
+        customerNameTh: customerRow.nameTh,
+        taxId: customerRow.taxId,
+        contactName: customerRow.contactName,
+        contactPhone: customerRow.contactPhone,
+        projectName: contract.projectName,
+        vatRate: contract.vatRate,
+        whtRate: contract.whtRate,
+        creditDays: contract.creditDays,
+      },
+      {
+        customerNameTh,
+        taxId,
+        ...('contactName' in input ? { contactName } : {}),
+        ...('contactPhone' in input ? { contactPhone } : {}),
+        projectName,
+        ...('vatRate' in input ? { vatRate } : {}),
+        ...('whtRate' in input ? { whtRate } : {}),
+        ...('creditDays' in input ? { creditDays } : {}),
+      },
+    );
+    if (changed.length > 0) {
+      throw new ContractMasterError(
+        `แก้ไม่ได้ — ช่อง ${changed.map((k) => FA_FIELD_LABELS[k]).join(', ')} ดึงมาจาก FlowAccount ` +
+          'ถ้าข้อมูลไม่ตรง ให้แก้ที่ FlowAccount แล้วซิงก์ใหม่',
+        409,
+      );
+    }
   }
 
   await prisma.$transaction([

@@ -24,6 +24,8 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  'ช่องที่ดึงจาก FlowAccount แก้ไม่ได้ — ถ้าไม่ตรง ให้แก้ที่ FlowAccount แล้วเลือกใบเสนอราคาใหม่': 'Fields pulled from FlowAccount cannot be edited — if they are wrong, fix them in FlowAccount and pick the quotation again',
+  'ดึงจาก FlowAccount — แก้ไม่ได้': 'From FlowAccount — read-only',
   'ไม่แน่ใจ: เว้นว่างไว้ ระบบจะใช้ชื่อมาตรฐานของตัวอ่านเอง': 'Not sure: leave it blank and the system uses the reader\'s standard name',
   'ถ้าเอกสารไม่มีฟิลด์นั้นเลย: กด "ไม่มีในฟอร์ม" ระบบจะไม่เตือนว่าหาฟิลด์ไม่เจอ': 'If the document does not have the field at all: press "Not in the form" and the system will not warn that it is missing',
   'ช่องตรงกลาง: พิมพ์ชื่อที่เอกสารของบริษัทนี้เรียกฟิลด์นั้น (ดูจากเอกสารจริง)': 'Middle column: type what this company\'s document calls the field (check a real document)',

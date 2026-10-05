@@ -12,6 +12,7 @@ import { prisma } from '@obs/db';
 import { round2, thaiMonth, money, nextPeriod } from '@obs/domain';
 import { SUBMISSION_METHOD_LABEL } from './activityFeedService.js';
 import { logAudit } from './audit.js';
+import { effectiveLockedKeys } from './faLockedFields.js';
 
 // ── สถานะรอบบิล — ported from service.js CYCLE_STATE / CYCLE_STATE_LABEL ──────
 export const CYCLE_STATE = {
@@ -118,6 +119,8 @@ export interface ContractSummary {
   quotationGrandTotal: number | null;
   /** บริษัทของสัญญานี้ผูกกับ FlowAccount แล้วหรือยัง — ถ้าผูกแล้วพนักงาน/เรทแก้เองไม่ได้ ต้องใช้ปุ่ม "ซิงก์จาก FlowAccount" */
   flowaccountLinked: boolean;
+  /** ช่องที่ดึงมาจาก FlowAccount — หน้าเว็บล็อกไม่ให้แก้ และ API ปฏิเสธการแก้ (ดู faLockedFields.ts) */
+  faLockedFields: string[];
 }
 
 /** ported from service.js listContracts() — headcount/monthlyTotal count/sum ALL assignments
@@ -151,6 +154,7 @@ export async function listContracts(): Promise<ContractSummary[]> {
     abbyySkillId: c.abbyySkillId,
     headcount: c.assignments.length,
     flowaccountLinked: Boolean(c.customer.flowaccountContactId),
+    faLockedFields: effectiveLockedKeys(c.faLockedFields, c.customer),
     zipCode: c.customer.zipCode,
     faReference: c.faReference,
     quotationDate: c.quotationDate,

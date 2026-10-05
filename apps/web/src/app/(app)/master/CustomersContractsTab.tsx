@@ -45,6 +45,8 @@ interface ContractRow {
   quotationSubTotal?: number | null;
   quotationDiscount?: number | null;
   quotationGrandTotal?: number | null;
+  /** ช่องที่ดึงมาจาก FlowAccount — ล็อกไม่ให้แก้ (API ปฏิเสธการแก้ด้วย) */
+  faLockedFields?: string[];
 }
 /** บริษัทที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลย — ดู GET /api/customers/without-contract */
 interface CustomerWithoutContract {
@@ -507,6 +509,17 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
   const [faIndex, setFaIndex] = useState('');
   const [faContactId, setFaContactId] = useState<string | null>(null);
   const [faHint, setFaHint] = useState('');
+  // ช่องที่ได้ค่ามาจากใบเสนอราคา FlowAccount จริง (ไม่ว่าง) — ล็อกแก้/พิมพ์เพิ่มไม่ได้ (5 ต.ค. 69 ตามที่สั่ง) ส่งรายการนี้ไปเก็บกับ
+  // สัญญาด้วย เพื่อให้ฟอร์มแก้สัญญาล็อกต่อ และ API ปฏิเสธการแก้ช่องเหล่านี้
+  const [faLocked, setFaLocked] = useState<Set<string>>(new Set());
+  const locked = (key: string) => faLocked.has(key);
+  // ป้ายเล็กใต้ช่องที่ล็อก — เป็นฟังก์ชันคืน JSX ไม่ใช่คอมโพเนนต์ซ้อน (กันบั๊กช่องกรอกเสียโฟกัส)
+  const lockNote = (key: string) =>
+    locked(key) ? (
+      <small className="fa-lockhint">
+        <Icon name="lock" className="sm" /> {tx('ดึงจาก FlowAccount — แก้ไม่ได้')}
+      </small>
+    ) : null;
 
   const [nameTh, setNameTh] = useState('');
   const [taxId, setTaxId] = useState('');
@@ -552,7 +565,36 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
   function onFromFaChange(indexStr: string) {
     setFaIndex(indexStr);
     const c = faCompanies[Number(indexStr)];
-    if (!c) return;
+    if (!c) {
+      // เลือกกลับเป็นช่องว่าง = ไม่ใช้ใบเสนอราคาแล้ว: ปลดล็อกทั้งหมดและเลิกผูก FlowAccount (ค่าที่เติมไว้ยังอยู่ให้แก้ต่อได้)
+      setFaLocked(new Set());
+      setFaContactId(null);
+      return;
+    }
+    const has = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== '';
+    const lockedNow = new Set<string>();
+    const mark = (key: string, v: unknown) => {
+      if (has(v)) lockedNow.add(key);
+    };
+    mark('customerNameTh', c.nameTh);
+    mark('taxId', c.taxId);
+    mark('branch', c.branch);
+    mark('address', c.address);
+    mark('zipCode', c.zipCode);
+    mark('contactName', c.contactName);
+    mark('contactPhone', c.contactPhone);
+    mark('contactEmail', c.contactEmail);
+    mark('projectName', c.projectName);
+    mark('faReference', c.reference);
+    mark('quotationDate', c.quotationDate);
+    mark('salesName', c.salesName);
+    mark('remarks', c.remarks);
+    mark('internalNotes', c.internalNotes);
+    lockedNow.add('priceIncludesVat');
+    if (c.vatPercent != null) lockedNow.add('vatRate');
+    if (c.withholdingPercent != null && c.withholdingPercent > 0) lockedNow.add('whtRate');
+    if (c.creditDays != null && c.creditDays > 0) lockedNow.add('creditDays');
+    setFaLocked(lockedNow);
     setNameTh(c.nameTh);
     setTaxId(c.taxId);
     setBranch(c.branch || 'สำนักงานใหญ่');
@@ -683,6 +725,8 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           quotationSubTotal: faTotals.sub,
           quotationDiscount: faTotals.disc,
           quotationGrandTotal: faTotals.grand,
+          // ช่องที่ล็อก (ดึงมาจาก FlowAccount) — เซิร์ฟเวอร์เก็บไว้กับสัญญาและปฏิเสธการแก้ช่องเหล่านี้ทีหลัง
+          faLockedFields: faIndex !== '' ? [...faLocked] : [],
         }),
       });
       const contract = await contractRes.json();
@@ -774,40 +818,50 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             className={fieldErrors.has('nameTh') ? 'err' : undefined}
             value={nameTh}
             onChange={(e) => setNameTh(e.target.value)}
+            readOnly={locked('customerNameTh')}
             placeholder="เช่น บริษัท ทดสอบ จำกัด"
           />
+          {lockNote('customerNameTh')}
         </label>
         <label>
           {tx('เลขผู้เสียภาษี')}
-          <input className={fieldErrors.has('taxId') ? 'err' : undefined} value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+          <input className={fieldErrors.has('taxId') ? 'err' : undefined} value={taxId} onChange={(e) => setTaxId(e.target.value)} readOnly={locked('taxId')} />
+          {lockNote('taxId')}
         </label>
         <label>
           {tx('สาขา')}
-          <input value={branch} onChange={(e) => setBranch(e.target.value)} />
+          <input value={branch} onChange={(e) => setBranch(e.target.value)} readOnly={locked('branch')} />
+          {lockNote('branch')}
         </label>
         <label>
           {tx('ที่อยู่')}
-          <input value={address} onChange={(e) => setAddress(e.target.value)} />
+          <input value={address} onChange={(e) => setAddress(e.target.value)} readOnly={locked('address')} />
+          {lockNote('address')}
         </label>
         <label>
           {tx('รหัสไปรษณีย์')}
-          <input value={zipCode} onChange={(e) => setZipCode(e.target.value)} inputMode="numeric" />
+          <input value={zipCode} onChange={(e) => setZipCode(e.target.value)} inputMode="numeric" readOnly={locked('zipCode')} />
+          {lockNote('zipCode')}
         </label>
         <label>
           {tx('เครดิต (วัน)')}
-          <input type="number" min={0} value={creditDays} onChange={(e) => setCreditDays(e.target.value)} />
+          <input type="number" min={0} value={creditDays} onChange={(e) => setCreditDays(e.target.value)} readOnly={locked('creditDays')} />
+          {lockNote('creditDays')}
         </label>
         <label>
           {tx('ผู้ประสานงาน')}
-          <input value={contactName} onChange={(e) => setContactName(e.target.value)} />
+          <input value={contactName} onChange={(e) => setContactName(e.target.value)} readOnly={locked('contactName')} />
+          {lockNote('contactName')}
         </label>
         <label>
           {tx('เบอร์ผู้ประสานงาน')}
-          <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+          <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} readOnly={locked('contactPhone')} />
+          {lockNote('contactPhone')}
         </label>
         <label>
           {tx('อีเมลผู้ประสานงาน')}
-          <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+          <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} readOnly={locked('contactEmail')} />
+          {lockNote('contactEmail')}
         </label>
         <label>
           {tx('สถานที่วางบิล')}
@@ -837,7 +891,8 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           </label>
           <label>
             {tx('ชื่อโครงการ')}
-            <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+            <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} readOnly={locked('projectName')} />
+            {lockNote('projectName')}
           </label>
           <label>
             {tx('ตัวหารอัตราต่อวัน')}
@@ -870,11 +925,13 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           </label>
           <label>
             VAT (%)
-            <input type="number" min={0} max={100} step={0.1} value={vat} onChange={(e) => setVat(e.target.value)} />
+            <input type="number" min={0} max={100} step={0.1} value={vat} onChange={(e) => setVat(e.target.value)} readOnly={locked('vatRate')} />
+            {lockNote('vatRate')}
           </label>
           <label>
             {tx('หัก ณ ที่จ่าย (%)')}
-            <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
+            <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} readOnly={locked('whtRate')} />
+            {lockNote('whtRate')}
           </label>
         </div>
         <small className="fhint">{tx('พนักงาน/อัตราจ้างของบริษัทรายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
@@ -884,7 +941,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
         <div className="fsec">
           <div className="fsec-h">
             <b>{tx('ข้อมูลจากใบเสนอราคา FlowAccount')}</b>
-            <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('ดึงมาให้อัตโนมัติ — แก้ไขได้ก่อนบันทึก')}</span>
+            <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('ช่องที่ดึงจาก FlowAccount แก้ไม่ได้ — ถ้าไม่ตรง ให้แก้ที่ FlowAccount แล้วเลือกใบเสนอราคาใหม่')}</span>
           </div>
           {faNotes.length > 0 && (
             <div className="note wn" style={{ marginBottom: 12 }}>
@@ -895,32 +952,38 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           <div className="frm">
             <label>
               {tx('เลขที่อ้างอิง')}
-              <input value={faReference} onChange={(e) => setFaReference(e.target.value)} />
+              <input value={faReference} onChange={(e) => setFaReference(e.target.value)} readOnly={locked('faReference')} />
+              {lockNote('faReference')}
             </label>
             <label>
               {tx('วันที่ใบเสนอราคา')}
-              <DatePicker value={quotationDate} onChange={setQuotationDate} />
+              <DatePicker value={quotationDate} onChange={setQuotationDate} disabled={locked('quotationDate')} />
+              {lockNote('quotationDate')}
             </label>
             <label>
               {tx('ราคา')}
               <span className="selectchip grow">
-                <select value={priceIncludesVat ? 'inc' : 'exc'} onChange={(e) => setPriceIncludesVat(e.target.value === 'inc')}>
+                <select value={priceIncludesVat ? 'inc' : 'exc'} onChange={(e) => setPriceIncludesVat(e.target.value === 'inc')} disabled={locked('priceIncludesVat')}>
                   <option value="exc">{tx('ราคาไม่รวมภาษี')}</option>
                   <option value="inc">{tx('ราคารวมภาษี')}</option>
                 </select>
               </span>
+              {lockNote('priceIncludesVat')}
             </label>
             <label>
               {tx('พนักงานขาย')}
-              <input value={salesName} onChange={(e) => setSalesName(e.target.value)} />
+              <input value={salesName} onChange={(e) => setSalesName(e.target.value)} readOnly={locked('salesName')} />
+              {lockNote('salesName')}
             </label>
             <label>
               {tx('หมายเหตุ')}
-              <input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+              <input value={remarks} onChange={(e) => setRemarks(e.target.value)} readOnly={locked('remarks')} />
+              {lockNote('remarks')}
             </label>
             <label>
               {tx('บันทึกภายใน')}
-              <input value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} />
+              <input value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} readOnly={locked('internalNotes')} />
+              {lockNote('internalNotes')}
             </label>
             <label>
               {tx('ยอดก่อนส่วนลด (อ่านอย่างเดียว)')}
@@ -1097,6 +1160,16 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
   const [creditDays, setCreditDays] = useState(String(contract.creditDays));
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
+  // ช่องที่ดึงมาจาก FlowAccount — แก้ไม่ได้ (รายการมาจาก server: สัญญาใหม่ตามที่เลือกตอนสร้าง สัญญาเก่าใช้กฎสำรอง) และ
+  // server ปฏิเสธการแก้ช่องเหล่านี้ด้วย ไม่ใช่แค่ล็อกที่หน้านี้
+  const lockedSet = new Set(contract.faLockedFields ?? []);
+  const locked = (key: string) => lockedSet.has(key);
+  const lockNote = (key: string) =>
+    locked(key) ? (
+      <small className="fa-lockhint">
+        <Icon name="lock" className="sm" /> {tx('ดึงจาก FlowAccount — แก้ไม่ได้')}
+      </small>
+    ) : null;
 
   async function save() {
     const cnt = customerNameTh.trim();
@@ -1174,19 +1247,23 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
       <div className="frm">
         <label>
           {tx('ชื่อบริษัท')}
-          <input className={fieldErrors.has('customerNameTh') ? 'err' : undefined} value={customerNameTh} onChange={(e) => setCustomerNameTh(e.target.value)} />
+          <input className={fieldErrors.has('customerNameTh') ? 'err' : undefined} value={customerNameTh} onChange={(e) => setCustomerNameTh(e.target.value)} readOnly={locked('customerNameTh')} />
+          {lockNote('customerNameTh')}
         </label>
         <label>
           {tx('เลขผู้เสียภาษี')}
-          <input className={fieldErrors.has('taxId') ? 'err' : undefined} value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+          <input className={fieldErrors.has('taxId') ? 'err' : undefined} value={taxId} onChange={(e) => setTaxId(e.target.value)} readOnly={locked('taxId')} />
+          {lockNote('taxId')}
         </label>
         <label>
           {tx('ผู้ประสานงาน')}
-          <input value={contactName} onChange={(e) => setContactName(e.target.value)} />
+          <input value={contactName} onChange={(e) => setContactName(e.target.value)} readOnly={locked('contactName')} />
+          {lockNote('contactName')}
         </label>
         <label>
           {tx('เบอร์ผู้ประสานงาน')}
-          <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+          <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} readOnly={locked('contactPhone')} />
+          {lockNote('contactPhone')}
         </label>
         <label>
           {tx('สถานที่วางบิล')}
@@ -1209,7 +1286,8 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
           </label>
           <label>
             {tx('ชื่อโครงการ')}
-            <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+            <input className={fieldErrors.has('projectName') ? 'err' : undefined} value={projectName} onChange={(e) => setProjectName(e.target.value)} readOnly={locked('projectName')} />
+            {lockNote('projectName')}
           </label>
           <label>
             {tx('ตัวหารอัตราต่อวัน')}
@@ -1242,15 +1320,18 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
           </label>
           <label>
             VAT (%)
-            <input type="number" min={0} max={100} step={0.1} value={vat} onChange={(e) => setVat(e.target.value)} />
+            <input type="number" min={0} max={100} step={0.1} value={vat} onChange={(e) => setVat(e.target.value)} readOnly={locked('vatRate')} />
+            {lockNote('vatRate')}
           </label>
           <label>
             {tx('หัก ณ ที่จ่าย (%)')}
-            <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} />
+            <input type="number" min={0} max={100} step={0.1} value={wht} onChange={(e) => setWht(e.target.value)} readOnly={locked('whtRate')} />
+            {lockNote('whtRate')}
           </label>
           <label>
             {tx('เครดิต (วัน)')}
-            <input type="number" min={0} value={creditDays} onChange={(e) => setCreditDays(e.target.value)} />
+            <input type="number" min={0} value={creditDays} onChange={(e) => setCreditDays(e.target.value)} readOnly={locked('creditDays')} />
+            {lockNote('creditDays')}
           </label>
         </div>
       </div>
