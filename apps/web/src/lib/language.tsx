@@ -24,6 +24,23 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  // ── admin/UsersTab.tsx (layout ใหม่ 5 ต.ค. 69) ──
+  'ทุกอย่าง รวมตั้งค่าระบบและจัดการผู้ใช้': 'Everything, including system settings and user management',
+  'อัปโหลด/ตรวจ Timesheet, ตรวจ Manday, วางบิล': 'Upload/review Timesheets, check Manday, billing',
+  'ส่ง Timesheet และดูความคืบหน้าของตัวเอง': 'Submit Timesheets and track own progress',
+  'ดูภาพรวมข้ามบริษัทอย่างเดียว': 'View cross-company overview only',
+  'ไม่มีแจ้งเตือนทาง LINE': 'No LINE notifications',
+  'ปิดฟอร์ม': 'Close form',
+  'เพิ่มผู้ใช้ใหม่': 'Add new user',
+  'กรอกข้อมูลบัญชี แล้วเลือกสิทธิ์การใช้งาน': 'Fill in account details, then choose access level',
+  'สิทธิ์การใช้งาน (Role)': 'Access level (Role)',
+  'ค้นหาชื่อ / username / อีเมล': 'Search name / username / email',
+  'ค้นหาผู้ใช้': 'Search users',
+  'กรอง': 'Filter',
+  'ล้างตัวกรอง': 'Clear filters',
+  'คุณ': 'You',
+  'ไม่พบผู้ใช้ที่ตรงกับตัวกรอง': 'No users match the filter',
+  'ชี้ที่สถานะ LINE เพื่อดูว่าจะได้รับแจ้งเตือนเรื่องอะไร': 'Hover a LINE status to see which notifications that user receives',
   'ช่องที่ดึงจาก FlowAccount แก้ไม่ได้ — ถ้าไม่ตรง ให้แก้ที่ FlowAccount แล้วเลือกใบเสนอราคาใหม่': 'Fields pulled from FlowAccount cannot be edited — if they are wrong, fix them in FlowAccount and pick the quotation again',
   'ดึงจาก FlowAccount — แก้ไม่ได้': 'From FlowAccount — read-only',
   'ไม่แน่ใจ: เว้นว่างไว้ ระบบจะใช้ชื่อมาตรฐานของตัวอ่านเอง': 'Not sure: leave it blank and the system uses the reader\'s standard name',

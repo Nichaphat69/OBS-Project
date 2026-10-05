@@ -5298,3 +5298,102 @@ tbody tr.sel td {
   font-size: 12px; color: var(--mut); line-height: 1.4;
 }
 .fa-lockhint svg { width: 13px; height: 13px; flex: none; }
+
+/* ═══ ตั้งค่าระบบ › ผู้ใช้ระบบ (UsersTab.tsx) — จัด layout ใหม่ 5 ต.ค. 69 ═══
+   การ์ดสรุปตาม role (กดเพื่อกรอง) · ฟอร์มเพิ่มผู้ใช้แบบพับได้ เลือก role เป็นการ์ด · ตาราง 7 คอลัมน์
+   สีประจำ role ใช้ชุดเดียวกันทั้งการ์ด/อวาตาร์/ตัวเลือก role ในตาราง: admin ม่วง · บัญชี ฟ้า · พนักงาน เขียว · ผู้บริหาร ส้ม */
+.r-admin { --rc: var(--pr); --rcb: var(--prb); }
+.r-accounting { --rc: var(--brand); --rcb: var(--tint); }
+.r-user { --rc: var(--ok); --rcb: var(--okb); }
+.r-executive { --rc: #c2410c; --rcb: #fff4ed; }
+
+.urole-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 1100px) { .urole-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .urole-grid { grid-template-columns: 1fr; } }
+.urole {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font: inherit;
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--rc);
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+  transition: box-shadow 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.urole:hover { box-shadow: var(--sh2); }
+.urole.on { background: var(--rcb); border-color: var(--rc); box-shadow: 0 0 0 1px var(--rc) inset; }
+.urole-top { display: flex; align-items: center; gap: 10px; }
+.urole-top b { font-size: 14px; color: var(--ink); flex: 1; }
+.urole-ic {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 30px; height: 30px; border-radius: 9px;
+  background: var(--rcb); color: var(--rc);
+}
+.urole-ic svg.i { color: var(--rc); }
+.urole-n { font-size: 22px; font-weight: 800; color: var(--rc); font-variant-numeric: tabular-nums; line-height: 1; }
+.urole-desc { font-size: 12.5px; color: var(--ink2); line-height: 1.5; }
+.urole-ln { display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; color: var(--mut); line-height: 1.5; }
+.urole-ln svg.i { flex: none; margin-top: 2px; color: var(--fnt); }
+
+/* ฟอร์มเพิ่มผู้ใช้ */
+.uadd {
+  background: var(--sunk);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-card);
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.uadd-h { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.uadd-h b { font-size: 15px; color: var(--ink); }
+.frm.uadd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+@media (max-width: 720px) { .frm.uadd-grid { grid-template-columns: 1fr; } }
+.uadd-sec { font-size: 13px; font-weight: 600; color: var(--ink2); margin: 16px 0 8px; }
+.urole-pick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .urole-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.urole-opt {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px; cursor: pointer;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-ctl);
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.urole-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.urole-opt > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.urole-opt b { font-size: 13.5px; color: var(--ink); }
+.urole-opt .sub { font-size: 12px; line-height: 1.45; }
+.urole-opt.on { border-color: var(--rc); background: var(--rcb); box-shadow: 0 0 0 1px var(--rc) inset; }
+.urole-opt:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
+.uadd-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* แถบค้นหาเหนือตาราง */
+.utool { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.usearch { position: relative; flex: 1; min-width: 220px; max-width: 380px; }
+.usearch svg.i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--mut); pointer-events: none; }
+.usearch input[type='search'] { width: 100%; padding-left: 38px; }
+
+/* ตาราง */
+.uwho { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.uav {
+  flex: none; width: 36px; height: 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px;
+  background: var(--rcb); color: var(--rc);
+  border: 1px solid color-mix(in srgb, var(--rc) 25%, transparent);
+}
+.uwho-t { display: flex; flex-direction: column; min-width: 0; }
+.uwho-t .nm { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.uwho-t .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.selectchip.urole-sel { border-color: color-mix(in srgb, var(--rc) 45%, transparent); background: var(--rcb); }
+.selectchip.urole-sel select { color: var(--rc); font-weight: 600; }
+tr.uinactive td { opacity: 0.55; }
+tr.uinactive td:last-child, tr.uinactive td:nth-last-child(3) { opacity: 1; }
