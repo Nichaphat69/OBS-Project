@@ -363,7 +363,7 @@ export default function ManadyDetailPage() {
     const method = sheet.submissionMethod ?? ingest?.detail?.submissionMethod ?? null;
     const source = sheet.sourceEmailSubject
       ? `${tx('อีเมล')}: ${sheet.sourceEmailSubject}`
-      : sheet.sourceFile
+      : sheet.sourceFile && !isManualEntry
         ? `${tx('ไฟล์')}: ${sheet.sourceFile}`
         : null;
     /* ลิสต์นี้รวม audit สามระดับไว้ด้วยกัน (ดู getTimesheet() ใน apps/api timesheetsService.ts): ของ
@@ -650,7 +650,8 @@ export default function ManadyDetailPage() {
             <div className="bd">
               <dl className="kv" style={{ marginBottom: 16 }}>
                 <dt>{tx('ไฟล์ที่อัปโหลด')}</dt>
-                <dd>{sheet.sourceFile ?? '—'}</dd>
+                {/* รายการกรอกเอง (ไม่มีไฟล์) เก็บข้อความปลอม "ป้อนด้วยมือ · เดือน" ไว้ในช่องนี้ ไม่ใช่ชื่อไฟล์ — ไม่โชว์เป็นชื่อไฟล์ */}
+                <dd>{isManualEntry ? '—' : sheet.sourceFile ?? '—'}</dd>
                 <dt>{tx('อ้างอิงอีเมล')}</dt>
                 <dd>{sheet.sourceEmailSubject ?? sheet.sourceEmailId ?? tx('ไม่ได้ระบุ')}</dd>
                 <dt>{tx('ชื่อที่เขียนในไฟล์')}</dt>

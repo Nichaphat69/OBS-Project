@@ -315,7 +315,10 @@ export async function confirmTimesheet({
 
   const result = await ingestTimesheet({
     documentNo,
-    fileName: fileName ?? `อัปโหลดด้วยมือ · ${data.period}`,
+    // ชื่อไฟล์ = ชื่อไฟล์ต้นฉบับจริงเสมอ (5 ต.ค. 69 เจ้าของระบบสั่ง: ไม่เอา "อัปโหลดด้วยมือ · เดือน" ที่ตั้งเอง ถ้าไฟล์ชื่อ
+    // "T8 Ruethaiwan 8-2026.pdf" ต้องเป็นชื่อนี้ทุกจุดที่แสดงไฟล์ Timesheet) หน้าเว็บตอนกดยืนยันไม่ได้ส่งชื่อมา แต่ชื่อเดิมเก็บอยู่ใน
+    // แถวอ่านไฟล์ (ai_reads.file_name) ของเลขเอกสารเดียวกันอยู่แล้ว — ใช้ข้อความสำรองเฉพาะกรณีไม่มีชื่อไหนเลยจริงๆ
+    fileName: fileName ?? pendingRead?.fileName ?? `อัปโหลดด้วยมือ · ${data.period}`,
     fileBytes: await loadFile(pendingRead?.fileKey),
     sourceEmailId,
     sourceEmailSubject,
