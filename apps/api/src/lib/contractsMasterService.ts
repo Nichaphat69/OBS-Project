@@ -100,6 +100,8 @@ export async function syncAssignmentsFromFlowAccount(
             startDate: contract.startDate,
             endDate: contract.endDate,
             status: 'active',
+            quantity: emp.quantity,
+            unitName: emp.unitName,
           },
         });
         created.push(emp.nameTh);
@@ -107,13 +109,35 @@ export async function syncAssignmentsFromFlowAccount(
         round2(existing.monthlyRate) !== round2(emp.monthlyRate) ||
         existing.employee.invoicePosition !== emp.invoicePosition
       ) {
-        await tx.assignment.update({ where: { id: existing.id }, data: { monthlyRate: round2(emp.monthlyRate), quotationNo: company.quotationNo } });
+        await tx.assignment.update({
+          where: { id: existing.id },
+          data: { monthlyRate: round2(emp.monthlyRate), quotationNo: company.quotationNo, quantity: emp.quantity, unitName: emp.unitName },
+        });
         await tx.employee.update({ where: { id: existing.employeeId }, data: { invoicePosition: emp.invoicePosition } });
         updated.push(emp.nameTh);
       } else {
+        // เรท/ตำแหน่งเหมือนเดิม — แต่จำนวน/หน่วยอาจเปลี่ยน อัปเดตเงียบๆ ไม่นับเป็นการเปลี่ยนแปลงของพนักงาน
+        await tx.assignment.update({ where: { id: existing.id }, data: { quantity: emp.quantity, unitName: emp.unitName } });
         unchanged += 1;
       }
     }
+
+    // ข้อมูลอ้างอิงจากใบเสนอราคาล่าสุดของสัญญา (เลขที่อ้างอิง/วันที่/พนักงานขาย/หมายเหตุ/ยอด) — ซิงก์ทับได้ เพราะไม่ใช่ค่าที่
+    // ใช้คิดเงินและไม่ใช่ค่าที่คนตั้งเอง · PO/วันที่สัญญา/เครดิต/VAT/หัก ณ ที่จ่ายไม่แตะ เพราะคนอาจแก้ให้ต่างจากใบเสนอราคาโดยตั้งใจ
+    await tx.contract.update({
+      where: { id: contractId },
+      data: {
+        faReference: company.reference,
+        quotationDate: company.quotationDate,
+        priceIncludesVat: company.isVatInclusive,
+        salesName: company.salesName,
+        remarks: company.remarks,
+        internalNotes: company.internalNotes,
+        quotationSubTotal: company.subTotal,
+        quotationDiscount: company.discountAmount,
+        quotationGrandTotal: company.grandTotal,
+      },
+    });
 
     for (const assignment of contract.assignments) {
       if (!targetNames.has(normalize(assignment.employee.nameTh))) {
@@ -144,18 +168,101 @@ async function newFlowAccountClient(): Promise<FlowAccountClient> {
   return new FlowAccountClient({ mode: (settings as any).mode, documentType: (settings as any).documentType });
 }
 
+export interface FlowAccountEmployeeLine {
+  nameTh: string;
+  invoicePosition: string;
+  monthlyRate: number;
+  /** จำนวน/หน่วย/ส่วนลด/VAT ของบรรทัดในใบเสนอราคา (5 ต.ค. 69) — เก็บอ้างอิง ยังไม่ใช้คิดเงิน */
+  quantity: number | null;
+  unitName: string | null;
+  discountAmount: number | null;
+  vatRate: number | null;
+}
+
 export interface FlowAccountCompany {
   flowaccountContactId: string;
   nameTh: string;
   taxId: string;
   branch: string;
   address: string | null;
+  zipCode: string | null;
   contactName: string | null;
   contactPhone: string | null;
   contactEmail: string | null;
   quotationNo: string | null;
   projectName: string | null;
-  employees: Array<{ nameTh: string; invoicePosition: string; monthlyRate: number }>;
+  // ── ฟิลด์ระดับเอกสารที่ดึงเพิ่ม (5 ต.ค. 69 เจ้าของระบบสั่งให้ดึงจาก FlowAccount ให้ครบ) ชื่อตรงกับ API จริงของ
+  // FlowAccount ที่ตรวจกับใบเสนอราคาจริง 20 ใบ ──
+  /** "เลขที่อ้างอิง" (reference) — น่าจะเป็นที่ที่ใส่เลข PO แต่มีค่าแค่บางใบ ไม่ใช่ทุกใบ ผู้ใช้ต้องตรวจเองก่อนใช้ */
+  reference: string | null;
+  /** เครดิตเป็นจำนวนวัน (creditDays) — 0 คือ "ไม่มีเครดิต" ไม่ใช่ "ไม่ได้ตั้ง" */
+  creditDays: number | null;
+  /** วันที่เอกสาร YYYY-MM-DD (publishedOn) */
+  quotationDate: string | null;
+  /** หัก ณ ที่จ่าย % ระดับเอกสาร (documentWithholdingTaxPercentage) · 0 = ไม่หัก */
+  withholdingPercent: number | null;
+  /** VAT % ของบรรทัดแรก (items[].vatRate) */
+  vatPercent: number | null;
+  /** true = ราคารวมภาษีแล้ว (isVatInclusive) ระบบคิดเงินของเรา "ไม่รวมภาษี" เสมอ ต้องเตือนถ้าเป็น true */
+  isVatInclusive: boolean;
+  remarks: string | null;
+  internalNotes: string | null;
+  salesName: string | null;
+  subTotal: number | null;
+  discountAmount: number | null;
+  grandTotal: number | null;
+  employees: FlowAccountEmployeeLine[];
+}
+
+const numOrNull = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+const textOrNull = (v: unknown): string | null => {
+  const t = typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim();
+  return t ? t : null;
+};
+
+/** แปลงใบเสนอราคา 1 ใบจาก FlowAccount เป็นข้อมูลบริษัท+สัญญาที่ใช้เติมฟอร์ม — แยกเป็นฟังก์ชันล้วนเพื่อให้เทสต์ยิงตรงได้ */
+export function mapQuotationToCompany(q: any): FlowAccountCompany {
+  const items: any[] = Array.isArray(q.items) ? q.items : [];
+  return {
+    flowaccountContactId: String(q.contactId),
+    nameTh: q.contactName || '',
+    taxId: q.contactTaxId || '',
+    branch: q.contactBranch || 'สำนักงานใหญ่',
+    address: q.contactAddress || null,
+    zipCode: textOrNull(q.contactZipCode),
+    contactName: q.contactPerson || null,
+    contactPhone: q.contactNumber || null,
+    contactEmail: q.contactEmail || null,
+    quotationNo: q.documentSerial ?? null,
+    projectName: q.projectName || null,
+    reference: textOrNull(q.reference),
+    creditDays: numOrNull(q.creditDays),
+    quotationDate: typeof q.publishedOn === 'string' && q.publishedOn.length >= 10 ? q.publishedOn.slice(0, 10) : null,
+    withholdingPercent: numOrNull(q.documentWithholdingTaxPercentage),
+    vatPercent: numOrNull(items[0]?.vatRate),
+    isVatInclusive: q.isVatInclusive === true || q.isVatInclusive === 'true',
+    remarks: textOrNull(q.remarks),
+    internalNotes: textOrNull(q.internalNotes),
+    salesName: textOrNull(q.salesName),
+    subTotal: numOrNull(q.subTotal),
+    discountAmount: numOrNull(q.discountAmount),
+    grandTotal: numOrNull(q.grandTotal),
+    employees: items
+      .filter((item: any) => (item.description || '').trim() && Number(item.pricePerUnit) > 0)
+      .map((item: any) => ({
+        nameTh: item.description.trim(),
+        invoicePosition: item.name || '',
+        monthlyRate: Number(item.pricePerUnit) || 0,
+        quantity: numOrNull(item.quantity),
+        unitName: textOrNull(item.unitName),
+        discountAmount: numOrNull(item.discountAmount),
+        vatRate: numOrNull(item.vatRate),
+      })),
+  };
 }
 
 /** ported from service.js listFlowAccountCompanies() — reads existing quotations from
@@ -177,25 +284,7 @@ export async function listFlowAccountCompanies(): Promise<FlowAccountCompany[]> 
 
   return [...byContact.values()]
     .sort((a, b) => (a.contactName ?? '').localeCompare(b.contactName ?? ''))
-    .map((q) => ({
-      flowaccountContactId: String(q.contactId),
-      nameTh: q.contactName || '',
-      taxId: q.contactTaxId || '',
-      branch: q.contactBranch || 'สำนักงานใหญ่',
-      address: q.contactAddress || null,
-      contactName: q.contactPerson || null,
-      contactPhone: q.contactNumber || null,
-      contactEmail: q.contactEmail || null,
-      quotationNo: q.documentSerial ?? null,
-      projectName: q.projectName || null,
-      employees: (q.items ?? [])
-        .filter((item: any) => (item.description || '').trim() && Number(item.pricePerUnit) > 0)
-        .map((item: any) => ({
-          nameTh: item.description.trim(),
-          invoicePosition: item.name || '',
-          monthlyRate: Number(item.pricePerUnit) || 0,
-        })),
-    }));
+    .map(mapQuotationToCompany);
 }
 
 /** ported from abbyySkillsService.ts's nextSkillId() pattern */
@@ -223,6 +312,16 @@ export interface CreateContractInput {
   vatRate?: number;
   whtRate?: number;
   abbyySkillId?: string | null;
+  // ฟิลด์จากใบเสนอราคา FlowAccount (5 ต.ค. 69) — ว่างได้ทั้งหมด
+  faReference?: string | null;
+  quotationDate?: string | null;
+  priceIncludesVat?: boolean;
+  salesName?: string | null;
+  remarks?: string | null;
+  internalNotes?: string | null;
+  quotationSubTotal?: number | null;
+  quotationDiscount?: number | null;
+  quotationGrandTotal?: number | null;
   actor: string;
 }
 
@@ -242,6 +341,15 @@ export async function createContract({
   vatRate = 0.07,
   whtRate = 0.03,
   abbyySkillId = null,
+  faReference = null,
+  quotationDate = null,
+  priceIncludesVat = false,
+  salesName = null,
+  remarks = null,
+  internalNotes = null,
+  quotationSubTotal = null,
+  quotationDiscount = null,
+  quotationGrandTotal = null,
   actor,
 }: CreateContractInput): Promise<ContractSummary | undefined> {
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
@@ -264,13 +372,23 @@ export async function createContract({
       poDate,
       startDate,
       endDate,
-      creditDays: Number(creditDays) || 30,
+      // เครดิต 0 วันเป็นค่าที่ถูกต้อง (FlowAccount 13 จาก 20 ใบเป็น 0) — เดิม `|| 30` ทำให้ 0 กลายเป็น 30 เงียบๆ
+      creditDays: Number.isFinite(Number(creditDays)) ? Number(creditDays) : 30,
       divisorMode,
       divisorValue: Number(divisorValue) || 20,
       vatRate: Number(vatRate),
       whtRate: Number(whtRate),
       status,
       abbyySkillId: abbyySkillId?.trim() || null,
+      faReference: faReference?.trim() || null,
+      quotationDate: quotationDate || null,
+      priceIncludesVat: Boolean(priceIncludesVat),
+      salesName: salesName?.trim() || null,
+      remarks: remarks?.trim() || null,
+      internalNotes: internalNotes?.trim() || null,
+      quotationSubTotal: quotationSubTotal ?? null,
+      quotationDiscount: quotationDiscount ?? null,
+      quotationGrandTotal: quotationGrandTotal ?? null,
       createdAt: new Date().toISOString(),
     },
   });

@@ -127,6 +127,9 @@ export interface CreateEmployeeInput {
   monthlyRate: number;
   startDate: string;
   endDate?: string | null;
+  /** จำนวน/หน่วยของบรรทัดในใบเสนอราคา FlowAccount — เก็บอ้างอิง (5 ต.ค. 69) */
+  quantity?: number | null;
+  unitName?: string | null;
   /** true เฉพาะตอนเรียกจากลูปสร้างพนักงานชุดแรกของ "เพิ่มลูกค้าใหม่จาก FlowAccount" เท่านั้น (ดู
    * CustomersContractsTab.tsx) — ข้าม assertAssignmentsNotFlowAccountLocked() ไปเลย ไม่เชื่อ headcount
    * ปัจจุบันของสัญญา (เดิมเคยลองเช็คว่า assignments.length===0 แทน แต่ลูปสร้างทีละคนตามลำดับทำให้
@@ -148,6 +151,8 @@ export async function createEmployee({
   monthlyRate,
   startDate,
   endDate = null,
+  quantity = null,
+  unitName = null,
   fromFlowAccountSync = false,
   actor,
 }: CreateEmployeeInput): Promise<EmployeeMasterRow | undefined> {
@@ -175,6 +180,8 @@ export async function createEmployee({
         startDate,
         endDate: endDate || contract.endDate,
         status: 'active',
+        quantity: quantity ?? null,
+        unitName: unitName?.trim() || null,
       },
     }),
   ]);

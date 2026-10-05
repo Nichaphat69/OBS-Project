@@ -42,6 +42,8 @@ model Customer {
   createdAt             String   @map("created_at")
   // เพิ่มทีหลัง (ADDED_COLUMNS) — โดเมนอีเมลของลูกค้า ใช้กรองกล่อง Gmail
   emailDomain           String?  @map("email_domain")
+  // เพิ่ม 5 ต.ค. 69 — รหัสไปรษณีย์ที่ดึงจากใบเสนอราคา FlowAccount (contactZipCode) แยกจากที่อยู่
+  zipCode               String?  @map("zip_code")
 
   contracts Contract[]
   holidays  Holiday[]
@@ -71,6 +73,17 @@ model Contract {
   // CLEAR_READ_TEMPLATE_ID จาก .env แทน เหมือนที่ ABBYY_SKILL_ID ทำอยู่ (16 ก.ย. 69)
   clearReadTemplateId String? @map("clear_read_template_id")
   createdAt    String   @map("created_at")
+  // เพิ่ม 5 ต.ค. 69 — ฟิลด์จากใบเสนอราคา FlowAccount ที่ดึงมาเก็บไว้กับสัญญา (ทั้งหมด nullable เพราะสัญญาที่กรอกเองไม่มี)
+  // faReference = "เลขที่อ้างอิง" · quotationDate = วันที่เอกสาร (publishedOn) · priceIncludesVat = isVatInclusive
+  faReference         String?  @map("fa_reference")
+  quotationDate       String?  @map("quotation_date")
+  priceIncludesVat    Boolean  @default(false) @map("price_includes_vat")
+  salesName           String?  @map("sales_name")
+  remarks             String?
+  internalNotes       String?  @map("internal_notes")
+  quotationSubTotal   Float?   @map("quotation_sub_total")
+  quotationDiscount   Float?   @map("quotation_discount")
+  quotationGrandTotal Float?   @map("quotation_grand_total")
 
   customer    Customer     @relation(fields: [customerId], references: [id])
   assignments Assignment[]
@@ -130,6 +143,9 @@ model Assignment {
   startDate    String   @map("start_date")
   endDate      String   @map("end_date")
   status       String   @default("active")
+  // เพิ่ม 5 ต.ค. 69 — จำนวน/หน่วยของบรรทัดในใบเสนอราคา FlowAccount (quantity, unitName) เก็บไว้อ้างอิง ยังไม่ใช้คิดเงิน
+  quantity     Float?
+  unitName     String?  @map("unit_name")
 
   contract Contract @relation(fields: [contractId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])

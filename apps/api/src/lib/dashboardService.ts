@@ -105,6 +105,17 @@ export interface ContractSummary {
   headcount: number;
   monthlyTotal: number;
   status: string;
+  // ฟิลด์จากใบเสนอราคา FlowAccount (5 ต.ค. 69) — null ถ้าสัญญาไม่ได้มาจาก FlowAccount
+  zipCode: string | null;
+  faReference: string | null;
+  quotationDate: string | null;
+  priceIncludesVat: boolean;
+  salesName: string | null;
+  remarks: string | null;
+  internalNotes: string | null;
+  quotationSubTotal: number | null;
+  quotationDiscount: number | null;
+  quotationGrandTotal: number | null;
   /** บริษัทของสัญญานี้ผูกกับ FlowAccount แล้วหรือยัง — ถ้าผูกแล้วพนักงาน/เรทแก้เองไม่ได้ ต้องใช้ปุ่ม "ซิงก์จาก FlowAccount" */
   flowaccountLinked: boolean;
 }
@@ -140,6 +151,16 @@ export async function listContracts(): Promise<ContractSummary[]> {
     abbyySkillId: c.abbyySkillId,
     headcount: c.assignments.length,
     flowaccountLinked: Boolean(c.customer.flowaccountContactId),
+    zipCode: c.customer.zipCode,
+    faReference: c.faReference,
+    quotationDate: c.quotationDate,
+    priceIncludesVat: c.priceIncludesVat,
+    salesName: c.salesName,
+    remarks: c.remarks,
+    internalNotes: c.internalNotes,
+    quotationSubTotal: c.quotationSubTotal,
+    quotationDiscount: c.quotationDiscount,
+    quotationGrandTotal: c.quotationGrandTotal,
     monthlyTotal: round2(c.assignments.reduce((sum, a) => sum + a.monthlyRate, 0)),
     status: c.status,
   }));

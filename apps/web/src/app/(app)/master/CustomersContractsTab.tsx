@@ -35,6 +35,16 @@ interface ContractRow {
   status: string;
   /** บริษัทผูก FlowAccount แล้ว → พนักงาน/เรทแก้เองไม่ได้ ใช้ปุ่มซิงก์แทน */
   flowaccountLinked?: boolean;
+  zipCode?: string | null;
+  faReference?: string | null;
+  quotationDate?: string | null;
+  priceIncludesVat?: boolean;
+  salesName?: string | null;
+  remarks?: string | null;
+  internalNotes?: string | null;
+  quotationSubTotal?: number | null;
+  quotationDiscount?: number | null;
+  quotationGrandTotal?: number | null;
 }
 /** บริษัทที่สร้างไว้แล้วแต่ยังไม่มีสัญญาเลย — ดู GET /api/customers/without-contract */
 interface CustomerWithoutContract {
@@ -46,6 +56,8 @@ interface FlowAccountEmployee {
   nameTh: string;
   invoicePosition: string;
   monthlyRate: number;
+  quantity?: number | null;
+  unitName?: string | null;
 }
 interface FlowAccountCompany {
   flowaccountContactId: string;
@@ -58,6 +70,20 @@ interface FlowAccountCompany {
   contactEmail: string | null;
   quotationNo: string | null;
   projectName: string | null;
+  // ฟิลด์ที่ดึงเพิ่มจากใบเสนอราคา (5 ต.ค. 69) — ดู FlowAccountCompany ฝั่ง apps/api
+  zipCode?: string | null;
+  reference?: string | null;
+  creditDays?: number | null;
+  quotationDate?: string | null;
+  withholdingPercent?: number | null;
+  vatPercent?: number | null;
+  isVatInclusive?: boolean;
+  remarks?: string | null;
+  internalNotes?: string | null;
+  salesName?: string | null;
+  subTotal?: number | null;
+  discountAmount?: number | null;
+  grandTotal?: number | null;
   employees: FlowAccountEmployee[];
 }
 
@@ -532,6 +558,29 @@ export default function CustomersContractsTab() {
                 )}
               </dl>
             </div>
+            {/* ข้อมูลที่ดึงจากใบเสนอราคา FlowAccount (5 ต.ค. 69) — โชว์เฉพาะสัญญาที่มีค่าอย่างน้อยหนึ่งช่อง */}
+            {(c.faReference || c.quotationDate || c.salesName || c.remarks || c.internalNotes || c.zipCode || c.quotationGrandTotal != null || c.priceIncludesVat) && (
+              <>
+                <div className="sub" style={{ margin: '14px 0 6px', fontWeight: 600 }}>{tx('ข้อมูลจากใบเสนอราคา FlowAccount')}</div>
+                <div className="g2">
+                  <dl className="kv">
+                    {c.faReference && (<><dt>{tx('เลขที่อ้างอิง')}</dt><dd className="n">{c.faReference}</dd></>)}
+                    {c.quotationDate && (<><dt>{tx('วันที่ใบเสนอราคา')}</dt><dd>{dateOnly(c.quotationDate, lang)}</dd></>)}
+                    <dt>{tx('ราคา')}</dt>
+                    <dd>{c.priceIncludesVat ? tx('รวมภาษี') : tx('ไม่รวมภาษี')}</dd>
+                    {c.salesName && (<><dt>{tx('พนักงานขาย')}</dt><dd>{c.salesName}</dd></>)}
+                    {c.zipCode && (<><dt>{tx('รหัสไปรษณีย์')}</dt><dd className="n">{c.zipCode}</dd></>)}
+                  </dl>
+                  <dl className="kv">
+                    {c.quotationSubTotal != null && (<><dt>{tx('ยอดก่อนส่วนลด')}</dt><dd className="n">{money(c.quotationSubTotal)} {tx('บาท')}</dd></>)}
+                    {c.quotationDiscount != null && c.quotationDiscount > 0 && (<><dt>{tx('ส่วนลด')}</dt><dd className="n">{money(c.quotationDiscount)} {tx('บาท')}</dd></>)}
+                    {c.quotationGrandTotal != null && (<><dt>{tx('ยอดรวมทั้งสิ้น')}</dt><dd className="n">{money(c.quotationGrandTotal)} {tx('บาท')}</dd></>)}
+                    {c.remarks && (<><dt>{tx('หมายเหตุ')}</dt><dd>{c.remarks}</dd></>)}
+                    {c.internalNotes && (<><dt>{tx('บันทึกภายใน')}</dt><dd>{c.internalNotes}</dd></>)}
+                  </dl>
+                </div>
+              </>
+            )}
           </Card>
         ),
       )}
@@ -568,6 +617,18 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
   const [endDate, setEndDate] = useState('');
   const [vat, setVat] = useState('7');
   const [wht, setWht] = useState('3');
+  // ฟิลด์ที่ดึงเพิ่มจากใบเสนอราคา FlowAccount (5 ต.ค. 69) — แก้ได้ก่อนบันทึก ยกเว้นยอดรวม (อ่านอย่างเดียว)
+  const [zipCode, setZipCode] = useState('');
+  const [faReference, setFaReference] = useState('');
+  const [quotationDate, setQuotationDate] = useState('');
+  const [priceIncludesVat, setPriceIncludesVat] = useState(false);
+  const [salesName, setSalesName] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [internalNotes, setInternalNotes] = useState('');
+  const [faTotals, setFaTotals] = useState<{ sub: number | null; disc: number | null; grand: number | null }>({ sub: null, disc: null, grand: null });
+  // เติมช่องไหนให้จากใบเสนอราคาแล้วบ้าง — ไว้ขึ้นข้อความเตือนให้ตรวจก่อนบันทึก (โดยเฉพาะเลข PO ที่เดามาจากเลขที่อ้างอิง)
+  const [poFromRef, setPoFromRef] = useState(false);
+  const [faNotes, setFaNotes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
 
@@ -591,6 +652,38 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     setContactEmail(c.contactEmail ?? '');
     if (c.projectName) setProjectName(c.projectName);
     setFaContactId(c.flowaccountContactId);
+    // ── ฟิลด์ที่ดึงเพิ่ม (5 ต.ค. 69 เจ้าของระบบสั่งให้ดึงจาก FlowAccount ให้ครบ) ──
+    const notes: string[] = [];
+    setZipCode(c.zipCode ?? '');
+    setFaReference(c.reference ?? '');
+    setQuotationDate(c.quotationDate ?? '');
+    setPriceIncludesVat(Boolean(c.isVatInclusive));
+    setSalesName(c.salesName ?? '');
+    setRemarks(c.remarks ?? '');
+    setInternalNotes(c.internalNotes ?? '');
+    setFaTotals({ sub: c.subTotal ?? null, disc: c.discountAmount ?? null, grand: c.grandTotal ?? null });
+    // เลข PO: "เลขที่อ้างอิง" ของ FlowAccount น่าจะเป็นเลข PO แต่มีค่าแค่บางใบและรูปแบบไม่เหมือนกัน — เติมให้เฉพาะตอนช่อง PO ยังว่าง
+    // แล้วขึ้นข้อความให้ตรวจเทียบกับใบว่าจ้างก่อนบันทึกเสมอ (PO ผิดแล้วเสียหายกว่าช่องว่าง)
+    if (c.reference && !poNo.trim()) {
+      setPoNo(c.reference);
+      setPoFromRef(true);
+    } else {
+      setPoFromRef(false);
+    }
+    // เครดิต/หัก ณ ที่จ่าย: FlowAccount ใส่ 0 เป็นค่าเริ่มต้นของใบเสนอราคาเกือบทุกใบ (ตรวจ 20 ใบ: เครดิต 0 อยู่ 13 ใบ, หัก ณ ที่จ่าย 0 ทั้ง 20 ใบ)
+    // ซึ่งแปลว่า "ยังไม่ได้ตั้ง" มากกว่า "ไม่มีเครดิต/ไม่หัก" — ทับค่าเริ่มต้นของเราด้วย 0 จะทำให้วันครบกำหนด/ยอดหักผิดโดยไม่รู้ตัว
+    // จึงเติมเฉพาะเมื่อมากกว่า 0 ส่วน 0 ใช้ค่าเริ่มต้นเดิมแล้วบอกให้รู้
+    if (c.creditDays != null) {
+      if (c.creditDays > 0) setCreditDays(String(c.creditDays));
+      else notes.push(`${tx('FlowAccount ระบุเครดิต 0 วัน — ใช้ค่าเริ่มต้น')} ${creditDays} ${tx('วันไว้ แก้ได้ที่ช่อง "เครดิต"')}`);
+    }
+    if (c.vatPercent != null) setVat(String(c.vatPercent));
+    if (c.withholdingPercent != null) {
+      if (c.withholdingPercent > 0) setWht(String(c.withholdingPercent));
+      else notes.push(`${tx('FlowAccount ไม่ได้ระบุหัก ณ ที่จ่าย — ใช้ค่าเริ่มต้น')} ${wht}% ${tx('ไว้ ตรวจให้ตรงกับสัญญา')}`);
+    }
+    if (c.isVatInclusive) notes.push(tx('⚠️ ใบเสนอราคานี้เป็นราคา "รวมภาษี" แต่ระบบคิดเงินแบบ "ไม่รวมภาษี" — ตรวจเรทต่อเดือนให้ตรงก่อนบันทึก'));
+    setFaNotes(notes);
     // ข้อความหลังนี้เคยชวนไปเพิ่มพนักงานเองทีหลังจากแท็บ "พนักงาน" — ตัดออกแล้วเพราะแท็บนั้นไม่มีปุ่ม
     // เพิ่มพนักงานอีก (18 ก.ย. 69 ตามกติกาที่เจ้าของระบบยืนยัน: พนักงานเข้าระบบได้ทางเดียวคือผ่าน
     // ใบเสนอราคาที่ผูกกับสัญญาเท่านั้น) ถ้าใบเสนอราคาไม่มีรายชื่อ ทางแก้คือไปเพิ่มที่ต้นทางใน FlowAccount
@@ -630,7 +723,8 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           taxId: ti,
           branch: branch.trim() || undefined,
           address: address.trim() || null,
-          creditDays: Number(creditDays) || 30,
+          zipCode: zipCode.trim() || null,
+          creditDays: Number.isFinite(Number(creditDays)) && creditDays.trim() !== '' ? Number(creditDays) : 30,
           contactName: contactName.trim() || null,
           contactPhone: contactPhone.trim() || null,
           contactEmail: contactEmail.trim() || null,
@@ -665,8 +759,20 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           divisorValue: Number(divisorValue) || 20,
           startDate,
           endDate,
+          // เครดิตเดิมไม่เคยส่งไปกับสัญญาเลย (ใช้ค่าเริ่มต้น 30 ของฝั่ง server เสมอ) — ส่งค่าเดียวกับที่โชว์ในฟอร์ม
+          creditDays: Number.isFinite(Number(creditDays)) && creditDays.trim() !== '' ? Number(creditDays) : 30,
           vatRate: (Number(vat) || 0) / 100,
           whtRate: (Number(wht) || 0) / 100,
+          // ข้อมูลจากใบเสนอราคา FlowAccount (5 ต.ค. 69)
+          faReference: faReference.trim() || null,
+          quotationDate: quotationDate || null,
+          priceIncludesVat,
+          salesName: salesName.trim() || null,
+          remarks: remarks.trim() || null,
+          internalNotes: internalNotes.trim() || null,
+          quotationSubTotal: faTotals.sub,
+          quotationDiscount: faTotals.disc,
+          quotationGrandTotal: faTotals.grand,
         }),
       });
       const contract = await contractRes.json();
@@ -692,6 +798,8 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
                 startDate,
                 endDate,
                 quotationNo: faCompany.quotationNo || null,
+                quantity: emp.quantity ?? null,
+                unitName: emp.unitName ?? null,
                 fromFlowAccountSync: true,
               }),
             });
@@ -772,6 +880,10 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           <input value={address} onChange={(e) => setAddress(e.target.value)} />
         </label>
         <label>
+          {tx('รหัสไปรษณีย์')}
+          <input value={zipCode} onChange={(e) => setZipCode(e.target.value)} inputMode="numeric" />
+        </label>
+        <label>
           {tx('เครดิต (วัน)')}
           <input type="number" min={0} value={creditDays} onChange={(e) => setCreditDays(e.target.value)} />
         </label>
@@ -804,9 +916,10 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             <input
               className={fieldErrors.has('poNo') ? 'err' : undefined}
               value={poNo}
-              onChange={(e) => setPoNo(e.target.value)}
               placeholder="เช่น 26/B0200"
+              onChange={(e) => { setPoNo(e.target.value); setPoFromRef(false); }}
             />
+            {poFromRef && <small className="fhint" style={{ color: 'var(--wn)' }}>{tx('เติมจาก "เลขที่อ้างอิง" ของ FlowAccount — ตรวจให้ตรงกับใบว่าจ้างก่อนบันทึก')}</small>}
           </label>
           <label>
             {tx('เลขที่สัญญา')}
@@ -856,6 +969,60 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
         </div>
         <small className="fhint">{tx('พนักงาน/อัตราจ้างของบริษัทรายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"')}</small>
       </div>
+
+      {faIndex !== '' && (
+        <div className="fsec">
+          <div className="fsec-h">
+            <b>{tx('ข้อมูลจากใบเสนอราคา FlowAccount')}</b>
+            <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('ดึงมาให้อัตโนมัติ — แก้ไขได้ก่อนบันทึก')}</span>
+          </div>
+          {faNotes.length > 0 && (
+            <div className="note wn" style={{ marginBottom: 12 }}>
+              <Icon name="alt" />
+              <span>{faNotes.join(' · ')}</span>
+            </div>
+          )}
+          <div className="frm">
+            <label>
+              {tx('เลขที่อ้างอิง')}
+              <input value={faReference} onChange={(e) => setFaReference(e.target.value)} />
+            </label>
+            <label>
+              {tx('วันที่ใบเสนอราคา')}
+              <DatePicker value={quotationDate} onChange={setQuotationDate} />
+            </label>
+            <label>
+              {tx('ราคา')}
+              <span className="selectchip grow">
+                <select value={priceIncludesVat ? 'inc' : 'exc'} onChange={(e) => setPriceIncludesVat(e.target.value === 'inc')}>
+                  <option value="exc">{tx('ราคาไม่รวมภาษี')}</option>
+                  <option value="inc">{tx('ราคารวมภาษี')}</option>
+                </select>
+              </span>
+            </label>
+            <label>
+              {tx('พนักงานขาย')}
+              <input value={salesName} onChange={(e) => setSalesName(e.target.value)} />
+            </label>
+            <label>
+              {tx('หมายเหตุ')}
+              <input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+            </label>
+            <label>
+              {tx('บันทึกภายใน')}
+              <input value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} />
+            </label>
+            <label>
+              {tx('ยอดก่อนส่วนลด (อ่านอย่างเดียว)')}
+              <input value={faTotals.sub != null ? faTotals.sub.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'} readOnly />
+            </label>
+            <label>
+              {tx('ยอดรวมทั้งสิ้น (อ่านอย่างเดียว)')}
+              <input value={faTotals.grand != null ? faTotals.grand.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'} readOnly />
+            </label>
+          </div>
+        </div>
+      )}
 
     </Card>
   );

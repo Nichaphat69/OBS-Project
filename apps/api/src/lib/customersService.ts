@@ -37,6 +37,7 @@ export interface Customer {
   taxId: string;
   branch: string | null;
   address: string | null;
+  zipCode: string | null;
   creditDays: number;
   billingPlace: string | null;
   contactName: string | null;
@@ -54,6 +55,7 @@ export async function createCustomer({
   taxId,
   branch = 'สำนักงานใหญ่',
   address = null,
+  zipCode = null,
   creditDays = 30,
   billingPlace = null,
   contactName = null,
@@ -67,6 +69,7 @@ export async function createCustomer({
   taxId: string;
   branch?: string | null;
   address?: string | null;
+  zipCode?: string | null;
   creditDays?: number;
   billingPlace?: string | null;
   contactName?: string | null;
@@ -100,7 +103,9 @@ export async function createCustomer({
       taxId,
       branch,
       address,
-      creditDays: Number(creditDays) || 30,
+      zipCode: zipCode?.trim() || null,
+      // เครดิต 0 วันเป็นค่าที่ถูกต้อง ไม่ใช่ "ไม่ได้ตั้ง" — เดิม `|| 30` ทำให้ 0 กลายเป็น 30 เงียบๆ
+      creditDays: Number.isFinite(Number(creditDays)) ? Number(creditDays) : 30,
       billingPlace,
       contactName,
       contactPhone,
