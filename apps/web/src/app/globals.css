@@ -548,17 +548,19 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   transform: scale(0.98);
   box-shadow: var(--m3-elev-0);
 }
+/* ปุ่มหลัก: สีเดียว #288adb ไม่ไล่สี (เจ้าของระบบสั่ง 2 ต.ค. 69) — ใช้ทุกปุ่ม .btn.pri ทั้งระบบ
+   (ล็อกอิน, บันทึกเข้าระบบ, ยืนยัน, เปิดตรวจ, ตรวจสอบ ฯลฯ) จึงเปลี่ยนที่จุดเดียวนี้ */
 .btn.pri {
-  background: var(--grad-brand);
+  background: #288adb;
   border: none;
   color: #fff;
   font-weight: 600;
-  box-shadow: var(--m3-elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
 }
 .btn.pri:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--brand-l) 0%, var(--brand-h) 55%, var(--brand-d) 100%);
+  background: #1f78c4;
   color: #fff;
-  box-shadow: var(--m3-elev-3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 3px 8px -2px rgba(40, 138, 219, 0.45);
   transform: none;
 }
 .btn.dgr {
@@ -3269,6 +3271,8 @@ td .nm {
 }
 .back:hover { text-decoration: underline; }
 
+/* แถบขั้นตอน (2 ต.ค. 69 ตามที่ขอ: ไม่เอาคำว่า STEP 01/02 ไม่เอาสี่เหลี่ยม) — โหนดเป็นวงกลมสีเดียว
+   เสร็จแล้ว = เขียวพร้อมเครื่องหมายถูก · ขั้นปัจจุบัน = #288adb มีวงเรืองแสงอ่อน · ยังไม่ถึง = ขาวขอบเทา */
 .prog {
   display: flex; align-items: flex-start; padding: 28px 26px 24px; background: var(--paper);
   border: 1px solid var(--m3-outline); border-radius: var(--m3-shape-lg); margin-bottom: 22px;
@@ -3276,33 +3280,26 @@ td .nm {
 }
 .pstep {
   display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: 8px; flex: none; width: 150px;
+  gap: 12px; flex: none; width: 140px;
 }
 .pstep .cir {
-  width: 52px; height: 52px; border-radius: var(--m3-shape-md); display: grid; place-items: center;
-  flex: none; background: var(--sunk); border: 1.5px solid var(--m3-outline); color: var(--fnt);
+  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  flex: none; background: #fff; border: 2px solid var(--m3-outline); color: var(--fnt);
+  transition: background .2s, border-color .2s, box-shadow .2s;
 }
 .pstep .cir svg { width: 22px; height: 22px; }
 .pstep.dn .cir {
-  background: linear-gradient(135deg, var(--okl) 0%, var(--ok) 100%);
-  border-color: var(--ok); color: #fff;
-  box-shadow: 0 4px 10px -4px rgba(22, 163, 74, 0.5);
+  background: var(--ok); border-color: var(--ok); color: #fff;
 }
 .pstep.cu .cir {
-  background: var(--grad-brand); border-color: var(--brand); color: #fff;
-  box-shadow: 0 0 0 6px var(--tint), 0 10px 20px -8px rgba(10,120,212,.55);
+  background: #288adb; border-color: #288adb; color: #fff;
+  box-shadow: 0 0 0 6px rgba(40, 138, 219, 0.16);
 }
-.pstep .cap {
-  font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
-  color: var(--fnt);
-}
-.pstep.dn .cap { color: var(--ok); }
-.pstep.cu .cap { color: var(--brand); }
-.pstep .pl { font-size: 13px; font-weight: 600; color: var(--mut); line-height: 1.3; }
+.pstep .pl { font-size: 13.5px; font-weight: 600; color: var(--mut); line-height: 1.3; }
 .pstep.dn .pl { color: var(--ink2); }
-.pstep.cu .pl { color: var(--brand-d); }
-.pline { flex: 1; min-width: 26px; height: 2px; background: var(--rule); margin: 25px 0 0; }
-.pline.dn { background: linear-gradient(90deg, var(--okl) 0%, var(--ok) 100%); }
+.pstep.cu .pl { color: #1f78c4; }
+.pline { flex: 1; min-width: 26px; height: 3px; border-radius: 3px; background: var(--rule); margin: 23px 6px 0; }
+.pline.dn { background: var(--ok); }
 
 .tabs {
   display: flex; gap: 4px; border-bottom: 1px solid var(--rule);

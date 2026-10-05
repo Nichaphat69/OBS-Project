@@ -453,7 +453,6 @@ export default function ManadyDetailPage() {
           <span className="cir">
             <Icon name="chk" />
           </span>
-          <span className="cap">Step 01</span>
           <span className="pl">{tx('อัปโหลด · ระบบอ่านไฟล์')}</span>
         </div>
         <div className="pline dn" />
@@ -461,15 +460,13 @@ export default function ManadyDetailPage() {
           <span className="cir">
             <Icon name={step >= 3 ? 'chk' : 'list-chk'} />
           </span>
-          <span className="cap">Step 02</span>
-          <span className="pl">{tx('ตรวจ Manday · คนยืนยัน')}</span>
+          <span className="pl">{tx('ตรวจ Manday')}</span>
         </div>
         <div className={`pline ${step >= 3 ? 'dn' : ''}`} />
         <div className={`pstep ${step === 3 ? 'cu' : step > 3 ? 'dn' : ''}`}>
           <span className="cir">
             <Icon name={step > 3 ? 'chk' : 'money'} />
           </span>
-          <span className="cap">Step 03</span>
           <span className="pl">{tx('วางบิล FlowAccount')}</span>
         </div>
         <div className={`pline ${step > 3 ? 'dn' : ''}`} />
@@ -477,7 +474,6 @@ export default function ManadyDetailPage() {
           <span className="cir">
             <Icon name="mail" />
           </span>
-          <span className="cap">Step 04</span>
           <span className="pl">{tx('ร่างอีเมลถึงบริษัท')}</span>
         </div>
       </div>

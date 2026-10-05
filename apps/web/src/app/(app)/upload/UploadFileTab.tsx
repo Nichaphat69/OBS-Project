@@ -504,9 +504,10 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
       )}
 
       {!noCycles && (
+      <div style={{ display: 'flex', justifyContent: submitOnly ? 'stretch' : 'flex-end', marginTop: 14 }}>
+      {/* โหมดบัญชี (Process Documents) ปุ่มเล็กชิดขวา (2 ต.ค. 69 ตามที่ขอ) — โหมดพนักงานที่มีปุ่มเดียวเต็มแถวยังคงเดิม */}
       <button
-        className="btn pri lg full"
-        style={{ marginTop: 14 }}
+        className={submitOnly ? 'btn pri lg full' : 'btn pri'}
         disabled={processing || (needsFile && files.length === 0) || (submitOnly && !selected)}
         onClick={!submitOnly ? doProcessBatch : needsFile ? doSubmit : doDeclare}
       >
@@ -521,6 +522,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
                 ? tx('แจ้งให้ผู้ดูแลเป็นคนส่ง')
                 : tx('ส่ง Timesheet นี้')}
       </button>
+      </div>
       )}
 
       {error && <div style={{ color: 'var(--cr)', marginTop: 14 }}>{error}</div>}
