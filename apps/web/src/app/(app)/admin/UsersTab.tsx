@@ -353,10 +353,35 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
           </label>
           <label>
             {tx('รหัสผ่าน (≥ 8 ตัวอักษร)')}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} style={{ flex: 1 }} />
-              <button type="button" className="btn ghost sm" onClick={() => setShowPassword((v) => !v)}>
-                {showPassword ? tx('ซ่อน') : tx('แสดง')}
+            {/* ไอคอนตาเปิด/ปิดอยู่ในช่องทางขวา แทนปุ่มข้อความ "แสดง/ซ่อน" (5 ต.ค. 69 เจ้าของระบบสั่ง) — แบบเดียวกับหน้าสมัครสมาชิก */}
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                style={{ width: '100%', paddingRight: 42 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? tx('ซ่อนรหัสผ่าน') : tx('แสดงรหัสผ่าน')}
+                aria-pressed={showPassword}
+                title={showPassword ? tx('ซ่อนรหัสผ่าน') : tx('แสดงรหัสผ่าน')}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  border: 'none',
+                  background: 'none',
+                  color: 'var(--mut)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  padding: 4,
+                }}
+              >
+                <Icon name={showPassword ? 'eye-off' : 'eye'} className="sm" />
               </button>
             </div>
           </label>

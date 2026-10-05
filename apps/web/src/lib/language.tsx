@@ -870,6 +870,8 @@ const TX: Record<string, string> = {
   ยังไม่มีผู้รับแจ้งเตือน: 'No notification recipients yet',
 
   // ── admin/UsersTab.tsx ──
+  'ซ่อนรหัสผ่าน': 'Hide password',
+  'แสดงรหัสผ่าน': 'Show password',
   'กรอก username, ชื่อ และรหัสผ่านให้ครบ': 'Fill in username, name, and password',
   เพิ่มผู้ใช้ไม่สำเร็จ: 'Failed to add user',
   เพิ่มผู้ใช้: 'Added user',
