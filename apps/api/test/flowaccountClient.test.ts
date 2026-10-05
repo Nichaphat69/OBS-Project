@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FlowAccountClient, FlowAccountError } from '../src/lib/flowaccountClient.js';
+import { FlowAccountClient, FlowAccountError, pointsAtLiveFlowAccount } from '../src/lib/flowaccountClient.js';
 import { respondByPath, withFetch, type FakeFetch } from './helpers/fakeFetch.js';
 
 const VALID_PAYLOAD = { documentStructureType: 'InlineDocument', items: [] };
@@ -159,4 +159,84 @@ test('fetchSharedPdf ปฏิเสธถ้าก้อนที่ตัด�
   await withFetch(htmlFetch(sharePage(notPdf)), async () => {
     await assert.rejects(() => htmlClient().fetchSharedPdf(SHARE_LINK), FlowAccountError);
   });
+});
+
+
+/* ── FlowAccount ตัวจริง = อ่านอย่างเดียว (เจ้าของระบบสั่ง 5 ต.ค. 69: ห้ามสร้าง/แก้/ลบอะไรเด็ดขาด) ───────────
+ * จุดที่ต้องพิสูจน์ไม่ใช่แค่ "โยน error" แต่ต้องไม่มีคำขอใดออกจากระบบไปหา FlowAccount เลยสักครั้ง
+ * (นับจำนวนครั้งที่เรียก fetch = 0) และการอ่านต้องยังทำงานได้ปกติ ไม่ใช่บล็อกทุกอย่างเหมา */
+function liveClient() {
+  return new FlowAccountClient({ mode: 'live', clientId: 'id', clientSecret: 'secret', documentType: 'billing-note' });
+}
+
+async function withFlag<T>(value: string | undefined, fn: () => Promise<T> | T): Promise<T> {
+  const before = process.env.FLOWACCOUNT_ALLOW_LIVE_WRITE;
+  if (value === undefined) delete process.env.FLOWACCOUNT_ALLOW_LIVE_WRITE;
+  else process.env.FLOWACCOUNT_ALLOW_LIVE_WRITE = value;
+  try {
+    return await fn();
+  } finally {
+    if (before === undefined) delete process.env.FLOWACCOUNT_ALLOW_LIVE_WRITE;
+    else process.env.FLOWACCOUNT_ALLOW_LIVE_WRITE = before;
+  }
+}
+
+test('live: สร้างเอกสาร/ขอลิงก์แชร์/ลบเอกสาร ถูกบล็อกและไม่มีคำขอออกจากระบบเลยสักครั้ง', async () => {
+  let networkCalls = 0;
+  const spy: FakeFetch = async () => {
+    networkCalls += 1;
+    throw new Error('ห้ามมีการเรียกเครือข่ายในโหมด live');
+  };
+  await withFlag(undefined, () =>
+    withFetch(spy, async () => {
+      const c = liveClient();
+      const blocked = (e: any) => e instanceof FlowAccountError && e.status === 403 && /ถูกบล็อก/.test(e.message);
+      await assert.rejects(() => c.createDraftDocument(VALID_PAYLOAD), blocked);
+      await assert.rejects(() => c.getShareLink('200154'), blocked);
+      await assert.rejects(() => c.deleteDocument('200154'), blocked);
+      assert.equal(networkCalls, 0, 'ต้องไม่มีคำขอใดออกไปหา FlowAccount (ไม่แม้แต่ขอ token)');
+    }),
+  );
+});
+
+test('live: การอ่านยังทำงานปกติ (ขอ token + ดึงรายการใบเสนอราคา) และใช้เฉพาะ GET/ขอ token', async () => {
+  const seen: Array<{ url: string; method: string }> = [];
+  const fetchImpl: FakeFetch = async (url: any, opts?: any) => {
+    seen.push({ url: String(url), method: (opts?.method ?? 'GET').toUpperCase() });
+    const body = String(url).includes('/token') ? { access_token: 'tok', expires_in: 3600 } : { data: { list: [] } };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  await withFlag(undefined, () =>
+    withFetch(fetchImpl, async () => {
+      const r: any = await liveClient().listDocuments({ type: 'quotations' });
+      assert.equal(r.ok, true);
+    }),
+  );
+  const nonRead = seen.filter((c) => c.method !== 'GET' && !c.url.includes('/token'));
+  assert.deepEqual(nonRead, [], 'ห้ามมีคำขอแบบเขียน/ลบ นอกจากขอ token');
+  assert.ok(seen.some((c) => c.url.includes('/quotations') && c.method === 'GET'));
+});
+
+test('เปิดการเขียนตัวจริงได้ทางเดียวคือ FLOWACCOUNT_ALLOW_LIVE_WRITE=true เท่านั้น (ค่าอื่นไม่นับ)', async () => {
+  const c = liveClient();
+  await withFlag('true', () => assert.doesNotThrow(() => c.assertWritable('ทดสอบ')));
+  for (const v of ['1', 'yes', 'TRUE', 'false', '']) {
+    await withFlag(v, () => assert.throws(() => c.assertWritable('ทดสอบ'), FlowAccountError));
+  }
+});
+
+test('sandbox (URL ลงท้าย /test) และ dry-run ไม่ถูกบล็อก — เทสต์เดิมทั้งหมดยังทำงานได้', async () => {
+  await withFlag(undefined, () => {
+    assert.doesNotThrow(() => client().assertWritable('ทดสอบ'));
+    assert.doesNotThrow(() => new FlowAccountClient({ mode: 'dry-run' }).assertWritable('ทดสอบ'));
+  });
+});
+
+test('pointsAtLiveFlowAccount: ตัดสินจากทั้งโหมดและ URL — ตั้งโหมดผิดแต่ชี้ URL จริงก็ถือเป็นตัวจริง', () => {
+  assert.equal(pointsAtLiveFlowAccount('dry-run', 'https://openapi.flowaccount.com/v1'), false, 'dry-run ไม่ส่งอะไรออกไป');
+  assert.equal(pointsAtLiveFlowAccount('live', 'https://openapi.flowaccount.com/test'), true, 'ชื่อโหมด live ถือเป็นตัวจริงเสมอ');
+  assert.equal(pointsAtLiveFlowAccount('sandbox', 'https://openapi.flowaccount.com/test'), false);
+  assert.equal(pointsAtLiveFlowAccount('sandbox', 'https://openapi.flowaccount.com/test/'), false);
+  assert.equal(pointsAtLiveFlowAccount('sandbox', 'https://openapi.flowaccount.com/v1'), true, 'sandbox แต่ URL จริง = ตัวจริง');
+  assert.equal(pointsAtLiveFlowAccount('whatever', 'https://openapi.flowaccount.com/v1'), true);
 });

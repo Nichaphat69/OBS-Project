@@ -617,6 +617,8 @@ async function approveCycleUnlocked(contractId: string, period: string, { actor 
   }
 
   const client = await newFlowAccountClient();
+  // FlowAccount ตัวจริงอ่านอย่างเดียว — บล็อกตั้งแต่ตรงนี้ ก่อนบันทึกอะไรลงฐานข้อมูล (ดู assertWritable)
+  client.assertWritable('การวางบิล');
   const invoiceId = `INV-${contractId}-${period}`;
   const invoiceCount = await prisma.invoice.count();
   const sequence = invoiceCount + 6; // ใบจริงของรอบแรกคือ ...0006
@@ -755,6 +757,7 @@ export async function deleteInvoice(invoiceId: string, { actor, client }: { acto
   // null เสมอ จึงข้ามขั้นนี้ไปเองโดยธรรมชาติ
   if (documentId) {
     const fa = client ?? new FlowAccountClient({ documentType: response?.documentType });
+    fa.assertWritable('การลบเอกสาร');
     await fa.deleteDocument(documentId);
   }
 

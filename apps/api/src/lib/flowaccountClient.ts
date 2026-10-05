@@ -14,6 +14,19 @@ const AUTH_SCOPE = process.env.FLOWACCOUNT_SCOPE ?? 'flowaccount-api';
 
 export const MODE = { DRY_RUN: 'dry-run', SANDBOX: 'sandbox', LIVE: 'live' } as const;
 export type FlowAccountMode = (typeof MODE)[keyof typeof MODE];
+
+/**
+ * ตัวเชื่อมนี้กำลังจะคุยกับ FlowAccount "ตัวจริง" (บัญชีบริษัท) หรือไม่ — ตัดสินจากทั้งชื่อโหมดและ URL
+ *   dry-run  → ไม่ส่งอะไรออกไปเลย ไม่ใช่ตัวจริง
+ *   live     → ตัวจริง
+ *   อื่นๆ     → ดู URL: sandbox ลงท้ายด้วย `/test` เสมอ อะไรที่ไม่ใช่ถือเป็นตัวจริงทั้งหมด
+ *               (กันกรณีตั้งโหมดเป็น sandbox แต่ชี้ URL จริง หรือสลับโหมดผิดจากหน้าตั้งค่า)
+ */
+export function pointsAtLiveFlowAccount(mode: string, baseUrl: string): boolean {
+  if (mode === MODE.DRY_RUN) return false;
+  if (mode === MODE.LIVE) return true;
+  return !/\/test\/?$/i.test(baseUrl.trim());
+}
 export type FlowAccountDocumentType = 'billing-note' | 'tax-invoice';
 
 const DOCUMENT_PATHS: Record<FlowAccountDocumentType, string> = {
@@ -77,6 +90,25 @@ export class FlowAccountClient {
     return this.mode === MODE.DRY_RUN;
   }
 
+  /**
+   * FlowAccount ตัวจริง = **อ่านอย่างเดียว** (เจ้าของระบบสั่ง 5 ต.ค. 69: ห้ามสร้าง ห้ามแก้ ห้ามลบอะไรในบัญชีจริง)
+   * ทุกเมธอดที่เขียนหรือลบ (สร้างเอกสาร ขอลิงก์แชร์ ลบเอกสาร) เรียกที่นี่ก่อนส่งคำขอออกไป — โหมด live หรือ URL ที่
+   * ไม่ใช่ sandbox จะถูกบล็อกทันทีโดยยังไม่มีคำขอใดออกจากระบบ ส่วนการอ่าน (ขอ token, ดึงรายการใบเสนอราคา,
+   * ดึง PDF จากลิงก์) ไม่ผ่านด่านนี้
+   *
+   * เปิดการเขียนตัวจริงได้ทางเดียวคือตั้ง FLOWACCOUNT_ALLOW_LIVE_WRITE=true ใน .env โดยตั้งใจ (ตอน go-live
+   * ที่ตกลงกันแล้วว่าจะออกเอกสารจริง) — ค่าเริ่มต้นปิดเสมอ ห้ามตั้งไว้ในเครื่องทดสอบ/UAT
+   */
+  assertWritable(action: string): void {
+    if (!pointsAtLiveFlowAccount(this.mode, BASE_URL)) return;
+    if (process.env.FLOWACCOUNT_ALLOW_LIVE_WRITE === 'true') return;
+    throw new FlowAccountError(
+      `${action}ถูกบล็อก — FlowAccount ตัวจริงตั้งให้อ่านได้อย่างเดียว (ห้ามสร้าง/แก้/ลบ) ` +
+        'ใช้ sandbox สำหรับทดสอบ หรือเปิดการเขียนด้วย FLOWACCOUNT_ALLOW_LIVE_WRITE=true เมื่อตกลงออกเอกสารจริงแล้วเท่านั้น',
+      { status: 403 },
+    );
+  }
+
   async getAccessToken(): Promise<string> {
     if (this.isDryRun) return 'dry-run-token';
     if (this.token && Date.now() < this.tokenExpiresAt - 60_000) return this.token;
@@ -129,6 +161,7 @@ export class FlowAccountClient {
       };
     }
 
+    this.assertWritable('การสร้างเอกสาร');
     const path = DOCUMENT_PATHS[this.documentType];
     if (!path) {
       throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
@@ -164,6 +197,7 @@ export class FlowAccountClient {
     if (!documentId) {
       throw new FlowAccountError('ต้องมี documentId ของเอกสารที่สร้างไปแล้วก่อนขอลิงก์ดูเอกสาร');
     }
+    this.assertWritable('การขอลิงก์แชร์เอกสาร');
     const path = SHARE_PATHS[this.documentType];
     if (!path) {
       throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
@@ -229,6 +263,7 @@ export class FlowAccountClient {
     if (!documentId) {
       throw new FlowAccountError('ต้องมี documentId ของเอกสารที่จะลบ');
     }
+    this.assertWritable('การลบเอกสาร');
     const path = DELETE_PATHS[this.documentType];
     if (!path) {
       throw new FlowAccountError(`ไม่รู้จักชนิดเอกสาร "${this.documentType}"`);
