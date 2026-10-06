@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { Icon } from '../../components/Icon';
+import { LangSwitch } from '../../components/LangSwitch';
+import { useLang } from '../../lib/language';
 import GoogleButton from '../../components/GoogleButton';
 
 /** ported from public/app.js's showRegisterScreen()/#registerForm — ลงทะเบียนบัญชีใหม่เอง บัญชีที่
@@ -10,6 +12,7 @@ import GoogleButton from '../../components/GoogleButton';
  * overlay ทับหน้า login เดียวกัน สแต็กใหม่แยกเป็นหน้า /register จริงตามธรรมเนียม routing ของ
  * Next.js — พฤติกรรม/ข้อความ/ฟิลด์ตรงกับต้นฉบับทุกจุด) */
 export default function RegisterPage() {
+  const { tx } = useLang();
   const [nameTh, setNameTh] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,11 +47,12 @@ export default function RegisterPage() {
   if (done) {
     return (
       <main className="login-wrap">
+        <LangSwitch />
         <div className="login-card">
-          <h1>ลงทะเบียนสำเร็จ</h1>
-          <p>รอผู้ดูแลระบบตรวจสอบและเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้</p>
+          <h1>{tx('ลงทะเบียนสำเร็จ')}</h1>
+          <p>{tx('รอผู้ดูแลระบบตรวจสอบและเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้')}</p>
           <Link href="/login" className="btn pri" style={{ justifyContent: 'center', marginTop: 20 }}>
-            กลับไปเข้าสู่ระบบ
+            {tx('กลับไปเข้าสู่ระบบ')}
           </Link>
         </div>
       </main>
@@ -57,24 +61,25 @@ export default function RegisterPage() {
 
   return (
     <main className="login-wrap">
+      <LangSwitch />
       <form onSubmit={onSubmit} className="login-card">
         <h1>
-          ลงทะเบียนใช้งาน <span style={{ color: 'var(--brand)' }}>OBS</span>
+          {tx('ลงทะเบียนใช้งาน')} <span style={{ color: 'var(--brand)' }}>OBS</span>
         </h1>
-        <p>ลงทะเบียนแล้วต้องรอผู้ดูแลระบบตรวจสอบและเปิดใช้งานก่อน จึงจะเข้าสู่ระบบได้</p>
+        <p>{tx('ลงทะเบียนแล้วต้องรอผู้ดูแลระบบตรวจสอบและเปิดใช้งานก่อน จึงจะเข้าสู่ระบบได้')}</p>
 
         <label>
-          ชื่อ-นามสกุล
+          {tx('ชื่อ-นามสกุล')}
           <input value={nameTh} onChange={(e) => setNameTh(e.target.value)} type="text" autoFocus required />
         </label>
 
         <label>
-          อีเมล
+          {tx('อีเมล')}
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required />
         </label>
 
         <label>
-          รหัสผ่าน
+          {tx('รหัสผ่าน')}
           <div style={{ position: 'relative' }}>
             <input
               value={password}
@@ -88,7 +93,7 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              aria-label={tx(showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')}
               style={{
                 position: 'absolute',
                 right: 10,
@@ -106,18 +111,18 @@ export default function RegisterPage() {
           </div>
         </label>
 
-        {error && <p className="err">{error}</p>}
+        {error && <p className="err">{tx(error)}</p>}
 
         <button type="submit" disabled={loading} className="btn pri">
-          {loading ? 'กำลังลงทะเบียน…' : 'ลงทะเบียน'}
+          {loading ? tx('กำลังลงทะเบียน…') : tx('ลงทะเบียน')}
         </button>
 
-        <GoogleButton label="ลงทะเบียนด้วย Google" />
+        <GoogleButton label={tx('ลงทะเบียนด้วย Google')} />
 
         <p className="lc-sw">
-          มีบัญชีอยู่แล้ว?
+          {tx('มีบัญชีอยู่แล้ว?')}
           <Link href="/login" className="lc-link">
-            เข้าสู่ระบบ
+            {tx('เข้าสู่ระบบ')}
           </Link>
         </p>
       </form>

@@ -58,7 +58,7 @@ export default function CompanyDetailClient({ contractId }: { contractId: string
   const router = useRouter();
   const searchParams = useSearchParams();
   const periodParam = searchParams.get('period');
-  const { tx } = useLang();
+  const { tx, formatPeriodLabel } = useLang();
 
   const [contract, setContract] = useState<ContractCycles | null | undefined>(undefined);
   const [employees, setEmployees] = useState<PeriodEmployee[] | null>(null);
@@ -178,7 +178,7 @@ export default function CompanyDetailClient({ contractId }: { contractId: string
               className={`btn sm${p.period === chosenPeriod ? ' pri' : ''}`}
               onClick={() => selectPeriod(p.period)}
             >
-              {p.periodLabel}
+              {formatPeriodLabel(p.periodLabel)}
             </button>
           ))}
         </div>

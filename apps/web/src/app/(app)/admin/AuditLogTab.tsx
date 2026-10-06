@@ -20,7 +20,7 @@ const PAGE_SIZE = 50;
  * activity ต้องทำ lazy loading เพื่อ performance") เปลี่ยนเป็นแบ่งหน้าจริงแบบเดียวกับแท็บ "API Activity
  * Log" ข้างๆ กัน — ปุ่มหน้าถัดไป/ก่อนหน้า ไม่ต้องดึงข้อมูลทั้งหมดมาไว้ในเบราว์เซอร์ทีเดียว */
 export default function AuditLogTab() {
-  const { tx } = useLang();
+  const { tx, formatDateTime } = useLang();
   const [rows, setRows] = useState<AuditLogRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -82,7 +82,7 @@ export default function AuditLogTab() {
             {rows?.map((r) => (
               <tr key={r.id}>
                 <td className="sub" style={{ whiteSpace: 'nowrap' }}>
-                  {r.at.replace('T', ' ').slice(0, 19)}
+                  {formatDateTime(r.at)}
                 </td>
                 <td>{r.actor}</td>
                 <td className="docid">{r.action}</td>

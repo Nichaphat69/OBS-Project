@@ -107,12 +107,6 @@ function days(n: number | null | undefined) {
   if (n === null || n === undefined) return '—';
   return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
-function dateOnly(iso: string | null | undefined) {
-  return iso ? iso.slice(0, 10) : '—';
-}
-function dt(iso: string | null | undefined) {
-  return iso ? iso.slice(0, 19).replace('T', ' ') : '—';
-}
 function hoursCell(v: number | null | undefined) {
   return v === null || v === undefined ? '—' : Number(v).toFixed(2);
 }
@@ -211,19 +205,27 @@ const HISTORY_EVENT: Record<string, (d: any) => HistoryEventShape> = {
   delete_invoice: (d) => ({ label: 'ลบใบแจ้งหนี้', stage: 'billing', error: true, extra: d?.documentNo }),
 };
 
+/** ข้อความเสริมของเหตุการณ์ (ตัวเลข/หน่วย/ชื่อวิธีส่ง) ให้เปลี่ยนตามภาษา — ไทยออกมาเหมือนเดิมทุกตัวอักษร */
+function localizeExtra(text: string, tx: (th: string) => string): string {
+  return text
+    .split(' · ')
+    .map((part) => {
+      let m: RegExpExecArray | null;
+      if ((m = /^พบจุดต้องตรวจ (\d+) จุด$/.exec(part))) return `${tx('พบจุดต้องตรวจ')} ${m[1]}`;
+      if ((m = /^วางบิลได้ (.+) วัน$/.exec(part))) return `${tx('วางบิลได้')} ${m[1]} ${tx('วัน')}`;
+      if ((m = /^ส่วนลดวันลา (.+) บาท$/.exec(part))) return `${tx('ส่วนลดวันลา')} ${m[1]} ${tx('บาท')}`;
+      if ((m = /^(.+) บาท$/.exec(part))) return `${m[1]} ${tx('บาท')}`;
+      if ((m = /^(\d+) คน$/.exec(part))) return `${m[1]} ${tx('คน')}`;
+      return tx(part);
+    })
+    .join(' · ');
+}
+
 function historyEventShape(a: { action: string; entityType: string | null; detail: any }): HistoryEventShape {
   const shape = HISTORY_EVENT[a.action];
   if (shape) return shape(a.detail);
   const stage: HistoryStage = a.entityType === 'timesheet' ? 'timesheet' : 'billing';
   return { label: a.action.replace(/_/g, ' '), stage, error: /error|failed/.test(a.action) };
-}
-
-/** วันเวลาตามเขตเวลาของเครื่อง (เดิมตัดสตริง ISO ตรงๆ เลยโชว์เวลา UTC ช้ากว่าไทย 7 ชม.) */
-function localDt(iso: string | null | undefined, lang: string) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(lang === 'en' ? 'en-GB' : 'th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
@@ -256,7 +258,7 @@ function dedupeRepeatedText(text: string | null | undefined): string {
 }
 
 export default function ManadyDetailPage() {
-  const { tx, lang } = useLang();
+  const { tx, lang, formatDate, formatDateTime, formatPeriodLabel } = useLang();
   const openPdfPreview = usePdfPreview();
   const params = useParams<{ id: string }>();
   const [sheet, setSheet] = useState<TimesheetDetail | null>(null);
@@ -372,7 +374,7 @@ export default function ManadyDetailPage() {
        คนอ่านจึงแยกไม่ออกว่าแถวไหนเป็นของใคร (เจ้าของระบบชี้ 25 ก.ย. 69: "ต้องขึ้นแสดงด้วยว่าตรวจ Manday
        ของใคร อันนี้เป็นรายการของใคร") โดยเฉพาะแถวที่ข้อความเอ่ยชื่อคนอื่นในรอบเดียวกัน */
     const whoThis = sheet.employee.nameTh ?? sheet.rawEmployeeName ?? tx('ไม่ทราบชื่อ');
-    const whoCycle = `${tx('ทั้งรอบบิล')} ${sheet.periodLabel}`;
+    const whoCycle = `${tx('ทั้งรอบบิล')} ${formatPeriodLabel(sheet.periodLabel)}`;
     const events: Array<{ key: string; at: string; order: number; stage: HistoryStage; label: string; detail: string; who: string; error?: boolean }> = [
       {
         key: 'received',
@@ -404,7 +406,7 @@ export default function ManadyDetailPage() {
             who: a.entityType === 'timesheet' ? whoThis : whoCycle,
             label: tx(shape.label),
             error: shape.error,
-            detail: [tx(actorLabel(a.actor)), shape.extra].filter(Boolean).join(' · '),
+            detail: [tx(actorLabel(a.actor)), shape.extra ? localizeExtra(shape.extra, tx) : null].filter(Boolean).join(' · '),
           };
         }),
     ];
@@ -435,7 +437,7 @@ export default function ManadyDetailPage() {
       <div className="phd">
         <div>
           <span className="ey">
-            Timesheet {sheet.id} · {tx('รอบบิล')} {sheet.periodLabel}
+            Timesheet {sheet.id} · {tx('รอบบิล')} {formatPeriodLabel(sheet.periodLabel)}
           </span>
           <h1>
             {sheet.employee.nameTh ?? sheet.rawEmployeeName ?? tx('ไม่ทราบชื่อ')} — {sheet.employee.invoicePosition ?? sheet.rawPosition ?? ''}
@@ -600,7 +602,7 @@ export default function ManadyDetailPage() {
                   <dd className="n">{sheet.employee.quotationNo ?? '—'}</dd>
                   <dt>{tx('ช่วงสัญญา')}</dt>
                   <dd>
-                    {dateOnly(sheet.contractDetail.startDate)} – {dateOnly(sheet.contractDetail.endDate)}
+                    {formatDate(sheet.contractDetail.startDate)} – {formatDate(sheet.contractDetail.endDate)}
                   </dd>
                   <dt>{tx('เครดิต')}</dt>
                   <dd>{int(sheet.contractDetail.creditDays)} {tx('วัน')}</dd>
@@ -632,7 +634,7 @@ export default function ManadyDetailPage() {
                         </span>
                         {ev.detail && <small>{ev.detail}</small>}
                       </span>
-                      <span className="tm">{localDt(ev.at, lang)}</span>
+                      <span className="tm">{formatDateTime(ev.at)}</span>
                     </li>
                   ))}
                 </ul>
@@ -786,7 +788,7 @@ export default function ManadyDetailPage() {
                     <tbody>
                       {(m.otDays ?? []).map((o) => (
                         <tr key={o.date}>
-                          <td className="n">{dateOnly(o.date)}</td>
+                          <td className="n">{formatDate(o.date)}</td>
                           <td className="r n">{o.hours}</td>
                           <td className="r n">{money(o.dayAmount)}</td>
                           <td className="r n" style={{ color: 'var(--ok)' }}>
@@ -818,7 +820,7 @@ export default function ManadyDetailPage() {
           <div>
             <div className="card">
               <div className="hd">
-                <h3>{tx('ปฏิทิน')} {sheet.periodLabel}</h3>
+                <h3>{tx('ปฏิทิน')} {formatPeriodLabel(sheet.periodLabel)}</h3>
               </div>
               <div className="bd">
                 <CalendarView manday={m} calDay={calDay} onSelect={setCalDay} />
@@ -924,7 +926,7 @@ export default function ManadyDetailPage() {
             </>
           ) : sheet.check?.checked ? (
             <>
-              <b>{tx('ยืนยันแล้ว')}</b> — {sheet.check.by ?? ''} · {dt(sheet.check.at)}
+              <b>{tx('ยืนยันแล้ว')}</b> — {sheet.check.by ?? ''} · {formatDateTime(sheet.check.at)}
             </>
           ) : sheet.check?.stale ? (
             <>
@@ -942,7 +944,7 @@ export default function ManadyDetailPage() {
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="เหตุผลที่ตีกลับ (ไม่บังคับ)"
+              placeholder={tx('เหตุผลที่ตีกลับ (ไม่บังคับ)')}
               style={{ flex: 1, height: 40, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 14px' }}
             />
             <button className="btn ghost" onClick={() => setRejecting(false)}>
@@ -1066,7 +1068,7 @@ function CalendarView({ manday, calDay, onSelect }: { manday: Manday | null; cal
 }
 
 function DayDetail({ date, sheet, manday }: { date: string | null; sheet: TimesheetDetail; manday: Manday | null }) {
-  const { tx, lang } = useLang();
+  const { tx, lang, formatDate } = useLang();
   if (!date) return <div className="empty">{tx('คลิกวันที่ในปฏิทินเพื่อดูรายละเอียดวันนั้น')}</div>;
   const d = sheet.dayLabels.find((r) => r.date === date);
   const calDayInfo = manday?.calendar?.days?.find((c) => c.date === date);
@@ -1080,7 +1082,7 @@ function DayDetail({ date, sheet, manday }: { date: string | null; sheet: Timesh
     <div>
       <div className="ddhd">
         <span className="ddhd-l">
-          <span className="ddate">{dateOnly(date)}</span>
+          <span className="ddate">{formatDate(date)}</span>
           <span className="ddow">{dow}</span>
         </span>
         <span className={`tg ${info.tone}`}>{tx(info.label)}</span>

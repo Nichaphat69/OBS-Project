@@ -56,7 +56,7 @@ function senderDomain(from: string): string | null {
 }
 
 export default function GmailTab() {
-  const { tx } = useLang();
+  const { tx, formatDateTime, formatPeriodLabel } = useLang();
   const toast = useToast();
   const openPdfPreview = usePdfPreview();
   // ลูกค้าเดียวที่ตัวกรองบนแถบบนชี้อยู่ (ใช้ผูกโดเมนอีเมลให้ลูกค้านั้น) — หลายลูกค้า/ไม่ได้เลือก = null
@@ -301,7 +301,7 @@ export default function GmailTab() {
           <div className="bulkbar-actions">
             <ReaderPickerBar picker={picker} />
             <button className="btn pri sm" disabled={selected.size === 0 || queueing} onClick={doReadSelected}>
-              <Icon name="chk" className="sm" /> {`${tx('อ่านที่เลือก')} (${selected.size})`}
+              {tx('อ่านที่เลือก')}
             </button>
           </div>
         </div>
@@ -315,7 +315,7 @@ export default function GmailTab() {
               <div>
                 <div style={{ fontWeight: 600 }}>{m.subject}</div>
                 <div className="sub">
-                  {m.from} · {m.receivedAt?.slice(0, 19).replace('T', ' ')}
+                  {m.from} · {formatDateTime(m.receivedAt)}
                 </div>
               </div>
               <button className="btn ghost sm" onClick={() => dismiss(m.id)}>
@@ -355,7 +355,7 @@ export default function GmailTab() {
                   <div>
                     <div style={{ fontWeight: 600 }}>{m.subject}</div>
                     <div className="sub">
-                      {m.from} · {m.receivedAt?.slice(0, 19).replace('T', ' ')}
+                      {m.from} · {formatDateTime(m.receivedAt)}
                     </div>
                   </div>
                   <Tag tone="ok">{tx('อ่านแล้ว')}</Tag>
@@ -366,7 +366,7 @@ export default function GmailTab() {
                       <span className="fname">
                         <Icon name="file" className="sm" /> {a.filename}
                       </span>
-                      <span className="sub">{m.periodLabel ?? m.documentNo ?? ''}</span>
+                      <span className="sub">{formatPeriodLabel(m.periodLabel) || m.documentNo || ''}</span>
                     </button>
                   ))}
                 </div>

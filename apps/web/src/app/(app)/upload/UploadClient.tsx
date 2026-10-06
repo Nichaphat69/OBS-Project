@@ -10,7 +10,7 @@ import EmployeeSubmissionsTab, { type EmployeeSubmissionItem } from './EmployeeS
 import { useLang } from '../../../lib/language';
 
 const TABS = [
-  { key: 'employee', label: 'รอจากพนักงาน' },
+  { key: 'employee', label: 'ส่งผ่านระบบ' },
   { key: 'upload', label: 'อัปโหลดไฟล์' },
   { key: 'gmail', label: 'ดึงจาก Gmail' },
   { key: 'manual', label: 'กรอกเอง' },
@@ -62,7 +62,7 @@ export default function UploadClient({ role }: { role: string }) {
       <PageHeader eyebrow={tx('ขั้นตอน 1 · อัปโหลด Timesheet')} title={tx('อัปโหลด Timesheet')} subtitle={tx('อ่านไฟล์ด้วย ABBYY OCR, ดึงจาก Gmail หรือกรอกเองแล้วบันทึกเข้าระบบ')} />
 
       <TabStrip
-        tabs={TABS.map((t) => (t.key === 'employee' ? { ...t, count: pending?.length } : t))}
+        tabs={TABS}
         active={tab}
         onChange={setTab}
       />

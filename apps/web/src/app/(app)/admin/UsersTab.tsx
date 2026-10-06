@@ -56,7 +56,7 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
   const toast = useToast();
   const confirm = useConfirm();
   const prompt = usePrompt();
-  const { tx } = useLang();
+  const { tx, formatDate } = useLang();
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -530,7 +530,7 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
                         <span className="tl">{u.active ? tx('ใช้งานอยู่') : tx('ปิดใช้งาน')}</span>
                       </label>
                     </td>
-                    <td className="sub" style={{ whiteSpace: 'nowrap' }}>{u.createdAt.slice(0, 10)}</td>
+                    <td className="sub" style={{ whiteSpace: 'nowrap' }}>{formatDate(u.createdAt)}</td>
                     <td>
                       <div className="rowacts">
                         <button className="btn sm icon" title={tx('แก้ไขชื่อ')} aria-label={tx('แก้ไขชื่อ')} onClick={() => startEdit(u)}>

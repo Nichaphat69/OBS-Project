@@ -113,7 +113,7 @@ function initials(name: string) {
 }
 
 export default function CycleDetailPage() {
-  const { tx } = useLang();
+  const { tx, formatDate, formatPeriodLabel } = useLang();
   const openPdfPreview = usePdfPreview();
   const params = useParams<{ contractId: string; period: string }>();
   const [data, setData] = useState<CyclePreview | null>(null);
@@ -204,7 +204,7 @@ export default function CycleDetailPage() {
   return (
     <>
       <PageHeader
-        eyebrow={`${data.contract.poNo} · ${data.periodLabel}`}
+        eyebrow={`${data.contract.poNo} · ${formatPeriodLabel(data.periodLabel)}`}
         title={data.contract.customerName}
         subtitle={data.contract.projectName}
       />
@@ -471,10 +471,10 @@ export default function CycleDetailPage() {
                     </div>
                     <dl className="kv">
                       <dt>{tx('วันที่เอกสาร')}</dt>
-                      <dd>{inv.documentDate.slice(0, 10)}</dd>
+                      <dd>{formatDate(inv.documentDate)}</dd>
                       <dt>{tx('เครดิต')}</dt>
                       <dd>
-                        {inv.creditDays} {tx('วัน')} · {tx('ครบ')} {inv.dueDate.slice(0, 10)}
+                        {inv.creditDays} {tx('วัน')} · {tx('ครบ')} {formatDate(inv.dueDate)}
                       </dd>
                     </dl>
                   </div>

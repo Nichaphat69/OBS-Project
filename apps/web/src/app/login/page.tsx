@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '../../components/Icon';
+import { LangSwitch } from '../../components/LangSwitch';
+import { useLang } from '../../lib/language';
 import GoogleButton from '../../components/GoogleButton';
 import { AnimatedLogo } from '../../components/AnimatedLogo';
 
@@ -16,6 +18,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const { tx } = useLang();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState('');
@@ -64,18 +67,19 @@ function LoginForm() {
 
   return (
     <main className="login-wrap">
+      <LangSwitch />
       <form onSubmit={onSubmit} className="login-card">
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
           <AnimatedLogo height={56} />
         </div>
         <h1 style={{ fontSize: 15 }}>
-          เข้าสู่ระบบ <span style={{ color: 'var(--mut)' }}>Outsource Billing System</span>
+          {tx('เข้าสู่ระบบ')} <span style={{ color: 'var(--mut)' }}>Outsource Billing System</span>
         </h1>
 
-        {info && <p className="lc-info">{info}</p>}
+        {info && <p className="lc-info">{tx(info)}</p>}
 
         <label>
-          Username / ชื่อ / อีเมล
+          Username
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -86,7 +90,7 @@ function LoginForm() {
         </label>
 
         <label>
-          รหัสผ่าน
+          {tx('รหัสผ่าน')}
           <div style={{ position: 'relative' }}>
             <input
               value={password}
@@ -98,7 +102,7 @@ function LoginForm() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              aria-label={tx(showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')}
               style={{
                 position: 'absolute',
                 right: 10,
@@ -119,25 +123,25 @@ function LoginForm() {
         <div className="lc-row">
           <label className="remember" style={{ cursor: 'pointer' }}>
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-            จดจำฉัน (30 วัน)
+            {tx('จดจำฉัน (30 วัน)')}
           </label>
           <Link href="/forgot-password" className="lc-link">
-            ลืมรหัสผ่าน?
+            {tx('ลืมรหัสผ่าน?')}
           </Link>
         </div>
 
-        {error && <p className="err">{error}</p>}
+        {error && <p className="err">{tx(error)}</p>}
 
         <button type="submit" disabled={loading} className="btn pri">
-          {loading ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
+          {loading ? tx('กำลังเข้าสู่ระบบ…') : tx('เข้าสู่ระบบ')}
         </button>
 
-        <GoogleButton label="เข้าสู่ระบบด้วย Google" />
+        <GoogleButton label={tx('เข้าสู่ระบบด้วย Google')} />
 
         <p className="lc-sw">
-          ยังไม่มีบัญชี?
+          {tx('ยังไม่มีบัญชี?')}
           <Link href="/register" className="lc-link">
-            ลงทะเบียน
+            {tx('ลงทะเบียน')}
           </Link>
         </p>
       </form>

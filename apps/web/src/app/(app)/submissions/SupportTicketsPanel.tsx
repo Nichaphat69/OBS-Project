@@ -31,7 +31,7 @@ interface TicketRow {
 
 export default function SupportTicketsPanel() {
   const toast = useToast();
-  const { tx } = useLang();
+  const { tx, formatDateTime } = useLang();
   const [tickets, setTickets] = useState<TicketRow[] | null>(null);
   const [resolving, setResolving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,12 +115,12 @@ export default function SupportTicketsPanel() {
                     </div>
                   )}
                 </td>
-                <td className="sub">{t.createdAt.replace('T', ' ').slice(0, 19)}</td>
+                <td className="sub">{formatDateTime(t.createdAt)}</td>
                 <td>
                   {t.status === 'resolved' ? (
                     <div>
                       <StatusPill tone="ok">{tx('แก้แล้ว')}</StatusPill>
-                      <div className="sub">{t.resolvedAt?.replace('T', ' ').slice(0, 19)}</div>
+                      <div className="sub">{formatDateTime(t.resolvedAt)}</div>
                     </div>
                   ) : (
                     <StatusPill tone="wn">{tx('รอดำเนินการ')}</StatusPill>

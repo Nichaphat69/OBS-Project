@@ -1,3 +1,5 @@
+import { txStatic } from './language';
+
 /**
  * อ่านคำตอบจาก API ให้ปลอดภัยเมื่อปลายทาง "ไม่ได้ตอบ JSON"
  *
@@ -18,11 +20,11 @@ export interface JsonResult<T = any> {
 
 /** แปลรหัสสถานะเป็นภาษาคน เฉพาะตัวที่เกิดจริงกับระบบนี้ */
 function describeStatus(status: number): string {
-  if (status === 413) return 'ไฟล์ที่เลือกรวมกันใหญ่เกินกว่าที่ตัวรับคำขอยอมให้ส่ง — ลองแบ่งส่งทีละน้อยลง';
-  if (status === 502 || status === 503 || status === 504) return 'ติดต่อเซิร์ฟเวอร์ไม่ได้ชั่วคราว — ลองใหม่อีกครั้ง';
-  if (status === 401) return 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่';
-  if (status === 0) return 'ส่งคำขอไม่ถึงเซิร์ฟเวอร์';
-  return `เซิร์ฟเวอร์ตอบกลับผิดปกติ (HTTP ${status})`;
+  if (status === 413) return txStatic('ไฟล์ที่เลือกรวมกันใหญ่เกินกว่าที่ตัวรับคำขอยอมให้ส่ง — ลองแบ่งส่งทีละน้อยลง');
+  if (status === 502 || status === 503 || status === 504) return txStatic('ติดต่อเซิร์ฟเวอร์ไม่ได้ชั่วคราว — ลองใหม่อีกครั้ง');
+  if (status === 401) return txStatic('เซสชันหมดอายุ — เข้าสู่ระบบใหม่');
+  if (status === 0) return txStatic('ส่งคำขอไม่ถึงเซิร์ฟเวอร์');
+  return txStatic('เซิร์ฟเวอร์ตอบกลับผิดปกติ (HTTP {status})').replace('{status}', String(status));
 }
 
 export async function readJson<T = any>(res: Response): Promise<JsonResult<T>> {

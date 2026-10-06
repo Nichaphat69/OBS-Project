@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { Icon } from '../../components/Icon';
+import { LangSwitch } from '../../components/LangSwitch';
+import { useLang } from '../../lib/language';
 
 type Step = 1 | 2 | 3 | 'done';
 
@@ -11,6 +13,7 @@ type Step = 1 | 2 | 3 | 'done';
  * /forgot-password หน้าเดียวเก็บ step เป็น local state แทน (email/resetToken ต้องจำข้ามขั้นไว้เอง
  * เพราะฟอร์มขั้น 2/3 ไม่มีช่องกรอกอีเมลซ้ำ — ตรงกับต้นฉบับ) */
 export default function ForgotPasswordPage() {
+  const { tx } = useLang();
   const [step, setStep] = useState<Step>(1);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -95,11 +98,12 @@ export default function ForgotPasswordPage() {
   if (step === 'done') {
     return (
       <main className="login-wrap">
+        <LangSwitch />
         <div className="login-card">
-          <h1>ตั้งรหัสผ่านใหม่สำเร็จ</h1>
-          <p>เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย</p>
+          <h1>{tx('ตั้งรหัสผ่านใหม่สำเร็จ')}</h1>
+          <p>{tx('เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย')}</p>
           <Link href="/login" className="btn pri" style={{ justifyContent: 'center', marginTop: 20 }}>
-            ไปเข้าสู่ระบบ
+            {tx('ไปเข้าสู่ระบบ')}
           </Link>
         </div>
       </main>
@@ -109,20 +113,21 @@ export default function ForgotPasswordPage() {
   if (step === 1) {
     return (
       <main className="login-wrap">
+        <LangSwitch />
         <form onSubmit={submitStep1} className="login-card">
-          <h1>ลืมรหัสผ่าน</h1>
-          <p>กรอกอีเมลที่ใช้เข้าสู่ระบบ จะส่งรหัสยืนยัน 6 หลักไปให้ทางอีเมล</p>
+          <h1>{tx('ลืมรหัสผ่าน')}</h1>
+          <p>{tx('กรอกอีเมลที่ใช้เข้าสู่ระบบ จะส่งรหัสยืนยัน 6 หลักไปให้ทางอีเมล')}</p>
           <label>
-            อีเมล
+            {tx('อีเมล')}
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" autoFocus required />
           </label>
-          {error && <p className="err">{error}</p>}
+          {error && <p className="err">{tx(error)}</p>}
           <button type="submit" disabled={loading} className="btn pri">
-            {loading ? 'กำลังส่ง…' : 'ส่งรหัสยืนยัน'}
+            {loading ? tx('กำลังส่ง…') : tx('ส่งรหัสยืนยัน')}
           </button>
           <p className="lc-sw">
             <Link href="/login" className="lc-link">
-              กลับไปเข้าสู่ระบบ
+              {tx('กลับไปเข้าสู่ระบบ')}
             </Link>
           </p>
         </form>
@@ -133,11 +138,12 @@ export default function ForgotPasswordPage() {
   if (step === 2) {
     return (
       <main className="login-wrap">
+        <LangSwitch />
         <form onSubmit={submitStep2} className="login-card">
-          <h1>กรอกรหัสยืนยัน</h1>
-          <p>ส่งรหัสยืนยัน 6 หลักไปที่ {email} แล้ว — รหัสใช้ได้ภายใน 10 นาที</p>
+          <h1>{tx('กรอกรหัสยืนยัน')}</h1>
+          <p>{tx('ส่งรหัสยืนยัน 6 หลักไปที่')} {email} {tx('แล้ว — รหัสใช้ได้ภายใน 10 นาที')}</p>
           <label>
-            รหัสยืนยัน 6 หลัก
+            {tx('รหัสยืนยัน 6 หลัก')}
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -150,13 +156,13 @@ export default function ForgotPasswordPage() {
               required
             />
           </label>
-          {error && <p className="err">{error}</p>}
+          {error && <p className="err">{tx(error)}</p>}
           <button type="submit" disabled={loading} className="btn pri">
-            {loading ? 'กำลังยืนยัน…' : 'ยืนยันรหัส'}
+            {loading ? tx('กำลังยืนยัน…') : tx('ยืนยันรหัส')}
           </button>
           <p className="lc-sw">
             <Link href="/login" className="lc-link">
-              กลับไปเข้าสู่ระบบ
+              {tx('กลับไปเข้าสู่ระบบ')}
             </Link>
           </p>
         </form>
@@ -166,10 +172,11 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="login-wrap">
+        <LangSwitch />
       <form onSubmit={submitStep3} className="login-card">
-        <h1>ตั้งรหัสผ่านใหม่</h1>
+        <h1>{tx('ตั้งรหัสผ่านใหม่')}</h1>
         <label>
-          รหัสผ่านใหม่
+          {tx('รหัสผ่านใหม่')}
           <div style={{ position: 'relative' }}>
             <input
               value={newPassword}
@@ -184,7 +191,7 @@ export default function ForgotPasswordPage() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              aria-label={tx(showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')}
               style={{
                 position: 'absolute',
                 right: 10,
@@ -201,9 +208,9 @@ export default function ForgotPasswordPage() {
             </button>
           </div>
         </label>
-        {error && <p className="err">{error}</p>}
+        {error && <p className="err">{tx(error)}</p>}
         <button type="submit" disabled={loading} className="btn pri">
-          {loading ? 'กำลังบันทึก…' : 'ตั้งรหัสผ่านใหม่'}
+          {loading ? tx('กำลังบันทึก…') : tx('ตั้งรหัสผ่านใหม่')}
         </button>
       </form>
     </main>

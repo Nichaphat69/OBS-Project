@@ -1069,6 +1069,308 @@ const TX: Record<string, string> = {
   ไม่มีงานค้าง: 'No pending tasks',
   'ส่วนนี้อยู่ระหว่างพอร์ตต่อจาก MIGRATION_PLAN.md': 'This section is still being ported per MIGRATION_PLAN.md',
   'กำลังพัฒนาในเฟสถัดไป — เชื่อมข้อมูลจริงเร็ว ๆ นี้': 'Coming in a future phase — will connect to real data soon',
+
+  // ── components/DatePicker.tsx ──
+  เลือกวันที่: 'Select date',
+  เดือนก่อนหน้า: 'Previous month',
+  เดือนถัดไป: 'Next month',
+
+  // ── เติมคำแปลที่ขาด (5 ต.ค. 69 — สลับภาษาแล้วต้องเปลี่ยนทั้งระบบ) ──
+  'ค้นหา': 'Search',
+  'ค้นหา URL หรือ Service': 'Search URL or service',
+  'จาก': 'of',
+  'ชนิด': 'Type',
+  'ชนิดระบบ': 'System type',
+  'ดาวน์โหลดรายงาน': 'Download report',
+  'ตั้งแต่วันที่': 'From date',
+  'ถึงวันที่': 'To date',
+  'ทุก Method': 'All methods',
+  'ทุก Service': 'All services',
+  'ระยะเวลา': 'Duration',
+  'ล้มเหลว': 'Failed',
+  'วันที่เรียกใช้': 'Called on',
+  'ผูกไลน์แล้ว': 'LINE linked',
+  'ยังไม่ผูก': 'Not linked',
+  'แต่ละคนผูกไลน์ของตัวเองได้จากเมนู "เชื่อมต่อ LINE" — ไม่ต้องมาผูกให้ที่นี่': 'Each person can link their own LINE from the "Connect LINE" menu — no need to link it here',
+  'ไม่ผูกพนักงาน': 'Not linked to an employee',
+  'คลิกเพื่อดูรายชื่อพนักงานและสถานะ Timesheet แต่ละคน': 'Click to see each employee and their Timesheet status',
+  'โหลดรอบบิลไม่สำเร็จ': 'Failed to load billing cycles',
+  'โหลดรายชื่อพนักงานไม่สำเร็จ': 'Failed to load the employee list',
+  'กำลังสร้างร่าง…': 'Creating draft…',
+  'วันที่เอกสาร': 'Document date',
+  'สร้างร่างอีเมลใน Gmail ไม่สำเร็จ': 'Failed to create the Gmail draft',
+  'สร้างร่างใน Gmail': 'Create Gmail draft',
+  'สร้างร่างในกล่อง Drafts แล้ว': 'Draft created in the Drafts folder',
+  'เปิดดูไฟล์นี้': 'Open this file',
+  'เปิดร่างใน Gmail': 'Open draft in Gmail',
+  'แนบไฟล์แล้ว': 'Attached',
+  'เลขที่ PO': 'PO number',
+  'ช่วงสัญญา': 'Contract period',
+  'ค้นหาชื่อพนักงาน': 'Search employee name',
+  'ทุกปี': 'All years',
+  'ทั้งรอบบิล': 'Whole billing cycle',
+  'ยอดของรายการนี้ก่อนหัก ณ ที่จ่าย': 'Amount for this item before withholding tax',
+  'ยอดประมาณเฉพาะรายการนี้ ยอดจริงในใบแจ้งหนี้คำนวณรวมทุกคนในรอบบิลเดียวกัน อาจต่างเล็กน้อยจากการปัดเศษ': 'Estimate for this item only. The invoice total is calculated across everyone in the same billing cycle, so it may differ slightly due to rounding',
+  'ยอดหลังหัก ณ ที่จ่าย (ประมาณ)': 'Amount after withholding tax (estimate)',
+  'หัก ณ ที่จ่าย (ประมาณ)': 'Withholding tax (estimate)',
+  'โหลดไม่สำเร็จ': 'Failed to load',
+  'ใบเสนอราคา': 'Quotation',
+  'ไม่พบ Timesheet นี้': 'Timesheet not found',
+  'FlowAccount ระบุเครดิต 0 วัน — ใช้ค่าเริ่มต้น': 'FlowAccount specifies 0 credit days — using the default',
+  'FlowAccount ไม่ได้ระบุหัก ณ ที่จ่าย — ใช้ค่าเริ่มต้น': 'FlowAccount does not specify withholding tax — using the default',
+  'กรอกชื่อบริษัท เลขผู้เสียภาษี เลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน': 'Fill in company name, tax ID, PO number, project name and contract period first',
+  'กรอกชื่อบริษัทและเลขผู้เสียภาษีให้ครบก่อน': 'Fill in company name and tax ID first',
+  'กรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบก่อน': 'Fill in PO number, project name and contract period first',
+  'กำลังซิงก์…': 'Syncing…',
+  'ข้อมูลจากใบเสนอราคา FlowAccount': 'Data from the FlowAccount quotation',
+  'จะเพิ่ม/ปรับเรท/ปิดสถานะพนักงานในสัญญานี้ให้ตรงกับใบเสนอราคาล่าสุดของบริษัทนี้ใน FlowAccount': 'Employees in this contract will be added, re-rated or deactivated to match this company\'s latest quotation in FlowAccount',
+  'ซิงก์': 'Sync',
+  'ซิงก์จาก FlowAccount': 'Sync from FlowAccount',
+  'ซิงก์พนักงานจาก FlowAccount?': 'Sync employees from FlowAccount?',
+  'ซิงก์รายชื่อและเรทพนักงานจากใบเสนอราคาล่าสุดใน FlowAccount': 'Sync employee names and rates from the latest FlowAccount quotation',
+  'ซิงก์แล้ว': 'Synced',
+  'ซิงก์ไม่สำเร็จ': 'Sync failed',
+  'ถ้าจะเพิ่มสัญญาด้วยเลย ต้องกรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบ — หรือเว้นว่างทั้งหมดไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้': 'To add a contract now, fill in the PO number, project name and contract period — or leave them all blank and add the contract later',
+  'บริษัทที่ยังไม่มีสัญญา': 'Companies without a contract',
+  'บันทึกภายใน': 'Internal note',
+  'ปรับเรท': 'Adjust rate',
+  'ปิดสถานะ': 'Deactivate',
+  'พนักงาน/อัตราจ้างของบริษัทรายนี้ดึงมาจากใบเสนอราคาใน FlowAccount อัตโนมัติ — แก้ไขทีหลังได้จากแท็บ "พนักงาน"': 'This company\'s employees and rates are pulled automatically from the FlowAccount quotation — you can edit them later from the "Employees" tab',
+  'พนักงานขาย': 'Salesperson',
+  'ยอดก่อนส่วนลด': 'Subtotal before discount',
+  'ยอดก่อนส่วนลด (อ่านอย่างเดียว)': 'Subtotal before discount (read-only)',
+  'ยอดรวมทั้งสิ้น': 'Grand total',
+  'ยอดรวมทั้งสิ้น (อ่านอย่างเดียว)': 'Grand total (read-only)',
+  'รวมภาษี': 'Incl. tax',
+  'รหัสไปรษณีย์': 'Postal code',
+  'ราคา': 'Price',
+  'ราคารวมภาษี': 'Price incl. tax',
+  'ราคาไม่รวมภาษี': 'Price excl. tax',
+  'วันที่ใบเสนอราคา': 'Quotation date',
+  'วันไว้ แก้ได้ที่ช่อง "เครดิต"': 'days by default — editable in the "Credit" field',
+  'เติมจาก "เลขที่อ้างอิง" ของ FlowAccount — ตรวจให้ตรงกับใบว่าจ้างก่อนบันทึก': 'Filled from the FlowAccount "Reference no." — check it matches the PO before saving',
+  'เพิ่มบริษัท': 'Add company',
+  'เพิ่มสัญญา': 'Add contract',
+  'เพิ่มสัญญาให้': 'Add a contract for',
+  'เลขที่อ้างอิง': 'Reference no.',
+  'แล้ว': 'done',
+  'แล้ว — ยังไม่มีสัญญา เพิ่มสัญญาให้ทีหลังได้จากรายการ "บริษัทที่ยังไม่มีสัญญา" ด้านบน': '— no contract yet. You can add one later from the "Companies without a contract" list above',
+  'ไม่บังคับ — เว้นว่างไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้': 'Optional — leave blank and add the contract later',
+  'ไม่รวมภาษี': 'Excl. tax',
+  'ไม่เปลี่ยน': 'No change',
+  'ไว้ ตรวจให้ตรงกับสัญญา': 'by default — check it against the contract',
+  '⚠️ ใบเสนอราคานี้เป็นราคา "รวมภาษี" แต่ระบบคิดเงินแบบ "ไม่รวมภาษี" — ตรวจเรทต่อเดือนให้ตรงก่อนบันทึก': '⚠️ This quotation is priced "incl. tax" but the system bills "excl. tax" — check the monthly rate before saving',
+  'กรอกชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และช่วงวันที่ให้ครบก่อน': 'Fill in name, invoice position, monthly rate and date range first',
+  'กรอกชื่อ ตำแหน่งบนใบแจ้งหนี้ เรทต่อเดือน และวันเริ่มงานให้ครบก่อน': 'Fill in name, invoice position, monthly rate and start date first',
+  'นำออกจากโครงการนี้': 'Remove from this project',
+  'QR แอดไลน์บริษัท': 'QR code to add the company LINE',
+  'กดปุ่มด้านล่างแล้วยืนยันตัวตนในแอป LINE — ระบบจะรู้จักบัญชีไลน์ของคุณอัตโนมัติ ไม่ต้องพิมพ์รหัสเอง (ถ้ายังไม่เคยแอดไลน์บริษัท จะมีหน้าชวนแอดโผล่ขึ้นมาให้ระหว่างทาง)': 'Press the button below and confirm in the LINE app — the system will recognise your LINE account automatically, no code to type (if you haven\'t added the company LINE yet, a prompt to add it will appear along the way)',
+  'ขั้นตอนที่ 1: แอดไลน์บริษัทก่อน (ข้ามได้ถ้าแอดไว้แล้ว)': 'Step 1: Add the company LINE first (skip if already added)',
+  'ขั้นตอนที่ 2: ขอรหัสเชื่อมต่อ': 'Step 2: Request a link code',
+  'ขั้นตอนที่ 3: พิมพ์รหัสนี้ส่งไปในแชทไลน์ที่แอดไว้ (หมดอายุใน 10 นาที)': 'Step 3: Send this code in the LINE chat you added (expires in 10 minutes)',
+  'ดึงลิงก์แอดไลน์อัตโนมัติไม่สำเร็จ — ค้นหา LINE OA ของบริษัทในแอป LINE แล้วแอดเป็นเพื่อนเอง หรือโหลดหน้านี้ใหม่อีกครั้ง': 'Couldn\'t fetch the add-friend link automatically — search for the company\'s LINE OA in the LINE app and add it yourself, or reload this page',
+  'เชื่อมต่อด้วย LINE': 'Connect with LINE',
+  'เชื่อมต่อด้วยไลน์ไม่ได้? ใช้วิธีพิมพ์รหัสแทน': 'Can\'t connect with LINE? Use a typed code instead',
+  'เพิ่มเพื่อนไลน์': 'Add LINE friend',
+  '← กลับไปใช้วิธีเชื่อมต่อด้วย LINE (คลิกเดียว)': '← Back to connecting with LINE (one click)',
+  'ค้นหาชื่อพนักงาน / เลข PO / สัญญา / รอบบิล': 'Search employee / PO / contract / billing cycle',
+  'ไม่พบรายการที่ตรงกับตัวกรอง': 'No items match the filter',
+  'กรอกรายละเอียดปัญหาก่อน': 'Describe the problem first',
+  'กำลังส่ง…': 'Sending…',
+  'ยังไม่เคยแจ้งปัญหาไว้เลย': 'No issues reported yet',
+  'ลบไฟล์': 'Remove file',
+  'ส่งเรื่อง': 'Submit',
+  'ส่งไม่สำเร็จ': 'Failed to send',
+  'อธิบายปัญหาที่เจอ หรือสิ่งที่อยากเสนอแนะ...': 'Describe the problem you found or what you\'d like to suggest...',
+  'เรื่องที่เคยแจ้งไปแล้ว': 'Previously reported',
+  'เลือกหมวดปัญหาก่อน': 'Choose a category first',
+  'แจ้งปัญหาเรียบร้อยแล้ว ขอบคุณครับ': 'Reported — thank you',
+  'แจ้งปัญหาใหม่': 'Report a new issue',
+  'แนบรูป': 'Attach images',
+  'ตัวกรอง': 'Filters',
+  'รอบที่ส่ง Timesheet แล้ว': 'Cycles with Timesheet submitted',
+  'วันและเวลาที่ส่ง': 'Date and time submitted',
+  'ส่ง Timesheet แล้ว': 'Timesheet submitted',
+  'กลับไปที่รายการ': 'Back to list',
+  'กำลังเข้าคิว…': 'Queuing…',
+  'จับคู่สัญญาไม่ได้': 'No matching contract',
+  'ตรวจสอบก่อนบันทึกเข้าระบบ': 'Review before saving to the system',
+  'ยังไม่มีไฟล์ที่พนักงานส่งเข้ามารอตรวจ': 'No files submitted by employees are waiting for review',
+  'รอจากพนักงาน': 'From employees',
+  ส่งผ่านระบบ: 'Via system',
+  'รายการที่เลือก': 'selected',
+  'สัญญา/บริษัท': 'Contract/Company',
+  'ส่งเมื่อ': 'Submitted',
+  'อ่านที่เลือก': 'Read selected',
+  'เข้าคิวไม่สำเร็จ': 'Failed to queue',
+  'เลือกทั้งหมด': 'Select all',
+  'เลือกแถวนี้': 'Select this row',
+  'ไฟล์ที่พนักงานส่งเองผ่านระบบ รอฝั่งบัญชีอ่านและยืนยัน': 'Files employees submitted through the system, waiting for accounting to read and confirm',
+  'กลับไปที่กล่องเมล': 'Back to inbox',
+  'เปิดผลการอ่านไม่สำเร็จ ลองใหม่อีกครั้ง': 'Couldn\'t open the read result — please try again',
+  'โหลดรายการไม่สำเร็จ': 'Failed to load the list',
+  'ไฟล์ที่ n8n ส่งมา — กดอ่านเองเมื่อพร้อม': 'Files sent by n8n — press read when ready',
+  'ไม่มีไฟล์ที่รออ่าน — ไฟล์จะโผล่ที่นี่เมื่อ n8n รับอีเมล Timesheet เข้ามา': 'No files waiting — files will appear here when n8n receives a Timesheet email',
+  'ตรวจสอบ': 'Review',
+  'พนักงานส่งเอง': 'Submitted by employee',
+  'อัปโหลดหลายไฟล์': 'Multi-file upload',
+  '(ยอดด้านล่างคำนวณตามนี้แล้ว)': '(the amounts below are already calculated accordingly)',
+  'FlowAccount ยังออกเอกสารด้วย % เต็มเท่านั้น': 'FlowAccount still issues documents with whole % only',
+  'กำลังพาไปหน้า "ตรวจ Manday"…': 'Taking you to "Review Manday"…',
+  'ชั่วโมงที่ลา (ว่าง = ลาเต็มวัน)': 'Leave hours (blank = full day)',
+  'เต็มวัน': 'Full day',
+  'ใบแจ้งหนี้จริงจะคิดที่': 'The actual invoice will be charged at',
+  'ขั้นตอน 1 · ส่ง Timesheet': 'Step 1 · Submit Timesheet',
+  'PDF ที่บริษัทอนุมัติแล้ว — เลือกได้หลายไฟล์พร้อมกัน': 'PDFs approved by the company — you can select several files at once',
+  'ผู้ดูแลจะตรวจไฟล์นี้ต่อ ติดตามสถานะได้ที่หน้า "บันทึกการส่ง"': 'An admin will review this file next. Track its status on the "Submission log" page',
+  'ลบไฟล์นี้': 'Remove this file',
+  'ส่ง Timesheet นี้': 'Submit this Timesheet',
+  'อัปโหลดเพิ่ม': 'Upload more',
+  'เพิ่มไฟล์': 'Add files',
+  'เลือกไฟล์อย่างน้อย 1 ไฟล์ก่อน': 'Select at least 1 file first',
+  'ไฟล์ที่เลือกไว้': 'Selected files',
+  'เปิดเมนู': 'Open menu',
+  'ย้อนกลับ': 'Back',
+  'ตรงตามสารบัญฟิลด์กลาง': 'Matches the central field catalog',
+  'กำลังโหลดไฟล์…': 'Loading file…',
+  'ชีตนี้ไม่มีข้อมูล': 'This sheet has no data',
+  'เปิดไฟล์นี้ไม่สำเร็จ — ลองดาวน์โหลดไปเปิดแทน': 'Couldn\'t open this file — try downloading it instead',
+  'ระบบกำลังอ่านไฟล์เบื้องหลัง ไม่ต้องปิดหน้านี้ก็ได้ — แถวไหนพร้อมแล้วคลิกเข้าไปตรวจสอบได้เลย': 'The system is reading files in the background — you don\'t need to keep this page open. Click any row that\'s ready to review it',
+  'อัปเดตสถานะอัตโนมัติ': 'Status updates automatically',
+  'อ่านครบทุกไฟล์แล้ว — คลิกแถวไหนก็ได้เพื่อตรวจสอบและยืนยันเข้าระบบ': 'All files read — click any row to review and confirm into the system',
+  'เข้าคิวอ่านแล้ว': 'Queued for reading',
+  'เสร็จแล้ว': 'Done',
+  'ไม่ทราบชื่อไฟล์': 'Unknown file name',
+  'กำลังดู': 'Viewing',
+  'ดูข้อมูลของทุกบริษัท': 'View data for all companies',
+  'ทุก PO': 'All POs',
+  'พิมพ์เลข PO / ชื่อบริษัท เพื่อค้นหา…': 'Type PO number / company name to search…',
+  'ล้าง': 'Clear',
+  'ไม่พบ PO ที่ตรงกับ': 'No PO matches',
+  'บันทึกระบบ': 'System log',
+  'เช่น thailife.com': 'e.g. thailife.com',
+  'ระบบมีปัญหา (error) · แจ้งปัญหา/feedback จากพนักงาน': 'System errors · issue reports/feedback from employees',
+  'ตรวจ Manday · ขออนุมัติวางบิล': 'Manday review · billing approval requests',
+  'เช็คสถานะ/ส่ง Timesheet ผ่านแชทบอท LINE': 'Check status / submit Timesheet via the LINE chatbot',
+  'ข้อมูลรอบบิลไม่ถูกรูปแบบ': 'Billing cycle data is malformed',
+  'ขั้นตอน 1': 'Step 1',
+  'ขั้นตอน 2': 'Step 2',
+  'ขั้นตอน 3': 'Step 3',
+  'ต้องเป็นผู้บริหารเท่านั้นถึงจะเข้าหน้านี้ได้': 'Only executives can access this page',
+  'โหลดข้อมูลแดชบอร์ดไม่สำเร็จ': 'Failed to load dashboard data',
+  'เหตุผล (ไม่บังคับ)': 'Reason (optional)',
+  'เหตุผลที่ตีกลับ (ไม่บังคับ)': 'Reason for sending back (optional)',
+  'วันหยุดนักขัตฤกษ์': 'Public holiday',
+  'สำนักงานใหญ่': 'Head office',
+  'เช่น บริษัท ทดสอบ จำกัด': 'e.g. Test Company Co., Ltd.',
+  'เช่น 26/B0200': 'e.g. 26/B0200',
+  'สัญญาบริษัท': 'Company contracts',
+  'ผูกบัญชี LINE ส่วนตัวเพื่อรับแจ้งเตือนเมื่อระบบมีปัญหา/error': 'Link your personal LINE account to get notified when the system has errors',
+  'ผูกบัญชี LINE ส่วนตัวเพื่อรับแจ้งเตือนคำขออนุมัติวางบิล/ตั๋วแจ้งปัญหา': 'Link your personal LINE account to get billing approval requests and issue tickets',
+  'ทั่วไป': 'General',
+  'มีแค่ role พนักงานเท่านั้นที่แจ้งปัญหาทางนี้ได้': 'Only the employee role can report issues here',
+  'พบปัญหาการใช้งาน หรืออยากเสนอแนะอะไร แจ้งได้เลย แนบรูปประกอบได้ด้วย': 'Found a problem or have a suggestion? Tell us — you can attach images',
+  'ทุกรอบบิล': 'All billing cycles',
+  'พร้อมตรวจสอบ': 'Ready to review',
+  'รอคิว': 'Queued',
+  'กำลังอ่าน Timesheet': 'Reading Timesheet',
+  'อ่านไม่สำเร็จ': 'Read failed',
+  'เช่น ตรวจสอบกับพนักงานแล้วว่า...': 'e.g. Checked with the employee that...',
+  'ส่งเรียบร้อยแล้ว': 'Submitted successfully',
+  'เลือกไฟล์ Timesheet ที่จะส่ง': 'Choose the Timesheet file to submit',
+  'หน้านี้สำหรับ admin แผนกบัญชี และพนักงานเท่านั้น': 'This page is for admin, accounting and employees only',
+  'วันนี้': 'Today',
+  'ล้างค่า': 'Clear',
+  'โมเดลในเครื่อง': 'Local model',
+  'ป้อนด้วยมือ': 'Manual entry',
+  'พบจุดต้องตรวจ': 'Items to check',
+  'วางบิลได้': 'Billable',
+  'แนบได้ไม่เกิน {n} รูปต่อครั้ง': 'You can attach at most {n} images at a time',
+  'ไฟล์ที่เลือกรวมกันใหญ่เกินกว่าที่ตัวรับคำขอยอมให้ส่ง — ลองแบ่งส่งทีละน้อยลง': 'The selected files are too large to send together — try sending fewer at a time',
+  'ติดต่อเซิร์ฟเวอร์ไม่ได้ชั่วคราว — ลองใหม่อีกครั้ง': 'Temporarily unable to reach the server — please try again',
+  'เซสชันหมดอายุ — เข้าสู่ระบบใหม่': 'Session expired — please sign in again',
+  ส่งคำขอไม่ถึงเซิร์ฟเวอร์: 'The request did not reach the server',
+  'เซิร์ฟเวอร์ตอบกลับผิดปกติ (HTTP {status})': 'Unexpected server response (HTTP {status})',
+
+  // ── หน้า Login / Register / ลืมรหัสผ่าน ──
+  'เข้าสู่ระบบ': 'Sign in',
+  'Username / ชื่อ / อีเมล': 'Username / name / email',
+  'รหัสผ่าน': 'Password',
+  'จดจำฉัน (30 วัน)': 'Remember me (30 days)',
+  'ลืมรหัสผ่าน?': 'Forgot password?',
+  'กำลังเข้าสู่ระบบ…': 'Signing in…',
+  'เข้าสู่ระบบด้วย Google': 'Sign in with Google',
+  'ยังไม่มีบัญชี?': 'Don\'t have an account?',
+  'ลงทะเบียน': 'Register',
+  'ลงทะเบียนผ่าน Google สำเร็จ — รอผู้ดูแลระบบตรวจสอบและเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้': 'Registered with Google — wait for an administrator to review and activate your account before signing in',
+  'เข้าสู่ระบบไม่สำเร็จ': 'Sign-in failed',
+  // ข้อความผิดพลาดที่ API ตอบกลับมาเป็นภาษาไทยในกระบวนการ เข้าสู่ระบบ/สมัคร/ลืมรหัสผ่าน/Google (6 ต.ค. 69) — หน้าเหล่านี้แสดงด้วย tx(error)
+  // ถ้าไม่มีคำแปลตรงนี้ ผู้ใช้ที่เลือก EN จะเห็นข้อความไทยโผล่ตอนกรอกผิด
+  'username หรือ password ไม่ถูกต้อง': 'Incorrect username or password',
+  'ต้องระบุ username และ password': 'Username and password are required',
+  'ยังไม่ได้เข้าสู่ระบบ': 'Not signed in',
+  'ต้องระบุอีเมล': 'Email is required',
+  'ต้องระบุอีเมล ชื่อ และรหัสผ่านให้ครบ': 'Email, name and password are all required',
+  'รูปแบบอีเมลไม่ถูกต้อง': 'Invalid email format',
+  'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร': 'Password must be at least 8 characters',
+  'มีบัญชีที่ใช้อีเมลนี้อยู่แล้ว': 'An account with this email already exists',
+  'ต้องระบุอีเมลและรหัสยืนยัน': 'Email and verification code are required',
+  'รหัสไม่ถูกต้องหรือหมดอายุแล้ว — ขอรหัสใหม่อีกครั้ง': 'The code is incorrect or has expired — request a new code',
+  'ต้องระบุอีเมล resetToken และรหัสผ่านใหม่': 'Email, reset token and new password are required',
+  'คำขอตั้งรหัสผ่านใหม่หมดอายุแล้ว — เริ่มใหม่ที่ขั้นตอนลืมรหัสผ่าน': 'The password reset request has expired — start again from Forgot password',
+  'Google ไม่ได้ส่ง code กลับมา': 'Google did not return a code',
+  'session สำหรับเข้าสู่ระบบด้วย Google หมดอายุ — ลองใหม่อีกครั้ง': 'Your Google sign-in session has expired — please try again',
+  'ยังไม่ได้ตั้งค่า Google Sign-In — ใส่ GOOGLE_CLIENT_ID/SECRET ใน .env ก่อน': 'Google Sign-In is not configured — set GOOGLE_CLIENT_ID/SECRET in .env first',
+  'ลงทะเบียนสำเร็จ': 'Registration successful',
+  'รอผู้ดูแลระบบตรวจสอบและเปิดใช้งานบัญชีก่อน จึงจะเข้าสู่ระบบได้': 'Wait for an administrator to review and activate your account before signing in',
+  'กลับไปเข้าสู่ระบบ': 'Back to sign in',
+  'ลงทะเบียนใช้งาน': 'Register for',
+  'ลงทะเบียนแล้วต้องรอผู้ดูแลระบบตรวจสอบและเปิดใช้งานก่อน จึงจะเข้าสู่ระบบได้': 'After registering, an administrator must review and activate your account before you can sign in',
+  'ชื่อ-นามสกุล': 'Full name',
+  'กำลังลงทะเบียน…': 'Registering…',
+  'ลงทะเบียนด้วย Google': 'Register with Google',
+  'มีบัญชีอยู่แล้ว?': 'Already have an account?',
+  'ลงทะเบียนไม่สำเร็จ': 'Registration failed',
+  'ตั้งรหัสผ่านใหม่สำเร็จ': 'Password reset successfully',
+  'เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย': 'You can now sign in with your new password',
+  'ไปเข้าสู่ระบบ': 'Go to sign in',
+  'ลืมรหัสผ่าน': 'Forgot password',
+  'กรอกอีเมลที่ใช้เข้าสู่ระบบ จะส่งรหัสยืนยัน 6 หลักไปให้ทางอีเมล': 'Enter the email you sign in with — we\'ll email you a 6-digit verification code',
+  'ส่งรหัสยืนยัน': 'Send verification code',
+  'กรอกรหัสยืนยัน': 'Enter verification code',
+  'ส่งรหัสยืนยัน 6 หลักไปที่': 'A 6-digit verification code was sent to',
+  'แล้ว — รหัสใช้ได้ภายใน 10 นาที': '— the code is valid for 10 minutes',
+  'รหัสยืนยัน 6 หลัก': '6-digit verification code',
+  'กำลังยืนยัน…': 'Verifying…',
+  'ยืนยันรหัส': 'Verify code',
+  'ส่งคำขอไม่สำเร็จ': 'Request failed',
+  'ยืนยันรหัสไม่สำเร็จ': 'Code verification failed',
+  'ตั้งรหัสผ่านใหม่ไม่สำเร็จ': 'Failed to set the new password',
+  'ค้นหาพนักงาน / บริษัท / โครงการ': 'Search employee / company / project',
+  'ล้างทั้งหมด': 'Clear all',
+  'บริษัทและสัญญา': 'Company and contract',
+  'เงื่อนไขการคิดเงิน': 'Billing terms',
+  'อ่านด้วย Skill ที่ลงทะเบียนไว้ ตั้งค่าการจับคู่ฟิลด์ได้ทีละ Skill': 'Reads with registered Skills — field mapping can be set per Skill',
+  'อ่านด้วยแม่แบบเดียวทั้งระบบ ดูรายการฟิลด์ที่แม่แบบอ่านได้': 'Reads with one template for the whole system — see the fields it can read',
+  'เพิ่ม ลบ และตั้งค่าการจับคู่ฟิลด์ของแต่ละ Skill': 'Add, remove and configure field mapping for each Skill',
+  'รายการฟิลด์ที่แม่แบบนี้อ่านและคำอธิบายที่สั่งเครื่องอ่าน': 'Fields this template reads and the instructions given to the reader',
+  'ภาพรวมรอบบิล': 'Billing cycle overview',
+  'แสดงน้อยลง': 'Show less',
+  'ดูทั้งหมด': 'View all',
+  'กดเพื่อกรองรายการรอบบิลด้านล่าง': 'Click to filter the billing cycle list below',
+  'อยู่ระหว่างดำเนินการ': 'In progress',
+  'คลิกที่ส่วนของกราฟเพื่อดูรายละเอียด': 'Click a part of the chart to see details',
+  'ประมาณ': 'estimate',
+  'สถานะแยกตามรอบบิล': 'Status by billing cycle',
+  'ช่องทางที่ใช้ส่ง': 'Submission channels',
+  'ยังไม่เลือก': 'Not chosen yet',
+  'บัญชี LINE ของคุณเชื่อมต่อกับ OBS แล้ว': 'Your LINE account is connected to OBS',
+  'ระบบจะส่งข้อความแจ้งเตือนมาที่ LINE ของคุณโดยตรง เลิกเชื่อมต่อได้ทุกเมื่อและเชื่อมต่อใหม่ได้เสมอ': 'The system will send notifications straight to your LINE. You can disconnect any time and reconnect later',
+  'เชื่อมต่อบัญชี LINE ของคุณ': 'Connect your LINE account',
+  'เชื่อมต่อ LINE ด้วยรหัส': 'Connect LINE with a code',
+  'ขอรหัสเชื่อมต่อ': 'Request link code',
+  'คัดลอก': 'Copy',
+  'คัดลอกแล้ว': 'Copied',
 };
 
 const MONTHS_TH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
@@ -1091,11 +1393,82 @@ export function formatPeriod(period: string | null | undefined, lang: Lang): str
   return lang === 'en' ? `${MONTHS_EN[mi]} ${y}` : `${MONTHS_TH[mi]} ${y + 543}`;
 }
 
+
+const MONTHS_TH_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const MONTHS_EN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** แปลข้อความนอก React (ไม่มี hook ให้เรียก เช่น ตัวช่วย fetch) — อ่านภาษาที่เลือกไว้จาก localStorage ตรงๆ */
+export function txStatic(th: string): string {
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(LANG_KEY) === 'en' && TX[th]) return TX[th];
+  } catch {
+    /* localStorage ถูกบล็อก — ใช้ไทย */
+  }
+  return th;
+}
+
+/** ปีตามภาษา: ไทย = พ.ศ. (+543), อังกฤษ = ค.ศ. ตรงๆ — ทุกที่ที่โชว์ปีต้องผ่านตัวนี้ (เจ้าของระบบสั่ง 5 ต.ค. 69) */
+export function formatYear(year: number, lang: Lang): number {
+  return lang === 'en' ? year : year + 543;
+}
+
+/** แปลงข้อความ "เดือน ปี" ที่เซิร์ฟเวอร์ปั้นเป็นไทยตายตัว (เช่น "พฤษภาคม 2569") ให้ตามภาษาที่เลือก — อังกฤษได้ "May 2026"
+ * (ชื่อเดือนอังกฤษ + ค.ศ.) ไทยคงเดิม · ใช้กับ periodLabel ที่ยังไม่มี period ดิบให้ใช้ formatPeriod */
+export function formatPeriodLabel(label: string | null | undefined, lang: Lang): string {
+  if (!label) return '';
+  if (lang !== 'en') return label;
+  return label.replace(/(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)\s+(\d{4})/g, (_m, mon: string, y: string) => {
+    const i = MONTHS_TH.indexOf(mon);
+    const year = Number(y);
+    return `${MONTHS_EN[i]} ${year > 2400 ? year - 543 : year}`;
+  });
+}
+
+interface Ymdhm { y: number; m: number; d: number; hh: number; mm: number; hasTime: boolean }
+
+/** แยกวันที่/เวลาจากสตริง ISO หรือ Date — ค่าที่มี timezone (Z / +hh:mm) แปลงเป็นเวลาไทย (UTC+7) ให้ก่อน
+ * ส่วนสตริงวันที่ล้วน (YYYY-MM-DD) ไม่แตะ timezone เลย กันวันเลื่อน */
+function parseStamp(v: string | Date | null | undefined): Ymdhm | null {
+  if (!v) return null;
+  if (typeof v === 'string') {
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (dateOnly) return { y: +dateOnly[1], m: +dateOnly[2], d: +dateOnly[3], hh: 0, mm: 0, hasTime: false };
+    const local = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(v);
+    if (local) return { y: +local[1], m: +local[2], d: +local[3], hh: +local[4], mm: +local[5], hasTime: true };
+  }
+  const t = (v instanceof Date ? v : new Date(v)).getTime();
+  if (Number.isNaN(t)) return null;
+  const b = new Date(t + 7 * 3600_000);
+  return { y: b.getUTCFullYear(), m: b.getUTCMonth() + 1, d: b.getUTCDate(), hh: b.getUTCHours(), mm: b.getUTCMinutes(), hasTime: true };
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** วันที่ตามภาษา: "25 ก.ย. 2569" / "25 Sep 2026" */
+export function formatDate(v: string | Date | null | undefined, lang: Lang): string {
+  const p = parseStamp(v);
+  if (!p) return v ? String(v) : '—';
+  const mon = (lang === 'en' ? MONTHS_EN_SHORT : MONTHS_TH_SHORT)[p.m - 1];
+  return `${p.d} ${mon} ${formatYear(p.y, lang)}`;
+}
+
+/** วันที่+เวลา แค่ชั่วโมง:นาที (ไม่เอาวินาที): "25 ก.ย. 2569 09:29" / "25 Sep 2026 09:29" */
+export function formatDateTime(v: string | Date | null | undefined, lang: Lang): string {
+  const p = parseStamp(v);
+  if (!p) return v ? String(v) : '—';
+  const date = formatDate(v, lang);
+  return p.hasTime ? `${date} ${pad2(p.hh)}:${pad2(p.mm)}` : date;
+}
+
 interface LanguageContextValue {
   lang: Lang;
   setLang: (lang: Lang) => void;
   tx: (th: string) => string;
   formatPeriod: (period: string | null | undefined) => string;
+  formatPeriodLabel: (label: string | null | undefined) => string;
+  formatDate: (v: string | Date | null | undefined) => string;
+  formatDateTime: (v: string | Date | null | undefined) => string;
+  formatYear: (year: number) => number;
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
@@ -1103,6 +1476,10 @@ const LanguageContext = createContext<LanguageContextValue>({
   setLang: () => {},
   tx: (th) => th,
   formatPeriod: (period) => formatPeriod(period, 'th'),
+  formatPeriodLabel: (label) => formatPeriodLabel(label, 'th'),
+  formatDate: (v) => formatDate(v, 'th'),
+  formatDateTime: (v) => formatDateTime(v, 'th'),
+  formatYear: (year) => formatYear(year, 'th'),
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
@@ -1119,6 +1496,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // <html lang> ตามภาษาที่เลือก — ให้โปรแกรมอ่านหน้าจอ/ตัวตรวจคำสะกดของเบราว์เซอร์รู้ว่าหน้านี้เป็นภาษาอะไร (เดิมค้างเป็น "th" เสมอ)
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   function setLang(next: Lang) {
     setLangState(next);
     try {
@@ -1134,6 +1516,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       setLang,
       tx: (th: string) => (lang === 'en' && TX[th] ? TX[th] : th),
       formatPeriod: (period: string | null | undefined) => formatPeriod(period, lang),
+      formatPeriodLabel: (label: string | null | undefined) => formatPeriodLabel(label, lang),
+      formatDate: (v: string | Date | null | undefined) => formatDate(v, lang),
+      formatDateTime: (v: string | Date | null | undefined) => formatDateTime(v, lang),
+      formatYear: (year: number) => formatYear(year, lang),
     }),
     [lang],
   );

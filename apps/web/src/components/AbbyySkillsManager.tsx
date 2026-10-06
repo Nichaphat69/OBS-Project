@@ -41,13 +41,13 @@ function hasAnyMapping(map: TimesheetFieldMap | null): boolean {
 
 /** ตัวห่อของตัวจัดการ Skill — ต้องอยู่ระดับไฟล์ ไม่ใช่ในตัวคอมโพเนนต์ (ดูเหตุผลที่คอมเมนต์ใน AbbyySkillsManager) */
 function Shell({ embedded, title, children }: { embedded?: boolean; title: string; children: React.ReactNode }) {
-  return embedded ? <div style={{ padding: '17px' }}>{children}</div> : <Card title={title}>{children}</Card>;
+  return embedded ? <div style={{ padding: '20px' }}>{children}</div> : <Card title={title}>{children}</Card>;
 }
 
 export default function AbbyySkillsManager({ embedded }: { embedded?: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { tx } = useLang();
+  const { tx, formatDate } = useLang();
   const [skills, setSkills] = useState<AbbyySkillRow[] | null>(null);
   const [name, setName] = useState('');
   const [skillId, setSkillId] = useState('');
@@ -169,36 +169,38 @@ export default function AbbyySkillsManager({ embedded }: { embedded?: boolean })
   // พิมพ์ต่อไม่ได้ (เจอจริง 1 ต.ค. 69 ทั้งช่องเพิ่ม Skill และช่องจับคู่ชื่อฟิลด์ที่อยู่ข้างใน) ย้ายออกไปไว้ระดับไฟล์แล้ว
   return (
     <Shell embedded={embedded} title={tx('สารบัญ Skill ABBYY')}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14, marginBottom: 18, alignItems: 'end' }}>
+      <div className="sk-add">
         <label>
           <div className="ey">{tx('ชื่อ Skill')}</div>
           <input
+            className="skill-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="เช่น OBS Timesheet - Thailife"
-            style={{ marginTop: 6, width: '100%', height: 38, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 12px' }}
+            
           />
         </label>
         <label>
           <div className="ey">Skill ID</div>
           <input
+            className="skill-input"
             value={skillId}
             onChange={(e) => setSkillId(e.target.value)}
             placeholder="เช่น 89aa1af3-1e04-4477-9b91-00023980402c"
-            style={{ marginTop: 6, width: '100%', height: 38, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 12px' }}
+            
           />
         </label>
         {/* justifySelf: ไม่ให้ปุ่มยืดเต็มคอลัมน์ของกริด ไม่งั้นมันสูงเท่าช่องกรอกและกว้างเท่ากัน
             จนดูเป็นช่องที่สามของฟอร์มแทนที่จะเป็นปุ่มสั่งงาน */}
-        <button className="btn pri sm" style={{ justifySelf: 'start' }} disabled={adding} onClick={add}>
-          {adding ? tx('กำลังเพิ่ม…') : `+ ${tx('เพิ่ม Skill ใหม่')}`}
+        <button className="btn red" disabled={adding} onClick={add}>
+          {adding ? tx('กำลังเพิ่ม…') : tx('เพิ่ม Skill ใหม่')}
         </button>
       </div>
 
       {error ? (
         <ErrorState message={error} onRetry={load} />
       ) : (
-      <div className="tw">
+      <div className="tw sk-table">
         <table>
           <thead>
             <tr>
@@ -222,7 +224,7 @@ export default function AbbyySkillsManager({ embedded }: { embedded?: boolean })
                       </div>
                     </td>
                     <td className="sub" style={{ wordBreak: 'break-all' }}>{s.skillId}</td>
-                    <td className="sub">{s.createdAt.slice(0, 10)}</td>
+                    <td className="sub">{formatDate(s.createdAt)}</td>
                     <td>
                       <div className="rowacts">
                         <button

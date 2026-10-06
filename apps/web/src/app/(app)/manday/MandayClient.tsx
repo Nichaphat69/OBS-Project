@@ -6,7 +6,7 @@ import { Card, Loading, PageHeader, ReadModelTag, StatusPill, Tag, TabStrip } fr
 import { useReadModelNameMap } from '../../../components/readModelNames';
 import { Icon } from '../../../components/Icon';
 import { ScopeSummary } from '../../../components/ScopeFilterBar';
-import { useLang } from '../../../lib/language';
+import { useLang, formatDate, formatYear } from '../../../lib/language';
 
 interface TimesheetListItem {
   id: string;
@@ -71,7 +71,7 @@ function matchesTab(item: TimesheetListItem, tab: string): boolean {
 }
 
 export default function MandayClient() {
-  const { tx } = useLang();
+  const { tx, lang, formatPeriodLabel } = useLang();
   const [data, setData] = useState<ListResult | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('needsReview');
   const [search, setSearch] = useState('');
@@ -191,7 +191,7 @@ export default function MandayClient() {
           <option value="">{tx('ทุกปี')}</option>
           {years.map((y) => (
             <option key={y} value={y}>
-              {Number(y) + 543}
+              {formatYear(Number(y), lang)}
             </option>
           ))}
         </select>
@@ -216,7 +216,7 @@ export default function MandayClient() {
             </div>
             <div className="bd">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <Tag tone="pr">{tx('รอบ')} {item.periodLabel}</Tag>
+                <Tag tone="pr">{tx('รอบ')} {formatPeriodLabel(item.periodLabel)}</Tag>
                 <Tag tone="mu">PO {item.contract.poNo}</Tag>
                 <Tag tone="mu">{tx('เลขที่')} {item.id}</Tag>
                 {/* กล่องข้อความแยกทีละวัน ไม่รวมเป็นบรรทัดเดียวคั่นจุลภาค — เดือนที่ลาหลายวันจะได้ไม่ต้อง
@@ -229,7 +229,7 @@ export default function MandayClient() {
                 <ReadModelTag model={item.readModel} nameMap={readModelNames} />
               </div>
               <div className="sub" style={{ marginBottom: 14 }}>
-                {tx('รับเมื่อ')} {item.receivedAt?.slice(0, 10)} · <b>{item.contract.customerName}</b> · PO {item.contract.poNo} · {item.contract.projectName}
+                {tx('รับเมื่อ')} {formatDate(item.receivedAt, lang)} · <b>{item.contract.customerName}</b> · PO {item.contract.poNo} · {item.contract.projectName}
               </div>
 
               <table style={{ minWidth: 0 }}>
@@ -273,7 +273,7 @@ export default function MandayClient() {
                     <input
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
-                      placeholder="เหตุผล (ไม่บังคับ)"
+                      placeholder={tx('เหตุผล (ไม่บังคับ)')}
                       style={{
                         height: 34,
                         borderRadius: 'var(--r-ctl)',

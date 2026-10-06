@@ -45,14 +45,6 @@ interface Settings {
   env: { hasLine: boolean };
 }
 
-/** ported from public/app.js's dt() — วันที่/เวลาแบบไทยสั้นๆ */
-function dt(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
 /**
  * รอบหนึ่งอยู่กลุ่มไหนในสายตาพนักงาน — หน้านี้มีคนดูคนเดียวคือเจ้าของ Timesheet ที่ทำอะไรได้อยู่
  * อย่างเดียวคือ "ส่งไฟล์" คำถามเดียวที่เขาต้องการคำตอบจึงเป็น **"รอบไหนที่ฉันต้องลงมือ"**
@@ -129,7 +121,7 @@ function stepsOf(p: EmployeeProgressPeriod): Array<{ key: string; label: string;
 }
 
 function PeriodRow({ p, bucket, contractId }: { p: EmployeeProgressPeriod; bucket: Bucket; contractId: string }) {
-  const { tx } = useLang();
+  const { tx, formatDateTime: dt, formatPeriodLabel } = useLang();
   const steps = stepsOf(p);
   // ขั้นที่ค้างอยู่ตอนนี้ = ตัวแรกที่ยังไม่เสร็จ — เอามาเขียนเป็นประโยคเดียวใต้ชื่อเดือน แทนที่จะให้คนไล่
   // อ่านสามแถวแล้วสรุปเอง
@@ -139,7 +131,7 @@ function PeriodRow({ p, bucket, contractId }: { p: EmployeeProgressPeriod; bucke
   return (
     <div className={`mypg-row ${bucket}`}>
       <div className="mypg-when">
-        <span className="mypg-month">{p.periodLabel}</span>
+        <span className="mypg-month">{formatPeriodLabel(p.periodLabel)}</span>
         <span className="mypg-sub">
           {bucket === 'future'
             ? tx('ยังไม่ถึงกำหนดส่ง')

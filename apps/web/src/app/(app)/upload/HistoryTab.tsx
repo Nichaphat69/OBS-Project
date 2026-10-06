@@ -253,7 +253,7 @@ function ReadDetail({ detail }: { detail: AiReadDetail }) {
 }
 
 export default function HistoryTab() {
-  const { tx } = useLang();
+  const { tx, formatDateTime, formatPeriodLabel } = useLang();
   const toast = useToast();
   const [rows, setRows] = useState<AiReadItem[] | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -395,7 +395,7 @@ export default function HistoryTab() {
                 <Fragment key={r.id}>
                   <tr className="rw" onClick={() => toggleExpand(r.id)} title={tx('คลิกเพื่อดูรายละเอียดที่ระบบอ่านได้')}>
                     <td className="docid">{r.documentNo}</td>
-                    <td>{r.periodLabel ?? '—'}</td>
+                    <td>{formatPeriodLabel(r.periodLabel) || '—'}</td>
                     <td className="nm">{r.employeeName ?? '—'}</td>
                     <td>
                       <Tag tone="mu">
@@ -416,7 +416,7 @@ export default function HistoryTab() {
                         {tx(STATUS_LABEL[r.status] ?? r.status)}
                       </StatusPill>
                     </td>
-                    <td className="sub">{r.readAt?.slice(0, 19).replace('T', ' ')}</td>
+                    <td className="sub">{formatDateTime(r.readAt)}</td>
                     <td className="r" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       {r.status === 'pending' && (
                         <button

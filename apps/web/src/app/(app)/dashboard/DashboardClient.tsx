@@ -4,7 +4,7 @@ import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import { Card, EmptyState, Kpi, Loading, PageHeader, PoTag, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useLang } from '../../../lib/language';
+import { useLang, formatDateTime } from '../../../lib/language';
 import { useScope } from '../../../lib/scope';
 import { contractRange } from '../../../components/ScopeFilterBar';
 
@@ -22,6 +22,13 @@ function employeeStatusTone(status: string): 'mu' | 'ok' | 'wn' {
   if (status === 'not_submitted') return 'mu';
   if (status === 'billed') return 'ok';
   return 'wn';
+}
+/** สีของพนักงานรายคนให้อยู่ในชุดสีเดียวกับสถานะรอบบิล: ยังไม่ส่ง=เทา · วางบิลแล้ว=เขียว · รอวางบิล(ตรวจผ่าน)=ฟ้า · อื่นๆ=ส้ม */
+function employeeStateClass(status: string): string {
+  if (status === 'not_submitted') return 's-awaiting';
+  if (status === 'billed') return 's-billed';
+  if (status === 'verified') return 's-ready';
+  return 's-checking';
 }
 function employeeStatusLabel(e: { status: string; statusLabel: string }): string {
   return e.status === 'verified' ? 'รอวางบิล' : e.statusLabel;
@@ -77,12 +84,6 @@ interface DashboardData {
   }>;
 }
 
-function formatDateTime(iso: string, lang: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(lang === 'en' ? 'en-US' : 'th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
 function money(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -91,6 +92,9 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
   const { tx, lang, formatPeriod } = useLang();
   const { contracts: scopeContracts } = useScope();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [cycleFilter, setCycleFilter] = useState('');
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [selSeg, setSelSeg] = useState<'' | 'billed' | 'doing' | 'left'>('');
   const [employeesByKey, setEmployeesByKey] = useState<Record<string, PeriodEmployee[] | 'loading' | 'error'>>({});
 
   function toggleExpand(contractId: string, period: string) {
@@ -108,6 +112,47 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         .catch(() => setEmployeesByKey((m) => ({ ...m, [key]: 'error' })));
     }
   }
+
+  // ชิปสถานะของการ์ดรอบบิล — นับจากรอบที่ได้มาทั้งหมด (ไม่ใช่เฉพาะที่กรองอยู่) ตัวเลขจะได้ไม่หายตอนกรอง
+  const cycleStates = (() => {
+    const m = new Map<string, { state: string; label: string; count: number }>();
+    for (const c of data.cycles) {
+      const cur = m.get(c.state);
+      if (cur) cur.count += 1;
+      else m.set(c.state, { state: c.state, label: c.stateLabel, count: 1 });
+    }
+    return [...m.values()];
+  })();
+  // ความคืบหน้าสัญญา: นับเป็น "เดือน" ของสัญญา — วางบิลแล้ว (monthsBilled) · อยู่ระหว่างดำเนินการ (รอบที่ส่ง/ตรวจแล้วแต่ยังไม่วางบิล)
+  // · ยังไม่ถึงรอบ (ที่เหลือ) · มูลค่าของสองส่วนหลังเป็นค่าประมาณจากยอดต่อเดือน
+  const progPer = data.contracts.map((c) => {
+    const started = data.cycles.filter((x) => x.contractId === c.id && x.state !== 'billed' && x.state !== 'awaiting').length;
+    const billed = Math.min(c.monthsBilled, c.monthsTotal);
+    const doing = Math.min(started, Math.max(c.monthsTotal - billed, 0));
+    const left = Math.max(c.monthsTotal - billed - doing, 0);
+    return { c, billed, doing, left, doingValue: c.monthlyTotal * doing, leftValue: Math.max(c.remainingValue - c.monthlyTotal * doing, 0) };
+  });
+  const progTotal = progPer.reduce((n, r) => n + r.c.monthsTotal, 0);
+  const progSegsRaw = [
+    { key: 'billed' as const, label: 'วางบิลแล้ว', count: progPer.reduce((n, r) => n + r.billed, 0), value: progPer.reduce((n, r) => n + r.c.billedValue, 0) },
+    { key: 'doing' as const, label: 'อยู่ระหว่างดำเนินการ', count: progPer.reduce((n, r) => n + r.doing, 0), value: progPer.reduce((n, r) => n + r.doingValue, 0) },
+    { key: 'left' as const, label: 'ยังไม่ถึงรอบ', count: progPer.reduce((n, r) => n + r.left, 0), value: progPer.reduce((n, r) => n + r.leftValue, 0) },
+  ];
+  const progSegs = (() => {
+    const gap = progSegsRaw.filter((g) => g.count > 0).length > 1 ? 0.8 : 0;
+    let acc = 0;
+    return progSegsRaw.map((g) => {
+      const share = (g.count / (progTotal || 1)) * 100;
+      const seg = { ...g, len: Math.max(share - gap, 0.1), offset: 25 - acc };
+      acc += share;
+      return seg;
+    });
+  })();
+  const progPct = progTotal ? Math.round((progSegsRaw[0].count / progTotal) * 100) : 0;
+  const selDetail = progSegs.find((g) => g.key === selSeg) ?? null;
+  // งานที่มีลิงก์ (ต้องลงมือ) ก่อน แล้วค่อยงานที่แค่รอ — sort คงลำดับเดิมในกลุ่มเดียวกัน
+  const taskList = [...data.tasks].sort((x, y) => Number(Boolean(y.link)) - Number(Boolean(x.link)));
+  const cycleShown = cycleFilter ? data.cycles.filter((c) => c.state === cycleFilter) : data.cycles;
 
   return (
     <>
@@ -158,7 +203,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                 {opt && (
                   <div className="cf">
                     <span className="lbl">{tx('ช่วงสัญญา')}</span>
-                    <span>{contractRange(opt)}</span>
+                    <span>{contractRange(opt, lang)}</span>
                   </div>
                 )}
                 <div className="cf end">
@@ -188,7 +233,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
           tone="g"
         />
         <Kpi
-          icon="send"
+          icon="money"
           label={tx('ยอดวางบิลแล้ว')}
           value={money(data.billedAmount)}
           caption={`${data.invoiceCount} ${tx('ใบ')}`}
@@ -196,95 +241,175 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         />
       </div>
 
-      {/* .mosaic.c2 คือ 1.6fr 1fr — ให้ "งานที่ต้องทำ" อยู่คอลัมน์กว้าง เพราะรายการยาวได้ไม่จำกัดและ
-          บรรทัดรายละเอียดยาว ส่วนสรุปสถานะเป็นสี่บรรทัดสั้นคงที่ จึงอยู่คอลัมน์แคบได้สบาย */}
+      {/* งานที่ต้องทำ (กว้าง) + โดนัทภาพรวมรอบบิล (แคบ) — 6 ต.ค. 69 เอาการ์ด "สรุปสถานะ Timesheet" ออก เพราะซ้ำกับการ์ดรอบบิล
+          ด้านล่างทุกตัวเลข แล้วใช้โดนัทแทน · งานที่มีปุ่ม "เปิด" (ต้องลงมือ) ขึ้นก่อน ส่วน "รอ Timesheet" ที่เป็นแค่รอเฉยๆ ตามหลัง
+          และโชว์แค่ 5 อันดับแรก ที่เหลือกดดูทั้งหมดได้ — เดิมยาวเป็นสิบกว่าแถวจนดันการ์ดอื่นหลุดจอ */}
       <div className="mosaic c2">
-        <Card title={tx('งานที่ต้องทำ')}>
-          <TaskList tasks={data.tasks} />
+        <Card
+          title={tx('งานที่ต้องทำ')}
+          right={taskList.length > 0 ? <span className="bc-count">{taskList.length}</span> : undefined}
+        >
+          <TaskList tasks={showAllTasks ? taskList : taskList.slice(0, 5)} />
+          {taskList.length > 5 && (
+            <button type="button" className="dn-more" onClick={() => setShowAllTasks((v) => !v)}>
+              {showAllTasks ? tx('แสดงน้อยลง') : `${tx('ดูทั้งหมด')} (${taskList.length})`}
+            </button>
+          )}
         </Card>
 
-        <Card title={tx('สรุปสถานะ Timesheet')}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <StatRow dot="a" label={tx('ทั้งหมด')} value={data.counts.total} />
-            <StatRow dot="wn" label={tx('ข้อมูลไม่ตรง')} value={data.counts.mismatch} />
-            <StatRow dot="ok" label={tx('วางบิลแล้ว')} value={data.counts.billed} />
-            <StatRow dot="cr" label={tx('ตีกลับ')} value={data.counts.rejected} />
-          </div>
+        {/* ความคืบหน้าสัญญา (6 ต.ค. 69 เปลี่ยนจากโดนัทสถานะรอบบิล): แบ่งเดือนทั้งหมดของสัญญาเป็น วางบิลแล้ว / อยู่ระหว่างดำเนินการ /
+            ยังไม่ถึงรอบ — กดส่วนไหนของกราฟ (หรือรายการข้างล่าง) แล้วแสดงรายละเอียดของส่วนนั้นใต้กราฟ แยกตามสัญญา
+            สีทึบโทนฟ้า #288adb ไล่ความเข้มตามความคืบหน้า */}
+        <Card title={tx('ความคืบหน้าสัญญา')}>
+          {data.contracts.length === 0 || progTotal === 0 ? (
+            <EmptyState label={tx('ไม่มีสัญญา')} />
+          ) : (
+            <div className="pg">
+              <div className="dn">
+                <div className="dn-chart" role="group" aria-label={tx('ความคืบหน้าสัญญา')}>
+                  <svg viewBox="0 0 42 42">
+                    <circle className="dn-track" cx="21" cy="21" r={DONUT_R} />
+                    {progSegs.filter((g) => g.count > 0).map((g) => (
+                      <circle
+                        key={g.key}
+                        className={`dn-seg pg-${g.key}${selSeg === g.key ? ' sel' : ''}${selSeg && selSeg !== g.key ? ' dim' : ''}`}
+                        cx="21"
+                        cy="21"
+                        r={DONUT_R}
+                        strokeDasharray={`${g.len} ${100 - g.len}`}
+                        strokeDashoffset={g.offset}
+                        onClick={() => setSelSeg(selSeg === g.key ? '' : g.key)}
+                        role="button"
+                        aria-label={tx(g.label)}
+                      />
+                    ))}
+                  </svg>
+                  <div className="dn-center">
+                    <b>{progPct}%</b>
+                    <span>{tx('วางบิลแล้ว')}</span>
+                  </div>
+                </div>
+                <ul className="dn-legend">
+                  {progSegs.map((g) => (
+                    <li key={g.key}>
+                      <button
+                        type="button"
+                        className={`dn-lg pg-${g.key}${selSeg === g.key ? ' on' : ''}`}
+                        onClick={() => setSelSeg(selSeg === g.key ? '' : g.key)}
+                      >
+                        <i />
+                        <span className="t">{tx(g.label)}</span>
+                        <b>{g.count}</b>
+                        <em>{Math.round((g.count / progTotal) * 100)}%</em>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {selDetail ? (
+                <div className={`pg-detail pg-${selDetail.key}`}>
+                  <div className="pg-dh">
+                    <span className="pg-dt"><i />{tx(selDetail.label)}</span>
+                    <button type="button" className="pg-x" onClick={() => setSelSeg('')} aria-label={tx('ปิด')}>×</button>
+                  </div>
+                  <div className="pg-nums">
+                    <div><b>{selDetail.count}</b><span>{tx('เดือน')} · {Math.round((selDetail.count / progTotal) * 100)}%</span></div>
+                    <div><b>{money(selDetail.value)}</b><span>{tx('บาท')}{selDetail.key === 'billed' ? '' : ` (${tx('ประมาณ')})`}</span></div>
+                  </div>
+                  <ul className="pg-per">
+                    {progPer
+                      .filter((r) => r[selDetail.key] > 0)
+                      .map((r) => (
+                        <li key={r.c.id}>
+                          <div className="pg-pt">
+                            <b>{r.c.poNo}</b>
+                            <span className="sub">{r.c.customerName}</span>
+                            <em>{r[selDetail.key]} / {r.c.monthsTotal} {tx('เดือน')}</em>
+                          </div>
+                          <div className="pg-bar"><span style={{ width: `${(r[selDetail.key] / Math.max(r.c.monthsTotal, 1)) * 100}%` }} /></div>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="pg-hint">{tx('คลิกที่ส่วนของกราฟเพื่อดูรายละเอียด')}</div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
 
       <div className="mosaic c2">
-        <Card title={tx('รอบบิล')} flush>
-          <div className="tw">
-            <table>
-              <thead>
-                <tr>
-                  <th>{tx('บริษัท')}</th>
-                  <th>{tx('รอบ')}</th>
-                  <th>{tx('สถานะ')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.cycles.slice(0, 20).map((c, i) => {
-                  const key = `${c.contractId}:${c.period}`;
-                  const expanded = expandedKey === key;
-                  const emps = employeesByKey[key];
-                  return (
-                    <Fragment key={`${c.contractId}-${c.period}-${i}`}>
-                      <tr className="rw" onClick={() => toggleExpand(c.contractId, c.period)} title={tx('คลิกเพื่อดูรายชื่อพนักงานและสถานะ Timesheet แต่ละคน')}>
-                        <td>
-                          <Icon
-                            name="cd"
-                            className="sm"
-                            style={{ marginRight: 6, transition: 'transform 0.15s var(--ease)', transform: expanded ? 'rotate(180deg)' : undefined }}
-                          />
-                          {c.customerName}
-                        </td>
-                        <td>{formatPeriod(c.period)}</td>
-                        <td>
-                          <StatusPill tone={CYCLE_STATE_TONE[c.state] ?? 'mu'}>{tx(c.stateLabel)}</StatusPill>
-                        </td>
-                      </tr>
-                      {expanded && (
-                        <tr>
-                          <td colSpan={3} style={{ padding: 0, background: 'var(--sunk)' }}>
-                            {emps === 'loading' || emps === undefined ? (
-                              <div style={{ padding: '4px 24px' }}><Loading variant="lines" rows={2} /></div>
-                            ) : emps === 'error' ? (
-                              <div style={{ padding: '12px 24px', color: 'var(--cr)' }}>{tx('โหลดรายชื่อพนักงานไม่สำเร็จ')}</div>
-                            ) : emps.length === 0 ? (
-                              <div className="sub" style={{ padding: '12px 24px' }}>{tx('ยังไม่มีพนักงานผูกกับสัญญานี้')}</div>
-                            ) : (
-                              <table style={{ width: '100%' }}>
-                                <tbody>
-                                  {emps.map((e) => (
-                                    <tr key={e.employeeId}>
-                                      <td style={{ paddingLeft: 40 }} className="nm">{e.nameTh}</td>
-                                      <td className="sub">{e.position}</td>
-                                      <td className="r" style={{ paddingRight: 24 }}>
-                                        <Tag tone={employeeStatusTone(e.status)}>{tx(employeeStatusLabel(e))}</Tag>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                {data.cycles.length === 0 && (
-                  <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--mut)' }}>
-                      {tx('ไม่มีรอบบิล')}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* รอบบิล (6 ต.ค. 69 จัดใหม่): แถบสีซ้ายของแต่ละแถว + ป้ายสถานะสีเดียวกัน แบ่งสีตามสถานะทั้งหน้า
+            ชิปด้านบนนับจำนวนต่อสถานะและกดกรองได้ · กดแถวเพื่อกางรายชื่อพนักงานและสถานะ Timesheet รายคน เหมือนเดิม */}
+        <Card title={tx('รอบบิล')} right={<span className="bc-count">{cycleShown.length} / {data.cycles.length}</span>} flush>
+          <div className="bc-filter" role="group" aria-label={tx('สถานะ')}>
+            <button type="button" className={`bc-chip${cycleFilter === '' ? ' on' : ''}`} onClick={() => setCycleFilter('')}>
+              {tx('ทั้งหมด')} <b>{data.cycles.length}</b>
+            </button>
+            {cycleStates.map((st) => (
+              <button
+                key={st.state}
+                type="button"
+                className={`bc-chip s-${st.state}${cycleFilter === st.state ? ' on' : ''}`}
+                onClick={() => setCycleFilter(cycleFilter === st.state ? '' : st.state)}
+              >
+                <i />{tx(st.label)} <b>{st.count}</b>
+              </button>
+            ))}
           </div>
+          <ul className="bc-list">
+            {cycleShown.slice(0, 20).map((c, i) => {
+              const key = `${c.contractId}:${c.period}`;
+              const expanded = expandedKey === key;
+              const emps = employeesByKey[key];
+              return (
+                <li key={`${c.contractId}-${c.period}-${i}`} className={`bc-item s-${c.state}${expanded ? ' open' : ''}`}>
+                  <button
+                    type="button"
+                    className="bc-row"
+                    aria-expanded={expanded}
+                    onClick={() => toggleExpand(c.contractId, c.period)}
+                    title={tx('คลิกเพื่อดูรายชื่อพนักงานและสถานะ Timesheet แต่ละคน')}
+                  >
+                    <span className="bc-av" aria-hidden>{(c.customerName.trim()[0] ?? '?').toUpperCase()}</span>
+                    <span className="bc-main">
+                      <b>{c.customerName}</b>
+                      <span className="sub">{formatPeriod(c.period)}</span>
+                    </span>
+                    <span className={`bc-pill s-${c.state}`}><i />{tx(c.stateLabel)}</span>
+                    <Icon name="cd" className="sm bc-chev" />
+                  </button>
+                  {expanded && (
+                    <div className="bc-emps">
+                      {emps === 'loading' || emps === undefined ? (
+                        <div style={{ padding: '4px 16px' }}><Loading variant="lines" rows={2} /></div>
+                      ) : emps === 'error' ? (
+                        <div className="bc-note err">{tx('โหลดรายชื่อพนักงานไม่สำเร็จ')}</div>
+                      ) : emps.length === 0 ? (
+                        <div className="bc-note">{tx('ยังไม่มีพนักงานผูกกับสัญญานี้')}</div>
+                      ) : (
+                        emps.map((e) => (
+                          <div key={e.employeeId} className="bc-emp">
+                            <span className="bc-av sm" aria-hidden>{(e.nameTh.trim()[0] ?? '?').toUpperCase()}</span>
+                            <span className="bc-main">
+                              <b>{e.nameTh}</b>
+                              <span className="sub">{e.position}</span>
+                            </span>
+                            <span className={`bc-pill sm ${employeeStateClass(e.status)}`}><i />{tx(employeeStatusLabel(e))}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {cycleShown.length === 0 && (
+              <li className="bc-empty">{tx('ไม่มีรอบบิล')}</li>
+            )}
+          </ul>
         </Card>
 
         <Card title={tx('กิจกรรมล่าสุด')}>
@@ -296,7 +421,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                   {data.contracts.length > 1 ? ` · ${a.customerName}` : ''}
                 </div>
                 <div style={{ color: 'var(--mut)', fontSize: 12, marginTop: 2 }}>
-                  {formatDateTime(a.at, lang)}
+                  {formatDateTime(a.at, lang === 'en' ? 'en' : 'th')}
                   {a.methodLabel ? ` · ${tx(a.methodLabel)}` : ''}
                 </div>
               </Link>
@@ -311,6 +436,8 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
 
 /** ใช้ tone เดียวกับ CYCLE_STATE_TONE ใน CompanyDetailClient.tsx (ไม่ได้ใช้ enum เดียวกันเป๊ะ — ที่นี่แค่ไล่สี
  * ตามความหมาย: ฟ้า=รวม, เหลือง=ต้องแก้, เขียว=เสร็จแล้ว, แดง=มีปัญหา) เพื่อให้จุดสีตรงกับ StatusPill ด้านล่าง */
+const DONUT_R = 15.9155; // เส้นรอบวง = 100 พอดี ให้ stroke-dasharray อ่านเป็นเปอร์เซ็นต์ตรงๆ
+
 const CYCLE_STATE_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu' | 'pr'> = {
   awaiting: 'mu',
   partial: 'wn',
@@ -320,31 +447,3 @@ const CYCLE_STATE_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu' | 'pr'> = {
   billed: 'ok',
 };
 
-const DOT_COLOR: Record<string, string> = {
-  a: 'var(--brand)',
-  wn: 'var(--wn)',
-  ok: 'var(--ok)',
-  cr: 'var(--cr)',
-};
-
-function StatRow({ label, value, dot }: { label: string; value: number; dot: 'a' | 'wn' | 'ok' | 'cr' }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13.5 }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'var(--mut)' }}>
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: DOT_COLOR[dot],
-            flex: 'none',
-          }}
-        />
-        {label}
-      </span>
-      <span style={{ fontWeight: 600 }} className="n">
-        {value}
-      </span>
-    </div>
-  );
-}

@@ -64,7 +64,7 @@ export default function HrddCompare({
   leaveDays: LeaveDayEdit[];
   onLeaveDaysChange: (next: LeaveDayEdit[]) => void;
 }) {
-  const { tx } = useLang();
+  const { tx, formatDateTime } = useLang();
   const [result, setResult] = useState<HrddResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [openDate, setOpenDate] = useState<string | null>(null);
@@ -139,7 +139,7 @@ export default function HrddCompare({
         {!notReady && (
           <div className="hrdd-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {(result?.state === 'match' || result?.state === 'diff') && (
-              <span className="hrddMeta">{tx('ซิงค์ล่าสุด')} {result.checkedAt.slice(0, 19).replace('T', ' ')}</span>
+              <span className="hrddMeta">{tx('ซิงค์ล่าสุด')} {formatDateTime(result.checkedAt)}</span>
             )}
             <button className="btn ghost sm" type="button" disabled={loading} onClick={run}>
               {loading ? tx('กำลังตรวจสอบ…') : tx('รีเฟรชจาก HRDD')}
@@ -336,7 +336,7 @@ function RowGroup({
                   setReason(e.target.value);
                   setInvalid(false);
                 }}
-                placeholder="เช่น ตรวจสอบกับพนักงานแล้วว่า..."
+                placeholder={tx('เช่น ตรวจสอบกับพนักงานแล้วว่า...')}
                 style={{ borderColor: invalid ? 'var(--cr)' : undefined }}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

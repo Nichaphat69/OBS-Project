@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card, ErrorState, Loading, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useConfirm, useToast } from '../../../components/Overlays';
-import { useLang } from '../../../lib/language';
+import { useLang, formatDate, formatYear } from '../../../lib/language';
 
 interface HolidayRow {
   date: string;
@@ -17,11 +17,7 @@ interface HolidaysResponse {
   holidays: HolidayRow[];
 }
 
-function dateOnly(iso: string, lang: 'th' | 'en'): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+const dateOnly = formatDate;
 
 /** ported from public/app.js's renderMaster() วันหยุดแท็บ — เติมวันหยุดราชการทางการให้อัตโนมัติตาม
  * ปีที่เลือก (ฝั่งเซิร์ฟเวอร์ทำให้เองตอน GET) ไม่มีฟอร์มเพิ่มวันหยุดในหน้านี้ (ต้นฉบับก็ไม่มีเหมือนกัน
@@ -90,7 +86,7 @@ export default function HolidaysTab() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
             {data.years.map((y) => (
               <option key={y} value={y}>
-                {y + 543}
+                {formatYear(y, lang)}
               </option>
             ))}
           </select>

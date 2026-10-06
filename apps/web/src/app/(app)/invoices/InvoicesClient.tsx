@@ -33,7 +33,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function InvoicesClient() {
-  const { tx } = useLang();
+  const { tx, formatPeriodLabel } = useLang();
   const [rows, setRows] = useState<InvoiceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,7 +94,7 @@ export default function InvoicesClient() {
                     <PoTag>{r.poNo}</PoTag>
                   </td>
                   <td className="nm">{r.customerName}</td>
-                  <td>{r.periodLabel}</td>
+                  <td>{formatPeriodLabel(r.periodLabel)}</td>
                   <td>{r.documentDate}</td>
                   <td className="r n">{money(r.paymentAmount)}</td>
                   <td>

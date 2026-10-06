@@ -3,15 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './scope-filter.css';
 import { Icon } from './Icon';
-import { useLang } from '../lib/language';
+import { useLang, formatYear, type Lang } from '../lib/language';
 import { useScope, type FilterContract } from '../lib/scope';
 
-const MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-function thaiMonthYear(iso: string) {
+const MONTHS_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function monthYear(iso: string, lang: Lang) {
   const [y, m] = iso.split('-');
-  return `${MONTHS[Number(m) - 1] ?? m} ${(Number(y) + 543) % 100}`;
+  const name = (lang === 'en' ? MONTHS_EN : MONTHS_TH)[Number(m) - 1] ?? m;
+  return `${name} ${formatYear(Number(y), lang)}`;
 }
-export const contractRange = (c: Pick<FilterContract, 'startDate' | 'endDate'>) => `${thaiMonthYear(c.startDate)} – ${thaiMonthYear(c.endDate)}`;
+export const contractRange = (c: Pick<FilterContract, 'startDate' | 'endDate'>, lang: Lang) => `${monthYear(c.startDate, lang)} – ${monthYear(c.endDate, lang)}`;
 
 /** ไฮไลต์ส่วนที่ตรงกับที่พิมพ์ในเลข PO — ให้เห็นว่ารายการแนะนำตรงกับตัวอักษรไหน */
 function Highlight({ text, q }: { text: string; q: string }) {
@@ -31,7 +33,7 @@ function Highlight({ text, q }: { text: string; q: string }) {
  * และระยะสัญญากำกับ เลือกแล้วทุกหน้าในระบบเป็นข้อมูลของ PO นั้น (ผ่าน cookie obs_scope ดู lib/scope.tsx) —
  * เลือกด้วยเมาส์ หรือพิมพ์แล้วใช้ ↑ ↓ Enter ก็ได้ */
 export function ScopeFilterBar() {
-  const { tx } = useLang();
+  const { tx, lang } = useLang();
   const { contracts, filters, isDefault, isExecutive, setFilter, reset, ready } = useScope();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -156,7 +158,7 @@ export function ScopeFilterBar() {
                       PO <Highlight text={c.poNo} q={q} />
                     </b>
                     <span>
-                      <Highlight text={c.customerName} q={q} /> · {contractRange(c)}
+                      <Highlight text={c.customerName} q={q} /> · {contractRange(c, lang)}
                     </span>
                     <span>
                       <Highlight text={c.projectName} q={q} />
@@ -176,7 +178,7 @@ export function ScopeFilterBar() {
 /** แถบสรุปขอบเขตที่กำลังดูอยู่ ใช้บนหน้าหลัก (ตรวจ Manday / วางบิล / อัปโหลด) ให้เห็นทันทีว่าตัวเลขและรายการ
  * ที่เห็นเป็นของ site · PO · พนักงานไหน — ใช้ class `.scopebar` เดิมของหน้าตรวจ Manday */
 export function ScopeSummary() {
-  const { tx } = useLang();
+  const { tx, lang } = useLang();
   const { contracts, filters, ready } = useScope();
   if (!ready || contracts.length === 0) return null;
   const po = filters.contractId ? contracts.find((c) => c.id === filters.contractId) : null;
@@ -192,7 +194,7 @@ export function ScopeSummary() {
             {tx('กำลังดู')} <b>PO {po!.poNo}</b>
             {' · '}
             <b>{po!.customerName}</b>
-            <span style={{ opacity: 0.75 }}> ({contractRange(po!)})</span>
+            <span style={{ opacity: 0.75 }}> ({contractRange(po!, lang)})</span>
             {po!.employees.length > 0 && <span style={{ opacity: 0.75 }}> · {tx('พนักงาน')} {po!.employees.map((e) => e.nameTh).join(', ')}</span>}
           </>
         )}

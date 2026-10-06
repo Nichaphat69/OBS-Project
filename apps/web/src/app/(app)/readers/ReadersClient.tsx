@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ErrorState, Loading, PageHeader, Tag } from '../../../components/ui';
+import { ErrorState, Loading, PageHeader } from '../../../components/ui';
 import AbbyySkillsManager from '../../../components/AbbyySkillsManager';
 import ClearReadFieldCatalog from '../../../components/ClearReadFieldCatalog';
 import { useLang } from '../../../lib/language';
@@ -16,8 +16,8 @@ interface Reader {
 /** การ์ดมีสองใบตามที่ผู้ใช้ขอ — local-llm เป็นตัวสำรองสุดท้ายที่ระบบเรียกเองเมื่ออีกสองตัวล้ม
  * ไม่ใช่ตัวเลือกของคน จึงไม่ต้องมีการ์ดของตัวเองในหน้าตั้งค่า */
 const CARDS = [
-  { id: 'abbyy', cls: 'ab', mark: 'AB' },
-  { id: 'clear-read', cls: 'cr', mark: 'CR' },
+  { id: 'abbyy', cls: 'ab', mark: 'AB', desc: 'อ่านด้วย Skill ที่ลงทะเบียนไว้ ตั้งค่าการจับคู่ฟิลด์ได้ทีละ Skill', panelSub: 'เพิ่ม ลบ และตั้งค่าการจับคู่ฟิลด์ของแต่ละ Skill' },
+  { id: 'clear-read', cls: 'cr', mark: 'CR', desc: 'อ่านด้วยแม่แบบเดียวทั้งระบบ ดูรายการฟิลด์ที่แม่แบบอ่านได้', panelSub: 'รายการฟิลด์ที่แม่แบบนี้อ่านและคำอธิบายที่สั่งเครื่องอ่าน' },
 ] as const;
 
 export default function ReadersClient({ canSwitchTemplate }: { canSwitchTemplate: boolean }) {
@@ -76,11 +76,12 @@ export default function ReadersClient({ canSwitchTemplate }: { canSwitchTemplate
                     <span className="mark">{c.mark}</span>
                     <span className="nm">{r.label}</span>
                   </span>
+                  <span className="ds">{tx(c.desc)}</span>
                   {/* ป้าย "พร้อมใช้งาน" ถูกเอาออก 18 ก.ย. 69 ตามที่เจ้าของระบบสั่ง — ตัวที่ตั้งค่าไม่ครบยัง
                       ต้องบอกอยู่ เพราะเป็นข้อมูลที่ทำให้เข้าใจว่าทำไมเลือกอ่านด้วยตัวนี้ไม่ได้ */}
                   {!r.configured && (
                     <span className="state">
-                      <Tag tone="mu">{tx('ยังตั้งค่าไม่ครบ')}</Tag>
+                      <span className="rd-warn"><i />{tx('ยังตั้งค่าไม่ครบ')}</span>
                     </span>
                   )}
                 </button>
@@ -93,6 +94,7 @@ export default function ReadersClient({ canSwitchTemplate }: { canSwitchTemplate
               <div className="phead">
                 <span className="pbar" />
                 <span className="ptitle">{tx('Skill ของ ABBYY')}</span>
+                <span className="psub">{tx(CARDS[0].panelSub)}</span>
               </div>
               {/* ตัวจัดการ Skill ตัวเดียวกับหน้า /abbyy-skills — เพิ่ม/ตั้งค่าฟิลด์/ลบ ได้ครบจากตรงนี้
                   ไม่ต้องสลับหน้า และเป็นโค้ดชุดเดียวกันจึงไม่มีทางที่สองที่จะเพี้ยนจากกัน */}
@@ -103,6 +105,7 @@ export default function ReadersClient({ canSwitchTemplate }: { canSwitchTemplate
               <div className="phead">
                 <span className="pbar" />
                 <span className="ptitle">{tx('แม่แบบของ Clear Read')}</span>
+                <span className="psub">{tx(CARDS[1].panelSub)}</span>
               </div>
               {/* ไม่มีการเลือกแม่แบบต่อสัญญาแล้ว — ระบบปักแม่แบบเดียวทั้งระบบ สิ่งที่คนตั้งค่าต้องเห็นจึงเป็น
                   "แม่แบบตัวนั้นอ่านอะไรบ้าง" คือรายการฟิลด์พร้อมคำอธิบายที่สั่งเครื่องอ่านจริง */}

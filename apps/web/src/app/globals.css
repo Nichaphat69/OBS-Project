@@ -86,8 +86,6 @@
   --sh3: 0 16px 32px -12px rgba(16, 24, 40, 0.16), 0 4px 10px -4px rgba(16, 24, 40, 0.06);
   --sh-brand: 0 8px 20px -6px rgba(10, 120, 212, 0.45), 0 2px 5px -1px rgba(10, 120, 212, 0.25);
 
-  --wrap: 1420px;
-
   /* ปฏิทิน "ตรวจ Manday" — สีต่อประเภทวัน */
   --cal-work: #7CC94D;
   --cal-weekend: #94A3B8;
@@ -266,35 +264,47 @@ svg.i.solid { stroke: none; fill: currentColor; }
   color: var(--fnt);
   width: 20px;
   height: 20px;
+  box-sizing: content-box;
+  padding: 5px;
+  margin: -5px;
   stroke-width: 2.1;
-  transition: color 0.13s;
+  transition: color 0.13s, background 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 .mtab:hover svg.i {
   color: var(--mut);
 }
-/* เมนูที่กำลังเลือกอยู่ — รอบ 5 (21 ก.ย. 69): ตัดแสงมุมขวาล่างออกทั้งหมดตามสั่ง เหลือแค่ "กรอบ" (เส้นขอบ)
-   ที่ไล่สีฟ้าอ่อน→เข้ม พื้นข้างในเป็นสีขาวล้วน — ทำด้วยเทคนิค double background: ชั้นในสุดทาสีขาวเต็ม
-   padding-box ชั้นนอกไล่เฉดเต็ม border-box ให้เห็นเฉพาะแถบ border (2px) เป็นไล่สี ตัวอักษร/ไอคอนยังไล่สี
-   เหมือนรอบก่อนหน้า (ไม่ได้ถูกสั่งเปลี่ยน) */
+/* เมนูที่กำลังเลือกอยู่ — รอบ 6 (6 ต.ค. 69 ตามที่ขอ: สีเดียว #288adb ไม่ไล่สี ทันสมัย ไม่เหมือนเมนูทั่วไป)
+   ไอคอนอยู่ในกระเบื้องมนสีน้ำเงินทึบ (ไอคอนขาว + เงาสีฟ้านุ่มใต้กระเบื้อง) · แถวเป็นพื้นฟ้าจางมาก · ตัวหนังสือฟ้าหนา
+   · มีแท่งสั้นมนยื่นที่ขอบซ้ายของแถบเมนูบอกตำแหน่ง — ไอคอนทุกอันมี padding/margin ติดลบชุดเดียวกัน จึงไม่ดันความสูงแถว */
 .mtab.on {
-  color: var(--brand-d);
+  color: #288adb;
   font-weight: 700;
-  border: 2px solid transparent;
-  background-image: linear-gradient(#fff, #fff), linear-gradient(135deg, var(--tint2) 0%, var(--brand-l) 60%, var(--brand) 100%);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-  box-shadow: 0 4px 12px -8px rgba(10, 120, 212, 0.25);
-  position: relative;
+  background: rgba(40, 138, 219, 0.09);
 }
-.mtab.on > span:first-of-type {
-  background: linear-gradient(90deg, var(--brand-l) 0%, var(--brand-d) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+.mtab.on:hover {
+  background: rgba(40, 138, 219, 0.13);
+  color: #288adb;
+}
+.mtab.on::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 4px;
+  height: 24px;
+  transform: translateY(-50%);
+  border-radius: 0 4px 4px 0;
+  background: #288adb;
 }
 .mtab.on svg.i {
-  stroke: url(#navicon-grad);
+  background: #288adb;
+  color: #fff;
+  stroke: #fff;
+  border-radius: 10px;
+  box-shadow: 0 6px 12px -5px rgba(40, 138, 219, 0.65);
+}
+.mtab.on:hover svg.i {
+  color: #fff;
 }
 .mtab .bdg {
   font-size: 10.5px;
@@ -475,9 +485,10 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
 }
 
 /* ═══ page/content ═══ */
+/* ไม่จำกัดความกว้าง — เนื้อหากางเต็มพื้นที่ที่เหลือจากแถบเมนูซ้ายเสมอ (28 ก.ย. 69 ตามที่เจ้าของระบบสั่ง)
+   เดิมคุมไว้ที่ 1420px ทำให้จอกว้างเหลือพื้นที่ว่างด้านขวาเป็นแถบเปล่าทุกหน้า */
 .page {
   padding: 32px 36px 100px;
-  max-width: var(--wrap);
 }
 .phd {
   display: flex;
@@ -557,6 +568,22 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
 }
+.skill-input:focus {
+  outline: none;
+  border-color: var(--cr) !important; /* ช่องมี border inline อยู่ จึงต้อง !important */
+  box-shadow: 0 0 0 1px var(--cr), 0 0 0 4px rgba(220, 38, 38, 0.18);
+}
+.btn.red {
+  background: var(--cr);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
+}
+.btn.red:hover:not(:disabled) {
+  background: #b91c1c;
+  color: #fff;
+}
 .btn.pri:hover:not(:disabled) {
   background: #1f78c4;
   color: #fff;
@@ -628,7 +655,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   background: var(--hov);
 }
 .tsi.on {
-  color: var(--brand-d);
+  color: #288adb;
   font-weight: 700;
 }
 .tsi.on::after {
@@ -639,7 +666,7 @@ body.side-collapsed .sidetoggle svg.i { transform: rotate(180deg); }
   bottom: 4px;
   height: 3px;
   border-radius: var(--m3-shape-full);
-  background: linear-gradient(90deg, var(--brand-l), var(--brand) 100%);
+  background: #288adb;
 }
 
 /* ═══ dropzone (อัปโหลด Timesheet) ═══ */
@@ -1340,10 +1367,11 @@ td.sub {
   background: var(--paper);
   color: var(--ink);
 }
+/* กรอบตอนโฟกัส: ขอบสี #288adb + วงเรืองแสงอ่อนรอบนอก (2 ชั้น) เหมือนกันทุกช่องในหน้าล็อกอิน/ลงทะเบียน/ลืมรหัสผ่าน */
 .login-card input:focus {
-  outline: 2px solid var(--brand);
-  outline-offset: -1px;
-  border-color: var(--brand);
+  outline: none;
+  border-color: #288adb;
+  box-shadow: 0 0 0 1px #288adb, 0 0 0 4px rgba(40, 138, 219, 0.2);
 }
 .login-card .remember {
   display: flex;
@@ -3312,7 +3340,7 @@ td .nm {
   transition: color .12s;
 }
 .tab:hover { color: var(--ink); }
-.tab.on { color: var(--brand-d); border-bottom-color: var(--brand); }
+.tab.on { color: #288adb; border-bottom-color: #288adb; }
 .tab:focus-visible { outline: 2px solid var(--brand); outline-offset: -3px; }
 .tp { display: none; } .tp.on { display: block; }
 
@@ -5394,6 +5422,479 @@ tbody tr.sel td {
 .uwho-t .nm { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .uwho-t .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
 .selectchip.urole-sel { border-color: color-mix(in srgb, var(--rc) 45%, transparent); background: var(--rcb); }
-.selectchip.urole-sel select { color: var(--rc); font-weight: 600; }
+.selectchip.urole-sel { height: 34px; }
+.selectchip.urole-sel select { color: var(--rc); font-weight: 600; padding: 0 20px 0 14px; }
 tr.uinactive td { opacity: 0.55; }
 tr.uinactive td:last-child, tr.uinactive td:nth-last-child(3) { opacity: 1; }
+
+/* ═══ หน้า "บันทึกการส่ง" — จัด layout ใหม่ 6 ต.ค. 69 ═══
+   สรุป (เลขใหญ่ + แถบ + ปุ่มสถานะกดกรองได้) → แถบเครื่องมือ (ค้นหา · รอบบิล · ตัวกรองอื่น) → ชิปตัวกรองที่เปิดอยู่ → ตาราง
+   ใช้สี #288adb สีเดียวเป็นโทนหลัก ไม่ไล่สี */
+.sl-sum {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  gap: 20px;
+  align-items: stretch;
+  margin-bottom: 22px;
+}
+.sl-prog {
+  background: var(--paper);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+.sl-cap { font-size: 12.5px; font-weight: 600; color: var(--mut); }
+.sl-big { display: flex; align-items: baseline; gap: 8px; }
+.sl-big b { font-size: 40px; line-height: 1; font-weight: 700; color: #288adb; font-variant-numeric: tabular-nums; }
+.sl-big span { font-size: 13.5px; color: var(--mut); }
+.sl-bar-track { height: 8px; border-radius: 8px; background: #e7eef6; overflow: hidden; margin-top: 4px; }
+.sl-bar-track span { display: block; height: 100%; border-radius: 8px; background: #288adb; transition: width 0.3s var(--ease); }
+.sl-pct { position: absolute; top: 18px; right: 20px; font-size: 12px; font-weight: 700; color: #288adb; background: rgba(40, 138, 219, 0.1); padding: 3px 10px; border-radius: 999px; }
+
+.sl-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.sl-tile {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--paper);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  padding: 16px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), transform 0.15s var(--ease), background 0.15s var(--ease);
+}
+.sl-tile:hover { transform: translateY(-2px); border-color: #b9d8f2; box-shadow: 0 8px 18px -12px rgba(40, 138, 219, 0.5); }
+.sl-tile:focus-visible { outline: 2px solid #288adb; outline-offset: 2px; }
+.sl-tile-n { font-size: 28px; line-height: 1; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sl-tile-l { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--mut); }
+.sl-tile-l i { width: 8px; height: 8px; border-radius: 50%; background: var(--dot, #94a3b8); flex: none; }
+.sl-tile.t-not_submitted { --dot: #94a3b8; }
+.sl-tile.t-submitted { --dot: #288adb; }
+.sl-tile.t-pending_review { --dot: #d97706; }
+.sl-tile.t-confirmed { --dot: #16a34a; }
+.sl-tile.t-problem { --dot: #dc2626; }
+.sl-tile.on { border-color: #288adb; background: rgba(40, 138, 219, 0.07); box-shadow: 0 0 0 1px #288adb; }
+.sl-tile.on .sl-tile-n, .sl-tile.on .sl-tile-l { color: #288adb; }
+
+.sl-wrap > .card { overflow: visible; }
+.sl-count { font-size: 12.5px; font-weight: 600; color: var(--mut); font-variant-numeric: tabular-nums; }
+.sl-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 16px 20px; }
+.sl-search {
+  flex: 1 1 260px; min-width: 0; max-width: 420px;
+  display: flex; align-items: center; gap: 8px;
+  height: 40px; padding: 0 12px;
+  border: 1px solid var(--m3-outline); border-radius: 999px; background: var(--paper);
+  color: var(--mut);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.sl-search:focus-within { border-color: #288adb; box-shadow: 0 0 0 1px #288adb, 0 0 0 4px rgba(40, 138, 219, 0.18); }
+.sl-search input { flex: 1; min-width: 0; border: none; outline: none; background: none; font: inherit; font-size: 13.5px; color: var(--ink); }
+.sl-x { border: none; background: none; cursor: pointer; font-size: 18px; line-height: 1; color: var(--mut); padding: 0 2px; }
+.sl-x:hover { color: var(--ink); }
+.sl-period { height: 40px; }
+.sl-tools .fmenu { margin-inline-start: auto; }
+.sl-tools .fmenu .btn { height: 40px; }
+.sl-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 14px; }
+.sl-chip {
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: #288adb; background: rgba(40, 138, 219, 0.1); border: 1px solid rgba(40, 138, 219, 0.28);
+  border-radius: 999px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px;
+}
+.sl-chip span { opacity: 0.7; font-size: 14px; line-height: 1; }
+.sl-chip:hover { background: rgba(40, 138, 219, 0.16); }
+.sl-clear { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--mut); text-decoration: underline; padding: 4px 6px; }
+.sl-clear:hover { color: var(--ink); }
+
+.sl-table { padding: 0 20px 18px; }
+.sl-table table { border-collapse: separate; border-spacing: 0; width: 100%; }
+.sl-table thead th { position: sticky; top: 0; background: #f4f8fc; font-size: 12px; letter-spacing: 0.02em; color: var(--mut); padding: 12px 14px; }
+.sl-table thead th:first-child { border-radius: 12px 0 0 12px; }
+.sl-table thead th:last-child { border-radius: 0 12px 12px 0; }
+.sl-table tbody td { padding: 14px; border-bottom: 1px solid var(--hair); vertical-align: middle; }
+.sl-table tbody tr:last-child td { border-bottom: none; }
+.sl-table tbody tr:hover td { background: rgba(40, 138, 219, 0.04); }
+.sl-emp { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sl-av { width: 38px; height: 38px; border-radius: 12px; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #288adb; background: rgba(40, 138, 219, 0.12); }
+.sl-emp-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sl-emp-t b { font-weight: 600; color: var(--ink); }
+.sl-period { white-space: nowrap; font-weight: 500; }
+.sl-when { white-space: nowrap; }
+.sl-empty { text-align: center; color: var(--mut); padding: 48px 14px !important; }
+.sl-empty .btn { margin-top: 12px; }
+
+@media (max-width: 1100px) {
+  .sl-sum { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .sl-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sl-tools .fmenu { margin-inline-start: 0; }
+}
+
+/* ═══ การ์ดสัญญาในหน้า "ข้อมูลหลัก → สัญญาบริษัท" — จัดใหม่ 6 ต.ค. 69 ═══
+   หัวการ์ด (ป้าย PO + ชื่อโครงการ/บริษัท + ปุ่มจัดการ) → แถบตัวเลขสำคัญ 4 ช่อง → กล่องรายละเอียด 2 คอลัมน์ → ใบเสนอราคา FlowAccount (พับได้)
+   โทนหลัก #288adb · สัญญาที่กำลังดำเนินการมีแท่งสีฟ้าที่ขอบซ้ายของการ์ด */
+.ct-card {
+  position: relative;
+  background: var(--paper);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  box-shadow: var(--m3-elev-1);
+  margin-bottom: 22px;
+  overflow: hidden;
+}
+.ct-card.live::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #288adb; }
+.ct-hd { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
+.ct-po { font-weight: 700; font-size: 13px; letter-spacing: 0.02em; color: #288adb; background: rgba(40, 138, 219, 0.1); border: 1px solid rgba(40, 138, 219, 0.25); padding: 6px 12px; border-radius: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ct-ttl { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ct-ttl h3 { margin: 0; font-size: 17px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-hd .rowacts { margin-inline-start: auto; }
+
+.ct-stats { display: grid; grid-template-columns: 1.3fr 0.8fr 1.5fr 0.8fr; gap: 12px; padding: 18px 22px 6px; }
+.ct-stat { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 14px; background: #f4f8fc; border: 1px solid transparent; min-width: 0; }
+.ct-stat .l { font-size: 12px; font-weight: 600; color: var(--mut); }
+.ct-stat .v { font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ct-stat .v small { font-size: 12.5px; font-weight: 600; color: var(--mut); }
+.ct-stat .v.sm { font-size: 15px; line-height: 1.35; }
+.ct-stat.main { background: #288adb; }
+.ct-stat.main .l, .ct-stat.main .v small { color: rgba(255, 255, 255, 0.85); }
+.ct-stat.main .v { color: #fff; }
+
+.ct-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 12px 22px 20px; }
+.ct-box { border: 1px solid var(--hair); border-radius: 14px; padding: 14px 16px 6px; }
+.ct-box h4 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; color: #288adb; }
+.ct-kv { display: grid; grid-template-columns: minmax(110px, 38%) 1fr; margin: 0; }
+.ct-kv dt, .ct-kv dd { margin: 0; padding: 9px 0; border-bottom: 1px dashed var(--hair); font-size: 13.5px; }
+.ct-kv dt { color: var(--mut); }
+.ct-kv dd { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.ct-kv dt:last-of-type, .ct-kv dd:last-of-type { border-bottom: none; }
+
+.ct-fa { border-top: 1px solid var(--hair); }
+.ct-fa summary { cursor: pointer; list-style: none; padding: 14px 22px; font-size: 13px; font-weight: 600; color: #288adb; display: flex; align-items: center; gap: 8px; }
+.ct-fa summary::-webkit-details-marker { display: none; }
+.ct-fa summary::after { content: "▾"; font-size: 12px; transition: transform 0.15s var(--ease); }
+.ct-fa[open] summary::after { transform: rotate(180deg); }
+.ct-fa .ct-cols { padding-top: 0; }
+.ct-fa .ct-kv { border: 1px solid var(--hair); border-radius: 14px; padding: 6px 16px; align-content: start; }
+
+@media (max-width: 1000px) {
+  .ct-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ct-cols { grid-template-columns: 1fr; }
+}
+
+/* ═══ หน้า "ตัวอ่าน Timesheet" — จัดใหม่ 6 ต.ค. 69 ═══
+   การ์ดเลือกตัวอ่านเป็นสีทึบ (ไม่ไล่สี) · ตัวที่กำลังดูมีกรอบ #288adb + วงติ๊กมุมขวา · แผงด้านล่างหัวสะอาด มีคำอธิบายใต้ชื่อ */
+.rdpick { gap: 12px; }
+/* การ์ดตัวอ่านใช้สไตล์เดียวกับการ์ด role ในหน้า "ผู้ใช้ระบบ" (.urole): แท่งสีประจำตัวอ่านที่ขอบบน · ไอคอนในกระเบื้องสีอ่อน ·
+   ชื่อ + คำอธิบาย + บรรทัดสถานะเล็กๆ · ตัวที่เลือกอยู่พื้นอ่อนสีประจำตัว + กรอบสีนั้น และวงติ๊กมุมขวา */
+.rdpick .rd.ab { --rc: #d44023; --rcb: #fdf0ed; }
+.rdpick .rd.cr { --rc: #12975a; --rcb: #e8f7ee; }
+.rdpick .rd {
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--rc);
+  border-radius: var(--r-ctl);
+  padding: 16px 18px;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 1;
+  transition: box-shadow 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.rdpick .rd:not(.on):not(.sel) { opacity: 1; }
+.rdpick .rd:hover { transform: none; box-shadow: var(--sh2); }
+/* หน้าตาเหมือนเดิมเสมอไม่ว่าจะเลือกอยู่หรือไม่ (6 ต.ค. 69 สั่ง): พื้นขาวตลอด ไม่มีวงติ๊ก — แผงด้านล่างบอกอยู่แล้วว่ากำลังดูตัวไหน */
+.rdpick .rd .top { gap: 10px; }
+.rdpick .rd .mark {
+  width: 34px; height: 34px; border-radius: 10px; font-size: 12.5px; box-shadow: none;
+  background: var(--rcb); color: var(--rc);
+}
+.rdpick .rd.ab .mark, .rdpick .rd.cr .mark { background: var(--rcb); }
+.rdpick .rd .tick { display: none; }
+/* ตัวที่เลือกอยู่: กรอบทั้งใบเป็นสีประจำตัวอ่านนั้น (ทับกฎเดิม .rd.sel:not(.on) ที่ใช้สีเทา) พื้นยังขาว */
+.rdpick .rd.sel:not(.on) { border-color: var(--rc); }
+.rdpick .rd .nm { font-size: 14.5px; }
+.rdpick .rd .ds { font-size: 12.5px; color: var(--ink2); line-height: 1.5; max-width: none; }
+.rdpick .rd .state { margin-top: 2px; padding-top: 0; border-top: none; min-height: 0; }
+.rd-warn { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; color: #b45309; }
+.rd-warn i { width: 7px; height: 7px; border-radius: 50%; background: #d97706; }
+
+.rdpanel { border-radius: 20px; }
+.rdpanel.ab .phead, .rdpanel.cr .phead { background: var(--paper); }
+.rdpanel .phead { padding: 18px 22px; gap: 4px 12px; align-items: baseline; }
+.rdpanel .pbar { display: none; }
+.rdpanel .ptitle { font-size: 16px; }
+.rdpanel .psub { font-size: 12.5px; color: var(--mut); }
+
+.sk-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 0;
+  margin-bottom: 20px;
+  background: transparent;
+}
+.sk-add .ey { font-size: 12px; font-weight: 600; color: var(--mut); }
+.sk-add input { margin-top: 6px; width: 100%; height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--m3-outline); background: var(--paper); font: inherit; font-size: 13.5px; }
+.sk-add .btn { height: 42px; padding: 0 20px; }
+.sk-table thead th { background: #f4f8fc; font-size: 12px; color: var(--mut); padding: 12px 14px; }
+.sk-table thead th:first-child { border-radius: 12px 0 0 12px; }
+.sk-table thead th:last-child { border-radius: 0 12px 12px 0; }
+.sk-table tbody td { padding: 14px; }
+@media (max-width: 860px) { .sk-add { grid-template-columns: 1fr; } }
+
+/* ═══ การ์ด "รอบบิล" ในแดชบอร์ด — จัดใหม่ 6 ต.ค. 69: แบ่งสีตามสถานะ สีทึบ ไม่ไล่สี ═══
+   awaiting เทา · partial/checking/อื่นๆ ส้ม · mismatch แดง · ready ฟ้า #288adb · billed เขียว */
+.s-awaiting { --c: #7b8794; }
+.s-partial { --c: #e59a0b; }
+.s-checking { --c: #d97706; }
+.s-mismatch { --c: #dc2626; }
+.s-ready { --c: #288adb; }
+.s-billed { --c: #16a34a; }
+.bc-count { font-size: 12.5px; font-weight: 600; color: var(--mut); font-variant-numeric: tabular-nums; }
+.bc-filter { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 18px 4px; }
+.bc-chip {
+  --c: #288adb;
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 999px;
+  color: var(--ink2); background: var(--paper); border: 1px solid var(--m3-outline);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.bc-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.bc-chip b { font-variant-numeric: tabular-nums; color: var(--mut); }
+.bc-chip:hover { border-color: var(--c); }
+.bc-chip.on { color: var(--c); border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, #fff); box-shadow: 0 0 0 1px var(--c); }
+.bc-chip.on b { color: var(--c); }
+.bc-list { list-style: none; margin: 0; padding: 10px 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.bc-item {
+  position: relative;
+  border: 1px solid var(--hair); border-radius: 16px; background: var(--paper);
+  overflow: hidden;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.bc-item::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+.bc-item:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--hair)); }
+.bc-item.open { border-color: var(--c); box-shadow: 0 10px 22px -18px var(--c); }
+.bc-row {
+  width: 100%; font: inherit; text-align: left; cursor: pointer; background: none; border: none; color: inherit;
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 18px;
+}
+.bc-av {
+  width: 38px; height: 38px; flex: none; border-radius: 12px; display: grid; place-items: center;
+  font-weight: 700; font-size: 15px; color: var(--c); background: color-mix(in srgb, var(--c) 13%, #fff);
+}
+.bc-av.sm { width: 30px; height: 30px; border-radius: 10px; font-size: 13px; }
+.bc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bc-main b { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-pill {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+  color: color-mix(in srgb, var(--c) 82%, #000); background: color-mix(in srgb, var(--c) 12%, #fff);
+}
+.bc-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.bc-pill.sm { font-size: 11.5px; padding: 3px 10px; }
+.bc-chev { color: var(--fnt); transition: transform 0.15s var(--ease); flex: none; }
+.bc-item.open .bc-chev { transform: rotate(180deg); color: var(--c); }
+.bc-emps { border-top: 1px dashed var(--hair); background: #f7fafd; padding: 6px 14px 10px 18px; display: flex; flex-direction: column; }
+.bc-emp { display: flex; align-items: center; gap: 12px; padding: 8px 0 8px 12px; border-bottom: 1px solid var(--hair); }
+.bc-emp:last-child { border-bottom: none; }
+.bc-note { padding: 12px 8px; font-size: 13px; color: var(--mut); }
+.bc-note.err { color: var(--cr); }
+.bc-empty { text-align: center; color: var(--mut); padding: 36px 12px; font-size: 13.5px; }
+
+/* ═══ โดนัทภาพรวมรอบบิล (แดชบอร์ด) — 6 ต.ค. 69 · สีตามสถานะชุดเดียวกับการ์ดรอบบิล (.s-*) สีทึบ ไม่ไล่สี ═══ */
+.dn { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; justify-content: center; padding: 6px 4px; }
+.dn-chart { position: relative; width: 190px; height: 190px; flex: none; }
+.dn-chart svg { width: 100%; height: 100%; transform: rotate(0deg); }
+.dn-track, .dn-seg { fill: none; stroke-width: 5.2; }
+.dn-track { stroke: #eef3f8; }
+.dn-seg { stroke: var(--c); stroke-linecap: butt; transition: opacity 0.2s var(--ease), stroke-width 0.2s var(--ease); }
+.dn-seg.dim { opacity: 0.22; }
+.dn-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.dn-center b { font-size: 34px; line-height: 1; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dn-center span { font-size: 12.5px; color: var(--mut); font-weight: 600; }
+.dn-legend { list-style: none; margin: 0; padding: 0; flex: 1 1 180px; min-width: 170px; display: flex; flex-direction: column; gap: 6px; }
+.dn-lg {
+  width: 100%; font: inherit; cursor: pointer; text-align: left; background: none; color: var(--ink);
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
+  border: 1px solid transparent; transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.dn-lg i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.dn-lg .t { flex: 1; font-size: 13px; font-weight: 600; min-width: 0; }
+.dn-lg b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.dn-lg em { font-style: normal; font-size: 11.5px; color: var(--mut); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.dn-lg:hover { background: color-mix(in srgb, var(--c) 8%, #fff); }
+.dn-lg.on { background: color-mix(in srgb, var(--c) 10%, #fff); border-color: var(--c); }
+.dn-more {
+  display: block; width: 100%; margin-top: 10px; padding: 10px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  color: #288adb; background: rgba(40, 138, 219, 0.07); border: none; border-radius: 12px;
+}
+.dn-more:hover { background: rgba(40, 138, 219, 0.13); }
+
+/* ═══ ความคืบหน้าสัญญา (แดชบอร์ด) — โทนฟ้า #288adb สามระดับ สีทึบ ═══ */
+.pg-billed { --c: #288adb; }
+.pg-doing { --c: #8cc4f0; }
+.pg-left { --c: #d3dfec; }
+.dn-seg[class*="pg-"] { cursor: pointer; }
+.dn-seg.sel { stroke-width: 6.6; }
+.pg-left.dn-lg i { box-shadow: inset 0 0 0 1px #b9c9db; }
+.pg-detail { margin-top: 14px; border: 1px solid color-mix(in srgb, var(--c) 55%, #fff); border-radius: 16px; padding: 14px 16px; background: #fff; }
+.pg-dh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.pg-dt { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--ink); }
+.pg-dt i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.pg-x { border: none; background: none; cursor: pointer; font-size: 20px; line-height: 1; color: var(--mut); padding: 0 4px; }
+.pg-x:hover { color: var(--ink); }
+.pg-nums { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 12px; }
+.pg-nums div { display: flex; flex-direction: column; gap: 2px; }
+.pg-nums b { font-size: 22px; font-weight: 700; color: #288adb; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pg-nums span { font-size: 12px; color: var(--mut); }
+.pg-per { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pg-pt { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.pg-pt b { font-size: 13px; }
+.pg-pt em { margin-inline-start: auto; font-style: normal; font-size: 12px; font-weight: 600; color: #288adb; font-variant-numeric: tabular-nums; }
+.pg-bar { height: 7px; border-radius: 7px; background: #e7eef6; overflow: hidden; }
+.pg-bar span { display: block; height: 100%; border-radius: 7px; background: var(--c); }
+.pg-hint { margin-top: 12px; text-align: center; font-size: 12.5px; color: var(--mut); }
+
+/* ── หน้า "บันทึกการส่ง" รอบ 2 (6 ต.ค. 69): รวมสถานะเข้าเมนูตัวกรอง · การ์ดสรุปเหลือแถบความคืบหน้าแถวเดียว ── */
+.sl-sum { grid-template-columns: 1fr; }
+.sl-prog { flex-direction: row; align-items: center; gap: 28px; padding: 18px 24px; }
+.sl-prog .sl-cap { flex: none; }
+.sl-prog .sl-big { flex: none; }
+.sl-prog .sl-bar-track { flex: 1; margin-top: 0; min-width: 120px; }
+.sl-prog .sl-pct { position: static; flex: none; }
+@media (max-width: 720px) { .sl-prog { flex-wrap: wrap; gap: 10px 16px; } .sl-prog .sl-bar-track { flex-basis: 100%; order: 5; } }
+
+.sl-fpanel { width: min(400px, calc(100vw - 32px)); gap: 16px; padding: 18px; border-radius: 18px; }
+.sl-fhead { display: flex; align-items: center; justify-content: space-between; }
+.sl-fhead b { font-size: 14px; }
+.sl-fhead .sl-clear:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
+.sl-fgroup { display: flex; flex-direction: column; gap: 8px; }
+.sl-fchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sl-fchip {
+  --dot: #288adb;
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 999px;
+  color: var(--ink2); background: var(--paper); border: 1px solid var(--m3-outline);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.sl-fchip i { width: 8px; height: 8px; border-radius: 50%; background: var(--dot); }
+.sl-fchip b { font-variant-numeric: tabular-nums; color: var(--mut); font-weight: 600; }
+.sl-fchip:hover { border-color: #288adb; }
+.sl-fchip.on { color: #288adb; border-color: #288adb; background: rgba(40, 138, 219, 0.1); box-shadow: 0 0 0 1px #288adb; }
+.sl-fchip.on b { color: #288adb; }
+
+/* ── หน้า "บันทึกการส่ง" รอบ 3 (6 ต.ค. 69): โดนัทสถานะการส่ง + รายละเอียดเมื่อคลิก ── */
+/* สีตามสถานะเหมือนที่ระบบตั้งไว้ในป้ายสถานะ (เขียว/เหลือง/ส้ม/แดง/เทา) แต่ปรับให้อ่อนลง ไม่เข้มจัด (6 ต.ค. 69) */
+.ss-confirmed { --c: #7ccfa4; }
+.ss-submitted { --c: #f6d27c; }
+.ss-pending_review { --c: #f5b878; }
+.ss-problem { --c: #f28b8b; }
+.ss-not_submitted { --c: #d5dce6; }
+.sl-sum.sl-donut {
+  grid-template-columns: auto minmax(200px, 260px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--m3-outline);
+  border-radius: var(--m3-shape-lg);
+  padding: 20px 26px;
+}
+.sl-dchart { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.sl-dchart .dn-chart { width: 170px; height: 170px; }
+.sl-dchart .dn-center b { font-size: 28px; color: #288adb; }
+.sl-dchart .dn-center span { font-size: 11px; max-width: 96px; text-align: center; line-height: 1.25; }
+.sl-dtotal { display: flex; align-items: baseline; gap: 6px; }
+.sl-dtotal b { font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sl-dtotal span { font-size: 12.5px; color: var(--mut); }
+.sl-dlegend { min-width: 0; flex: none; }
+.sl-ddetail { border: 1px solid color-mix(in srgb, var(--c) 55%, #fff); border-radius: 16px; padding: 14px 18px; background: #fff; min-width: 0; align-self: stretch; }
+.sl-ddetail .pg-dt i { background: var(--c); }
+.sl-ddetail .pg-bar span { background: var(--c); }
+.sl-people { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.sl-people span { font-size: 12px; font-weight: 600; color: #288adb; background: rgba(40, 138, 219, 0.1); border-radius: 999px; padding: 3px 10px; }
+.sl-people .more { color: var(--mut); background: #eef3f8; }
+.sl-dhint { text-align: center; font-size: 12.5px; color: var(--mut); }
+@media (max-width: 1100px) { .sl-sum.sl-donut { grid-template-columns: 1fr; justify-items: stretch; } .sl-dlegend { width: 100%; } }
+
+/* ภาพรวมเมื่อยังไม่ได้เลือกสถานะ (แทนที่ว่างเดิม) */
+.sl-dover { display: flex; flex-direction: column; gap: 18px; align-self: stretch; justify-content: center; min-width: 0; }
+.sl-ovblock h4 { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; color: #288adb; }
+.sl-stack { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.sl-stack li { display: grid; grid-template-columns: 120px minmax(0, 1fr) 28px; align-items: center; gap: 12px; }
+.sl-stack .lbl { font-size: 12.5px; font-weight: 600; color: var(--ink2); white-space: nowrap; }
+.sl-stack .bar { display: flex; height: 12px; border-radius: 8px; overflow: hidden; background: #eef3f8; gap: 2px; }
+.sl-stack .bar i { display: block; height: 100%; background: var(--c); }
+.sl-stack b { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.sl-mchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sl-mchip { display: inline-flex; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink2); background: rgba(40, 138, 219, 0.08); border-radius: 12px; padding: 7px 12px; }
+.sl-mchip b { font-size: 16px; color: #288adb; font-variant-numeric: tabular-nums; }
+.sl-mchip.mu { background: #eef3f8; }
+.sl-mchip.mu b { color: var(--mut); }
+
+/* ═══ หน้า "เชื่อมต่อ LINE" — จัดใหม่ 6 ต.ค. 69 · ตราสัญลักษณ์ LINE สีเขียวแบรนด์ + ขั้นตอน 1-2-3 เลขวงกลมฟ้า #288adb ═══ */
+.ll { max-width: 860px; display: flex; flex-direction: column; gap: 16px; }
+.ll-err { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; border-radius: 14px; padding: 12px 16px; font-size: 13.5px; }
+.ll-card {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  background: var(--paper); border: 1px solid var(--m3-outline); border-radius: 24px; padding: 28px 30px;
+}
+.ll-card.ok { border-color: #bfe8d0; background: #f6fcf9; }
+.ll-logo { flex: none; border-radius: 18px; box-shadow: 0 10px 22px -12px rgba(6, 199, 85, 0.7); }
+.ll-body { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.ll-body h2, .ll-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); }
+.ll-body p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--mut); max-width: 56ch; }
+.ll-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
+.ll-badge.ok { color: #0b7a3b; background: #d9f3e4; }
+.ll-badge.wn { color: #b45309; background: #fdeed6; }
+.ll-acts { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 8px; }
+.ll-btn {
+  display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
+  font: inherit; font-size: 14.5px; font-weight: 700; color: #fff; background: #06c755;
+  border: none; border-radius: 999px; padding: 12px 24px; cursor: pointer;
+  box-shadow: 0 10px 20px -12px rgba(6, 199, 85, 0.9);
+  transition: background 0.15s var(--ease), transform 0.15s var(--ease);
+}
+.ll-btn:hover { background: #05b34c; transform: translateY(-1px); color: #fff; }
+.ll-link { font: inherit; font-size: 13px; font-weight: 600; color: #288adb; background: none; border: none; cursor: pointer; padding: 4px 2px; text-decoration: underline; text-underline-offset: 3px; }
+.ll-link:hover { color: #1f78c4; }
+
+.ll-steps { background: var(--paper); border: 1px solid var(--m3-outline); border-radius: 24px; padding: 26px 30px; display: flex; flex-direction: column; gap: 4px; }
+.ll-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.ll-head > div { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ll-step { display: flex; gap: 16px; padding: 18px 0; border-top: 1px solid var(--hair); }
+.ll-step.off { opacity: 0.5; }
+.ll-n { width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #288adb; color: #fff; font-weight: 700; font-size: 14px; }
+.ll-sb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.ll-sb > b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.ll-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.ll-qr { border-radius: 16px; border: 1px solid var(--hair); padding: 6px; background: #fff; }
+.ll-code { display: inline-flex; align-items: center; gap: 16px; align-self: flex-start; background: #f4f8fc; border: 1.5px dashed #288adb; border-radius: 16px; padding: 12px 14px 12px 22px; }
+.ll-code span { font-size: 28px; font-weight: 700; letter-spacing: 0.14em; color: #288adb; font-variant-numeric: tabular-nums; }
+.ll-steps > .ll-link { align-self: flex-start; margin-top: 8px; }
+/* โดนัทเล็กต่อรอบบิลในภาพรวมหน้าบันทึกการส่ง */
+.sl-minis { display: flex; flex-wrap: wrap; gap: 22px; }
+.sl-mini { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.sl-mini-chart { position: relative; width: 92px; height: 92px; }
+.sl-mini-chart svg { width: 100%; height: 100%; }
+.sl-mini-chart .dn-track, .sl-mini-chart .dn-seg { stroke-width: 5.6; }
+.sl-mini-chart .dn-seg { cursor: pointer; }
+.sl-mini-chart .dn-seg:hover { stroke-width: 7; }
+.sl-mini-chart b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; pointer-events: none; }
+.sl-mini-l { font-size: 12px; font-weight: 600; color: var(--ink2); white-space: nowrap; }
+/* ภาพรวมหน้าบันทึกการส่ง: ให้โดนัทเล็กและชิปช่องทางเต็มความกว้างคอลัมน์ขวา เรียงเท่ากัน ไม่เหลือที่ว่างด้านขวา */
+.sl-dover { width: 100%; gap: 22px; }
+.sl-minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 14px; justify-items: center; }
+.sl-mini { width: 100%; padding: 12px 8px 10px; border-radius: 16px; background: #f7fafd; }
+.sl-mini-chart { width: 100px; height: 100px; }
+.sl-mchips { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.sl-mchip { justify-content: center; padding: 10px 12px; }

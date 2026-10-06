@@ -48,7 +48,7 @@ const CATEGORY_ICON: Record<string, string> = {
 };
 
 export default function ReportIssueClient() {
-  const { tx } = useLang();
+  const { tx, formatDateTime } = useLang();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -81,7 +81,7 @@ export default function ReportIssueClient() {
     setFiles((prev) => {
       const merged = [...prev, ...Array.from(list)];
       if (merged.length > MAX_ATTACHMENTS) {
-        toast(tx(`แนบได้ไม่เกิน ${MAX_ATTACHMENTS} รูปต่อครั้ง`), true);
+        toast(tx('แนบได้ไม่เกิน {n} รูปต่อครั้ง').replace('{n}', String(MAX_ATTACHMENTS)), true);
         return merged.slice(0, MAX_ATTACHMENTS);
       }
       return merged;
@@ -198,7 +198,7 @@ export default function ReportIssueClient() {
                   ) : (
                     <StatusPill tone="wn">{tx('รอดำเนินการ')}</StatusPill>
                   )}
-                  <span className="sub">{t.createdAt.replace('T', ' ').slice(0, 19)}</span>
+                  <span className="sub">{formatDateTime(t.createdAt)}</span>
                 </div>
                 <div>{t.description}</div>
                 {t.attachments.length > 0 && (

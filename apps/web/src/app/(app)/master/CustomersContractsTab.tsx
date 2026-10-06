@@ -5,7 +5,7 @@ import { Card, ErrorState, Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
-import { useLang } from '../../../lib/language';
+import { useLang, formatDate } from '../../../lib/language';
 import { SETTINGS_CHANGED_EVENT } from '../../../lib/settingsChanged';
 
 interface ContractRow {
@@ -161,11 +161,7 @@ function FlowAccountToggle() {
 function money(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function dateOnly(iso: string, lang: 'th' | 'en'): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+const dateOnly = formatDate;
 
 /** ปัดเป็นทศนิยม 2 ตำแหน่งไม่ให้เพี้ยนจาก floating point (เช่น 0.0158*100 อาจได้ 1.5800000000000001)
  * แต่ไม่บังคับโชว์ทศนิยมท้ายที่ไม่มีนัยสำคัญ (3% ยังโชว์ "3" ไม่ใช่ "3.00") */
@@ -403,79 +399,101 @@ export default function CustomersContractsTab() {
             }}
           />
         ) : (
-          <Card
-            key={c.id}
-            title={`${c.poNo} — ${c.projectName}`}
-            right={
-              <div className="rowacts">
-                <label
-                  className={`toggle${c.status === 'active' ? ' on' : ''}`}
-                  title={tx(c.status === 'active' ? 'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ' : 'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)')}
-                >
-                  <input type="checkbox" checked={c.status === 'active'} disabled={togglingId === c.id} onChange={(e) => toggleActive(c, e.target.checked)} />
-                  <span className="tk" />
-                  <span className="tl">{c.status === 'active' ? tx('กำลังดำเนินการ') : tx('ปิดอยู่')}</span>
-                </label>
-                {c.flowaccountLinked && (
-                  <button className="btn sm" disabled={syncingId === c.id} title={tx('ซิงก์รายชื่อและเรทพนักงานจากใบเสนอราคาล่าสุดใน FlowAccount')} onClick={() => syncFromFlowAccount(c)}>
-                    <Icon name="rf" />
-                    <span>{syncingId === c.id ? tx('กำลังซิงก์…') : tx('ซิงก์จาก FlowAccount')}</span>
-                  </button>
-                )}
-                <button className="btn sm icon" title={tx('แก้ไขข้อมูลสัญญา')} aria-label={tx('แก้ไข')} onClick={() => setEditContractId(c.id)}>
-                  <Icon name="edit" />
-                </button>
-                <button className="btn sm icon dgr" title={tx('ลบสัญญานี้')} aria-label={tx('ลบ')} onClick={() => deleteContract(c)}>
-                  <Icon name="trash" />
-                </button>
+          <section key={c.id}
+            className={`ct-card${c.status === 'active' ? ' live' : ''}`}>
+            {/* หัวการ์ด (6 ต.ค. 69 จัดใหม่): ป้ายเลข PO สีฟ้า + ชื่อโครงการ + ชื่อบริษัทใต้ชื่อ · ปุ่มจัดการอยู่ขวาสุดแถวเดียวกัน */}
+            <header className="ct-hd">
+              <span className="ct-po">{c.poNo}</span>
+              <div className="ct-ttl">
+                <h3>{c.projectName}</h3>
+                <span className="sub">{c.customerName}</span>
               </div>
-            }
-          >
-            <div className="g2">
-              <dl className="kv">
-                <dt>{tx('บริษัท')}</dt>
-                <dd>{c.customerName}</dd>
-                <dt>{tx('เลขผู้เสียภาษี')}</dt>
-                <dd className="n">{c.taxId}</dd>
-                <dt>{tx('เลขที่สัญญา')}</dt>
-                <dd className="n">{c.contractNo ?? '—'}</dd>
-                <dt>{tx('ช่วงสัญญา')}</dt>
-                <dd>
-                  {dateOnly(c.startDate, lang)} – {dateOnly(c.endDate, lang)}
-                </dd>
-                <dt>{tx('จำนวนคน')}</dt>
-                <dd className="n">{c.headcount} {tx('คน')}</dd>
-              </dl>
-              <dl className="kv">
-                <dt>{tx('ยอดต่อเดือน')}</dt>
-                <dd className="n">{money(c.monthlyTotal)} {tx('บาท')}</dd>
-                <dt>{tx('ตัวหารอัตราต่อวัน')}</dt>
-                <dd>{c.divisorMode === 'fixed' ? `${tx('คงที่')} ${c.divisorValue}` : tx('วันทำงานจริงของเดือน')}</dd>
-                <dt>VAT</dt>
-                <dd className="n">{Math.round(c.vatRate * 100)}%</dd>
-                <dt>{tx('หัก ณ ที่จ่าย')}</dt>
-                {/* ตัวเลขอย่างเดียว ไม่มีปุ่มดินสอแก้ตรงนี้ (5 ต.ค. 69 เจ้าของระบบสั่งเอาออก) — แก้ผ่านฟอร์ม "แก้ไขข้อมูลสัญญา" ด้านบนของการ์ด */}
-                <dd className="n">{pctPrecise(c.whtRate)}%</dd>
-                <dt>{tx('เครดิต')}</dt>
-                <dd className="n">{c.creditDays} {tx('วัน')}</dd>
-                <dt>{tx('ผู้ประสานงาน')}</dt>
-                <dd>
-                  {c.contactName ?? '—'} {c.contactPhone ?? ''}
-                </dd>
-                {c.billingPlace && (
-                  <>
-                    <dt>{tx('สถานที่วางบิล')}</dt>
-                    <dd>{c.billingPlace}</dd>
-                  </>
-                )}
-              </dl>
+                <div className="rowacts">
+                  <label
+                    className={`toggle${c.status === 'active' ? ' on' : ''}`}
+                    title={tx(c.status === 'active' ? 'กำลังดำเนินการอยู่ — ปิดไปยังไม่มีบริษัทอื่นมาแทนที่อัตโนมัติ' : 'ปิดอยู่ — เปิดเพื่อให้ระบบทำงานกับบริษัทนี้ (จะปิดบริษัทอื่นที่เปิดอยู่ให้เองอัตโนมัติ)')}
+                  >
+                    <input type="checkbox" checked={c.status === 'active'} disabled={togglingId === c.id} onChange={(e) => toggleActive(c, e.target.checked)} />
+                    <span className="tk" />
+                    <span className="tl">{c.status === 'active' ? tx('กำลังดำเนินการ') : tx('ปิดอยู่')}</span>
+                  </label>
+                  {c.flowaccountLinked && (
+                    <button className="btn sm" disabled={syncingId === c.id} title={tx('ซิงก์รายชื่อและเรทพนักงานจากใบเสนอราคาล่าสุดใน FlowAccount')} onClick={() => syncFromFlowAccount(c)}>
+                      <Icon name="rf" />
+                      <span>{syncingId === c.id ? tx('กำลังซิงก์…') : tx('ซิงก์จาก FlowAccount')}</span>
+                    </button>
+                  )}
+                  <button className="btn sm icon" title={tx('แก้ไขข้อมูลสัญญา')} aria-label={tx('แก้ไข')} onClick={() => setEditContractId(c.id)}>
+                    <Icon name="edit" />
+                  </button>
+                  <button className="btn sm icon dgr" title={tx('ลบสัญญานี้')} aria-label={tx('ลบ')} onClick={() => deleteContract(c)}>
+                    <Icon name="trash" />
+                  </button>
+                </div>
+            </header>
+
+            {/* แถบตัวเลขสำคัญ 4 ช่อง — ของที่คนเปิดหน้านี้มาดูบ่อยสุด อ่านได้ในแวบเดียว */}
+            <div className="ct-stats">
+              <div className="ct-stat main">
+                <span className="l">{tx('ยอดต่อเดือน')}</span>
+                <span className="v">{money(c.monthlyTotal)} <small>{tx('บาท')}</small></span>
+              </div>
+              <div className="ct-stat">
+                <span className="l">{tx('จำนวนคน')}</span>
+                <span className="v">{c.headcount} <small>{tx('คน')}</small></span>
+              </div>
+              <div className="ct-stat wide">
+                <span className="l">{tx('ช่วงสัญญา')}</span>
+                <span className="v sm">{dateOnly(c.startDate, lang)} – {dateOnly(c.endDate, lang)}</span>
+              </div>
+              <div className="ct-stat">
+                <span className="l">{tx('เครดิต')}</span>
+                <span className="v">{c.creditDays} <small>{tx('วัน')}</small></span>
+              </div>
             </div>
-            {/* ข้อมูลที่ดึงจากใบเสนอราคา FlowAccount (5 ต.ค. 69) — โชว์เฉพาะสัญญาที่มีค่าอย่างน้อยหนึ่งช่อง */}
+
+            <div className="ct-cols">
+              <div className="ct-box">
+                <h4>{tx('บริษัทและสัญญา')}</h4>
+                <dl className="ct-kv">
+                  <dt>{tx('บริษัท')}</dt>
+                  <dd>{c.customerName}</dd>
+                  <dt>{tx('เลขผู้เสียภาษี')}</dt>
+                  <dd className="n">{c.taxId}</dd>
+                  <dt>{tx('เลขที่สัญญา')}</dt>
+                  <dd className="n">{c.contractNo ?? '—'}</dd>
+                  <dt>{tx('ผู้ประสานงาน')}</dt>
+                  <dd>{c.contactName || c.contactPhone ? `${c.contactName ?? ''} ${c.contactPhone ?? ''}`.trim() : '—'}</dd>
+                  {c.billingPlace && (
+                    <>
+                      <dt>{tx('สถานที่วางบิล')}</dt>
+                      <dd>{c.billingPlace}</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+              <div className="ct-box">
+                <h4>{tx('เงื่อนไขการคิดเงิน')}</h4>
+                <dl className="ct-kv">
+                  <dt>{tx('ตัวหารอัตราต่อวัน')}</dt>
+                  <dd>{c.divisorMode === 'fixed' ? `${tx('คงที่')} ${c.divisorValue}` : tx('วันทำงานจริงของเดือน')}</dd>
+                  <dt>VAT</dt>
+                  <dd className="n">{Math.round(c.vatRate * 100)}%</dd>
+                  <dt>{tx('หัก ณ ที่จ่าย')}</dt>
+                  {/* ตัวเลขอย่างเดียว ไม่มีปุ่มดินสอแก้ตรงนี้ (5 ต.ค. 69 เจ้าของระบบสั่งเอาออก) — แก้ผ่านฟอร์ม "แก้ไขข้อมูลสัญญา" ด้านบนของการ์ด */}
+                  <dd className="n">{pctPrecise(c.whtRate)}%</dd>
+                  <dt>{tx('เครดิต')}</dt>
+                  <dd className="n">{c.creditDays} {tx('วัน')}</dd>
+                </dl>
+              </div>
+            </div>
+
+            {/* ข้อมูลที่ดึงจากใบเสนอราคา FlowAccount (5 ต.ค. 69) — โชว์เฉพาะสัญญาที่มีค่าอย่างน้อยหนึ่งช่อง · พับเก็บไว้ได้ ไม่ให้การ์ดยาวเกินจำเป็น */}
             {(c.faReference || c.quotationDate || c.salesName || c.remarks || c.internalNotes || c.zipCode || c.quotationGrandTotal != null || c.priceIncludesVat) && (
-              <>
-                <div className="sub" style={{ margin: '14px 0 6px', fontWeight: 600 }}>{tx('ข้อมูลจากใบเสนอราคา FlowAccount')}</div>
-                <div className="g2">
-                  <dl className="kv">
+              <details className="ct-fa">
+                <summary>{tx('ข้อมูลจากใบเสนอราคา FlowAccount')}</summary>
+                <div className="ct-cols">
+                  <dl className="ct-kv">
                     {c.faReference && (<><dt>{tx('เลขที่อ้างอิง')}</dt><dd className="n">{c.faReference}</dd></>)}
                     {c.quotationDate && (<><dt>{tx('วันที่ใบเสนอราคา')}</dt><dd>{dateOnly(c.quotationDate, lang)}</dd></>)}
                     <dt>{tx('ราคา')}</dt>
@@ -483,7 +501,7 @@ export default function CustomersContractsTab() {
                     {c.salesName && (<><dt>{tx('พนักงานขาย')}</dt><dd>{c.salesName}</dd></>)}
                     {c.zipCode && (<><dt>{tx('รหัสไปรษณีย์')}</dt><dd className="n">{c.zipCode}</dd></>)}
                   </dl>
-                  <dl className="kv">
+                  <dl className="ct-kv">
                     {c.quotationSubTotal != null && (<><dt>{tx('ยอดก่อนส่วนลด')}</dt><dd className="n">{money(c.quotationSubTotal)} {tx('บาท')}</dd></>)}
                     {c.quotationDiscount != null && c.quotationDiscount > 0 && (<><dt>{tx('ส่วนลด')}</dt><dd className="n">{money(c.quotationDiscount)} {tx('บาท')}</dd></>)}
                     {c.quotationGrandTotal != null && (<><dt>{tx('ยอดรวมทั้งสิ้น')}</dt><dd className="n">{money(c.quotationGrandTotal)} {tx('บาท')}</dd></>)}
@@ -491,9 +509,9 @@ export default function CustomersContractsTab() {
                     {c.internalNotes && (<><dt>{tx('บันทึกภายใน')}</dt><dd>{c.internalNotes}</dd></>)}
                   </dl>
                 </div>
-              </>
+              </details>
             )}
-          </Card>
+          </section>
         ),
       )}
     </>
@@ -819,7 +837,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             value={nameTh}
             onChange={(e) => setNameTh(e.target.value)}
             readOnly={locked('customerNameTh')}
-            placeholder="เช่น บริษัท ทดสอบ จำกัด"
+            placeholder={tx('เช่น บริษัท ทดสอบ จำกัด')}
           />
           {lockNote('customerNameTh')}
         </label>
@@ -880,7 +898,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             <input
               className={fieldErrors.has('poNo') ? 'err' : undefined}
               value={poNo}
-              placeholder="เช่น 26/B0200"
+              placeholder={tx('เช่น 26/B0200')}
               onChange={(e) => { setPoNo(e.target.value); setPoFromRef(false); }}
             />
             {poFromRef && <small className="fhint" style={{ color: 'var(--wn)' }}>{tx('เติมจาก "เลขที่อ้างอิง" ของ FlowAccount — ตรวจให้ตรงกับใบว่าจ้างก่อนบันทึก')}</small>}
@@ -1084,7 +1102,7 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
             className={fieldErrors.has('poNo') ? 'err' : undefined}
             value={poNo}
             onChange={(e) => setPoNo(e.target.value)}
-            placeholder="เช่น 26/B0200"
+            placeholder={tx('เช่น 26/B0200')}
           />
         </label>
         <label>

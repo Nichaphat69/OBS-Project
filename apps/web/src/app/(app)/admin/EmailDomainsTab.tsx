@@ -89,7 +89,7 @@ export default function EmailDomainsTab() {
                     <input
                       value={draft}
                       onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
-                      placeholder="เช่น thailife.com"
+                      placeholder={tx('เช่น thailife.com')}
                       style={{ height: 36, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 12px', width: '100%' }}
                     />
                   </td>

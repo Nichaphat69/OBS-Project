@@ -40,7 +40,7 @@ export default function EmployeeSubmissionsTab({
   items: EmployeeSubmissionItem[] | null;
   onReload: () => void;
 }) {
-  const { tx } = useLang();
+  const { tx, formatDateTime, formatPeriodLabel } = useLang();
   const openPdfPreview = usePdfPreview();
   const picker = useReaderPicker();
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -141,7 +141,7 @@ export default function EmployeeSubmissionsTab({
   }
 
   return (
-    <Card title={tx('รอจากพนักงาน')} right={<span className="sub">{tx('ไฟล์ที่พนักงานส่งเองผ่านระบบ รอฝั่งบัญชีอ่านและยืนยัน')}</span>} flush>
+    <Card title={tx('ส่งผ่านระบบ')} right={<span className="sub">{tx('ไฟล์ที่พนักงานส่งเองผ่านระบบ รอฝั่งบัญชีอ่านและยืนยัน')}</span>} flush>
       {items === null ? (
         <Loading rows={4} />
       ) : items.length === 0 ? (
@@ -159,7 +159,7 @@ export default function EmployeeSubmissionsTab({
             <div className="bulkbar-actions">
               <ReaderPickerBar picker={picker} disabled={queuing} />
               <button className="btn pri sm" disabled={selected.size === 0 || queuing} onClick={doReadSelected}>
-                <Icon name="chk" className="sm" /> {queuing ? tx('กำลังเข้าคิว…') : `${tx('อ่านที่เลือก')} (${selected.size})`}
+                {queuing ? tx('กำลังเข้าคิว…') : tx('อ่านที่เลือก')}
               </button>
             </div>
           </div>
@@ -191,7 +191,7 @@ export default function EmployeeSubmissionsTab({
                       />
                     </td>
                     <td className="nm">{it.employeeName ?? tx('ไม่ทราบชื่อ')}</td>
-                    <td>{it.periodLabel ?? '—'}</td>
+                    <td>{formatPeriodLabel(it.periodLabel) || '—'}</td>
                     <td>
                       <Tag tone="mu">{tx('พนักงานส่งเองผ่านระบบ OBS')}</Tag>
                     </td>
@@ -208,7 +208,7 @@ export default function EmployeeSubmissionsTab({
                         <Icon name="file" className="sm" /> {it.fileName ?? '—'}
                       </button>
                     </td>
-                    <td className="sub">{it.readAt?.slice(0, 19).replace('T', ' ')}</td>
+                    <td className="sub">{formatDateTime(it.readAt)}</td>
                   </tr>
                 ))}
               </tbody>

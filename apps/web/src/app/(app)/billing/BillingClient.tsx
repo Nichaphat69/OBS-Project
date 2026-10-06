@@ -79,7 +79,7 @@ const STATE_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu' | 'pr'> = {
 };
 
 export default function BillingClient() {
-  const { tx } = useLang();
+  const { tx, lang, formatPeriodLabel } = useLang();
   const [data, setData] = useState<CyclesResult | null>(null);
   // แถวรอบบิลไหนกำลังกางดูรายชื่อพนักงานอยู่ — คีย์ "contractId:period" (24 ก.ย. 69 ตามที่ขอ: "รอบบิล
   // ที่มีพนักงานหลายคน ต้องคลิกแล้วมี dropdown แสดงชื่อ+สถานะ Timesheet แต่ละคนได้") ใช้ endpoint
@@ -157,7 +157,7 @@ export default function BillingClient() {
         <Card
           key={contract.id}
           title={`PO ${contract.poNo} — ${contract.customerName}`}
-          right={<span>{contract.projectName}{contract.startDate && contract.endDate ? ` · ${contractRange({ startDate: contract.startDate, endDate: contract.endDate })}` : ''}</span>}
+          right={<span>{contract.projectName}{contract.startDate && contract.endDate ? ` · ${contractRange({ startDate: contract.startDate, endDate: contract.endDate }, lang)}` : ''}</span>}
           flush
         >
           <div style={{ display: 'flex', gap: 32, padding: '18px 24px', borderBottom: '1px solid var(--hair)', flexWrap: 'wrap' }}>
@@ -195,7 +195,7 @@ export default function BillingClient() {
                             className="sm"
                             style={{ marginRight: 6, transition: 'transform 0.15s var(--ease)', transform: expanded ? 'rotate(180deg)' : undefined }}
                           />
-                          {p.periodLabel}
+                          {formatPeriodLabel(p.periodLabel)}
                         </td>
                         <td>
                           {p.received} / {p.expected}

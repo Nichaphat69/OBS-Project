@@ -99,7 +99,7 @@ interface SubmitResult {
  * ตรวจ/ยืนยันจากแท็บ "ประวัติ" ได้เหมือนเดิมด้วย (เข้าถึงแถวเดียวกัน คนละทางเข้า)
  */
 export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boolean } = {}) {
-  const { tx, formatPeriod } = useLang();
+  const { tx, formatPeriod, formatPeriodLabel } = useLang();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -313,7 +313,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
           <div className="tx">
             <b>{tx(submitted.method === 'self_obs' ? 'ส่งเรียบร้อยแล้ว' : 'บันทึกเรียบร้อยแล้ว')}</b>
             <div className="sub">
-              {tx('รอบบิล')} {submitted.periodLabel} · {submitted.customerName} · {submitted.projectName}
+              {tx('รอบบิล')} {formatPeriodLabel(submitted.periodLabel)} · {submitted.customerName} · {submitted.projectName}
             </div>
             {submitted.method === 'self_obs' && (
               <>

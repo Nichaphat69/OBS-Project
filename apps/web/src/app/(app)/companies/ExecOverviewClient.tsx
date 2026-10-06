@@ -33,7 +33,7 @@ function money(n: number) {
  * ความคืบหน้าอยู่แล้ว ไม่ต้องมี endpoint ใหม่) */
 export default function ExecOverviewClient() {
   const router = useRouter();
-  const { tx } = useLang();
+  const { tx, lang } = useLang();
   const { filters } = useScope();
   const [contracts, setContracts] = useState<ContractCycles[] | null>(null);
   const [employees, setEmployees] = useState<EmployeeRow[] | null>(null);
@@ -117,7 +117,7 @@ export default function ExecOverviewClient() {
                   <td className="n">{c.poNo}</td>
                   <td>
                     {c.projectName}
-                    {c.startDate && c.endDate && <div className="sub">{contractRange({ startDate: c.startDate, endDate: c.endDate })}</div>}
+                    {c.startDate && c.endDate && <div className="sub">{contractRange({ startDate: c.startDate, endDate: c.endDate }, lang)}</div>}
                   </td>
                   <td>{c.employees && c.employees.length > 0 ? c.employees.map((e) => e.nameTh).join(', ') : c.headcount}</td>
                   <td className="r n">{money(c.contractValue)}</td>

@@ -62,7 +62,7 @@ function toCsvValue(v: unknown): string {
  * admin หน้าตาอ้างอิงตามตัวอย่างที่เจ้าของระบบส่งมา 21 ก.ย. 69 (หน้า API monitor ของระบบอื่น) — โครงสร้าง
  * ข้อมูลจริงมีเท่าที่ backend เก็บ (ไม่มี Header แยก/Request Key จริง เลยไม่ใส่ช่องพวกนั้นมาหลอกว่ามีข้อมูล) */
 export default function ApiActivityLogTab() {
-  const { tx } = useLang();
+  const { tx, formatDateTime } = useLang();
   const [rows, setRows] = useState<ApiActivityRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [services, setServices] = useState<string[]>([]);
@@ -240,8 +240,8 @@ export default function ApiActivityLogTab() {
                 {rows?.map((r) => {
                   const isOpen = expanded === r.id;
                   const { base, pathOnly, query } = splitUrl(r.path);
-                  const requestedOn = new Date(new Date(r.at).getTime() - r.durationMs).toLocaleString('th-TH');
-                  const respondedOn = new Date(r.at).toLocaleString('th-TH');
+                  const requestedOn = formatDateTime(new Date(new Date(r.at).getTime() - r.durationMs));
+                  const respondedOn = formatDateTime(r.at);
                   return (
                     <Fragment key={r.id}>
                       <tr className="rw" onClick={() => setExpanded(isOpen ? null : r.id)}>

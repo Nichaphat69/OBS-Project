@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { useLang, formatDate, formatYear } from '../lib/language';
 
 /** ปฏิทินเลือกวันที่ทรง Material Design 3 (เจ้าของระบบสั่ง 22 ก.ย. 69 — อ้างอิงจาก m3.material.io/
  * components/date-pickers แต่ใช้โทนฟ้าไล่อ่อน→เข้มของระบบเองแทนสีม่วงต้นแบบ) แทนที่ <input type="date">
@@ -15,6 +16,11 @@ import { Icon } from './Icon';
  */
 
 const WEEKDAYS_TH = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+const WEEKDAYS_EN = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const MONTHS_EN = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 const MONTHS_TH = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
@@ -52,6 +58,7 @@ export function DatePicker({
   ariaLabel?: string;
   id?: string;
 }) {
+  const { lang, tx } = useLang();
   const [open, setOpen] = useState(false);
   const [openUp, setOpenUp] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -149,9 +156,9 @@ export function DatePicker({
   const cells: Array<number | null> = [...Array(startWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const todayIso = toIso(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const label = parsed
-    ? new Date(parsed.y, parsed.m, parsed.d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-    : null;
+  const label = parsed ? formatDate(toIso(parsed.y, parsed.m, parsed.d), lang) : null;
+  const months = lang === 'en' ? MONTHS_EN : MONTHS_TH;
+  const weekdays = lang === 'en' ? WEEKDAYS_EN : WEEKDAYS_TH;
 
   return (
     <div className={`dpk${className ? ` ${className}` : ''}`} ref={wrapRef}>
@@ -166,7 +173,7 @@ export function DatePicker({
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="cal" className="sm" />
-        {label ? <span>{label}</span> : <span className="dpk-placeholder">{ariaLabel ?? 'เลือกวันที่'}</span>}
+        {label ? <span>{label}</span> : <span className="dpk-placeholder">{ariaLabel ?? tx('เลือกวันที่')}</span>}
       </button>
 
       {open && typeof document !== 'undefined' && createPortal(
@@ -174,24 +181,24 @@ export function DatePicker({
           ref={panelRef}
           className={`dpk-panel${openUp ? ' up' : ''}`}
           role="dialog"
-          aria-label={ariaLabel ?? 'เลือกวันที่'}
+          aria-label={ariaLabel ?? tx('เลือกวันที่')}
           // fixed ทับ absolute ของคลาส (ตำแหน่งจริงคำนวณด้านบน) · ซ่อนไว้จนกว่าจะวัดตำแหน่งเสร็จ กันปฏิทินวาบที่มุมจอ
           style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0, bottom: 'auto', zIndex: 1000, visibility: pos ? 'visible' : 'hidden' }}
         >
           <div className="dpk-head">
-            <button type="button" className="dpk-nav" onClick={goPrevMonth} aria-label="เดือนก่อนหน้า">
+            <button type="button" className="dpk-nav" onClick={goPrevMonth} aria-label={tx('เดือนก่อนหน้า')}>
               <Icon name="chev" className="sm" style={{ transform: 'rotate(90deg)' }} />
             </button>
             <span className="dpk-title">
-              {MONTHS_TH[viewM]} {viewY + 543}
+              {months[viewM]} {formatYear(viewY, lang)}
             </span>
-            <button type="button" className="dpk-nav" onClick={goNextMonth} aria-label="เดือนถัดไป">
+            <button type="button" className="dpk-nav" onClick={goNextMonth} aria-label={tx('เดือนถัดไป')}>
               <Icon name="chev" className="sm" style={{ transform: 'rotate(-90deg)' }} />
             </button>
           </div>
 
           <div className="dpk-weekdays">
-            {WEEKDAYS_TH.map((w) => (
+            {weekdays.map((w) => (
               <span key={w}>{w}</span>
             ))}
           </div>
@@ -229,7 +236,7 @@ export function DatePicker({
                 setOpen(false);
               }}
             >
-              วันนี้
+              {tx('วันนี้')}
             </button>
             {value && (
               <button
@@ -240,7 +247,7 @@ export function DatePicker({
                   setOpen(false);
                 }}
               >
-                ล้างค่า
+                {tx('ล้างค่า')}
               </button>
             )}
           </div>

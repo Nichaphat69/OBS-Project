@@ -27,7 +27,7 @@ const LEVEL_LABEL: Record<string, string> = { critical: 'ผิดพลาด',
 const LEVEL_ICON: Record<string, string> = { critical: 'alt', warn: 'alt', ok: 'chk', info: 'info' };
 
 /** ported from public/app.js's ago() — เวลาแบบอ่านง่าย ใกล้ๆ บอกเป็นนาที ไกลแล้วบอกเป็นวันที่ */
-function ago(iso: string | null, tx: (th: string) => string): string {
+function ago(iso: string | null, tx: (th: string) => string, fmtDate: (v: string) => string): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
@@ -39,14 +39,14 @@ function ago(iso: string | null, tx: (th: string) => string): string {
   const day = Math.floor(hr / 24);
   if (day === 1) return tx('เมื่อวาน');
   if (day < 7) return `${day} ${tx('วันที่แล้ว')}`;
-  return iso.slice(0, 10);
+  return fmtDate(iso);
 }
 
 const LEVEL_FILTER_LABEL: Record<string, string> = { critical: 'ผิดพลาด', warn: 'ตีกลับ', ok: 'สำเร็จ', info: 'ทั่วไป' };
 
 export default function NotificationsClient({ role }: { role: string }) {
   const router = useRouter();
-  const { tx } = useLang();
+  const { tx, formatDate } = useLang();
   const [feed, setFeed] = useState<Feed | null>(null);
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +189,7 @@ export default function NotificationsClient({ role }: { role: string }) {
                       <span className="bp-t">{tx(n.title)}</span>
                       <span className="bp-d">{tx(n.detail)}</span>
                       <span className="bp-m">
-                        {ago(n.at, tx)} · {tx('โดย')} {n.by}
+                        {ago(n.at, tx, formatDate)} · {tx('โดย')} {n.by}
                       </span>
                     </span>
                     {LEVEL_LABEL[n.level] && <span className={`tg ${tone}`}>{tx(LEVEL_LABEL[n.level])}</span>}
