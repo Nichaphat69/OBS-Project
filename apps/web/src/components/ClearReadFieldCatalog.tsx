@@ -93,6 +93,7 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [allOpen, setAllOpen] = useState(false);
+  const [tab, setTab] = useState<'doc' | 'detail'>('doc');
 
   const load = useCallback((id: string | null, refresh = false) => {
     setBusy(true);
@@ -255,10 +256,11 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
   /* ตัวเลือกแม่แบบต้องอยู่นอกทุกสาขาที่คืนก่อน — ถ้าเปิดดูตัวที่โหลดไม่ขึ้นแล้วตัวเลือกหายไปด้วย
      คนจะติดอยู่กับหน้าเสียโดยไม่มีทางกลับไปเลือกตัวอื่น */
   const picker = templates.length > 0 && (
-    <div className="tplpick">
-      <label className="lbl" htmlFor="cr-template">{tx('แม่แบบที่เปิดดู')}</label>
+    <div className="cx-top">
+      <label className="cx-lbl" htmlFor="cr-template">{tx('แม่แบบที่เปิดดู')}</label>
       <select
         id="cr-template"
+        className="cx-select"
         value={viewingId ?? pinnedId ?? ''}
         disabled={busy}
         onChange={(e) => setViewingId(e.target.value || null)}
@@ -288,7 +290,7 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
           </optgroup>
         )}
       </select>
-      <button type="button" className="btn sm" disabled={busy} onClick={refreshAll}>
+      <button type="button" className="btn" disabled={busy} onClick={refreshAll}>
         {busy ? tx('กำลังโหลด…') : tx('ดึงใหม่')}
       </button>
     </div>
@@ -379,75 +381,93 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
     && unknownCount === 0
     && (reg.documentMissing.length + reg.detailMissing.length) === 0;
 
+  // รายการที่ต้องดู (นับเฉพาะที่มีผล) — โชว์เป็นป้ายเล็กๆ บนแถบสรุป กดขยายดูรายละเอียดทีละกลุ่มได้
+  const missingAll = reg ? [...new Set([...reg.documentMissing, ...reg.detailMissing])] : [];
+  const unknownAll = [...new Set([...unknownDoc, ...unknownDetail])];
+  const issueCount = unknownAll.length + forbidden.size + missingAll.length;
+  const active = shown.find((g) => g.id === tab) ?? shown[0];
+
+  // จัดหน้าใหม่ 6 ต.ค. 69: แถบเลือกแม่แบบ → การ์ดสรุป (ป้ายจำนวน + ผลเทียบสารบัญพับได้) → แท็บสลับระดับเอกสาร/ตารางรายวัน
+  // (ทีละระดับ ไม่ต่อกันยาวเป็นพันแถว) + ค้นหา → รายการฟิลด์เป็นแถวเรียบ กดขยายอ่านคำอธิบายเต็ม · ตรรกะทุกอย่างเหมือนเดิม
   return (
-    <div className="crfields">
+    <div className="crfields cx">
       {picker}
       {notices}
 
-      {/* แถบสรุปแม่แบบ — กล่องเดียวจบ รวม "เวอร์ชัน/รหัส/จำนวนช่อง" เข้ากับ "ผลตรวจเทียบสารบัญกลาง"
-          เดิมเป็นสามกล่องซ้อนกัน (แถบเขียวบอกรหัส → กล่องผลตรวจ → กล่องย่อยข้างในอีกชั้น) ทั้งที่จำนวนช่อง
-          ก็ซ้ำกับ dropdown ด้านบนอยู่แล้ว อ่านแล้วไม่รู้ว่าต้องดูตรงไหนก่อน (เจ้าของระบบสั่งแก้ 18 ก.ย. 69)
-
-          ผลตรวจเรียงตามความเสียหาย: "ระบบอ่านค่าไม่ได้" อยู่บนสุด เพราะแปลว่าตั้งช่องไว้แล้วแต่ข้อมูลไม่ไหลเข้า */}
-      <div className={`crsum${reg ? (clean ? ' ok' : ' warn') : ''}`}>
-        <div className="sh">
-          {reg && <Icon name={clean ? 'chk' : 'info'} className="si" />}
-          <span className="st">
-            {reg
-              ? `${clean ? tx('ตรงตามสารบัญฟิลด์กลาง') : tx('เทียบกับสารบัญฟิลด์กลาง')} ${reg.promptVersion}`
-              : tx('แม่แบบที่เปิดดู')}
-          </span>
-          <span className="sg" />
-          <span className="sc">
-            {t.fields.length} {tx('ช่องระดับเอกสาร')} · {t.detailColumns.length} {tx('คอลัมน์รายวัน')}
-          </span>
-          {t.version !== null && <span className="sv">v{t.version}</span>}
-          {t.isDefault && <span className="sv">{tx('ค่าเริ่มต้น')}</span>}
-          {/* รหัสแม่แบบไว้เทียบกับหน้า Clear Read ตรงๆ ตอนไล่ปัญหา — เก็บไว้แต่ทำให้เงียบที่สุด */}
-          <span className="sid" title={t.id}>{t.id}</span>
+      <div className={`cx-sum${reg ? (clean ? ' ok' : ' warn') : ''}`}>
+        <div className="cx-sum-hd">
+          {reg && <span className="cx-sico"><Icon name={clean ? 'chk' : 'info'} /></span>}
+          <div className="cx-stt">
+            <b>
+              {reg
+                ? `${clean ? tx('ตรงตามสารบัญฟิลด์กลาง') : tx('เทียบกับสารบัญฟิลด์กลาง')} ${reg.promptVersion}`
+                : tx('แม่แบบที่เปิดดู')}
+            </b>
+            {/* รหัสแม่แบบไว้เทียบกับหน้า Clear Read ตรงๆ ตอนไล่ปัญหา — เก็บไว้แต่ทำให้เงียบที่สุด */}
+            <span className="cx-id" title={t.id}>{t.id}</span>
+          </div>
+          <div className="cx-chips">
+            <span className="cx-chip"><b>{t.fields.length}</b>{tx('ช่องระดับเอกสาร')}</span>
+            <span className="cx-chip"><b>{t.detailColumns.length}</b>{tx('คอลัมน์รายวัน')}</span>
+            {t.version !== null && <span className="cx-chip mu">v{t.version}</span>}
+            {t.isDefault && <span className="cx-chip mu">{tx('ค่าเริ่มต้น')}</span>}
+          </div>
         </div>
 
         {reg && !clean && (
-          <div className="cl">
-            {unknownCount > 0 && (
-              <div className="ci bad">
-                <span className="cn">{tx('ระบบอ่านค่าจากช่องเหล่านี้ไม่ได้')} ({unknownCount})</span>
-                <span className="cd">{tx('ตั้งไว้ในแม่แบบแล้ว แต่ระบบไม่รู้จักชื่อนี้ ข้อมูลจึงไม่ไหลเข้ามา')}</span>
-                {/* ชื่อเดียวกันอาจไม่รู้จักทั้งสองระดับ — รวมเป็นเซ็ตก่อนวาด กันไม่ให้ขึ้นซ้ำสองชิป */}
-                <span className="cvs">
-                  {[...new Set([...unknownDoc, ...unknownDetail])].map((n) => <code key={n}>{n}</code>)}
-                </span>
-              </div>
-            )}
-            {forbidden.size > 0 && (
-              <div className="ci warn">
-                <span className="cn">{tx('ชื่อที่ V4 เลิกใช้แล้ว')} ({forbidden.size})</span>
-                <span className="cd">{tx('สเปกห้ามใช้ชื่อซ้ำข้ามระดับ จึงแยกเป็นชื่อใหม่แทน')}</span>
-                <span className="cvs">
-                  {[...forbidden].map(([n, use]) => (
-                    <code key={n}>{n} → {use}</code>
-                  ))}
-                </span>
-              </div>
-            )}
-            {(reg.documentMissing.length > 0 || reg.detailMissing.length > 0) && (
-              <div className="ci mu">
-                <span className="cn">
-                  {tx('สเปกมีแต่แม่แบบยังไม่มี')} ({reg.documentMissing.length + reg.detailMissing.length})
-                </span>
-                <span className="cd">{tx('ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มบริษัทไม่มีช่องนี้จริงก็ไม่ต้องมี')}</span>
-                <span className="cvs">
-                  {[...new Set([...reg.documentMissing, ...reg.detailMissing])].map((n) => <code key={n}>{n}</code>)}
-                </span>
-              </div>
-            )}
-          </div>
+          <details className="cx-iss">
+            <summary>
+              <span className="cx-sumtxt">{tx('ข้อสังเกตจากการเทียบสารบัญ')}</span>
+              {unknownAll.length > 0 && <span className="cx-b bad">{tx('อ่านไม่ได้')} {unknownAll.length}</span>}
+              {forbidden.size > 0 && <span className="cx-b warn">{tx('เลิกใช้')} {forbidden.size}</span>}
+              {missingAll.length > 0 && <span className="cx-b mu">{tx('ยังไม่มี')} {missingAll.length}</span>}
+              <span className="cx-more">{issueCount} {tx('รายการ')}</span>
+            </summary>
+            <div className="cx-igrid">
+              {unknownAll.length > 0 && (
+                <div className="cx-ic bad">
+                  <b>{tx('ระบบอ่านค่าจากช่องเหล่านี้ไม่ได้')} ({unknownAll.length})</b>
+                  <p>{tx('ตั้งไว้ในแม่แบบแล้ว แต่ระบบไม่รู้จักชื่อนี้ ข้อมูลจึงไม่ไหลเข้ามา')}</p>
+                  <div className="cx-codes">{unknownAll.map((n) => <code key={n}>{n}</code>)}</div>
+                </div>
+              )}
+              {forbidden.size > 0 && (
+                <div className="cx-ic warn">
+                  <b>{tx('ชื่อที่ V4 เลิกใช้แล้ว')} ({forbidden.size})</b>
+                  <p>{tx('สเปกห้ามใช้ชื่อซ้ำข้ามระดับ จึงแยกเป็นชื่อใหม่แทน')}</p>
+                  <div className="cx-codes">{[...forbidden].map(([n, use]) => <code key={n}>{n} → {use}</code>)}</div>
+                </div>
+              )}
+              {missingAll.length > 0 && (
+                <div className="cx-ic mu">
+                  <b>{tx('สเปกมีแต่แม่แบบยังไม่มี')} ({missingAll.length})</b>
+                  <p>{tx('ไม่ใช่ข้อผิดพลาดเสมอไป — ถ้าฟอร์มบริษัทไม่มีช่องนี้จริงก็ไม่ต้องมี')}</p>
+                  <div className="cx-codes">{missingAll.map((n) => <code key={n}>{n}</code>)}</div>
+                </div>
+              )}
+            </div>
+          </details>
         )}
       </div>
 
-      <div className="bar">
-        <div className="find">
-          <Icon name="search" />
+      <div className="cx-bar">
+        <div className="cx-tabs" role="tablist">
+          {shown.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              role="tab"
+              aria-selected={active?.id === g.id}
+              className={`cx-tab${active?.id === g.id ? ' on' : ''}`}
+              onClick={() => { setTab(g.id as 'doc' | 'detail'); setOpen(new Set()); setAllOpen(false); }}
+            >
+              {g.id === 'doc' ? tx('ระดับเอกสาร') : tx('ตารางรายวัน')}
+              <b>{g.fields.length}</b>
+            </button>
+          ))}
+        </div>
+        <div className="cx-find">
+          <Icon name="search" className="sm" />
           <input
             type="search"
             value={q}
@@ -456,65 +476,53 @@ export default function ClearReadFieldCatalog({ canSwitch }: { canSwitch: boolea
             aria-label={tx('ค้นหาฟิลด์')}
           />
         </div>
-        <button type="button" className="btn sm" onClick={toggleAll}>
+        <button type="button" className="btn" onClick={toggleAll}>
           {allOpen ? tx('ย่อทั้งหมด') : tx('ขยายทั้งหมด')}
         </button>
       </div>
 
-      {needle && total === 0 ? (
-        <div className="none">{tx('ไม่พบฟิลด์ที่ตรงกับคำค้น')} “{q.trim()}”</div>
+      {active && <p className="cx-hint">{active.hint}</p>}
+
+      {needle && active && active.fields.length === 0 ? (
+        <div className="cx-none">{tx('ไม่พบฟิลด์ที่ตรงกับคำค้น')} “{q.trim()}”</div>
       ) : (
-        shown.map((g) =>
-          g.fields.length === 0 ? null : (
-            <section key={g.id} className="grp">
-              <header className="ghd">
-                <span className="gt">{g.title}</span>
-                <span className="gc">{g.fields.length} {tx('ช่อง')}</span>
-                <span className="gh">{g.hint}</span>
-              </header>
-              <ul className="rows">
-                {g.fields.map((f) => {
-                  const id = `${g.id}:${f.name}`;
-                  const isOpen = open.has(id);
-                  const isUnknown = g.unknown.has(f.name);
-                  const useInstead = forbidden.get(f.name);
-                  return (
-                    <li key={id} className={isOpen ? 'fr open' : 'fr'}>
-                      <button type="button" className="hd" onClick={() => toggle(id)} aria-expanded={isOpen}>
-                        <span className="nmw">
-                          <span className="nm">{f.name}</span>
-                          {isUnknown && <span className="fl bad">{tx('ระบบอ่านไม่ได้')}</span>}
-                          {useInstead && <span className="fl warn">{tx('ชื่อที่เลิกใช้')}</span>}
-                        </span>
-                        {f.type && (
-                          <span className={f.type === 'number' ? 'ty num' : 'ty'}>{f.type}</span>
-                        )}
-                        <Icon name="chev" className="cv" />
-                      </button>
-                      {/* ค่าเริ่มต้นโชว์แค่ชื่อช่อง ไม่มีคำอธิบายโผล่ค้างเลยแม้แต่บรรทัดเดียว — กดขยายแล้วค่อยเห็น
-                          เต็ม (18 ก.ย. 69 ตามที่เจ้าของระบบสั่ง: ฟิลด์เยอะเกินไปถ้าคำอธิบายค้างอยู่ทุกแถว) */}
-                      {isOpen && (
-                        <>
-                          {useInstead && <p className="hint">{tx('ใช้แทนด้วย')} {useInstead}</p>}
-                          {f.description ? (
-                            <p className="ds">{f.description}</p>
-                          ) : (
-                            <p className="ds nodesc">{tx('ช่องนี้ไม่มีคำอธิบายในแม่แบบ — เครื่องอ่านจะเดาจากชื่อช่องอย่างเดียว')}</p>
-                          )}
-                        </>
+        active && (
+          <ul className="cx-rows">
+            {active.fields.map((f) => {
+              const id = `${active.id}:${f.name}`;
+              const isOpen = open.has(id);
+              const isUnknown = active.unknown.has(f.name);
+              const useInstead = forbidden.get(f.name);
+              return (
+                <li key={id} className={`cx-fr${isOpen ? ' open' : ''}`}>
+                  <button type="button" className="cx-hd" onClick={() => toggle(id)} aria-expanded={isOpen}>
+                    <span className="cx-nm">{f.name}</span>
+                    {isUnknown && <span className="cx-b bad">{tx('ระบบอ่านไม่ได้')}</span>}
+                    {useInstead && <span className="cx-b warn">{tx('ชื่อที่เลิกใช้')}</span>}
+                    <span className="cx-gap" />
+                    {f.type && <span className={`cx-ty ${f.type.toLowerCase()}`}>{f.type}</span>}
+                    <Icon name="chev" className="cx-cv" />
+                  </button>
+                  {isOpen && (
+                    <div className="cx-body">
+                      {useInstead && <p className="cx-use">{tx('ใช้แทนด้วย')} <code>{useInstead}</code></p>}
+                      {f.description ? (
+                        <p className="cx-ds">{f.description}</p>
+                      ) : (
+                        <p className="cx-ds nodesc">{tx('ช่องนี้ไม่มีคำอธิบายในแม่แบบ — เครื่องอ่านจะเดาจากชื่อช่องอย่างเดียว')}</p>
                       )}
-                    </li>
-                  );
-                })}
-              </ul>
-              {!needle && g.missing.length > 0 && (
-                <p className="gmiss">
-                  {tx('สเปกมีแต่แม่แบบยังไม่มี')}: {g.missing.map((n) => <code key={n}>{n}</code>)}
-                </p>
-              )}
-            </section>
-          ),
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )
+      )}
+      {!needle && active && active.missing.length > 0 && (
+        <p className="cx-miss">
+          {tx('สเปกมีแต่แม่แบบยังไม่มี')}: {active.missing.map((n) => <code key={n}>{n}</code>)}
+        </p>
       )}
     </div>
   );
