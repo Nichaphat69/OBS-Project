@@ -1,5 +1,5 @@
 /**
- * ไฟล์ที่ n8n ส่งเข้ามาเก็บรอให้คนกดอ่าน — จุดที่ต้องไม่พลาด: ส่งซ้ำแล้วไม่ซ้อน, ไม่รับไฟล์ที่ไม่ใช่ PDF,
+ * ไฟล์ที่ n8n ส่งเข้ามาเก็บรอให้คนกดอ่าน — จุดที่ต้องไม่พลาด: ส่งซ้ำแล้วไม่ซ้อน, ไม่รับไฟล์ที่อ่านไม่ได้ (รับ PDF/Excel/CSV/ภาพสแกน),
  * และ "ไม่มีการเรียกโมเดล/Gmail" ระหว่างรับ (ทดสอบโดยไม่ได้ตั้งค่าอะไรไว้เลย ถ้าไปแตะจะพัง)
  */
 import test from 'node:test';
@@ -49,13 +49,44 @@ test('อีเมลเดียวหลายไฟล์ รวมเป็�
   assert.equal(inbox.messages[0].attachments.length, 2);
 });
 
-test('ไม่รับไฟล์ที่ไม่ใช่ PDF และไม่เหลือแถวค้าง', async () => {
+test('ไม่รับไฟล์ที่อ่านไม่ได้ (Word/ZIP/ไบนารี) และไม่เหลือแถวค้าง', async () => {
   await clear();
-  await assert.rejects(
-    receiveInboundEmail({ ...base, fileBase64: Buffer.from('ไม่ใช่ pdf').toString('base64') }),
-    (e: any) => e instanceof InboundEmailError && e.status === 422,
-  );
+  const docx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('[Content_Types].xml word/document.xml')]);
+  for (const [name, bytes] of [
+    ['report.docx', docx],
+    ['data.bin', Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04])],
+    ['x.zip', Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('a.txt')])],
+  ] as Array<[string, Buffer]>) {
+    await assert.rejects(
+      receiveInboundEmail({ ...base, fileName: name, fileBase64: bytes.toString('base64') }),
+      (e: any) => e instanceof InboundEmailError && e.status === 422 && /รองรับ|รับเฉพาะ/.test(e.message),
+      name,
+    );
+  }
   assert.equal(await prisma.inboundEmail.count(), 0);
+});
+
+test('รับ Excel (xlsx/xls) / CSV / ภาพสแกน โดยตรวจจากเนื้อไฟล์ ไม่ใช่นามสกุล', async () => {
+  await clear();
+  const xlsx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('[Content_Types].xml xl/workbook.xml')]);
+  const xls = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(64)]);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+  const csv = Buffer.from('วันที่,เวลาเข้า,เวลาออก\n1/9/2026,09:00,18:00\n');
+  const cases: Array<[string, Buffer, RegExp]> = [
+    ['t.xlsx', xlsx, /spreadsheetml/],
+    // นามสกุลหลอก: ชื่อ .pdf แต่เนื้อเป็น xlsx — ต้องจัดตามเนื้อไฟล์
+    ['fake.pdf', xlsx, /spreadsheetml/],
+    ['t.xls', xls, /ms-excel/],
+    ['scan.png', png, /image\/png/],
+    ['scan.jpg', jpg, /image\/jpeg/],
+    ['t.csv', csv, /text\/csv/],
+  ];
+  for (const [i, [name, bytes]] of cases.entries()) {
+    const r = await receiveInboundEmail({ ...base, sourceEmailId: `mail-kind-${i}`, fileName: name, fileBase64: bytes.toString('base64') });
+    assert.equal(r.duplicate, false, name);
+  }
+  assert.equal(await prisma.inboundEmail.count(), cases.length);
 });
 
 test('ขาดข้อมูลจำเป็นต้องถูกปฏิเสธ', async () => {

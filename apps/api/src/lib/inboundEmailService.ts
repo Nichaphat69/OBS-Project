@@ -8,6 +8,7 @@
 import { prisma } from '@obs/db';
 import { storeFile } from './fileStorage.js';
 import { logAudit } from './audit.js';
+import { detectFileKind, SUPPORTED_FILES_TEXT } from './fileKind.js';
 
 export class InboundEmailError extends Error {
   status: number;
@@ -16,9 +17,6 @@ export class InboundEmailError extends Error {
     this.status = status;
   }
 }
-
-/** PDF ขึ้นต้นด้วย "%PDF-" เสมอ — ตรวจตรงนี้กันไฟล์อื่น/base64 เสียที่จะมากองรอให้คนกดอ่านแล้วพัง */
-const PDF_MAGIC = Buffer.from('%PDF-');
 
 export interface ReceiveEmailInput {
   sourceEmailId?: unknown;
@@ -47,11 +45,17 @@ export async function receiveInboundEmail(input: ReceiveEmailInput): Promise<{ i
   if (existing) return { id: existing.id, duplicate: true };
 
   const bytes = Buffer.from(input.fileBase64, 'base64');
-  if (bytes.length === 0 || !bytes.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC)) {
-    throw new InboundEmailError(`ไฟล์ ${fileName} ไม่ใช่ PDF ที่อ่านได้`, 422);
+  // ตรวจชนิดจากเนื้อไฟล์ (ไม่เชื่อนามสกุล) — รับ PDF / Excel / CSV / ภาพสแกน (6 ต.ค. 69 ขยายจากเดิมที่รับเฉพาะ PDF)
+  // ชนิดที่อ่านไม่ได้ (Word, ZIP ฯลฯ) ปฏิเสธตรงนี้ กันมากองรอให้คนกดอ่านแล้วพัง
+  const detected = bytes.length === 0 ? null : detectFileKind(bytes, fileName);
+  if (!detected || detected.kind === 'unknown') {
+    throw new InboundEmailError(
+      `ไฟล์ ${fileName} ${detected?.label ? `เป็นไฟล์ ${detected.label} ` : ''}อ่านอัตโนมัติไม่ได้ — รับเฉพาะ ${SUPPORTED_FILES_TEXT}`,
+      422,
+    );
   }
 
-  const fileKey = await storeFile('ai-read', bytes, { fileName, mimeType: 'application/pdf' });
+  const fileKey = await storeFile('ai-read', bytes, { fileName, mimeType: detected.mimeType });
   try {
     const row = await prisma.inboundEmail.create({
       data: {

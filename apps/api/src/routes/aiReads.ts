@@ -38,6 +38,12 @@ const FILE_CONTENT_TYPES: Record<string, string> = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   xls: 'application/vnd.ms-excel',
   csv: 'text/csv',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  webp: 'image/webp',
 };
 
 /** ไฟล์ต้นฉบับที่เคยอ่านผ่าน AI (upload/Gmail) — ใช้ตอนกด preview/ดาวน์โหลดจากหน้าประวัติ "ที่มาของ

@@ -16,7 +16,7 @@ import { Loading } from './ui';
 import { useLang } from '../lib/language';
 
 /** นามสกุลที่ต้อง parse เป็นตารางแทนการฝัง iframe — ตรงกับชนิดไฟล์ที่หน้าอัปโหลดรับ
- * (`accept=".pdf,.xlsx,.csv"` ใน UploadFileTab.tsx) เดาจากชื่อไฟล์ก่อน ถ้าไม่มีชื่อไฟล์ค่อยเดาจาก URL */
+ * (`accept` ใน UploadFileTab.tsx — PDF/Excel/CSV/ภาพสแกน ภาพกับ PDF แสดงด้วย iframe ของเบราว์เซอร์) เดาจากชื่อไฟล์ก่อน ถ้าไม่มีชื่อไฟล์ค่อยเดาจาก URL */
 function isSpreadsheetName(name: string | null): boolean {
   const n = (name ?? '').toLowerCase();
   return n.endsWith('.xlsx') || n.endsWith('.xls') || n.endsWith('.csv');

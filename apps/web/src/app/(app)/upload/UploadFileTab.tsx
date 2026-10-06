@@ -376,7 +376,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   return (
     <Card
       title={tx(submitOnly ? 'เลือกไฟล์ Timesheet ที่จะส่ง' : 'เลือกไฟล์ Timesheet')}
-      right={submitOnly ? undefined : <span className="sub">{tx('PDF ที่บริษัทอนุมัติแล้ว — เลือกได้หลายไฟล์พร้อมกัน')}</span>}
+      right={submitOnly ? undefined : <span className="sub">{tx('ไฟล์ Timesheet ที่บริษัทอนุมัติแล้ว (PDF, Excel, CSV, ภาพสแกน) — เลือกได้หลายไฟล์พร้อมกัน')}</span>}
     >
       {submitOnly && (
         <div className="frm" style={{ gridTemplateColumns: '1fr', marginBottom: 14 }}>
@@ -431,7 +431,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
           <input
             ref={fileRef}
             type="file"
-            accept=".pdf,.xlsx,.csv"
+            accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.tif,.tiff,.webp"
             multiple={!submitOnly}
             hidden
             onChange={(e) => pickFiles(e.target.files)}
@@ -464,7 +464,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.xlsx,.csv"
+              accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.tif,.tiff,.webp"
               multiple={!submitOnly}
               hidden
               onChange={(e) => pickFiles(e.target.files)}

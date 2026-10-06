@@ -53,7 +53,9 @@ type Grid = Cell[][];
  * อ่านเป็นเลข serial ดิบ (`raw:true`) แล้วแปลงวันที่/เวลาเองด้วยเลขล้วนแทน กัน timezone ปนเปื้อนทั้งหมด */
 function parseGrid(source: Buffer): Grid {
   const isZip = source.length >= 2 && source[0] === 0x50 && source[1] === 0x4b;
-  const workbook = isZip
+  // xls รุ่นเก่า (OLE2, ขึ้นต้น D0 CF 11 E0) — SheetJS อ่านจากไบต์ได้เหมือน xlsx แต่ห้ามถูกตีเป็นข้อความ CSV
+  const isOle = source.length >= 4 && source[0] === 0xd0 && source[1] === 0xcf && source[2] === 0x11 && source[3] === 0xe0;
+  const workbook = isZip || isOle
     ? XLSX.read(source, { type: 'buffer', cellDates: false, raw: true })
     : XLSX.read(source.toString('utf-8'), { type: 'string', raw: true });
 

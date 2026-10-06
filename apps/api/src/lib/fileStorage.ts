@@ -36,6 +36,9 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
   'application/vnd.ms-excel': 'xls',
+  'text/csv': 'csv',
+  'image/tiff': 'tiff',
+  'image/webp': 'webp',
 };
 
 function extensionFor(fileName: string | null | undefined, mimeType: string | null | undefined): string {

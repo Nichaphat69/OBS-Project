@@ -13,7 +13,8 @@ import { prisma } from '@obs/db';
 import { matchEmployee, checkPosition, type MatchableEmployee } from '@obs/domain';
 import { employeesForMatching } from './masterData.js';
 import { logAudit } from './audit.js';
-import { extractTimesheet } from './extractionService.js';
+import { extractTimesheet, extractTimesheetFromImage } from './extractionService.js';
+import { detectFileKind, SUPPORTED_FILES_TEXT } from './fileKind.js';
 import { extractTimesheetFromSpreadsheet } from './spreadsheetExtractionService.js';
 import { getActiveContract } from './dashboardService.js';
 import { pendingSubmissionFor } from './timesheetSubmissionService.js';
@@ -111,9 +112,15 @@ export async function readTimesheetFile({
 
   const source = fileBytes ?? Buffer.from(fileBase64!, 'base64');
   // เดารูปแบบไฟล์จากเนื้อไฟล์เอง ไม่เชื่อชื่อไฟล์ (ไฟล์ตัวอย่างจริงที่เจอมาชื่อ "...pdf.xlsx" — ชื่อไฟล์
-  // เชื่อไม่ได้) — PDF ขึ้นต้นด้วย "%PDF" เสมอ ที่เหลือ (xlsx/csv) ให้ spreadsheetExtractionService.ts
-  // เดาต่อเอง (zip = xlsx, ไม่งั้นถือเป็นข้อความ CSV)
-  const isPdf = source.subarray(0, 4).toString('latin1') === '%PDF';
+  // เชื่อไม่ได้) ดู fileKind.ts — PDF → เครื่องอ่านเอกสาร · xlsx/xls/csv → ตัวอ่านตาราง · ภาพสแกน → ABBYY
+  // ชนิดอื่น (Word/ZIP ฯลฯ) ปฏิเสธพร้อมบอกชนิดที่รับได้ (เดิมถือว่า "ไม่ใช่ PDF = ตารางเสมอ" แล้วพังด้วยข้อความที่ไม่บอกอะไร)
+  const detected = detectFileKind(source, fileName);
+  if (detected.kind === 'unknown') {
+    throw new UploadError(
+      `ไฟล์${fileName ? ` "${fileName}"` : ''} ${detected.label ? `เป็นไฟล์ ${detected.label} ` : ''}อ่านอัตโนมัติไม่ได้ — รองรับ ${SUPPORTED_FILES_TEXT}`,
+    );
+  }
+  const isPdf = detected.kind === 'pdf';
   // Skill ที่คนเลือกเองตอนอัปโหลดชนะ Skill ที่ผูกไว้กับสัญญาเสมอ — ถ้าไม่ได้เลือกค่อยใช้ของสัญญา
   // (เลือกแล้วต้องได้ตัวนั้นจริง ไม่งั้นคนที่กำลังลองเทียบ Skill จะเข้าใจผิดว่าได้ลองไปแล้ว)
   const contractTemplates = await resolveReaderTemplates(contractId);
@@ -124,7 +131,14 @@ export async function readTimesheetFile({
         ...contractTemplates,
         ...(abbyySkillId ? { abbyySkillId } : {}),
       })
-    : await extractTimesheetFromSpreadsheet(source, { expectedPeriod });
+    : detected.kind === 'image'
+      ? await extractTimesheetFromImage(source, {
+          expectedPeriod,
+          abbyySkillId: abbyySkillId ?? contractTemplates.abbyySkillId,
+          fileName,
+          mimeType: detected.mimeType,
+        })
+      : await extractTimesheetFromSpreadsheet(source, { expectedPeriod });
   const { usage, model, verification } = extracted;
   const data = extracted.data;
 

@@ -118,10 +118,10 @@ export class AbbyyClient {
     }
   }
 
-  async launchTransaction(fileBuffer: Buffer, fileName: string): Promise<string> {
+  async launchTransaction(fileBuffer: Buffer, fileName: string, mimeType = 'application/pdf'): Promise<string> {
     this.assertConfigured();
     const form = new FormData();
-    form.append('Files', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), fileName);
+    form.append('Files', new Blob([new Uint8Array(fileBuffer)], { type: mimeType }), fileName);
 
     const res = await this.authedFetch(`/api/publicapi/v1/transactions/launch?skillId=${encodeURIComponent(this.skillId!)}`, {
       method: 'POST',
@@ -157,8 +157,8 @@ export class AbbyyClient {
     return safeJson(text) ?? text;
   }
 
-  async extractDocument(fileBuffer: Buffer, fileName: string): Promise<{ transactionId: string; manualReviewLink: string | null; rawResult: any }> {
-    const transactionId = await this.launchTransaction(fileBuffer, fileName);
+  async extractDocument(fileBuffer: Buffer, fileName: string, mimeType = 'application/pdf'): Promise<{ transactionId: string; manualReviewLink: string | null; rawResult: any }> {
+    const transactionId = await this.launchTransaction(fileBuffer, fileName, mimeType);
 
     const deadline = Date.now() + POLL_TIMEOUT_MS;
     let transaction: any;

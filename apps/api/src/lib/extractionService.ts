@@ -34,6 +34,9 @@ export interface ReaderOptions {
   templateId?: string | null;
   /** ผังชื่อฟิลด์ของลูกค้ารายนี้ — ตัวอ่านรับไปใช้โดยไม่สนว่าเก็บไว้ที่ไหน (ดู TimesheetFieldMap) */
   fieldMap?: TimesheetFieldMap | null;
+  /** ชื่อไฟล์/ชนิดไฟล์ที่ส่งให้เครื่องอ่าน — ใช้ตอนไฟล์ไม่ใช่ PDF (ภาพสแกน) ไม่ส่งมา = PDF เหมือนเดิม */
+  fileName?: string | null;
+  mimeType?: string | null;
 }
 
 /**
@@ -55,11 +58,11 @@ const abbyyReader: TimesheetReader = {
   id: 'abbyy',
   label: 'ABBYY Vantage',
   isConfigured: hasAbbyyCredentials,
-  async read(source, { expectedPeriod, templateId, fieldMap }) {
+  async read(source, { expectedPeriod, templateId, fieldMap, fileName, mimeType }) {
     // ไม่ได้ส่ง Skill มาหรือสัญญานั้นยังไม่ได้ตั้งไว้ → ปล่อยให้ AbbyyClient ใช้ ABBYY_SKILL_ID จาก .env
     // ตามพฤติกรรมเดิมก่อนมี multi-skill
     const client = new AbbyyClient(templateId ? { skillId: templateId } : {});
-    const { rawResult } = await client.extractDocument(source, 'timesheet.pdf');
+    const { rawResult } = await client.extractDocument(source, fileName || 'timesheet.pdf', mimeType || 'application/pdf');
     // ผู้เรียกส่ง fieldMap มาให้แล้วก็ใช้เลย ไม่ส่งมาค่อยไปหาเอาจากสารบัญ Skill — เผื่อเส้นทางที่เรียก
     // ตัวอ่านตรงโดยไม่ผ่าน extractTimesheet()
     const map = fieldMap ?? (await getFieldMapForSkill(templateId));
@@ -190,7 +193,7 @@ export async function pickReader(
  * มีไว้เพื่อให้ตัวอ่านเจ้าใหม่เขียน mapping ด้วยคีย์ตามสเปกได้เลย โดยไม่ต้องรอ rename ข้ามไฟล์
  * (ดู DETAIL_SPEC_KEY_ALIASES ใน @obs/domain สำหรับที่มาของข้อยกเว้นสามตัวนี้)
  */
-function normalizeDetailKeys(data: any): any {
+export function normalizeDetailKeys(data: any): any {
   if (!Array.isArray(data?.days)) return data;
   data.days = data.days.map((row: Record<string, unknown>) => {
     const out: Record<string, unknown> = {};
@@ -218,3 +221,21 @@ export const extractTimesheet: Extractor = async (source, { expectedPeriod, abby
   const result = await reader.read(source, { expectedPeriod, templateId });
   return { ...result, data: normalizeDetailKeys(result.data) };
 };
+
+/**
+ * อ่านภาพสแกน (JPG/PNG/TIFF) — ส่งให้ ABBYY เท่านั้น (6 ต.ค. 69)
+ *
+ * เจาะจง ABBYY เพราะ Clear Read และโมเดลในเครื่องของระบบนี้สร้างมารับ PDF (Clear Read ส่งเป็น PDF ทั้งก้อน, local-LLM
+ * แปลง PDF เป็นภาพทีละหน้าเอง) ภาพเดี่ยวส่งเข้าไปแล้วไม่มีหลักประกันว่าอ่านได้ — ถ้าไม่ได้ตั้งค่า ABBYY ให้บอกตรงๆ
+ * ไม่ลอบตกไปใช้ตัวอื่นแล้วได้ผลมั่ว ⚠️ ทางนี้ยังไม่เคยทดสอบกับ ABBYY จริง (ไม่มีไฟล์ภาพตัวอย่าง) ผลลัพธ์ผ่านขั้นรีวิวเสมอ
+ */
+export async function extractTimesheetFromImage(
+  source: Buffer,
+  { expectedPeriod, abbyySkillId, fileName, mimeType }: { expectedPeriod?: string; abbyySkillId?: string | null; fileName?: string | null; mimeType: string },
+) {
+  if (!abbyyReader.isConfigured()) {
+    throw new ExtractionError('ภาพสแกนอ่านได้เฉพาะด้วย ABBYY Vantage ซึ่งยังตั้งค่าไม่ครบ — ส่งเป็น PDF หรือ Excel แทน', 400);
+  }
+  const result = await abbyyReader.read(source, { expectedPeriod, templateId: abbyySkillId ?? null, fileName, mimeType });
+  return { ...result, data: normalizeDetailKeys(result.data) };
+}

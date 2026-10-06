@@ -1222,6 +1222,7 @@ const TX: Record<string, string> = {
   'ใบแจ้งหนี้จริงจะคิดที่': 'The actual invoice will be charged at',
   'ขั้นตอน 1 · ส่ง Timesheet': 'Step 1 · Submit Timesheet',
   'PDF ที่บริษัทอนุมัติแล้ว — เลือกได้หลายไฟล์พร้อมกัน': 'PDFs approved by the company — you can select several files at once',
+  'ไฟล์ Timesheet ที่บริษัทอนุมัติแล้ว (PDF, Excel, CSV, ภาพสแกน) — เลือกได้หลายไฟล์พร้อมกัน': 'Company-approved timesheet files (PDF, Excel, CSV, scans) — you can select several at once',
   'ผู้ดูแลจะตรวจไฟล์นี้ต่อ ติดตามสถานะได้ที่หน้า "บันทึกการส่ง"': 'An admin will review this file next. Track its status on the "Submission log" page',
   'ลบไฟล์นี้': 'Remove this file',
   'ส่ง Timesheet นี้': 'Submit this Timesheet',
