@@ -71,7 +71,7 @@ export interface EmployeeMasterRow {
  * — หน้า "พนักงาน & ชื่อพ้อง" ต้องกรองด้วยตัวนี้เสมอ ไม่งั้นสลับบริษัทบนแถบบนแล้วยังเห็นพนักงานของ
  * บริษัทอื่นค้างอยู่
  */
-export async function listEmployeesFull({ contractId }: { contractId?: string } = {}): Promise<EmployeeMasterRow[]> {
+export async function listEmployeesFull({ contractId, contractIds }: { contractId?: string; contractIds?: string[] | null } = {}): Promise<EmployeeMasterRow[]> {
   const employees = await prisma.employee.findMany({
     include: {
       assignments: { include: { contract: { include: { customer: true } } } },
@@ -113,7 +113,9 @@ export async function listEmployeesFull({ contractId }: { contractId?: string } 
     }
   }
 
-  const filtered = contractId ? rows.filter((r) => r.contractId === contractId) : rows;
+  // contractIds = ขอบเขตจากตัวกรอง PO (หลายสัญญาได้ · null = ทุกสัญญา รวมพนักงานที่ยังไม่ผูกสัญญา) · contractId เดี่ยวคงไว้ให้โค้ดเดิม
+  const ids = contractIds ?? (contractId ? [contractId] : null);
+  const filtered = ids ? rows.filter((r) => r.contractId !== null && ids.includes(r.contractId)) : rows;
   return filtered.sort((x, y) => (y.monthlyRate ?? 0) - (x.monthlyRate ?? 0));
 }
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireNotUser } from '../lib/requireRole.js';
-import { getActiveContract } from '../lib/dashboardService.js';
+import { requestScope } from '../lib/scopeService.js';
 import { activityFeed, employeeTimesheetFeed } from '../lib/activityFeedService.js';
 
 export const activityRouter = Router();
@@ -14,8 +14,9 @@ activityRouter.use(requireAuth);
  * /api/my-notifications อยู่แล้ว (NotificationsClient.tsx) ฟีดรวมนี้จึงไม่เคยถูกใช้โดย role นั้นเลย */
 activityRouter.get('/', requireNotUser, async (req, res) => {
   const limit = req.query.limit ? Number(req.query.limit) : 30;
-  const activeContract = req.user!.role === 'executive' ? null : await getActiveContract();
-  res.json(await activityFeed({ limit, contractId: activeContract?.id ?? null }));
+  // ขอบเขตตามตัวกรอง PO บนแถบบน (cookie) — เดิมใช้ธงสัญญา "กำลังดำเนินการ" ของทั้งระบบ ไม่ตรงกับ PO ที่เลือก (6 ต.ค. 69)
+  const { contractIds } = await requestScope(req);
+  res.json(await activityFeed({ limit, contractIds }));
 });
 
 export const myNotificationsRouter = Router();

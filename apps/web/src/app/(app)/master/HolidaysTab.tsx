@@ -32,7 +32,8 @@ export default function HolidaysTab() {
 
   function load(y: number) {
     setError(null);
-    fetch(`/api/holidays?year=${y}`, { cache: 'no-store' })
+    // scoped=1 = วันหยุดทุกบริษัท + ของบริษัทเจ้าของ PO ที่เลือกบนแถบบน
+    fetch(`/api/holidays?year=${y}&scoped=1`, { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));

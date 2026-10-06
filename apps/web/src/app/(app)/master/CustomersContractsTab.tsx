@@ -7,6 +7,7 @@ import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang, formatDate } from '../../../lib/language';
 import { SETTINGS_CHANGED_EVENT } from '../../../lib/settingsChanged';
+import { useScope } from '../../../lib/scope';
 
 interface ContractRow {
   id: string;
@@ -172,6 +173,8 @@ function pctPrecise(rate: number) {
 /** ported from public/app.js's renderMaster() tab 2 (บริษัท & สัญญา) + renderCustomerAddForm()/
  * renderContractEditForm() */
 export default function CustomersContractsTab() {
+  const { filters: scopeFilters } = useScope();
+  const scopeHasPo = Boolean(scopeFilters.contractId);
   const confirm = useConfirm();
   const toast = useToast();
   const { tx, lang } = useLang();
@@ -191,7 +194,8 @@ export default function CustomersContractsTab() {
 
   function load() {
     setError(null);
-    fetch('/api/contracts', { cache: 'no-store' })
+    // scoped=1 = ตามตัวกรอง PO บนแถบบน (เลือก PO เดียวเห็นแค่สัญญานั้น · ทุก PO เห็นทั้งหมด)
+    fetch('/api/contracts?scoped=1', { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
@@ -203,6 +207,11 @@ export default function CustomersContractsTab() {
       .catch(() => setError(tx('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')));
     // บริษัทที่สร้างไว้แต่ยังไม่มีสัญญา (เพิ่งแยกขั้นตอนสร้างบริษัท/สัญญาออกจากกัน) — ล้มเหลวได้เงียบๆ
     // เพราะไม่ใช่ข้อมูลหลักของหน้านี้ ไม่ควรทำให้ทั้งหน้าใช้งานไม่ได้ถ้าดึงไม่สำเร็จ
+    // บริษัทที่ยังไม่มีสัญญาไม่มี PO ให้ผูกกับตัวกรอง — โชว์เฉพาะตอนดูทุก PO เท่านั้น (เลือก PO เดียวอยู่ ไม่เกี่ยวข้อง)
+    if (scopeHasPo) {
+      setOrphanCustomers([]);
+      return;
+    }
     fetch('/api/customers/without-contract', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : []))
       .then(setOrphanCustomers)

@@ -61,12 +61,9 @@ export default function EmployeesTab() {
 
   function load() {
     setError(null);
-    fetch('/api/contracts/active', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((c: ActiveContract | null) => {
-        const qs = c ? `?shape=full&contractId=${encodeURIComponent(c.id)}` : '?shape=full';
-        return fetch(`/api/employees${qs}`, { cache: 'no-store' });
-      })
+    // ขอบเขตตามตัวกรอง PO บนแถบบน (scoped=1 → เซิร์ฟเวอร์อ่าน cookie obs_scope) — เดิมดึงสัญญา "กำลังดำเนินการ" (ธงของทั้งระบบ)
+    // มากรอง จึงโชว์พนักงานของสัญญานั้นเสมอไม่ว่าเลือก PO ไหนอยู่ (บั๊ก 6 ต.ค. 69)
+    fetch('/api/employees?shape=full&scoped=1', { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));

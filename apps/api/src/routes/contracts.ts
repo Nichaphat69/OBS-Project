@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin, requireNotUser } from '../lib/requireRole.js';
-import { listFilterOptions } from '../lib/scopeService.js';
+import { listFilterOptions, requestScope } from '../lib/scopeService.js';
 import { listContracts, getActiveContract, setActiveContract, deactivateContract, ContractActionError } from '../lib/dashboardService.js';
 import {
   ContractMasterError,
@@ -18,8 +18,14 @@ contractsRouter.use(requireAuth);
 /** ก่อนหน้านี้ไม่มี role check เลย (role "user" เรียกดูสัญญา/ลูกค้าทุกบริษัทได้หมด) — แก้ให้กันเฉพาะ
  * "user" ออก (15 ก.ย. 69 ตาม audit ที่ user ขอ) admin/accounting ยังใช้ list นี้จริงสำหรับ dropdown
  * สลับบริษัท + ตาราง Master Data ที่ต้องเห็นทุกบริษัทอยู่แล้ว (ของเดิม ไม่ใช่การเพิ่มสิทธิ์ใหม่) */
-contractsRouter.get('/', requireNotUser, async (_req, res) => {
-  res.json(await listContracts());
+contractsRouter.get('/', requireNotUser, async (req, res) => {
+  const all = await listContracts();
+  // `scoped=1` = ตามตัวกรอง PO บนแถบบน (แท็บ "สัญญาบริษัท" ในข้อมูลหลัก) — ไม่ใส่ = รายการเต็มเหมือนเดิม (หน้าอื่นต้องเห็นทุกสัญญา)
+  if (req.query.scoped === '1') {
+    const { contractIds } = await requestScope(req);
+    return res.json(contractIds ? all.filter((c) => contractIds.includes(c.id)) : all);
+  }
+  res.json(all);
 });
 
 /**

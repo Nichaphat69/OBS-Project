@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, ErrorState, Loading, PageHeader, PoTag, StatusPill } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
+import { ScopeSummary } from '../../../components/ScopeFilterBar';
 
 interface InvoiceRow {
   id: string;
@@ -37,9 +38,8 @@ export default function InvoicesClient() {
   const [rows, setRows] = useState<InvoiceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ไม่ส่ง contractId ขึ้นไปแล้ว — เซิร์ฟเวอร์เลือกสัญญาที่กำลังดำเนินการอยู่ให้เอง เหตุผลเดียวกับหน้า
-  // ตรวจ Manday: ถ้าหน้าเว็บดึงสัญญา active มาไม่ได้ query จะว่าง แล้วกลายเป็น "ขอทุกบริษัท" คือพลาด
-  // แล้วขอบเขตกว้างขึ้น ซึ่งผิดทิศสำหรับยอดเงินของบริษัทแต่ละราย
+  // ไม่ส่ง contractId ขึ้นไป — เซิร์ฟเวอร์อ่านขอบเขตจากตัวกรอง PO บนแถบบน (cookie obs_scope) เอง ไม่เลือกอะไร = สัญญากำลังดำเนินการ
+  // (แคบลง ไม่ใช่ขอทุกบริษัท — พลาดแล้วต้องแคบลง ไม่ใช่กว้างขึ้น เพราะเป็นยอดเงินของบริษัทแต่ละราย)
   // เดิมไม่มี .catch — พอมี skeleton ตอน rows เป็น null แล้ว โหลดพังจะกลายเป็นหมุนค้างตลอดไป จึงเพิ่ม error state
   function load() {
     setError(null);
@@ -60,6 +60,7 @@ export default function InvoicesClient() {
   return (
     <>
       <PageHeader eyebrow={tx('เอกสาร')} title={tx('ใบแจ้งหนี้')} subtitle={tx('เอกสารที่ระบบสร้างเข้า FlowAccount')} />
+      <ScopeSummary />
 
       <Card flush>
         {error ? (

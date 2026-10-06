@@ -36,7 +36,9 @@ export interface AiReadListItem {
  * (15 ก.ย. 69 ตาม policy ที่ user ยืนยัน) — role "user" ต้องเห็นแค่ของตัวเอง ผูก path นี้ต่างจาก
  * contractId ตรงที่กรองด้วย employeeId ที่บันทึกไว้ตอน ingest ตรงๆ (แม่นกว่า heuristic ชื่อของ
  * contractId ด้านล่างที่ยังคงไว้ให้ admin/accounting ใช้กรองตามบริษัทเหมือนเดิม) */
-export async function listAiReads(contractId?: string, restrictToEmployeeId?: string | null): Promise<AiReadListItem[]> {
+export async function listAiReads(contractScope?: string | string[] | null, restrictToEmployeeId?: string | null): Promise<AiReadListItem[]> {
+  // สัญญาเดียว (ของเดิม) หรือรายการสัญญาจากตัวกรอง PO บนแถบบน — null/ไม่ระบุ = ไม่กรอง
+  const scopeIds = Array.isArray(contractScope) ? contractScope : contractScope ? [contractScope] : null;
   const rows = await prisma.aiRead.findMany({
     where: {
       status: { not: 'discarded' },
@@ -51,7 +53,7 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
   });
 
   let filtered = rows;
-  if (contractId) {
+  if (scopeIds) {
     const employees = await employeesForMatching();
     const belongs = new Map<string, boolean>();
     const out: typeof rows = [];
@@ -59,7 +61,7 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
       // รู้ employeeId อยู่แล้ว (เช่น พนักงานส่งเอง) — เช็คสัญญาจาก id ตรงๆ ไม่ต้องเดาจากชื่อ เดิมแถวที่ไม่มี
       // employeeName ถูกทิ้งไปเลย ไฟล์ที่พนักงานส่งมาจึงหายจากรายการตอนเลือกบริษัทไว้
       if (r.employeeId) {
-        if (await prisma.assignment.findFirst({ where: { employeeId: r.employeeId, contractId }, select: { employeeId: true } })) out.push(r);
+        if (await prisma.assignment.findFirst({ where: { employeeId: r.employeeId, contractId: { in: scopeIds } }, select: { employeeId: true } })) out.push(r);
         continue;
       }
       if (!r.employeeName) continue;
@@ -67,7 +69,7 @@ export async function listAiReads(contractId?: string, restrictToEmployeeId?: st
       if (ok === undefined) {
         const { employee } = matchEmployee(r.employeeName, employees);
         ok = employee
-          ? Boolean(await prisma.assignment.findFirst({ where: { employeeId: employee.id, contractId } }))
+          ? Boolean(await prisma.assignment.findFirst({ where: { employeeId: employee.id, contractId: { in: scopeIds } } }))
           : false;
         belongs.set(r.employeeName, ok);
       }

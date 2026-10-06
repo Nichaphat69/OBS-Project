@@ -64,6 +64,8 @@ export interface SubmissionLogFilter {
   period?: string | null;
   employeeId?: string | null;
   contractId?: string | null;
+  /** ขอบเขตหลายสัญญาจากตัวกรอง PO บนแถบบน (6 ต.ค. 69) — null/ไม่ระบุ = ไม่กรอง · contractId เดี่ยวยังใช้ได้ */
+  contractIds?: string[] | null;
   /** กรองตามบริษัทที่ส่งพนักงานไป — หนึ่งบริษัทมีได้หลายสัญญา จึงกรองที่นี่ไม่ใช่ที่ contractId
    *  (เจ้าของระบบสั่ง 27 ก.ย. 69 ให้เลือกดูรายการส่งรายบริษัทได้) */
   customerId?: string | null;
@@ -121,7 +123,7 @@ export async function listTimesheetSubmissions(filter: SubmissionLogFilter = {})
     where: {
       status: 'active',
       ...(employeeId ? { employeeId } : {}),
-      ...(filter.contractId ? { contractId: filter.contractId } : {}),
+      ...(filter.contractId ? { contractId: filter.contractId } : filter.contractIds ? { contractId: { in: filter.contractIds } } : {}),
       ...(filter.customerId ? { contract: { customerId: filter.customerId } } : {}),
     },
     include: { contract: { include: { customer: true } }, employee: true },

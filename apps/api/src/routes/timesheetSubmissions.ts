@@ -16,6 +16,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
+import { requestScope } from '../lib/scopeService.js';
 import {
   listTimesheetSubmissions,
   type SubmissionLogFilter,
@@ -120,7 +121,11 @@ timesheetSubmissionsRouter.post('/mine/method', async (req, res) => {
 
 /** ภาพรวมทุกคน — admin/แผนกบัญชีเท่านั้น (role 'user' ไปไม่ถึงโค้ดนี้เลย ถูกกันที่ requireAdmin) */
 timesheetSubmissionsRouter.get('/', requireAdmin, async (req, res) => {
-  const result = await listTimesheetSubmissions({ ...filtersFrom(req.query), employeeId: str(req.query.employeeId) });
+  // ตัวกรองที่ระบุมาใน query (contractId/customerId) ชนะเสมอ — ไม่ระบุ ใช้ขอบเขตตามตัวกรอง PO บนแถบบน (cookie)
+  const filters = filtersFrom(req.query);
+  let contractIds: string[] | null = null;
+  if (!filters.contractId && !filters.customerId) contractIds = (await requestScope(req, { allowAll: true })).contractIds;
+  const result = await listTimesheetSubmissions({ ...filters, contractIds, employeeId: str(req.query.employeeId) });
   res.json({ scope: { restrictedToEmployeeId: null, mine: false }, ...result });
 });
 

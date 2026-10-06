@@ -6,6 +6,7 @@ import EmployeesTab from './EmployeesTab';
 import CustomersContractsTab from './CustomersContractsTab';
 import HolidaysTab from './HolidaysTab';
 import { useLang } from '../../../lib/language';
+import { ScopeSummary } from '../../../components/ScopeFilterBar';
 
 const TABS = [
   { key: 'customers', label: 'สัญญาบริษัท' },
@@ -26,6 +27,8 @@ export default function MasterDataClient() {
   return (
     <>
       <PageHeader eyebrow={tx('อ้างอิง')} title={tx('ข้อมูลหลัก')} />
+
+      <ScopeSummary />
 
       <TabStrip tabs={TABS} active={tab} onChange={setTab} />
 

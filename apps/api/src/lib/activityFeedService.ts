@@ -131,7 +131,9 @@ export interface Feed {
 }
 
 /** ported from service.js activityFeed() */
-export async function activityFeed({ limit = 30, contractId = null }: { limit?: number; contractId?: string | null } = {}): Promise<Feed> {
+export async function activityFeed({ limit = 30, contractId = null, contractIds = null }: { limit?: number; contractId?: string | null; contractIds?: string[] | null } = {}): Promise<Feed> {
+  // ขอบเขตหลายสัญญาจากตัวกรอง PO บนแถบบน (6 ต.ค. 69) — null/ไม่ระบุ = ทุกสัญญา · contractId เดี่ยวคงไว้ให้โค้ดเดิม
+  const scopeIds = contractIds ?? (contractId ? [contractId] : null);
   const rows = await prisma.auditLog.findMany({ orderBy: { id: 'desc' }, take: limit * 3 });
   const candidates = rows
     .map((r) => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null }))
@@ -153,10 +155,10 @@ export async function activityFeed({ limit = 30, contractId = null }: { limit?: 
     return null;
   };
 
-  const filtered = contractId
+  const filtered = scopeIds
     ? candidates.filter((r) => {
         const rc = contractOf(r);
-        return !rc || rc === contractId;
+        return !rc || scopeIds.includes(rc);
       })
     : candidates;
   const trimmed = filtered.slice(0, limit);

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '@obs/db';
 import { requireAuth } from '../lib/requireAuth.js';
+import { requestScope } from '../lib/scopeService.js';
 import { listAiReads, getAiRead, dismissAiRead, AiReadError } from '../lib/aiReadsService.js';
 import { loadFile } from '../lib/fileStorage.js';
 
@@ -18,7 +19,9 @@ aiReadsRouter.get('/', async (req, res) => {
     if (!req.user!.employeeId) return res.json([]);
     return res.json(await listAiReads(undefined, req.user!.employeeId));
   }
-  res.json(await listAiReads(contractId));
+  // contractId ที่ระบุมาใน query ชนะ · ไม่ระบุ = ขอบเขตตามตัวกรอง PO บนแถบบน (ใช้กับแท็บ "รอจากพนักงาน"/"ประวัติ")
+  const scope = contractId ? contractId : (await requestScope(req, { allowAll: true })).contractIds;
+  res.json(await listAiReads(scope));
 });
 
 aiReadsRouter.get('/:id', async (req, res) => {

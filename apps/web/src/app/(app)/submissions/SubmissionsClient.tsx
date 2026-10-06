@@ -5,6 +5,7 @@ import { Card, ErrorState, Loading, PageHeader, StatusPill, Tag, TabStrip } from
 import { Icon } from '../../../components/Icon';
 import SupportTicketsPanel from './SupportTicketsPanel';
 import { useLang } from '../../../lib/language';
+import { ScopeSummary } from '../../../components/ScopeFilterBar';
 
 /**
  * หน้ารวม "บันทึกการส่ง Timesheet ตามรอบบิล"
@@ -342,6 +343,7 @@ export default function SubmissionsClient({ role }: { role: string }) {
   return (
     <>
       <PageHeader eyebrow={tx('อ้างอิง')} title={tx('บันทึกการส่ง')} />
+      {isStaff && <ScopeSummary />}
 
       {data?.scope.mine && (
         <div className="scopebar">

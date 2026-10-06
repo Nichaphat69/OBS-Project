@@ -3,7 +3,7 @@ import { prisma } from '@obs/db';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin } from '../lib/requireRole.js';
 import { CycleActionError, deleteInvoice, listInvoices } from '../lib/cyclesService.js';
-import { getActiveContract } from '../lib/dashboardService.js';
+import { requestScope } from '../lib/scopeService.js';
 import { loadFile } from '../lib/fileStorage.js';
 
 export const invoicesRouter = Router();
@@ -23,18 +23,10 @@ invoicesRouter.use(requireAuth);
  * ต้องการดูข้ามบริษัทจริงๆ ส่ง `?all=1` มาอย่างชัดเจน
  */
 invoicesRouter.get('/', requireAdmin, async (req, res) => {
-  const explicit = typeof req.query.contractId === 'string' && req.query.contractId ? req.query.contractId : null;
-  const wantsAll = req.query.all === '1' || req.query.all === 'true';
-
-  let contractId = explicit ?? undefined;
-  if (!explicit && !wantsAll) {
-    const active = await getActiveContract();
-    contractId = active?.id;
-  }
-
-  // คืนรูปเดิมเป๊ะ ไม่ห่อ scope เพิ่มเหมือนฝั่ง timesheets เพราะหน้านี้รับเป็น array ตรงๆ อยู่แล้ว
-  // การเปลี่ยนรูป response จะทำให้หน้าเว็บพังทันที ซึ่งไม่ใช่เรื่องที่แก้อยู่
-  res.json(await listInvoices(contractId));
+  // ขอบเขตตามตัวกรอง PO บนแถบบน (cookie) · ไม่เลือกอะไร = สัญญากำลังดำเนินการ (แคบลง) · `?all=1` ต้องเขียนชัดเจน
+  // คืนรูปเดิมเป๊ะ (array) หน้านี้รับเป็น array ตรงๆ อยู่แล้ว
+  const { contractIds } = await requestScope(req, { allowAll: true });
+  res.json(await listInvoices(contractIds));
 });
 
 /** ไฟล์ PDF ของใบแจ้งหนี้ — cache มาจาก FlowAccount shareLink ตอนอนุมัติ (approveCycle) ไม่ผ่าน

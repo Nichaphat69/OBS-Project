@@ -438,9 +438,10 @@ export async function draftEmailWithAi(contractId: string, period: string, { act
   return merged;
 }
 
-export async function listInvoices(contractId?: string) {
+export async function listInvoices(scope?: string | string[] | null) {
+  const ids = Array.isArray(scope) ? scope : scope ? [scope] : null;
   const rows = await prisma.invoice.findMany({
-    where: contractId ? { contractId } : undefined,
+    where: ids ? { contractId: { in: ids } } : undefined,
     include: { contract: { include: { customer: true } } },
     orderBy: { documentDate: 'desc' },
   });

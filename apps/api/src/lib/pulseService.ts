@@ -4,7 +4,7 @@
  * และชื่อ/role ของคนที่ login อยู่
  */
 import { prisma } from '@obs/db';
-import { getActiveContract, getSetting, contractCycles, CYCLE_STATE } from './dashboardService.js';
+import { getSetting, contractCycles, CYCLE_STATE, listContracts } from './dashboardService.js';
 import { listTimesheets } from './timesheetsService.js';
 import { activityFeed, employeeTimesheetFeed, type Feed } from './activityFeedService.js';
 
@@ -32,12 +32,12 @@ export async function pulse({
   actor = 'ยังไม่ได้ระบุผู้ใช้',
   role = null,
   employeeId = null,
-}: { actor?: string; role?: string | null; employeeId?: string | null } = {}): Promise<Pulse> {
-  /* ป้ายบนเมนูต้องนับเฉพาะของบริษัทที่กำลังดำเนินการอยู่ตอนนี้ — ให้ตรงกับที่หน้า "ตรวจ Manday"/
-     "วางบิล" เองก็กรองด้วย contractId เดียวกัน ไม่งั้นป้ายจะขึ้นเลขรวมทุกบริษัท */
-  const activeContract = await getActiveContract();
-  const { items: sheets } = await listTimesheets();
-  const scoped = activeContract ? sheets.filter((s) => s.contract.id === activeContract.id) : sheets;
+  contractIds = null,
+}: { actor?: string; role?: string | null; employeeId?: string | null; contractIds?: string[] | null } = {}): Promise<Pulse> {
+  /* ป้ายบนเมนู/กระดิ่งต้องนับตามขอบเขตที่ผู้ใช้เลือกไว้บนแถบบน (PO / ทุกบริษัท) ให้ตรงกับที่หน้า "ตรวจ Manday"/"วางบิล"
+     เองกรองอยู่ — เดิมใช้ธง "สัญญากำลังดำเนินการ" ของทั้งระบบ ซึ่งไม่ตรงกับ PO ที่เลือก (บั๊ก 6 ต.ค. 69)
+     contractIds = null แปลว่าทุกสัญญา (route เป็นคนตัดสินตามสิทธิ์) */
+  const { items: scoped } = await listTimesheets({ contractIds });
 
   const byStatus: Record<string, number> = {};
   for (const sheet of scoped) byStatus[sheet.status] = (byStatus[sheet.status] ?? 0) + 1;
@@ -45,9 +45,10 @@ export async function pulse({
   const waitingCheck = scoped.filter((s) => s.status === 'verified' && !s.check.checked).length;
 
   let readyToApprove = 0;
-  if (activeContract) {
-    const cycles = await contractCycles(activeContract.id);
-    readyToApprove = cycles.filter((c) => c.state === CYCLE_STATE.READY).length;
+  const cycleContractIds = contractIds ?? (await listContracts()).map((c) => c.id);
+  for (const id of cycleContractIds) {
+    const cycles = await contractCycles(id);
+    readyToApprove += cycles.filter((c) => c.state === CYCLE_STATE.READY).length;
   }
 
   const billingRules = await getSetting<{ requireHumanCheck?: boolean }>('billing_rules', {});
@@ -74,7 +75,7 @@ export async function pulse({
       ? employeeId
         ? await employeeTimesheetFeed(employeeId, { limit: 25 })
         : { items: [], latestAt: null, counts: { total: 0, critical: 0 } }
-      : await activityFeed({ limit: 25, contractId: role === 'executive' ? null : activeContract?.id ?? null });
+      : await activityFeed({ limit: 25, contractIds });
 
   return {
     needsAction: NEEDS_ACTION.reduce((sum, k) => sum + (byStatus[k] ?? 0), 0) + waitingCheck,

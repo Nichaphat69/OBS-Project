@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/requireAuth.js';
 import { requireAdmin, requireNotUser } from '../lib/requireRole.js';
 import { listEmployeesBasic } from '../lib/masterData.js';
+import { requestScope } from '../lib/scopeService.js';
 import {
   EmployeeMasterError,
   addEmployeeAlias,
@@ -29,6 +30,12 @@ employeesRouter.use(requireAuth);
 employeesRouter.get('/', requireNotUser, async (req, res) => {
   if (req.query.shape === 'full') {
     const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : undefined;
+    // `scoped=1` = ใช้ขอบเขตตามตัวกรอง PO บนแถบบน (แท็บ "พนักงาน" ในข้อมูลหลัก) — ไม่ใส่ = ไม่กรอง ตามเดิม เพราะหน้าอื่น (เช่น จัดการระบบ
+    // ผูกพนักงานกับบัญชี) ต้องเห็นพนักงานทุกคนข้ามบริษัทโดยเจตนา
+    if (!contractId && req.query.scoped === '1') {
+      const { contractIds } = await requestScope(req);
+      return res.json(await listEmployeesFull({ contractIds }));
+    }
     return res.json(await listEmployeesFull({ contractId }));
   }
   res.json(await listEmployeesBasic());
