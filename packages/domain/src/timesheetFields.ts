@@ -310,6 +310,13 @@ export const TIMESHEET_DETAIL_FIELDS: TimesheetFieldSpec[] = [
     description: 'Overtime approval state when the source shows it as its own column.',
     type: 'text', examples: ['Approved', 'Pending', 'Yes', 'No'],
   },
+  {
+    key: 'adjustmentValue', name: 'Adjustment_Value', label: 'ค่าปรับปรุง (รายวัน)',
+    description:
+      'Numeric adjustment printed on this daily row when the source has an Adjust or Adjustment column. '
+      + 'For an adjustment stated at month/period level use Total_OT_Adjust instead — they are different fields.',
+    type: 'number', examples: ['0', '0.5', '-1'],
+  },
 ];
 
 /**

@@ -108,7 +108,7 @@ test('ฟิลด์ระดับเอกสารรวมครบทั�
   assert.ok(headerField('employeeSignatureName'), 'ฟิลด์ลายเซ็นต้องหาเจอผ่าน headerField()');
 });
 
-test('prompt กลางมีกติกาที่เป็นหัวใจของ V4 ครบ — ถ้าใครตัดทิ้งต้องรู้ตัว', () => {
+test('prompt กลางมีกติกาที่เป็นหัวใจของ V4 ครบ — V5 ยกมาทั้งหมด ถ้าใครตัดทิ้งต้องรู้ตัว', () => {
   for (const rule of [
     'Never use the field name Total_Hours',
     'Do not use the field name Site',
@@ -120,6 +120,20 @@ test('prompt กลางมีกติกาที่เป็นหัวใ�
   }
 });
 
+/* กติกาที่ V5 เพิ่มเข้ามา (28 ก.ย. 69) — ล็อกไว้ด้วยเหตุผลเดียวกับชุด V4 ด้านบน: ทั้งหมดเป็นข้อที่ถ้า
+   หายไปแล้วผลอ่านจะเพี้ยนแบบเงียบๆ ไม่ใช่พังให้เห็น โดยเฉพาะแมนเดย์ที่ไปโผล่เป็นจำนวนวันทำงานแทน */
+test('prompt กลางมีกติกาที่ V5 เพิ่มเข้ามาครบ', () => {
+  for (const rule of [
+    'Total_Base_Man_Day is NOT the same as Total_Work_Days',
+    'Do not assume the first number is Monthly_Total_Hours',
+    'Additional_Hours unless the source clearly labels it as OT',
+    'Work_Type=Working and Work_Location=WFH',
+    'Never create a new field just because a source uses a different label',
+  ]) {
+    assert.ok(TIMESHEET_MASTER_PROMPT.includes(rule), `prompt กลางขาดกติกา V5: "${rule}"`);
+  }
+});
+
 test('ชื่อฟิลด์ที่ prompt อ้างถึง ต้องมีอยู่จริงในสารบัญ ไม่งั้นสั่งให้อ่านลงช่องที่ไม่มี', () => {
   const names = new Set(ALL_FIELDS.map((f) => f.name));
   // ชื่อที่ prompt ระบุเป็นปลายทางของการ map (ฝั่งขวาของลูกศร) ต้องมีอยู่จริงทุกตัว
@@ -128,6 +142,16 @@ test('ชื่อฟิลด์ที่ prompt อ้างถึง ต้�
     'Monthly_Total_Hours', 'Total_Normal_Hours', 'Total_Leave_Sick_Days', 'Total_Leave_Days',
     'Total_Sick_Days', 'Daily_Site', 'Document_Site', 'Work_Location', 'Approved_By_Name',
     'Employee_Signature_Name', 'Job_Description',
+    // V5 — ฟิลด์ที่สเปกใหม่สั่ง map ลงตรงๆ เพิ่มจากชุด V4
+    'Vendor_Name', 'Client_Name', 'Project_Name', 'Employee_Name', 'Position', 'Role',
+    'Project_Team', 'Supervisor_Name', 'Project_Manager_Name', 'Month_Year', 'Reporting_Period',
+    'Document_Number', 'Row_Number', 'Date', 'Day', 'Project', 'Work_Type', 'Break_Hours',
+    'OT_In', 'OT_Out', 'OT_Break_Hours', 'Additional_Hours', 'Activity', 'PR_Link', 'Ticket_ID',
+    'Leave_Type', 'Leave_Days', 'Remarks', 'Status', 'OT_Approval', 'Adjustment_Value',
+    'Total_Work_Days', 'Total_Weekend_Days', 'Total_Holiday_Days', 'Total_Base_Man_Day',
+    'Total_Additional_Man_Day', 'Total_Additional_Hours', 'Total_OT_Adjust',
+    'Employee_Signature_Date', 'Project_Manager_Signature_Name', 'Project_Manager_Signature_Date',
+    'Authorized_Signature_Name', 'Issued_By_Name', 'Issued_Date', 'Approved_Date', 'Signature_Status',
   ]) {
     assert.ok(names.has(target), `prompt อ้างถึงฟิลด์ "${target}" แต่สารบัญไม่มี`);
   }
