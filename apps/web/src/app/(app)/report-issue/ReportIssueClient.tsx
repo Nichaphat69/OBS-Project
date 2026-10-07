@@ -1,12 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Card, Loading, StatusPill, Tag } from '../../../components/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Loading } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useToast, usePdfPreview } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
+import '../../../components/emp.css';
 
 const MAX_ATTACHMENTS = 5;
+const MAX_DESC = 1000;
+
+const CATEGORY_HINT: Record<string, string> = {
+  bug: 'ระบบใช้งานไม่ได้ / ขึ้น error',
+  manday: 'ตัวเลขวันทำงานไม่ตรง',
+  timesheet: 'ส่ง/แก้ไฟล์ Timesheet ไม่ได้',
+  suggestion: 'อยากให้ปรับปรุงอะไรเพิ่ม',
+};
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -130,82 +139,105 @@ export default function ReportIssueClient() {
     }
   }
 
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+
   return (
-    <>
-      <Card title={tx('แจ้งปัญหาใหม่')}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+    <div className="ep ep-split">
+      <div className="ep-panel">
+        <div className={`ep-step${category ? ' done' : ''}`}>
+          <span className="ep-num">{category ? <Icon name="chk" className="sm" /> : 1}</span>
+          <div>
+            <h4>{tx('เรื่องอะไร')}</h4>
+            <p>{tx('เลือกหมวดที่ใกล้เคียงที่สุด')}</p>
+          </div>
+        </div>
+        <div className="ri-cats">
           {Object.entries(categories).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={`btn sm${category === key ? ' pri' : ''}`}
-              onClick={() => setCategory(key)}
-            >
-              <Icon name={CATEGORY_ICON[key] ?? 'info'} className="sm" /> {tx(label)}
+            <button key={key} type="button" className={`ep-opt${category === key ? ' on' : ''}`} onClick={() => { setCategory(key); setError(null); }}>
+              <span className="ic"><Icon name={CATEGORY_ICON[key] ?? 'info'} className="sm" /></span>
+              <span>
+                <b>{tx(label)}</b>
+                {CATEGORY_HINT[key] && <span className="s">{tx(CATEGORY_HINT[key])}</span>}
+              </span>
             </button>
           ))}
         </div>
 
+        <div className={`ep-step${description.trim() ? ' done' : ''}`}>
+          <span className="ep-num">2</span>
+          <div>
+            <h4>{tx('เล่าให้ฟังหน่อย')}</h4>
+            <p>{tx('เกิดอะไรขึ้น ทำอะไรอยู่ตอนนั้น ยิ่งละเอียดยิ่งแก้ไว')}</p>
+          </div>
+        </div>
         <textarea
+          className="ri-ta"
           value={description}
+          maxLength={MAX_DESC}
           onChange={(e) => setDescription(e.target.value)}
           placeholder={tx('อธิบายปัญหาที่เจอ หรือสิ่งที่อยากเสนอแนะ...')}
-          rows={5}
-          style={{ width: '100%', resize: 'vertical' }}
         />
+        <div className="ri-meta">
+          <span />
+          <span>{description.length}/{MAX_DESC}</span>
+        </div>
 
-        <div style={{ marginTop: 14 }}>
-          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => pickFiles(e.target.files)} />
-          <button type="button" className="btn sm ghost" onClick={() => fileRef.current?.click()} disabled={files.length >= MAX_ATTACHMENTS}>
-            <Icon name="up" className="sm" /> {tx('แนบรูป')} ({files.length}/{MAX_ATTACHMENTS})
-          </button>
-          {files.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-              {files.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 12px', border: '1px solid var(--hair)', borderRadius: 'var(--m3-shape-md)' }}>
-                  <span className="sub">{f.name} · {fileSizeLabel(f.size)}</span>
-                  <button type="button" className="btn icon sm ghost" onClick={() => removeFile(i)} aria-label={tx('ลบไฟล์')}>
-                    <Icon name="x" className="sm" />
-                  </button>
-                </div>
-              ))}
+        <div className="ep-step">
+          <span className="ep-num">3</span>
+          <div>
+            <h4>{tx('แนบรูป (ไม่บังคับ)')}</h4>
+            <p>{tx('แนบได้ไม่เกิน {n} รูปต่อครั้ง').replace('{n}', String(MAX_ATTACHMENTS))}</p>
+          </div>
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { pickFiles(e.target.files); e.target.value = ''; }} />
+        <div className="ri-thumbs" style={{ marginTop: 0 }}>
+          {files.map((f, i) => (
+            <div key={`${f.name}-${i}`} className="ri-th" title={`${f.name} · ${fileSizeLabel(f.size)}`}>
+              <img src={previews[i]} alt={f.name} />
+              <button type="button" onClick={() => removeFile(i)} aria-label={tx('ลบไฟล์')}>
+                <Icon name="x" className="sm" />
+              </button>
             </div>
+          ))}
+          {files.length < MAX_ATTACHMENTS && (
+            <button type="button" className="ri-add" onClick={() => fileRef.current?.click()}>
+              <Icon name="up" />
+              {tx('แนบรูป')} ({files.length}/{MAX_ATTACHMENTS})
+            </button>
           )}
         </div>
 
-        {error && <div style={{ color: 'var(--cr)', marginTop: 12 }}>{error}</div>}
+        {error && <div className="ep-err">{error}</div>}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
-          <button className="btn pri" disabled={submitting} onClick={submit}>
-            {submitting ? tx('กำลังส่ง…') : tx('ส่งเรื่อง')}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+          <button className="btn pri lg" disabled={submitting} onClick={submit}>
+            <Icon name="send" /> {submitting ? tx('กำลังส่ง…') : tx('ส่งเรื่อง')}
           </button>
         </div>
-      </Card>
+      </div>
 
-      <Card title={tx('เรื่องที่เคยแจ้งไปแล้ว')} flush>
-        {tickets === null ? (
-          <Loading rows={3} />
-        ) : tickets.length === 0 ? (
-          <div className="sub" style={{ padding: 24, textAlign: 'center' }}>{tx('ยังไม่เคยแจ้งปัญหาไว้เลย')}</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {tickets.map((t) => (
-              <div key={t.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '16px 24px', borderBottom: '1px solid var(--hair)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span className="docid">#{t.id}</span>
-                  <Tag tone="mu">{tx(t.categoryLabel)}</Tag>
-                  {t.status === 'resolved' ? (
-                    <StatusPill tone="ok">{tx('แก้แล้ว')}</StatusPill>
-                  ) : (
-                    <StatusPill tone="wn">{tx('รอดำเนินการ')}</StatusPill>
-                  )}
-                  <span className="sub">{formatDateTime(t.createdAt)}</span>
-                </div>
-                <div>{t.description}</div>
-                {t.attachments.length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {t.attachments.map((a) => (
-                      <a
+      <aside className="ep-side">
+        <div className="ep-panel ri-hist">
+          <h4>{tx('เรื่องที่เคยแจ้งไปแล้ว')}</h4>
+          {tickets === null ? (
+            <Loading rows={3} />
+          ) : tickets.length === 0 ? (
+            <div className="ri-empty">{tx('ยังไม่เคยแจ้งปัญหาไว้เลย')}</div>
+          ) : (
+            <ul className="ri-tl">
+              {tickets.map((t) => (
+                <li key={t.id} className={`ri-ti${t.status === 'resolved' ? ' ok' : ''}`}>
+                  <div className="ri-th1">
+                    <b>#{t.id} · {tx(t.categoryLabel)}</b>
+                    <span className="ri-st">{t.status === 'resolved' ? tx('แก้แล้ว') : tx('รอดำเนินการ')}</span>
+                    <span>{formatDateTime(t.createdAt)}</span>
+                  </div>
+                  <p className="ri-desc">{t.description}</p>
+                  {t.attachments.length > 0 && (
+                    <div className="ri-att">
+                      {t.attachments.map((a) => (
+                        <a
                           key={a.id}
                           href={`/api/support-tickets/attachments/${a.id}`}
                           target="_blank"
@@ -216,20 +248,17 @@ export default function ReportIssueClient() {
                             openPdfPreview(`/api/support-tickets/attachments/${a.id}`, a.fileName);
                           }}
                         >
-                        <img
-                          src={`/api/support-tickets/attachments/${a.id}`}
-                          alt={a.fileName}
-                          style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 'var(--m3-shape-sm)', border: '1px solid var(--hair)' }}
-                        />
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </>
+                          <img src={`/api/support-tickets/attachments/${a.id}`} alt={a.fileName} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+    </div>
   );
 }

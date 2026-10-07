@@ -9,6 +9,7 @@ import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPick
 import { QueueStatusCard } from '../../../components/QueueStatusCard';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
 import { readJson } from '../../../lib/fetchJson';
+import '../../../components/emp.css';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -314,40 +315,34 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   /* หน้ายืนยันหลังส่งสำเร็จ (โหมดพนักงาน) — ทวนให้ชัดว่าส่งของรอบไหนไปแล้ว */
   if (submitOnly && submitted) {
     return (
-      <Card title={tx(submitted.method === 'self_obs' ? 'ส่ง Timesheet แล้ว' : submitted.method === 'self_email' ? 'บันทึกการส่งผ่าน Email เรียบร้อย' : 'มอบหมายผู้ดูแลระบบเรียบร้อย')}>
-        <div className="subdone">
-          <span className="ic">
+      <div className="ep">
+        <div className="ep-done">
+          <div className="big">
             <Icon name="chk" className="lg" />
-          </span>
-          <div className="tx">
-            <b>{tx(submitted.method === 'self_obs' ? 'ส่งเรียบร้อยแล้ว' : 'บันทึกเรียบร้อยแล้ว')}</b>
-            <div className="sub">
-              {tx('รอบบิล')} {formatPeriodLabel(submitted.periodLabel)} · {submitted.customerName} · {submitted.projectName}
-            </div>
-            {submitted.method === 'self_obs' && (
-              <>
-                <div className="sub">{submitted.fileName}</div>
-                <div className="sub">{tx('ผู้ดูแลจะตรวจไฟล์นี้ต่อ ติดตามสถานะได้ที่หน้า "บันทึกการส่ง"')}</div>
-              </>
-            )}
-            {submitted.method === 'self_email' && (
-              <div className="sub">
-                {tx('ฝ่ายบัญชีจะกรอกเข้าระบบเมื่อได้รับอีเมล')}
-                {submitted.emailTargets?.length ? ` · ${tx('อีเมลปลายทาง')}: ${submitted.emailTargets.join(', ')}` : ''}
-              </div>
-            )}
-            {submitted.method === 'proxy_email' && (
-              <div className="sub">{tx('ระบบได้ส่งการแจ้งเตือนไปยังฝ่ายดูแล เพื่อดำเนินการส่งและตรวจ Timesheet แทนคุณเรียบร้อยแล้ว')}</div>
-            )}
-            {submitted.method !== 'self_obs' && <div className="sub">{tx('ถ้าเชื่อมต่อ LINE ไว้ จะได้รับข้อความยืนยันทางไลน์ด้วย')}</div>}
           </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <button className="btn" onClick={() => { setSubmitted(null); setMethod('self_obs'); }}>
+          <h3>{tx(submitted.method === 'self_obs' ? 'ส่ง Timesheet เรียบร้อยแล้ว' : submitted.method === 'self_email' ? 'บันทึกการส่งผ่าน Email เรียบร้อย' : 'มอบหมายผู้ดูแลระบบเรียบร้อย')}</h3>
+          <p>
+            {tx('รอบบิล')} {formatPeriodLabel(submitted.periodLabel)} · {submitted.customerName} · {submitted.projectName}
+          </p>
+          {submitted.method === 'self_obs' && (
+            <>
+              <p><b>{submitted.fileName}</b></p>
+              <p>{tx('ผู้ดูแลจะตรวจไฟล์นี้ต่อ ติดตามสถานะได้ที่หน้า "บันทึกการส่ง"')}</p>
+            </>
+          )}
+          {submitted.method === 'self_email' && (
+            <p>
+              {tx('ฝ่ายบัญชีจะกรอกเข้าระบบเมื่อได้รับอีเมล')}
+              {submitted.emailTargets?.length ? ` · ${tx('อีเมลปลายทาง')}: ${submitted.emailTargets.join(', ')}` : ''}
+            </p>
+          )}
+          {submitted.method === 'proxy_email' && <p>{tx('ระบบได้ส่งการแจ้งเตือนไปยังฝ่ายดูแล เพื่อดำเนินการส่งและตรวจ Timesheet แทนคุณเรียบร้อยแล้ว')}</p>}
+          {submitted.method !== 'self_obs' && <p>{tx('ถ้าเชื่อมต่อ LINE ไว้ จะได้รับข้อความยืนยันทางไลน์ด้วย')}</p>}
+          <button className="btn pri" onClick={() => { setSubmitted(null); setMethod('self_obs'); }}>
             {tx('ส่งรอบอื่น')}
           </button>
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -381,6 +376,164 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
   // ไม่มีรอบบิลให้ส่งเลย (โหลดเสร็จแล้วและว่าง) → ซ่อนช่องวิธีส่ง/ช่องวางไฟล์/ปุ่มส่งทั้งหมด เหลือแค่ข้อความบอก — เดิมยังโชว์ครบ
   // ทั้งที่ส่งอะไรไม่ได้ (QA SUBMETH-007, 1 ต.ค. 69)
   const noCycles = submitOnly && options !== null && !optionsError && options.length === 0;
+
+  /* โหมดพนักงาน — ฟอร์มสามขั้น (รอบบิล → วิธีส่ง → ไฟล์) + การ์ดสรุป/ปุ่มส่งปักอยู่ด้านขวา (7 ต.ค. 69 ปรับดีไซน์)
+     ใช้ state/ฟังก์ชันชุดเดิมทั้งหมด เปลี่ยนแค่หน้าตา */
+  if (submitOnly) {
+    const accept = '.pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.tif,.tiff,.webp';
+    const methodInfo = SUBMIT_METHODS.find((m) => m.value === method)!;
+    const METHOD_ICON: Record<SubmitMethod, string> = { self_obs: 'up', self_email: 'mail', proxy_email: 'send' };
+    const ready = Boolean(selected) && (!needsFile || files.length > 0);
+    const file = files[0] ?? null;
+    return (
+      <div className="ep">
+        <input ref={fileRef} type="file" accept={accept} hidden onChange={(e) => { pickFiles(e.target.files); e.target.value = ''; }} />
+        {optionsError ? (
+          <div className="ep-err">{tx('โหลดรอบบิลไม่สำเร็จ ลองรีเฟรชหน้านี้')}</div>
+        ) : options === null ? (
+          <div className="ep-panel sub">{tx('กำลังโหลด…')}</div>
+        ) : noCycles ? (
+          <div className="ep-done">
+            <div className="big"><Icon name="chk" className="lg" /></div>
+            <h3>{tx('ตอนนี้ไม่มีรอบบิลที่ต้องส่ง')}</h3>
+            <p>{tx('ส่งครบทุกรอบที่ถึงกำหนดแล้ว')}</p>
+          </div>
+        ) : (
+          <div className="ep-split">
+            <div className="ep-panel">
+              <div className={`ep-step${selected ? ' done' : ''}`}>
+                <span className="ep-num">{selected ? <Icon name="chk" className="sm" /> : 1}</span>
+                <div>
+                  <h4>{tx('รอบบิลที่จะส่ง')}</h4>
+                  <p>{tx('เลือกเดือนที่ไฟล์นี้เป็นของ')}</p>
+                </div>
+              </div>
+              <div className="ep-opts">
+                {options.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    className={`ep-opt${selectedKey === o.key ? ' on' : ''}`}
+                    disabled={processing}
+                    onClick={() => { setSelectedKey(o.key); setError(null); }}
+                  >
+                    <span className="ic"><Icon name="file" className="sm" /></span>
+                    <span>
+                      <b>{formatPeriod(o.period)}</b>
+                      <span className="s">{o.customerName}</span>
+                      {o.rejected ? (
+                        <span className="tg">{tx('ถูกตีกลับ ส่งใหม่')}</span>
+                      ) : o.declaredMethod ? (
+                        <span className="tg m">{tx('แจ้งไว้แล้ว')}: {tx(METHOD_SHORT[o.declaredMethod] ?? o.declaredMethod)}</span>
+                      ) : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="ep-step">
+                <span className="ep-num">2</span>
+                <div>
+                  <h4>{tx('วิธีส่ง')}</h4>
+                  <p>{tx(methodInfo.hint)}</p>
+                </div>
+              </div>
+              <div className="ep-opts">
+                {SUBMIT_METHODS.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    className={`ep-opt${method === m.value ? ' on' : ''}`}
+                    disabled={processing}
+                    onClick={() => { setMethod(m.value); setError(null); }}
+                  >
+                    <span className="ic"><Icon name={METHOD_ICON[m.value]} className="sm" /></span>
+                    <span>
+                      <b>{tx(m.label)}</b>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className={`ep-step${needsFile && file ? ' done' : ''}`}>
+                <span className="ep-num">3</span>
+                <div>
+                  <h4>{tx(needsFile ? 'ไฟล์ Timesheet' : 'ยืนยันการส่ง')}</h4>
+                  <p>{tx(needsFile ? 'PDF, Excel, CSV หรือภาพสแกน — ทีละ 1 ไฟล์' : 'ไม่ต้องแนบไฟล์ในขั้นนี้')}</p>
+                </div>
+              </div>
+              {needsFile ? (
+                file ? (
+                  <div className="ep-file">
+                    <span className="ic"><Icon name="file" /></span>
+                    <div className="nm">
+                      <button type="button" title={tx('เปิดดูไฟล์นี้')} onClick={() => previewLocalFile(file)}>{file.name}</button>
+                      <span>{fileSizeLabel(file.size)}</span>
+                    </div>
+                    <button type="button" className="btn sm" onClick={() => fileRef.current?.click()} disabled={processing}>{tx('เปลี่ยนไฟล์')}</button>
+                    <button type="button" className="btn sm icon dgr" onClick={() => removeFile(0)} disabled={processing} title={tx('ลบไฟล์นี้')} aria-label={tx('ลบ')}>
+                      <Icon name="x" className="sm" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`ep-drop${dragOver ? ' over' : ''}`}
+                    onClick={() => fileRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={onDrop}
+                  >
+                    <span className="ic"><Icon name="up" /></span>
+                    <b>{tx('ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์')}</b>
+                    <span>PDF · Excel · CSV · JPG · PNG</span>
+                  </div>
+                )
+              ) : (
+                <div className="ep-note">{tx(methodInfo.hint)}</div>
+              )}
+              {error && <div className="ep-err">{error}</div>}
+            </div>
+
+            <aside className="ep-side">
+              <div className="ep-sum">
+                <h4>{tx('สรุปก่อนส่ง')}</h4>
+                <dl>
+                  <div>
+                    <dt>{tx('รอบบิล')}</dt>
+                    <dd className={selected ? '' : 'mt'}>{selected ? `${formatPeriod(selected.period)} · ${selected.customerName}` : tx('ยังไม่ได้เลือก')}</dd>
+                  </div>
+                  <div>
+                    <dt>{tx('วิธีส่ง')}</dt>
+                    <dd>{tx(methodInfo.label)}</dd>
+                  </div>
+                  {needsFile && (
+                    <div>
+                      <dt>{tx('ไฟล์')}</dt>
+                      <dd className={file ? '' : 'mt'}>{file ? file.name : tx('ยังไม่ได้เลือก')}</dd>
+                    </div>
+                  )}
+                </dl>
+                <button className="btn" disabled={processing || !ready} onClick={needsFile ? doSubmit : doDeclare}>
+                  <Icon name="send" />{' '}
+                  {processing
+                    ? tx('กำลังส่ง…')
+                    : method === 'self_email'
+                      ? tx('ยืนยันว่าส่งผ่าน Email แล้ว')
+                      : method === 'proxy_email'
+                        ? tx('แจ้งให้ผู้ดูแลเป็นคนส่ง')
+                        : tx('ส่ง Timesheet นี้')}
+                </button>
+              </div>
+              <div className="ep-tip">
+                <b>{tx('ส่งแล้วเกิดอะไรขึ้น')}</b>
+                {tx('ผู้ดูแลจะตรวจ Manday จากไฟล์ของคุณ แล้วอนุมัติวางบิลต่อ ดูสถานะได้ที่หน้า "ความคืบหน้าของฉัน"')}
+              </div>
+            </aside>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <Card

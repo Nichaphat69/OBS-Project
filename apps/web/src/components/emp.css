@@ -1,0 +1,188 @@
+/* หน้าฝั่งพนักงาน (ความคืบหน้าของฉัน · ส่ง Timesheet · แจ้งปัญหา) — ดีไซน์ใหม่ 7 ต.ค. 69
+   ⚠️ ห้ามไล่สี (gradient) — เจ้าของระบบสั่งว่า "ไม่เอาไล่สี ดูเป็น AI" ใช้สีทึบล้วน พื้นขาว
+   ความทันสมัยมาจากการจัดวาง ตัวเลขใหญ่ การ์ดมน และเส้นความคืบหน้าแบบแบ่งช่อง
+   คลาสทั้งหมดขึ้นต้น ep- และ mp- ไม่แตะ globals.css */
+
+.ep {
+  --ep-ink: #14202f;
+  --ep-line: #e6e9ef;
+  --ep-soft: #f6f8fb;
+  --ep-blue: #0a78d4;
+  --ep-blue-t: #e9f3fc;
+  --ep-amber: #d97706;
+  --ep-amber-t: #fff4e0;
+  --ep-green: #12975a;
+  --ep-green-t: #e8f7ee;
+  --ep-red: #dc2626;
+  --ep-red-t: #fef3f2;
+  --ep-mut: #77839a;
+}
+
+/* ───────── ความคืบหน้าของฉัน ───────── */
+.mp-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; margin-bottom: 28px; }
+.mp-lead {
+  background: var(--ep-ink); color: #fff; border-radius: 28px; padding: 30px 32px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 22px; min-height: 196px;
+  position: relative; overflow: hidden;
+}
+.mp-lead.ok { background: #0f5b3a; }
+.mp-lead::after { /* วงกลมทึบจาง ๆ เป็นลายมุม ไม่ใช่ไล่สี */
+  content: ''; position: absolute; right: -54px; top: -54px; width: 190px; height: 190px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+}
+.mp-lead small { font-size: 12.5px; letter-spacing: 0.04em; opacity: 0.7; font-weight: 600; }
+.mp-lead h2 { margin: 6px 0 0; font-size: 30px; line-height: 1.2; font-weight: 700; color: #fff; }
+.mp-lead h2 em { font-style: normal; color: #ffc46b; }
+.mp-lead.ok h2 em { color: #8ff0b8; }
+.mp-lead .btn { align-self: flex-start; background: #fff; color: var(--ep-ink); border: 0; font-weight: 700; position: relative; z-index: 1; }
+.mp-lead .btn:hover { background: #ffe2ad; }
+.mp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.mp-stat { border: 1px solid var(--ep-line); border-radius: 22px; background: #fff; padding: 18px 18px 16px; display: flex; flex-direction: column; justify-content: space-between; }
+.mp-stat b { font-size: 38px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.mp-stat span { font-size: 12.5px; color: var(--ep-mut); font-weight: 600; margin-top: 10px; }
+.mp-stat i { width: 28px; height: 6px; border-radius: 3px; display: block; margin-bottom: 18px; }
+.mp-stat.a i { background: var(--ep-amber); } .mp-stat.a b { color: var(--ep-amber); }
+.mp-stat.w i { background: var(--ep-blue); } .mp-stat.w b { color: var(--ep-blue); }
+.mp-stat.d i { background: var(--ep-green); } .mp-stat.d b { color: var(--ep-green); }
+
+.mp-co { margin-bottom: 30px; }
+.mp-cohead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0 2px 14px; }
+.mp-cohead h3 { margin: 0; font-size: 18px; font-weight: 700; color: var(--ep-ink); }
+.mp-cohead span { font-size: 13px; color: var(--ep-mut); }
+.mp-po { margin-left: auto; font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--ep-soft); color: #41506a; border: 1px solid var(--ep-line); }
+
+.mp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px; }
+.mp-card {
+  --c: var(--ep-blue); --t: var(--ep-blue-t);
+  background: #fff; border: 1px solid var(--ep-line); border-radius: 22px; padding: 20px 20px 18px;
+  display: flex; flex-direction: column; gap: 16px; position: relative;
+  transition: transform 0.25s var(--ease, ease), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.mp-card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px -18px rgba(16, 24, 40, 0.3); }
+.mp-card.action { --c: var(--ep-amber); --t: var(--ep-amber-t); border: 1.5px solid #f0b960; }
+.mp-card.waiting { --c: var(--ep-blue); --t: var(--ep-blue-t); }
+.mp-card.done { --c: var(--ep-green); --t: var(--ep-green-t); }
+.mp-card.future { --c: #a2aebf; --t: #f1f3f7; background: var(--ep-soft); }
+.mp-ctop { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.mp-month { font-size: 20px; font-weight: 700; color: var(--ep-ink); line-height: 1.2; }
+.mp-sub { display: block; font-size: 12.5px; color: var(--ep-mut); margin-top: 4px; }
+.mp-chip { font-size: 12px; font-weight: 700; padding: 5px 11px; border-radius: 999px; background: var(--t); color: var(--c); white-space: nowrap; }
+.mp-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.mp-seg { display: flex; flex-direction: column; gap: 7px; }
+.mp-seg i { height: 7px; border-radius: 4px; background: #e8ecf2; display: block; }
+.mp-seg.s-dn i { background: var(--ep-green); }
+.mp-seg.s-cu i { background: var(--c); }
+.mp-seg.s-wn i { background: var(--ep-red); }
+.mp-seg span { font-size: 11.5px; color: var(--ep-mut); font-weight: 600; line-height: 1.25; }
+.mp-seg.s-dn span { color: var(--ep-green); }
+.mp-seg.s-cu span { color: var(--ink, #14202f); }
+.mp-seg.s-wn span { color: var(--ep-red); }
+.mp-card .btn { width: 100%; justify-content: center; }
+.mp-future { margin-top: 14px; }
+.mp-futuretoggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #41506a; background: var(--ep-soft); border: 1px solid var(--ep-line); border-radius: 999px; padding: 8px 16px; cursor: pointer; margin-bottom: 14px; }
+.mp-futuretoggle:hover { background: #edf0f5; }
+
+/* ───────── แจ้งปัญหา / ส่ง Timesheet: โครงสองคอลัมน์ ───────── */
+.ep-split { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+.ep-panel { background: #fff; border: 1px solid var(--ep-line); border-radius: 26px; padding: 26px 28px; }
+.ep-panel + .ep-panel { margin-top: 16px; }
+.ep-side { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 16px; }
+.ep-step { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+.ep-step:not(:first-child) { margin-top: 30px; padding-top: 28px; border-top: 1px dashed var(--ep-line); }
+.ep-num { flex: none; width: 32px; height: 32px; border-radius: 11px; background: var(--ep-ink); color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+.ep-step.done .ep-num { background: var(--ep-green); }
+.ep-step h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ep-ink); }
+.ep-step p { margin: 3px 0 0; font-size: 13px; color: var(--ep-mut); }
+
+/* การ์ดตัวเลือก (รอบบิล / วิธีส่ง / หมวดปัญหา) */
+.ep-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.ep-opt {
+  text-align: left; cursor: pointer; font: inherit; color: inherit; background: #fff;
+  border: 1.5px solid var(--ep-line); border-radius: 18px; padding: 15px 16px; display: flex; gap: 12px; align-items: flex-start;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+.ep-opt:hover:not(:disabled) { border-color: #b9c4d4; transform: translateY(-1px); }
+.ep-opt:disabled { opacity: 0.55; cursor: not-allowed; }
+.ep-opt.on { border-color: var(--ep-blue); background: var(--ep-blue-t); }
+.ep-opt .ic { flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--ep-soft); color: #41506a; display: grid; place-items: center; }
+.ep-opt.on .ic { background: var(--ep-blue); color: #fff; }
+.ep-opt b { display: block; font-size: 14.5px; font-weight: 700; color: var(--ep-ink); }
+.ep-opt span.s { display: block; font-size: 12.5px; color: var(--ep-mut); margin-top: 3px; line-height: 1.4; }
+.ep-opt .tg { display: inline-block; margin-top: 7px; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--ep-red-t); color: var(--ep-red); }
+.ep-opt .tg.m { background: var(--ep-amber-t); color: var(--ep-amber); }
+
+.ep-drop {
+  border: 2px dashed #c6cfdc; border-radius: 22px; background: var(--ep-soft); padding: 34px 20px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; transition: border-color 0.18s ease, background 0.18s ease;
+}
+.ep-drop:hover, .ep-drop.over { border-color: var(--ep-blue); background: var(--ep-blue-t); }
+.ep-drop .ic { width: 54px; height: 54px; border-radius: 18px; background: #fff; border: 1px solid var(--ep-line); display: grid; place-items: center; color: var(--ep-blue); }
+.ep-drop b { font-size: 15px; color: var(--ep-ink); }
+.ep-drop span { font-size: 12.5px; color: var(--ep-mut); }
+.ep-file { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1.5px solid #a6dcbd; background: var(--ep-green-t); border-radius: 18px; }
+.ep-file .ic { flex: none; width: 42px; height: 42px; border-radius: 13px; background: #fff; color: var(--ep-green); display: grid; place-items: center; }
+.ep-file .nm { min-width: 0; flex: 1; }
+.ep-file .nm button { display: block; max-width: 100%; text-align: left; font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ep-ink); }
+.ep-file .nm button:hover { text-decoration: underline; }
+.ep-file .nm span { font-size: 12.5px; color: var(--ep-mut); }
+.ep-note { border-radius: 16px; background: var(--ep-soft); padding: 14px 16px; font-size: 13px; color: #41506a; line-height: 1.55; }
+.ep-err { margin-top: 14px; padding: 12px 16px; border-radius: 14px; background: var(--ep-red-t); color: var(--ep-red); font-size: 13.5px; font-weight: 600; }
+
+/* การ์ดสรุปด้านขวา */
+.ep-sum { background: var(--ep-ink); color: #fff; border-radius: 26px; padding: 24px 24px 22px; }
+.ep-sum h4 { margin: 0 0 16px; font-size: 13px; letter-spacing: 0.05em; font-weight: 600; opacity: 0.65; }
+.ep-sum dl { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.ep-sum dt { font-size: 11.5px; opacity: 0.6; font-weight: 600; }
+.ep-sum dd { margin: 3px 0 0; font-size: 14.5px; font-weight: 600; word-break: break-word; }
+.ep-sum dd.mt { opacity: 0.4; font-weight: 400; }
+.ep-sum .btn { width: 100%; justify-content: center; margin-top: 22px; background: #fff; color: var(--ep-ink); border: 0; font-weight: 700; height: 48px; font-size: 15px; }
+.ep-sum .btn:hover:not(:disabled) { background: #ffe2ad; }
+.ep-sum .btn:disabled { background: rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.5); }
+.ep-tip { border: 1px solid var(--ep-line); border-radius: 22px; padding: 18px 20px; font-size: 13px; color: #41506a; line-height: 1.6; background: #fff; }
+.ep-tip b { display: block; color: var(--ep-ink); margin-bottom: 6px; font-size: 13.5px; }
+
+/* หน้าสำเร็จ */
+.ep-done { max-width: 620px; margin: 24px auto 0; text-align: center; background: #fff; border: 1px solid var(--ep-line); border-radius: 30px; padding: 40px 34px 32px; }
+.ep-done .big { width: 72px; height: 72px; border-radius: 50%; background: var(--ep-green); color: #fff; display: grid; place-items: center; margin: 0 auto 18px; }
+.ep-done h3 { margin: 0 0 6px; font-size: 22px; color: var(--ep-ink); }
+.ep-done p { margin: 4px 0; font-size: 13.5px; color: var(--ep-mut); }
+.ep-done .btn { margin-top: 22px; }
+
+/* ───────── แจ้งปัญหา ───────── */
+.ri-cats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.ri-ta { width: 100%; resize: vertical; min-height: 150px; border-radius: 18px; padding: 16px 18px; border: 1.5px solid var(--ep-line); background: #fff; font: inherit; font-size: 14.5px; line-height: 1.55; }
+.ri-ta:focus { outline: none; border-color: var(--ep-blue); box-shadow: 0 0 0 4px var(--ep-blue-t); }
+.ri-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--ep-mut); margin-top: 8px; }
+.ri-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 12px; }
+.ri-th { position: relative; aspect-ratio: 1; border-radius: 16px; overflow: hidden; border: 1px solid var(--ep-line); background: var(--ep-soft); }
+.ri-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ri-th button { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(20, 32, 47, 0.8); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.ri-add { aspect-ratio: 1; border: 2px dashed #c6cfdc; border-radius: 16px; background: var(--ep-soft); color: var(--ep-mut); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; }
+.ri-add:hover:not(:disabled) { border-color: var(--ep-blue); color: var(--ep-blue); background: var(--ep-blue-t); }
+.ri-add:disabled { opacity: 0.5; cursor: not-allowed; }
+.ri-hist h4 { margin: 0 0 4px; font-size: 16px; color: var(--ep-ink); }
+.ri-tl { list-style: none; margin: 16px 0 0; padding: 0 0 0 4px; }
+.ri-ti { position: relative; padding: 0 0 22px 26px; border-left: 2px solid var(--ep-line); margin-left: 6px; }
+.ri-ti:last-child { border-left-color: transparent; padding-bottom: 0; }
+.ri-ti::before { content: ''; position: absolute; left: -7px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--ep-amber); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ep-amber); }
+.ri-ti.ok::before { background: var(--ep-green); box-shadow: 0 0 0 1px var(--ep-green); }
+.ri-th1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--ep-mut); }
+.ri-th1 b { color: var(--ep-ink); font-size: 12.5px; }
+.ri-st { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--ep-amber-t); color: var(--ep-amber); }
+.ri-ti.ok .ri-st { background: var(--ep-green-t); color: var(--ep-green); }
+.ri-desc { margin: 7px 0 0; font-size: 14px; line-height: 1.5; color: var(--ep-ink); white-space: pre-wrap; word-break: break-word; }
+.ri-att { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+.ri-att img { width: 56px; height: 56px; object-fit: cover; border-radius: 12px; border: 1px solid var(--ep-line); display: block; }
+.ri-empty { text-align: center; padding: 26px 10px 8px; color: var(--ep-mut); font-size: 13.5px; }
+
+@media (max-width: 1100px) {
+  .mp-hero, .ep-split { grid-template-columns: 1fr; }
+  .ep-side { position: static; }
+}
+@media (max-width: 600px) {
+  .mp-stats { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .mp-stat { padding: 14px; } .mp-stat b { font-size: 28px; }
+  .mp-lead { padding: 24px; } .mp-lead h2 { font-size: 24px; }
+  .ep-panel { padding: 20px 18px; border-radius: 22px; }
+  .ri-cats { grid-template-columns: 1fr; }
+}

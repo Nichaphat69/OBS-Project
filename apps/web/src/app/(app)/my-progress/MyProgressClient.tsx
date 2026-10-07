@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Card, EmptyState, ErrorState, Loading, PageHeader, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
+import '../../../components/emp.css';
 
 interface EmployeeProgressPeriod {
   period: string;
@@ -123,53 +124,52 @@ function stepsOf(p: EmployeeProgressPeriod): Array<{ key: string; label: string;
 function PeriodRow({ p, bucket, contractId }: { p: EmployeeProgressPeriod; bucket: Bucket; contractId: string }) {
   const { tx, formatDateTime: dt, formatPeriodLabel } = useLang();
   const steps = stepsOf(p);
-  // ขั้นที่ค้างอยู่ตอนนี้ = ตัวแรกที่ยังไม่เสร็จ — เอามาเขียนเป็นประโยคเดียวใต้ชื่อเดือน แทนที่จะให้คนไล่
-  // อ่านสามแถวแล้วสรุปเอง
+  // ขั้นที่ค้างอยู่ตอนนี้ = ตัวแรกที่ยังไม่เสร็จ — เขียนเป็นป้ายสถานะเดียวบนการ์ด
   const current = steps.find((s) => s.state === 'cu' || s.state === 'wn') ?? null;
   const lastDone = [...steps].reverse().find((s) => s.state === 'dn' && s.at) ?? null;
+  const chip =
+    bucket === 'done'
+      ? tx('วางบิลแล้ว')
+      : bucket === 'future'
+        ? tx('ยังไม่ถึงรอบ')
+        : bucket === 'action'
+          ? tx(p.timesheetStatus === 'rejected' ? 'ถูกตีกลับ' : 'ยังไม่ได้ส่ง')
+          : tx(current ? current.label : p.timesheetStatusLabel);
 
   return (
-    <div className={`mypg-row ${bucket}`}>
-      <div className="mypg-when">
-        <span className="mypg-month">{formatPeriodLabel(p.periodLabel)}</span>
-        <span className="mypg-sub">
-          {bucket === 'future'
-            ? tx('ยังไม่ถึงกำหนดส่ง')
-            : p.invoiceNo
-              ? `${tx('เลขที่เอกสาร')} ${p.invoiceNo}`
-              : lastDone
-                ? `${tx(lastDone.label)} · ${dt(lastDone.at)}`
-                : tx(p.timesheetStatusLabel)}
-        </span>
+    <div className={`mp-card ${bucket}`}>
+      <div className="mp-ctop">
+        <div>
+          <span className="mp-month">{formatPeriodLabel(p.periodLabel)}</span>
+          <span className="mp-sub">
+            {bucket === 'future'
+              ? tx('ยังไม่ถึงกำหนดส่ง')
+              : p.invoiceNo
+                ? `${tx('เลขที่เอกสาร')} ${p.invoiceNo}`
+                : lastDone
+                  ? `${tx(lastDone.label)} · ${dt(lastDone.at)}`
+                  : tx(p.timesheetStatusLabel)}
+          </span>
+        </div>
+        <span className="mp-chip">{chip}</span>
       </div>
 
-      {/* ไทม์ไลน์ย่อ — จุดสีบอกว่าถึงขั้นไหนแล้ว hover ดูวันเวลาได้ ไม่กินพื้นที่เท่าสามแถวแบบเดิม */}
-      <div className="mypg-steps" aria-hidden={bucket === 'future'}>
-        {steps.map((s, i) => (
-          <span key={s.key} className="mypg-stepwrap">
-            {i > 0 && <span className={`mypg-bar ${steps[i - 1].state === 'dn' ? 'dn' : ''}`} />}
-            <span
-              className={`mypg-step ${bucket === 'future' ? 'off' : s.state}`}
-              title={`${tx(s.label)}${s.at ? ` · ${dt(s.at)}` : ''}`}
-            >
-              <Icon name={s.state === 'dn' ? 'chk' : s.icon} />
-            </span>
-          </span>
+      {/* เส้นความคืบหน้าสามช่อง (ส่ง → ตรวจ → วางบิล) สีทึบ — ช่องที่ค้างอยู่ใช้สีของกลุ่ม */}
+      <div className="mp-bar" aria-hidden={bucket === 'future'}>
+        {steps.map((s) => (
+          <div key={s.key} className={`mp-seg${bucket === 'future' ? '' : ` s-${s.state}`}`} title={`${tx(s.label)}${s.at ? ` · ${dt(s.at)}` : ''}`}>
+            <i />
+            <span>{tx(s.label)}</span>
+          </div>
         ))}
       </div>
 
-      <div className="mypg-act">
-        {bucket === 'action' ? (
-          // ติดรอบของแถวนี้ไปด้วย — หน้าอัปโหลดบังคับเลือกรอบก่อนส่ง (25 ก.ย. 69) กดจากแถวไหนก็เลือกรอบนั้นไว้ให้
-          <Link href={`/upload?contractId=${encodeURIComponent(contractId)}&period=${encodeURIComponent(p.period)}`} className="btn sm pri">
-            <Icon name="up" className="sm" /> {tx(p.timesheetStatus === 'rejected' ? 'ส่งใหม่อีกครั้ง' : 'ส่งไฟล์ Timesheet')}
-          </Link>
-        ) : (
-          <Tag tone={bucket === 'done' ? 'ok' : bucket === 'waiting' ? 'wn' : 'mu'}>
-            {bucket === 'done' ? tx('วางบิลแล้ว') : bucket === 'waiting' ? tx(current ? current.label : p.timesheetStatusLabel) : tx('ยังไม่ถึงรอบ')}
-          </Tag>
-        )}
-      </div>
+      {bucket === 'action' && (
+        // ติดรอบของแถวนี้ไปด้วย — หน้าอัปโหลดบังคับเลือกรอบก่อนส่ง (25 ก.ย. 69) กดจากการ์ดไหนก็เลือกรอบนั้นไว้ให้
+        <Link href={`/upload?contractId=${encodeURIComponent(contractId)}&period=${encodeURIComponent(p.period)}`} className="btn pri">
+          <Icon name="up" className="sm" /> {tx(p.timesheetStatus === 'rejected' ? 'ส่งใหม่อีกครั้ง' : 'ส่งไฟล์ Timesheet')}
+        </Link>
+      )}
     </div>
   );
 }
@@ -180,12 +180,18 @@ function FutureList({ periods, contractId }: { periods: EmployeeProgressPeriod[]
   const [open, setOpen] = useState(false);
   if (periods.length === 0) return null;
   return (
-    <div className="mypg-future">
-      <button type="button" className="mypg-futuretoggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+    <div className="mp-future">
+      <button type="button" className="mp-futuretoggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <Icon name="chev" className={open ? 'mypg-chev on' : 'mypg-chev'} />
         {tx('รอบที่ยังไม่ถึงกำหนด')} ({periods.length})
       </button>
-      {open && periods.map((p) => <PeriodRow key={p.period} p={p} bucket="future" contractId={contractId} />)}
+      {open && (
+        <div className="mp-grid">
+          {periods.map((p) => (
+            <PeriodRow key={p.period} p={p} bucket="future" contractId={contractId} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -198,7 +204,7 @@ function FutureList({ periods, contractId }: { periods: EmployeeProgressPeriod[]
  * อะไรต่อ ตอนนี้: หนึ่งรอบ = หนึ่งแถวเตี้ยๆ มีไทม์ไลน์ย่อบอกว่าค้างขั้นไหน รอบที่ต้องลงมือถูกดันขึ้นบนสุด
  * พร้อมปุ่มพาไปส่งไฟล์ (สิ่งเดียวที่พนักงานทำได้จากหน้านี้) ส่วนรอบที่ยังมาไม่ถึงถูกพับเก็บไว้ท้ายสุด */
 export default function MyProgressClient() {
-  const { tx } = useLang();
+  const { tx, formatPeriodLabel } = useLang();
   const [progress, setProgress] = useState<EmployeeProgress | null | undefined>(undefined);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -255,14 +261,14 @@ export default function MyProgressClient() {
     );
   }
 
-  // นับรอบที่ต้องลงมือข้ามทุกสัญญา — เอาไว้ขึ้นแถบสรุปบนสุด ให้รู้ตั้งแต่ยังไม่ทันเลื่อนจอว่ามีอะไรค้าง
-  const actionCount = progress.contracts.reduce(
-    (n, c) => n + c.periods.filter((p) => bucketOf(p, progress.currentPeriod) === 'action').length,
-    0,
-  );
+  // นับรอบทุกกลุ่มข้ามทุกสัญญา — ขึ้นหัวหน้าให้รู้ตั้งแต่ยังไม่ทันเลื่อนจอว่ามีอะไรค้าง
+  const counts = { action: 0, waiting: 0, done: 0, future: 0 };
+  for (const c of progress.contracts) for (const p of c.periods) counts[bucketOf(p, progress.currentPeriod)]++;
+  const actionCount = counts.action;
+  const firstName = progress.employee.nameTh.split(' ')[0];
 
   return (
-    <>
+    <div className="ep">
       <PageHeader
         eyebrow={tx('พนักงาน')}
         title={tx('ความคืบหน้าของฉัน')}
@@ -283,22 +289,33 @@ export default function MyProgressClient() {
       />
 
       {progress.contracts.length > 0 && (
-        <div className={actionCount > 0 ? 'mypg-banner act' : 'mypg-banner'}>
-          <Icon name={actionCount > 0 ? 'alt' : 'chk'} />
-          <span>
+        <div className="mp-hero">
+          <div className={actionCount > 0 ? 'mp-lead' : 'mp-lead ok'}>
+            <div>
+              <small>{tx('สวัสดี')} {firstName} · {formatPeriodLabel(progress.currentPeriodLabel)}</small>
+              <h2>
+                {actionCount > 0 ? (
+                  <>
+                    {tx('ต้องส่ง Timesheet')} <em>{actionCount}</em> {tx('รอบ')}
+                  </>
+                ) : (
+                  tx('ส่งครบทุกรอบที่ถึงกำหนดแล้ว')
+                )}
+              </h2>
+            </div>
             {actionCount > 0 ? (
-              <>
-                <b>{tx('ต้องส่ง Timesheet')} {actionCount} {tx('รอบ')}</b> — {tx('กดปุ่มในแถวที่ไฮไลต์ไว้เพื่อส่งไฟล์')}
-              </>
+              <Link href="/upload" className="btn">
+                <Icon name="up" className="sm" /> {tx('ส่งไฟล์ Timesheet')}
+              </Link>
             ) : (
-              <b>{tx('ส่งครบทุกรอบที่ถึงกำหนดแล้ว')}</b>
+              <span style={{ fontSize: 13, opacity: 0.8 }}>{tx('ไม่มีอะไรค้าง ติดตามสถานะรอบอื่นได้ด้านล่าง')}</span>
             )}
-          </span>
-          {actionCount > 0 && (
-            <Link href="/upload" className="btn sm pri">
-              <Icon name="up" className="sm" /> {tx('ส่งไฟล์ Timesheet')}
-            </Link>
-          )}
+          </div>
+          <div className="mp-stats">
+            <div className="mp-stat a"><i /><b>{counts.action}</b><span>{tx('ต้องส่ง')}</span></div>
+            <div className="mp-stat w"><i /><b>{counts.waiting}</b><span>{tx('รอตรวจ/วางบิล')}</span></div>
+            <div className="mp-stat d"><i /><b>{counts.done}</b><span>{tx('วางบิลแล้ว')}</span></div>
+          </div>
         </div>
       )}
 
@@ -308,17 +325,22 @@ export default function MyProgressClient() {
           const due = sorted.filter((p) => bucketOf(p, progress.currentPeriod) !== 'future');
           const future = sorted.filter((p) => bucketOf(p, progress.currentPeriod) === 'future');
           return (
-            <Card key={c.contractId} title={c.customerName} right={<span className="sub">{c.projectName}</span>} flush>
-              <div className="mypg-list">
-                {due.length === 0 && future.length === 0 && (
-                  <div className="mypg-empty">{tx('ยังไม่มีรอบบิลในสัญญานี้')}</div>
-                )}
-                {due.map((p) => (
-                  <PeriodRow key={p.period} p={p} bucket={bucketOf(p, progress.currentPeriod)} contractId={c.contractId} />
-                ))}
-                <FutureList periods={future} contractId={c.contractId} />
+            <section key={c.contractId} className="mp-co">
+              <div className="mp-cohead">
+                <h3>{c.customerName}</h3>
+                <span>{c.projectName}</span>
+                {c.poNo && <span className="mp-po">PO {c.poNo}</span>}
               </div>
-            </Card>
+              {due.length === 0 && future.length === 0 && <div className="ep-note">{tx('ยังไม่มีรอบบิลในสัญญานี้')}</div>}
+              {due.length > 0 && (
+                <div className="mp-grid">
+                  {due.map((p) => (
+                    <PeriodRow key={p.period} p={p} bucket={bucketOf(p, progress.currentPeriod)} contractId={c.contractId} />
+                  ))}
+                </div>
+              )}
+              <FutureList periods={future} contractId={c.contractId} />
+            </section>
           );
         })
       ) : (
@@ -326,6 +348,6 @@ export default function MyProgressClient() {
           <EmptyState label={tx('ยังไม่มีสัญญาที่ผูกกับตัวเอง')} />
         </Card>
       )}
-    </>
+    </div>
   );
 }
