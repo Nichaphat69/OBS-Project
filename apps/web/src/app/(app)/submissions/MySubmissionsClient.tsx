@@ -87,7 +87,7 @@ export default function MySubmissionsClient() {
                 <span>{r.customerName} · {r.projectName}</span>
               </div>
               <div className="ms-meta">
-                <span>{r.method ? tx(METHOD_LABEL[r.method] ?? r.method) : '—'}</span>
+                {r.method && <span>{tx(METHOD_LABEL[r.method] ?? r.method)}</span>}
                 <span>{r.methodChosenAt ? dt(r.methodChosenAt) : r.deferredAt ? `${tx('ขอเลื่อน')} · ${dt(r.deferredAt)}` : ''}</span>
               </div>
               <span className="mp-chip">{tx(STATUS_LABEL[r.status])}</span>
