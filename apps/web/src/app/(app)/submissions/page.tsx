@@ -2,6 +2,7 @@ import { requireUser } from '../../../lib/session';
 import { Card } from '../../../components/ui';
 import { TxPageHeader, TxEmptyState } from '../../../components/TxPageHeader';
 import SubmissionsClient from './SubmissionsClient';
+import MySubmissionsClient from './MySubmissionsClient';
 
 /**
  * "บันทึกการส่ง" — มาแทนหน้า "แจ้งปัญหา" เดิมในตำแหน่งเมนูเดียวกัน โดยแจ้งปัญหากลายเป็นแท็บข้างใน
@@ -24,6 +25,9 @@ export default async function SubmissionsPage() {
       </>
     );
   }
+
+  // พนักงานเห็นหน้าสั้นๆ ของตัวเองเท่านั้น ไม่ใช่ภาพรวมแบบ admin/บัญชี
+  if (user.role === 'user') return <MySubmissionsClient />;
 
   return <SubmissionsClient role={user.role} />;
 }
