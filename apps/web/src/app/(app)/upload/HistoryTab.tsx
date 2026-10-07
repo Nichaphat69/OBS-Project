@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Card, ErrorState, Loading, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { usePdfPreview, useToast } from '../../../components/Overlays';
+import { usePdfPreview, useToast, fileBadge } from '../../../components/Overlays';
 import ReviewCard, { formatModelLabel, type ReadResultShape } from './ReviewCard';
 import { useLang } from '../../../lib/language';
 import { useReadModelNameMap } from '../../../components/readModelNames';
@@ -151,7 +151,7 @@ function ReadDetail({ detail }: { detail: AiReadDetail }) {
         </span>
         {fileName && (
           <button type="button" className="file" onClick={() => openPdfPreview(`/api/ai-reads/${detail.id}/file`, fileName)}>
-            <span className="pd">PDF</span> {fileName}
+            <span className="pd">{fileBadge(fileName)}</span> {fileName}
           </button>
         )}
       </div>

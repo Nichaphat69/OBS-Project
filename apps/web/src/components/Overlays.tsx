@@ -15,11 +15,42 @@ import { Icon } from './Icon';
 import { Loading } from './ui';
 import { useLang } from '../lib/language';
 
-/** นามสกุลที่ต้อง parse เป็นตารางแทนการฝัง iframe — ตรงกับชนิดไฟล์ที่หน้าอัปโหลดรับ
- * (`accept` ใน UploadFileTab.tsx — PDF/Excel/CSV/ภาพสแกน ภาพกับ PDF แสดงด้วย iframe ของเบราว์เซอร์) เดาจากชื่อไฟล์ก่อน ถ้าไม่มีชื่อไฟล์ค่อยเดาจาก URL */
-function isSpreadsheetName(name: string | null): boolean {
-  const n = (name ?? '').toLowerCase();
-  return n.endsWith('.xlsx') || n.endsWith('.xls') || n.endsWith('.csv');
+type FileKind = 'pdf' | 'image' | 'sheet' | 'other' | 'unknown';
+
+const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'tif', 'tiff', 'webp', 'gif'];
+const SHEET_EXT = ['xlsx', 'xls', 'csv'];
+
+function extOf(name: string | null | undefined): string {
+  return (name ?? '').toLowerCase().match(/\.([a-z0-9]{1,5})$/)?.[1] ?? '';
+}
+
+/** เดาชนิดจากชื่อไฟล์ — ตรงกับชนิดที่ระบบรับ (PDF/Excel/CSV/ภาพสแกน) ที่เหลือที่รู้จักแต่เปิดในหน้าไม่ได้ (Word ฯลฯ)
+ * เป็น 'other' ส่วนชื่อที่ไม่มีนามสกุลเป็น 'unknown' ให้ไปถามชนิดจริงจากเซิร์ฟเวอร์อีกที */
+function kindFromName(name: string | null | undefined): FileKind {
+  const e = extOf(name);
+  if (e === 'pdf') return 'pdf';
+  if (IMAGE_EXT.includes(e)) return 'image';
+  if (SHEET_EXT.includes(e)) return 'sheet';
+  return e ? 'other' : 'unknown';
+}
+
+function kindFromContentType(ct: string | null): FileKind {
+  const c = (ct ?? '').toLowerCase();
+  if (c.includes('pdf')) return 'pdf';
+  if (c.startsWith('image/')) return 'image';
+  if (c.includes('spreadsheetml') || c.includes('ms-excel') || c.includes('csv')) return 'sheet';
+  return 'other';
+}
+
+/** ป้ายชนิดไฟล์สั้นๆ ข้างชื่อไฟล์ (เดิมเขียน "PDF" ตายตัวทุกที่ ทั้งที่ไฟล์เป็น Excel/ภาพได้แล้ว) */
+export function fileBadge(name: string | null | undefined): string {
+  const e = extOf(name);
+  if (e === 'pdf') return 'PDF';
+  if (e === 'xlsx' || e === 'xls') return 'XLS';
+  if (e === 'csv') return 'CSV';
+  if (IMAGE_EXT.includes(e)) return 'IMG';
+  if (e === 'doc' || e === 'docx') return 'DOC';
+  return e ? e.toUpperCase().slice(0, 4) : 'FILE';
 }
 
 interface ConfirmOptions {
@@ -207,13 +238,13 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
           <div className="modal-card pdf-card">
             <div className="pdf-hd">
               <span className="pdf-title">
-                <Icon name={isSpreadsheetName(modal.filename) ? 'invoice' : 'file'} className="sm" /> {modal.filename ?? tx('เอกสาร PDF')}
+                <Icon name="file" className="sm" /> {modal.filename ?? tx('ไฟล์')}
               </span>
               <div className="pdf-actions">
                 <a
                   className="btn sm icon"
-                  href={`${modal.url}${modal.url.includes('?') ? '&' : '?'}dl`}
-                  download={modal.filename ?? 'document.pdf'}
+                  href={modal.url.startsWith('blob:') ? modal.url : `${modal.url}${modal.url.includes('?') ? '&' : '?'}dl`}
+                  download={modal.filename ?? 'file'}
                   title={tx('ดาวน์โหลดไฟล์นี้')}
                   aria-label={tx('ดาวน์โหลด')}
                 >
@@ -224,15 +255,71 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
             </div>
-            {isSpreadsheetName(modal.filename) ? (
-              <SpreadsheetPreview url={modal.url} />
-            ) : (
-              <iframe className="pdf-frame" src={modal.url} title={modal.filename ?? tx('เอกสาร PDF')} />
-            )}
+            <FileViewer url={modal.url} filename={modal.filename} />
           </div>
         </div>
       )}
     </OverlayContext.Provider>
+  );
+}
+
+/**
+ * ตัวดูไฟล์ในป๊อปอัป — เลือกวิธีแสดงตามชนิดจริงของไฟล์: PDF ฝังในหน้า, ภาพแสดงเต็มกรอบ, Excel/CSV เป็นตาราง,
+ * ชนิดอื่นที่เบราว์เซอร์เปิดเองไม่ได้ (Word ฯลฯ) ขึ้นการ์ดบอกตรงๆ พร้อมปุ่มดาวน์โหลด — ไม่ปล่อยให้เป็นกรอบเปล่า/404
+ */
+function FileViewer({ url, filename }: { url: string; filename: string | null }) {
+  const { tx } = useLang();
+  const [kind, setKind] = useState<FileKind>(() => kindFromName(filename));
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+    const byName = kindFromName(filename);
+    setKind(byName);
+    if (byName !== 'unknown') return;
+    // ชื่อไม่มีนามสกุล — ถามชนิดจริงจาก header ของเซิร์ฟเวอร์
+    let cancelled = false;
+    fetch(url, { method: 'HEAD' })
+      .then((r) => (r.ok ? kindFromContentType(r.headers.get('content-type')) : 'other'))
+      .catch(() => 'other' as FileKind)
+      .then((k) => {
+        if (!cancelled) setKind(k);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url, filename]);
+
+  const dlHref = url.startsWith('blob:') ? url : `${url}${url.includes('?') ? '&' : '?'}dl`;
+
+  if (kind === 'unknown') {
+    return (
+      <div className="xlsx-state" style={{ placeItems: 'stretch', alignContent: 'start', padding: 16 }}>
+        <Loading rows={6} label={tx('กำลังโหลดไฟล์…')} />
+      </div>
+    );
+  }
+  if (kind === 'pdf') return <iframe className="pdf-frame" src={url} title={filename ?? tx('ไฟล์')} />;
+  if (kind === 'sheet') return <SpreadsheetPreview url={url} />;
+  if (kind === 'image' && !failed) {
+    return (
+      <div className="img-preview">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt={filename ?? ''} onError={() => setFailed(true)} />
+      </div>
+    );
+  }
+  return (
+    <div className="xlsx-state file-fallback">
+      <div>
+        <Icon name="file" className="lg" />
+        <div className="ff-title">{failed ? tx('เปิดภาพนี้ในหน้าไม่ได้') : tx('ไฟล์ชนิดนี้ดูตัวอย่างในหน้าไม่ได้')}</div>
+        <div className="sub">{tx('กดปุ่มด้านล่างเพื่อดาวน์โหลดไปเปิดดู')}</div>
+        <a className="btn pri sm" href={dlHref} download={filename ?? 'file'} style={{ marginTop: 14 }}>
+          <Icon name="download" className="sm" /> {tx('ดาวน์โหลดไฟล์นี้')}
+        </a>
+      </div>
+    </div>
   );
 }
 

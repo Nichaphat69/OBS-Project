@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Card } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
-import { useToast } from '../../../components/Overlays';
+import { useToast, usePdfPreview } from '../../../components/Overlays';
 import { useReaderPicker, ReaderPickerBar } from '../../../components/ReaderPicker';
 import { QueueStatusCard } from '../../../components/QueueStatusCard';
 import ReviewCard, { type ReadResultShape } from './ReviewCard';
@@ -101,6 +101,15 @@ interface SubmitResult {
 export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boolean } = {}) {
   const { tx, formatPeriod, formatPeriodLabel } = useLang();
   const toast = useToast();
+  const openPdfPreview = usePdfPreview();
+  // ไฟล์ที่เลือกไว้ยังไม่ได้ส่งขึ้นเซิร์ฟเวอร์ — เปิดดูจากไฟล์ในเครื่องผ่าน blob URL ได้เลย (เก็บไว้เพื่อคืนหน่วยความจำตอนออกจากหน้า)
+  const blobUrls = useRef<string[]>([]);
+  useEffect(() => () => blobUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
+  function previewLocalFile(f: File) {
+    const url = URL.createObjectURL(f);
+    blobUrls.current.push(url);
+    openPdfPreview(url, f.name);
+  }
   const fileRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -485,7 +494,15 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
               >
                 <Icon name="file" className="sm" style={{ color: 'var(--brand)', flex: 'none' }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                  <button
+                    type="button"
+                    className="lnk"
+                    title={tx('เปิดดูไฟล์นี้')}
+                    style={{ display: 'block', maxWidth: '100%', textAlign: 'left', fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    onClick={() => previewLocalFile(f)}
+                  >
+                    {f.name}
+                  </button>
                   <div className="sub">{fileSizeLabel(f.size)}</div>
                 </div>
                 <button type="button" className="btn sm icon dgr" onClick={() => removeFile(i)} title={tx('ลบไฟล์นี้')} aria-label={tx('ลบ')}>

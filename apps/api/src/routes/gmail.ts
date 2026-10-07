@@ -18,6 +18,8 @@ import { ExtractionError } from '../lib/extractionService.js';
 import { AbbyyError } from '../lib/abbyyClient.js';
 import { SpreadsheetExtractionError } from '../lib/spreadsheetExtractionService.js';
 import { GmailError } from '../lib/gmailClient.js';
+import { loadFile } from '../lib/fileStorage.js';
+import { sendStoredFile } from '../lib/fileResponse.js';
 
 export const gmailRouter = Router();
 
@@ -36,6 +38,18 @@ gmailRouter.use(requireAuth);
  * วางไว้ที่ระดับ router ไม่ใช่ไล่ใส่ทีละเส้น เพื่อไม่ให้เส้นที่เพิ่มทีหลังหลุดการป้องกันโดยลืม
  */
 gmailRouter.use(requireAdmin);
+
+/** ไฟล์แนบที่ n8n ส่งมาเก็บไว้ (ยังไม่ได้กดอ่าน) — ให้กดเปิดดูในป๊อปอัปก่อนตัดสินใจอ่านได้
+ * `:id` คือ attachmentId ที่ /inbox ส่งกลับ (= id ของแถวใน inbound_emails) */
+gmailRouter.get('/attachments/:id/file', async (req, res) => {
+  const id = Number(req.params.id);
+  const row = Number.isInteger(id)
+    ? await prisma.inboundEmail.findUnique({ where: { id }, select: { fileName: true, fileKey: true } })
+    : null;
+  const bytes = await loadFile(row?.fileKey);
+  if (!row || !bytes) return res.status(404).json({ error: 'ไม่พบไฟล์แนบนี้ในกล่องรับเมล' });
+  sendStoredFile(req, res, bytes, row.fileName);
+});
 
 gmailRouter.get('/inbox', async (req, res) => {
   try {

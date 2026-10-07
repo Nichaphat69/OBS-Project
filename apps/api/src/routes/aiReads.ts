@@ -4,6 +4,7 @@ import { requireAuth } from '../lib/requireAuth.js';
 import { requestScope } from '../lib/scopeService.js';
 import { listAiReads, getAiRead, dismissAiRead, AiReadError } from '../lib/aiReadsService.js';
 import { loadFile } from '../lib/fileStorage.js';
+import { sendStoredFile } from '../lib/fileResponse.js';
 
 export const aiReadsRouter = Router();
 
@@ -33,19 +34,6 @@ aiReadsRouter.get('/:id', async (req, res) => {
   res.json(row);
 });
 
-const FILE_CONTENT_TYPES: Record<string, string> = {
-  pdf: 'application/pdf',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  xls: 'application/vnd.ms-excel',
-  csv: 'text/csv',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  tif: 'image/tiff',
-  tiff: 'image/tiff',
-  webp: 'image/webp',
-};
-
 /** ไฟล์ต้นฉบับที่เคยอ่านผ่าน AI (upload/Gmail) — ใช้ตอนกด preview/ดาวน์โหลดจากหน้าประวัติ "ที่มาของ
  * ข้อมูล" (เดิม getAiRead() ตัด fileBytes ออกโดยตั้งใจเพราะหน้ารีวิวไม่ต้องใช้ — ดู aiReadsService.ts)
  * ports จาก timesheets.ts's GET /:id/file's pattern — ต่างกันตรงต้องเดา Content-Type จากนามสกุลไฟล์
@@ -66,18 +54,7 @@ aiReadsRouter.get('/:id/file', async (req, res) => {
   if (!bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของรายการนี้` });
   }
-  const filename = row.fileName || `ai-read-${req.params.id}`;
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  const contentType = FILE_CONTENT_TYPES[ext] ?? 'application/octet-stream';
-  const download = req.query.dl !== undefined;
-  const encoded = encodeURIComponent(filename);
-  res.set({
-    'Content-Type': contentType,
-    'Content-Length': String(bytes.length),
-    'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encoded}`,
-    'Cache-Control': 'no-store',
-  });
-  res.send(bytes);
+  sendStoredFile(req, res, bytes, row.fileName || `ai-read-${req.params.id}`);
 });
 
 aiReadsRouter.post('/dismiss', async (req, res) => {

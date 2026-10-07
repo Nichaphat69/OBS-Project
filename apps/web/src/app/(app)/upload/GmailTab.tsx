@@ -202,11 +202,17 @@ export default function GmailTab() {
 
   function openIngestedPreview(messageId: string, filename: string) {
     const id = aiReadIds.get(`${messageId}::${filename}`);
-    if (!id) {
-      toast(tx('พรีวิวไฟล์นี้ยังไม่พร้อมใช้งาน'));
+    if (id) {
+      openPdfPreview(`/api/ai-reads/${id}/file`, filename);
       return;
     }
-    openPdfPreview(`/api/ai-reads/${id}/file`, filename);
+    // ไม่มีแถวประวัติการอ่านที่ผูกกับไฟล์นี้ (เช่น ประวัติถูกลบแล้ว) — ไฟล์ต้นฉบับยังอยู่ในกล่องรับเมล เปิดจากตรงนั้นแทน
+    const att = inbox?.ingested.find((m) => m.id === messageId)?.attachments.find((a) => a.filename === filename);
+    if (att?.attachmentId) {
+      openPdfPreview(`/api/gmail/attachments/${encodeURIComponent(att.attachmentId)}/file`, filename);
+      return;
+    }
+    toast(tx('พรีวิวไฟล์นี้ยังไม่พร้อมใช้งาน'));
   }
 
   async function dismiss(messageId: string) {
@@ -334,7 +340,20 @@ export default function GmailTab() {
                         onChange={() => toggleAttachment(key)}
                         style={{ marginRight: 4 }}
                       />
-                      <Icon name="file" className="sm" /> {a.filename} <Icon name="cd" className="xs" />
+                      <button
+                        type="button"
+                        className="lnk"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        title={tx('เปิดดูไฟล์นี้')}
+                        onClick={(e) => {
+                          // อยู่ใน <label> ของ checkbox — กันไม่ให้การกดดูไฟล์ไปติ๊กเลือกแถวด้วย
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openPdfPreview(`/api/gmail/attachments/${encodeURIComponent(a.attachmentId)}/file`, a.filename);
+                        }}
+                      >
+                        <Icon name="file" className="sm" /> {a.filename} <Icon name="cd" className="xs" />
+                      </button>
                     </span>
                   </label>
                 );
@@ -362,7 +381,7 @@ export default function GmailTab() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
                   {m.attachments.map((a) => (
-                    <button key={a.filename} type="button" className="mailattach" onClick={() => openIngestedPreview(m.id, a.filename)}>
+                    <button key={a.filename} type="button" className="mailattach" title={tx('เปิดดูไฟล์นี้')} onClick={() => openIngestedPreview(m.id, a.filename)}>
                       <span className="fname">
                         <Icon name="file" className="sm" /> {a.filename}
                       </span>

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, Loading, PageHeader, PoTag, StatusPill, Tag, parseReadModel } from '../../../../components/ui';
 import { Icon } from '../../../../components/Icon';
-import { usePdfPreview } from '../../../../components/Overlays';
+import { usePdfPreview, fileBadge } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
 
 interface CalendarDay {
@@ -676,7 +676,7 @@ export default function ManadyDetailPage() {
                       onClick={() => openPdfPreview(`/api/timesheets/${sheet.id}/file`, sheet.sourceFile)}
                       title={tx('เปิดดูไฟล์ต้นฉบับ')}
                     >
-                      <span className="pd">PDF</span> {sheet.sourceFile}
+                      <span className="pd">{fileBadge(sheet.sourceFile)}</span> {sheet.sourceFile}
                     </button>
                     <a className="btn sm icon" href={`/api/timesheets/${sheet.id}/file?dl`} title={tx('ดาวน์โหลดไฟล์ต้นฉบับ')}>
                       <Icon name="download" />

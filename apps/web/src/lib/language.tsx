@@ -24,6 +24,10 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  // ── ตัวดูไฟล์ในป๊อปอัป (7 ต.ค. 69) ──
+  'เปิดภาพนี้ในหน้าไม่ได้': "Can't display this image here",
+  'ไฟล์ชนิดนี้ดูตัวอย่างในหน้าไม่ได้': "This file type can't be previewed here",
+  'กดปุ่มด้านล่างเพื่อดาวน์โหลดไปเปิดดู': 'Use the button below to download and open it',
   // ── admin/UsersTab.tsx (layout ใหม่ 5 ต.ค. 69) ──
   'ทุกอย่าง รวมตั้งค่าระบบและจัดการผู้ใช้': 'Everything, including system settings and user management',
   'อัปโหลด/ตรวจ Timesheet, ตรวจ Manday, วางบิล': 'Upload/review Timesheets, check Manday, billing',

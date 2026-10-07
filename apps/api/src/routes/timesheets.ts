@@ -21,6 +21,7 @@ import { SpreadsheetExtractionError } from '../lib/spreadsheetExtractionService.
 import { checkTimesheetAgainstHrdd, HrddCompareError } from '../lib/hrddCompareService.js';
 import { enqueueFiles, enqueueExisting, ReadQueueError } from '../lib/readQueueService.js';
 import { loadFile } from '../lib/fileStorage.js';
+import { sendStoredFile } from '../lib/fileResponse.js';
 
 export const timesheetsRouter = Router();
 
@@ -256,16 +257,7 @@ timesheetsRouter.get('/:id/file', requireAdmin, async (req, res) => {
   if (!row || !bytes) {
     return res.status(404).json({ error: `ไม่พบไฟล์ต้นฉบับของ Timesheet ${req.params.id}` });
   }
-  const filename = row.sourceFile || `${row.id}.pdf`;
-  const download = req.query.dl !== undefined;
-  const encoded = encodeURIComponent(filename);
-  res.set({
-    'Content-Type': 'application/pdf',
-    'Content-Length': String(bytes.length),
-    'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encoded}`,
-    'Cache-Control': 'no-store',
-  });
-  res.send(bytes);
+  sendStoredFile(req, res, bytes, row.sourceFile || `${row.id}.pdf`, 'application/pdf');
 });
 
 /** เทียบวันลาที่ Timesheet รายงานกับวันลาที่อนุมัติแล้วจริงใน HRDD — อ่านอย่างเดียว ไม่มีเขียน/แก้/ลบ

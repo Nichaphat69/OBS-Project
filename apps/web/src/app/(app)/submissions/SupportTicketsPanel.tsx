@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Card, ErrorState, Loading, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useToast } from '../../../components/Overlays';
+import { useToast, usePdfPreview } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
 interface TicketAttachment {
@@ -32,6 +32,7 @@ interface TicketRow {
 export default function SupportTicketsPanel() {
   const toast = useToast();
   const { tx, formatDateTime } = useLang();
+  const openPdfPreview = usePdfPreview();
   const [tickets, setTickets] = useState<TicketRow[] | null>(null);
   const [resolving, setResolving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +105,17 @@ export default function SupportTicketsPanel() {
                   {t.attachments.length > 0 && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
                       {t.attachments.map((a) => (
-                        <a key={a.id} href={`/api/support-tickets/attachments/${a.id}`} target="_blank" rel="noreferrer">
+                        <a
+                          key={a.id}
+                          href={`/api/support-tickets/attachments/${a.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={tx('เปิดดูไฟล์นี้')}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openPdfPreview(`/api/support-tickets/attachments/${a.id}`, a.fileName);
+                          }}
+                        >
                           <img
                             src={`/api/support-tickets/attachments/${a.id}`}
                             alt={a.fileName}

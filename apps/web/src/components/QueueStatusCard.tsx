@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card } from './ui';
 import { Icon } from './Icon';
 import { useLang } from '../lib/language';
+import { usePdfPreview } from './Overlays';
 
 export interface QueueItem {
   id: number;
@@ -36,6 +37,7 @@ export function QueueStatusCard({
   openingId?: number | null;
 }) {
   const { tx } = useLang();
+  const openPdfPreview = usePdfPreview();
   const [items, setItems] = useState<QueueItem[] | null>(null);
 
   useEffect(() => {
@@ -117,7 +119,23 @@ export function QueueStatusCard({
                     />
                   )}
                   <span className="rq-name">
-                    {it.fileName ?? tx('ไม่ทราบชื่อไฟล์')}
+                    {it.fileName ? (
+                      <button
+                        type="button"
+                        className="lnk"
+                        title={tx('เปิดดูไฟล์นี้')}
+                        onClick={(e) => {
+                          // แถวนี้คลิกเพื่อเปิดรีวิวได้ — กดที่ชื่อไฟล์ให้เปิดดูไฟล์ต้นฉบับอย่างเดียว ไม่เด้งไปรีวิว
+                          e.stopPropagation();
+                          openPdfPreview(`/api/ai-reads/${it.id}/file`, it.fileName);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        {it.fileName}
+                      </button>
+                    ) : (
+                      tx('ไม่ทราบชื่อไฟล์')
+                    )}
                     {it.status === 'failed' && it.errorMessage && <span className="rq-err">{it.errorMessage}</span>}
                   </span>
                 </div>

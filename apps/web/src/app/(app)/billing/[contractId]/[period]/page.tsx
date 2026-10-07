@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../../../components/ui';
 import { Icon } from '../../../../../components/Icon';
-import { usePdfPreview } from '../../../../../components/Overlays';
+import { usePdfPreview, fileBadge } from '../../../../../components/Overlays';
 import { useLang } from '../../../../../lib/language';
 
 interface InvoiceItem {
@@ -416,11 +416,11 @@ export default function CycleDetailPage() {
                                 : null;
                             return href ? (
                               <button key={i} type="button" className="file" onClick={() => openPdfPreview(href, a.label)} title={tx('เปิดดูไฟล์นี้')}>
-                                <span className="pd">PDF</span> {a.label}
+                                <span className="pd">{a.invoiceId ? 'PDF' : fileBadge(a.label) === 'FILE' ? 'PDF' : fileBadge(a.label)}</span> {a.label}
                               </button>
                             ) : (
                               <span key={i} className="file">
-                                <span className="pd">PDF</span> {a.label}
+                                <span className="pd">{a.invoiceId ? 'PDF' : fileBadge(a.label) === 'FILE' ? 'PDF' : fileBadge(a.label)}</span> {a.label}
                               </span>
                             );
                           })}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Card, Loading, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useToast } from '../../../components/Overlays';
+import { useToast, usePdfPreview } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
 
 const MAX_ATTACHMENTS = 5;
@@ -49,6 +49,7 @@ const CATEGORY_ICON: Record<string, string> = {
 
 export default function ReportIssueClient() {
   const { tx, formatDateTime } = useLang();
+  const openPdfPreview = usePdfPreview();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -204,7 +205,17 @@ export default function ReportIssueClient() {
                 {t.attachments.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {t.attachments.map((a) => (
-                      <a key={a.id} href={`/api/support-tickets/attachments/${a.id}`} target="_blank" rel="noreferrer">
+                      <a
+                          key={a.id}
+                          href={`/api/support-tickets/attachments/${a.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={tx('เปิดดูไฟล์นี้')}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openPdfPreview(`/api/support-tickets/attachments/${a.id}`, a.fileName);
+                          }}
+                        >
                         <img
                           src={`/api/support-tickets/attachments/${a.id}`}
                           alt={a.fileName}
