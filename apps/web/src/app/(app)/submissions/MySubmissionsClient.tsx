@@ -90,14 +90,14 @@ export default function MySubmissionsClient() {
                 {r.method && <span>{tx(METHOD_LABEL[r.method] ?? r.method)}</span>}
                 <span>{r.methodChosenAt ? dt(r.methodChosenAt) : r.deferredAt ? `${tx('ขอเลื่อน')} · ${dt(r.deferredAt)}` : ''}</span>
               </div>
-              <span className="mp-chip">{tx(STATUS_LABEL[r.status])}</span>
               {r.status === 'not_submitted' || r.status === 'problem' ? (
                 <Link className="btn sm pri" href={`/upload?contractId=${encodeURIComponent(r.contractId)}&period=${encodeURIComponent(r.period)}`}>
-                  <Icon name="up" className="sm" /> {tx('ส่งไฟล์ Timesheet')}
+                  {tx('ส่งไฟล์ Timesheet')}
                 </Link>
               ) : (
                 <span className="ms-gap" />
               )}
+              <span className="mp-chip">{tx(STATUS_LABEL[r.status])}</span>
             </div>
           ))}
         </div>

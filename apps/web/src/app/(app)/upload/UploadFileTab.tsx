@@ -87,6 +87,107 @@ interface SubmitResult {
   emailTargets?: string[];
 }
 
+/** เลือกรอบบิลแบบ dropdown (8 ต.ค. 69 ตามที่ขอ "เปลี่ยนเป็น dropdown จะได้ประหยัดพื้นที่") — เดิมเป็นการ์ดเรียงกันกินที่หลายแถว
+ * ปุ่มแสดงรอบที่เลือก + ชื่อลูกค้า + ป้ายสถานะ กดแล้วเปิดรายการ เลือกแล้วปิดเอง · ปิดด้วย Esc หรือคลิกนอกกล่อง */
+function PeriodDropdown({
+  options,
+  value,
+  disabled,
+  onChange,
+  formatPeriod,
+}: {
+  options: Array<{ key: string; period: string; customerName: string; rejected?: boolean; declaredMethod?: string | null }>;
+  value: string;
+  disabled: boolean;
+  onChange: (key: string) => void;
+  formatPeriod: (period: string) => string;
+}) {
+  const { tx } = useLang();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const sel = options.find((o) => o.key === value) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const tagOf = (o: { rejected?: boolean; declaredMethod?: string | null }) =>
+    o.rejected ? { text: tx('ถูกตีกลับ ส่งใหม่'), cls: 'bad' } : o.declaredMethod ? { text: `${tx('แจ้งไว้แล้ว')}: ${tx(METHOD_SHORT[o.declaredMethod] ?? o.declaredMethod)}`, cls: 'm' } : null;
+
+  const selTag = sel ? tagOf(sel) : null;
+
+  return (
+    <div className="ep-dd" ref={wrap}>
+      <button
+        type="button"
+        className={`ep-dd-btn${open ? ' open' : ''}${sel ? ' has' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="ic">
+          <Icon name="cal" className="sm" />
+        </span>
+        <span className="tx">
+          {sel ? (
+            <>
+              <b>{formatPeriod(sel.period)}</b>
+              <span className="s">
+                {sel.customerName}
+                {selTag && <span className={`tg ${selTag.cls}`}>{selTag.text}</span>}
+              </span>
+            </>
+          ) : (
+            <b className="ph">{tx('— เลือกรอบบิล —')}</b>
+          )}
+        </span>
+        <Icon name="chev" className="sm ch" />
+      </button>
+      {open && (
+        <ul className="ep-dd-list" role="listbox">
+          {options.map((o) => {
+            const t = tagOf(o);
+            return (
+              <li key={o.key}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={o.key === value}
+                  className={o.key === value ? 'on' : ''}
+                  onClick={() => {
+                    onChange(o.key);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="n">
+                    <b>{formatPeriod(o.period)}</b>
+                    <span className="s">{o.customerName}</span>
+                  </span>
+                  {t && <span className={`tg ${t.cls}`}>{t.text}</span>}
+                  {o.key === value && <Icon name="chk" className="sm ck" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /**
  * `submitOnly` = โหมดของพนักงาน (role `user`) — เลือกไฟล์เดียวแล้วกดส่ง จบ ไม่มีคิว/ตัวอ่านเลย
  * (เจ้าของระบบสั่ง 18 ก.ย. 69: พนักงานมีหน้าที่ "ส่ง" อย่างเดียว) ยิงคนละเส้นกับโหมดฝั่งบัญชีด้านล่าง —
@@ -408,28 +509,13 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
                   <p>{tx('เลือกเดือนที่ไฟล์นี้เป็นของ')}</p>
                 </div>
               </div>
-              <div className="ep-opts">
-                {options.map((o) => (
-                  <button
-                    key={o.key}
-                    type="button"
-                    className={`ep-opt${selectedKey === o.key ? ' on' : ''}`}
-                    disabled={processing}
-                    onClick={() => { setSelectedKey(o.key); setError(null); }}
-                  >
-                    <span className="ic"><Icon name="file" className="sm" /></span>
-                    <span>
-                      <b>{formatPeriod(o.period)}</b>
-                      <span className="s">{o.customerName}</span>
-                      {o.rejected ? (
-                        <span className="tg">{tx('ถูกตีกลับ ส่งใหม่')}</span>
-                      ) : o.declaredMethod ? (
-                        <span className="tg m">{tx('แจ้งไว้แล้ว')}: {tx(METHOD_SHORT[o.declaredMethod] ?? o.declaredMethod)}</span>
-                      ) : null}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <PeriodDropdown
+                options={options}
+                value={selectedKey}
+                disabled={processing}
+                onChange={(k) => { setSelectedKey(k); setError(null); }}
+                formatPeriod={formatPeriod}
+              />
 
               <div className="ep-step">
                 <span className="ep-num">2</span>

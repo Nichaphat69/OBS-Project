@@ -96,7 +96,7 @@
 .ep-step p { margin: 3px 0 0; font-size: 13px; color: var(--ep-mut); }
 
 /* การ์ดตัวเลือก (รอบบิล / วิธีส่ง / หมวดปัญหา) */
-.ep-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.ep-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 12px; }
 .ep-opt {
   text-align: left; cursor: pointer; font: inherit; color: inherit; background: #fff;
   border: 1.5px solid var(--ep-line); border-radius: 18px; padding: 15px 16px; display: flex; gap: 12px; align-items: flex-start;
@@ -177,7 +177,8 @@
 .ri-empty { text-align: center; padding: 26px 10px 8px; color: var(--ep-mut); font-size: 13.5px; }
 
 @media (max-width: 1100px) {
-  .mp-hero, .ep-split { grid-template-columns: 1fr; }
+  .mp-hero, .ep-split { grid-template-columns: minmax(0, 1fr); }
+  .ep-split > *, .mp-hero > * { min-width: 0; }
   .ep-side { position: static; }
 }
 @media (max-width: 600px) {
@@ -190,7 +191,7 @@
 
 /* ───────── บันทึกการส่ง (พนักงาน) ───────── */
 .ms-list { display: flex; flex-direction: column; gap: 12px; }
-.ms-row { --c: #a2aebf; --t: #f1f3f7; display: grid; grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1fr) auto 150px; gap: 16px; align-items: center; background: #fff; border: 1px solid var(--ep-line); border-radius: 20px; padding: 16px 20px; }
+.ms-row { --c: #a2aebf; --t: #f1f3f7; display: grid; grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1fr) 150px 108px; gap: 16px; align-items: center; background: #fff; border: 1px solid var(--ep-line); border-radius: 20px; padding: 16px 20px; }
 .ms-row.a { --c: var(--ep-amber); --t: var(--ep-amber-t); }
 .ms-row.w { --c: var(--ep-blue); --t: var(--ep-blue-t); }
 .ms-row.d { --c: var(--ep-green); --t: var(--ep-green-t); }
@@ -199,6 +200,41 @@
 .ms-main b { display: block; font-size: 16px; color: var(--ep-ink); }
 .ms-main span, .ms-meta span { display: block; font-size: 12.5px; color: var(--ep-mut); margin-top: 3px; }
 .ms-meta span:first-child { color: #41506a; font-weight: 600; font-size: 13.5px; margin-top: 0; }
-.ms-row .mp-chip { background: var(--t); color: var(--c); }
+.ms-row .mp-chip { background: var(--t); color: var(--c); justify-self: end; min-width: 84px; text-align: center; } /* สถานะอยู่ขวาสุดเสมอ ความกว้างเท่ากันทุกแถวให้เรียงเป็นแนว */
 .ms-row .btn { justify-content: center; }
-@media (max-width: 900px) { .ms-row { grid-template-columns: 44px 1fr auto; } .ms-meta, .ms-gap { display: none; } .ms-row .btn { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .ms-row { grid-template-columns: 44px 1fr auto; } .ms-meta, .ms-gap { display: none; } .ms-row .mp-chip { grid-column: 3; grid-row: 1; } .ms-row .btn { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ───────── เลือกรอบบิลแบบ dropdown (8 ต.ค. 69) — สีทึบ ไม่ไล่สี ───────── */
+.ep-dd { position: relative; max-width: 520px; }
+.ep-dd-btn {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; font: inherit; color: var(--ep-ink, #14202f); background: #fff; cursor: pointer;
+  border: 1.5px solid var(--ep-line, #e6e9ef); border-radius: 16px; padding: 11px 14px; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ep-dd-btn:hover:not(:disabled) { border-color: #b9c4d4; }
+.ep-dd-btn.open, .ep-dd-btn:focus-visible { outline: none; border-color: #288adb; }
+.ep-dd-btn.has { background: #f3f9fe; border-color: #a9d2f1; }
+.ep-dd-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ep-dd-btn .ic { flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--ep-soft, #f6f8fb); color: #41506a; display: grid; place-items: center; }
+.ep-dd-btn.has .ic { background: #288adb; color: #fff; }
+.ep-dd-btn .tx { flex: 1; min-width: 0; }
+.ep-dd-btn .tx b { display: block; font-size: 14.5px; font-weight: 700; }
+.ep-dd-btn .tx b.ph { color: var(--ep-mut, #77839a); font-weight: 600; }
+.ep-dd-btn .tx .s { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: var(--ep-mut, #77839a); margin-top: 2px; }
+.ep-dd-btn .ch { flex: none; color: var(--ep-mut, #77839a); transition: transform 0.18s ease; }
+.ep-dd-btn.open .ch { transform: rotate(180deg); }
+.ep-dd .tg { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #eef1f5; color: #667085; }
+.ep-dd .tg.bad { background: #fde8e6; color: #b42318; }
+.ep-dd .tg.m { background: #fdf1dc; color: #b45309; }
+.ep-dd-list {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none; max-height: 320px; overflow-y: auto;
+  background: #fff; border: 1.5px solid var(--ep-line, #e6e9ef); border-radius: 16px; box-shadow: 0 18px 40px -16px rgba(16, 24, 40, 0.28);
+}
+.ep-dd-list button {
+  width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-radius: 11px; padding: 10px 12px; cursor: pointer;
+}
+.ep-dd-list button:hover { background: var(--ep-soft, #f6f8fb); }
+.ep-dd-list button.on { background: #e8f3fc; }
+.ep-dd-list .n { flex: 1; min-width: 0; }
+.ep-dd-list .n b { display: block; font-size: 14px; font-weight: 700; }
+.ep-dd-list .n .s { display: block; font-size: 12px; color: var(--ep-mut, #77839a); margin-top: 1px; }
+.ep-dd-list .ck { flex: none; color: #288adb; }

@@ -1,0 +1,161 @@
+/* หน้าบันทึกระบบ (Audit log) + API Activity Log — ดีไซน์ใหม่ 8 ต.ค. 69
+   ⚠️ ห้ามไล่สี (gradient) — เจ้าของระบบสั่ง "ไม่เอาไล่สี เป็นสีเดี่ยวๆ ทันสมัย ไม่โหลๆ" ใช้สีทึบล้วน พื้นขาว
+   สีแบ่งตามสถานะ: เขียว = สำเร็จ/สร้าง · ฟ้า (#288adb) = ข้อมูล/แก้ไข · เหลืองอำพัน = ควรระวัง/ช้า
+   · แดง = ล้มเหลว/ลบ · ม่วง = แจ้งเตือน/อีเมล/ระบบภายนอก · เทา = อื่นๆ — ทุกสีเป็นโทนอ่อน ไม่เข้มจัด
+   คลาสทั้งหมดขึ้นต้น al- ไม่แตะ globals.css */
+
+.al {
+  --al-ink: #14202f;
+  --al-mut: #77839a;
+  --al-line: #e6e9ef;
+  --al-soft: #f6f8fb;
+  --al-blue: #288adb;
+  --al-blue-t: #e8f3fc;
+  --al-blue-x: #1f78c4;
+  --al-green: #12975a;
+  --al-green-t: #e6f6ee;
+  --al-green-x: #0f7a4c;
+  --al-amber: #d97706;
+  --al-amber-t: #fdf1dc;
+  --al-amber-x: #b45309;
+  --al-red: #dc2626;
+  --al-red-t: #fde8e6;
+  --al-red-x: #b42318;
+  --al-violet: #6d4fd3;
+  --al-violet-t: #efeafc;
+  --al-violet-x: #5538b0;
+  --al-grey: #667085;
+  --al-grey-t: #eef1f5;
+  color: var(--al-ink);
+}
+
+/* โทนสีที่ใช้ซ้ำ: ตั้งค่า --c (สีเข้ม) --t (พื้นอ่อน) --x (ตัวอักษร) */
+.al .t-ok { --c: var(--al-green); --t: var(--al-green-t); --x: var(--al-green-x); }
+.al .t-info { --c: var(--al-blue); --t: var(--al-blue-t); --x: var(--al-blue-x); }
+.al .t-warn { --c: var(--al-amber); --t: var(--al-amber-t); --x: var(--al-amber-x); }
+.al .t-err { --c: var(--al-red); --t: var(--al-red-t); --x: var(--al-red-x); }
+.al .t-sys { --c: var(--al-violet); --t: var(--al-violet-t); --x: var(--al-violet-x); }
+.al .t-mut { --c: var(--al-grey); --t: var(--al-grey-t); --x: var(--al-grey); }
+
+.al-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px;
+  background: var(--t); color: var(--x); font-size: 12px; font-weight: 700; white-space: nowrap; line-height: 1.5;
+}
+.al-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; }
+.al-code {
+  display: inline-block; min-width: 38px; text-align: center; padding: 3px 9px; border-radius: 9px;
+  background: var(--t); color: var(--x); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* ───────── แถบหัว + ตัวกรอง ───────── */
+.al-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.al-head h3 { margin: 0; font-size: 18px; font-weight: 700; }
+.al-head p { margin: 4px 0 0; font-size: 13px; color: var(--al-mut); }
+.al-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.al-bar .grow { flex: 1 1 260px; min-width: 220px; }
+.al-search { position: relative; }
+.al-search svg.i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--al-mut); width: 16px; height: 16px; }
+.al-search input {
+  box-sizing: border-box; width: 100%; height: 42px; border: 1.5px solid var(--al-line); border-radius: 14px; padding: 0 14px 0 40px; font: inherit; font-size: 14px; background: #fff;
+  transition: border-color 0.15s ease;
+}
+.al-search input:focus { outline: none; border-color: var(--al-blue); }
+.al-select {
+  box-sizing: border-box; height: 42px; border: 1.5px solid var(--al-line); border-radius: 14px; padding: 0 34px 0 14px; font: inherit; font-size: 13.5px; color: var(--al-ink); background: #fff; cursor: pointer;
+}
+.al-select:focus { outline: none; border-color: var(--al-blue); }
+.al-btn {
+  box-sizing: border-box; height: 42px; padding: 0 16px; border-radius: 14px; border: 1.5px solid var(--al-line); background: #fff; color: var(--al-ink);
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.al-btn:hover:not(:disabled) { border-color: #b9c4d4; background: var(--al-soft); }
+.al-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.al-btn.pri { background: var(--al-blue); border-color: var(--al-blue); color: #fff; }
+.al-btn.pri:hover:not(:disabled) { background: var(--al-blue-x); border-color: var(--al-blue-x); }
+.al-dates { display: inline-flex; align-items: center; gap: 8px; color: var(--al-mut); font-size: 13px; }
+
+/* ปุ่มสลับแบบกลุ่ม (segmented) */
+.al-seg { display: inline-flex; padding: 4px; border-radius: 14px; background: var(--al-grey-t); gap: 2px; }
+.al-seg button {
+  border: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: var(--al-grey); padding: 7px 14px; border-radius: 11px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px; transition: background 0.15s ease, color 0.15s ease;
+}
+.al-seg button:hover { color: var(--al-ink); }
+.al-seg button.on { background: #fff; color: var(--al-ink); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1); }
+.al-seg button i { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--al-grey)); }
+
+/* สรุปในหน้านี้ */
+.al-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.al-stat {
+  border: 1px solid var(--al-line); border-radius: 18px; padding: 14px 16px; background: #fff; display: flex; align-items: center; gap: 12px;
+}
+.al-stat .ic { flex: none; width: 38px; height: 38px; border-radius: 12px; background: var(--t); color: var(--c); display: grid; place-items: center; }
+.al-stat b { display: block; font-size: 22px; font-weight: 800; line-height: 1.1; color: var(--x); font-variant-numeric: tabular-nums; }
+.al-stat span { display: block; font-size: 12px; color: var(--al-mut); margin-top: 3px; }
+
+/* ───────── รายการ (แถวเป็นการ์ดแบน มีแถบสีซ้ายตามสถานะ) ───────── */
+.al-list { display: flex; flex-direction: column; gap: 8px; }
+.al-cols, .al-row-h {
+  display: grid; gap: 14px; align-items: center; padding: 0 16px 0 20px;
+}
+.al-cols { font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--al-mut); text-transform: uppercase; padding-bottom: 2px; }
+.al-item {
+  position: relative; border: 1px solid var(--al-line); border-radius: 16px; background: #fff; overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.al-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--c); }
+.al-item:hover { border-color: #cfd8e5; }
+.al-item.open { border-color: var(--c); box-shadow: 0 8px 22px -16px rgba(16, 24, 40, 0.35); }
+.al-row-h { min-height: 58px; padding-top: 10px; padding-bottom: 10px; cursor: pointer; background: none; border: 0; width: 100%; text-align: left; font: inherit; color: inherit; }
+.al-row-h:focus-visible { outline: 2px solid var(--al-blue); outline-offset: -2px; border-radius: 16px; }
+.al-chev { color: var(--al-mut); transition: transform 0.2s ease; justify-self: end; }
+.al-item.open .al-chev { transform: rotate(180deg); }
+.al-mut { color: var(--al-mut); font-size: 12.5px; }
+.al-ell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-strong { font-weight: 700; font-size: 13.5px; }
+.al-two > b { display: block; font-size: 13px; font-weight: 600; }
+.al-two > span:not(.al-pill) { display: block; font-size: 12px; color: var(--al-mut); margin-top: 1px; }
+.al-two > .al-pill { display: flex; width: fit-content; }
+
+.al-method { display: inline-block; min-width: 52px; text-align: center; padding: 3px 8px; border-radius: 8px; background: var(--t); color: var(--x); font-size: 11.5px; font-weight: 800; letter-spacing: 0.03em; }
+.al-dur { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--x); text-align: right; }
+
+/* avatar ผู้ทำ + ป้ายเป้าหมาย */
+.al-actor { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.al-av { flex: none; width: 30px; height: 30px; border-radius: 10px; background: var(--al-blue-t); color: var(--al-blue-x); font-weight: 800; font-size: 13px; display: grid; place-items: center; }
+.al-av.sys { background: var(--al-violet-t); color: var(--al-violet-x); }
+.al-tgt { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
+.al-tgt em { font-style: normal; flex: none; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 7px; background: var(--al-grey-t); color: var(--al-grey); }
+.al-tgt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--al-ink); }
+.al-ic {
+  flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--t); color: var(--c); display: grid; place-items: center;
+}
+
+/* ส่วนที่ขยาย */
+.al-body { border-top: 1px dashed var(--al-line); padding: 18px 20px 20px 26px; background: #fcfdfe; display: flex; flex-direction: column; gap: 16px; }
+.al-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.al-kv > div { background: #fff; border: 1px solid var(--al-line); border-radius: 14px; padding: 11px 14px; min-width: 0; }
+.al-kv > div > span { display: block; font-size: 11.5px; color: var(--al-mut); font-weight: 600; margin-bottom: 3px; }
+.al-kv b { display: block; font-size: 13.5px; font-weight: 700; word-break: break-word; }
+.al-kv b .al-pill, .al-kv b .al-code { display: inline-flex; width: fit-content; }
+.al-kv > div.wide { grid-column: 1 / -1; }
+.al-sec h5 { margin: 0 0 7px; font-size: 12px; font-weight: 700; color: var(--al-mut); letter-spacing: 0.03em; }
+.al-pre {
+  margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--al-soft); border: 1px solid var(--al-line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.6; color: #2b3a52; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto;
+}
+.al-none { display: inline-block; font-size: 12.5px; color: var(--al-mut); padding: 6px 12px; border-radius: 10px; background: var(--al-soft); border: 1px dashed var(--al-line); }
+.al-errbox { border-radius: 14px; background: var(--al-red-t); color: var(--al-red-x); padding: 11px 14px; font-size: 13px; font-weight: 600; word-break: break-word; }
+
+.al-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+.al-pg { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; color: var(--al-mut); }
+.al-pg button {
+  width: 38px; height: 38px; border-radius: 12px; border: 1.5px solid var(--al-line); background: #fff; font-size: 18px; line-height: 1; cursor: pointer; color: var(--al-ink);
+}
+.al-pg button:hover:not(:disabled) { border-color: #b9c4d4; background: var(--al-soft); }
+.al-pg button:disabled { opacity: 0.4; cursor: not-allowed; }
+.al-empty { text-align: center; padding: 44px 16px; color: var(--al-mut); border: 1.5px dashed var(--al-line); border-radius: 18px; font-size: 14px; }
+
+@media (max-width: 1100px) {
+  .al-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
