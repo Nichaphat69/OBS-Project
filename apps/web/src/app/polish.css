@@ -1,0 +1,202 @@
+/* ═══ ชั้นปรับหน้าตาทั้งระบบ — 9 ต.ค. 69 ตามที่เจ้าของระบบสั่ง ═══
+   "ปรับ UX/UI ให้ใช้งานง่าย จัด layout เป็นระเบียบ สีเดี่ยวๆ ไม่เอาไล่สี ทันสมัย ไม่โหลๆ
+    แต่ห้ามเพิ่ม/ลด/เปลี่ยนตำแหน่งปุ่มหรือฟีเจอร์ใดๆ เด็ดขาด"
+   ⇒ ไฟล์นี้แก้ "เฉพาะสี เส้นขอบ เงา มุม ตัวอักษร" เท่านั้น — ไม่มี display/position/order/grid/flex-direction
+   ที่ย้ายองค์ประกอบ และไม่ซ่อนอะไร (โหลดหลัง globals.css จึงทับกฎเดิมด้วย specificity เท่ากัน)
+
+   ภาษาภาพ: พื้นเทาเย็นเรียบ + การ์ดขาวขอบบางไม่มีเงา · หัวตารางพื้นทึบอ่อน · ป้ายสถานะพื้นสีอ่อนไม่มีกรอบ ·
+   ปุ่มหลักสีเดียว #288adb ไม่มีเงา · ไม่มี gradient แม้แต่จุดเดียว */
+
+:root {
+  --pl-bg: #f4f6fa;
+  --pl-line: #e1e7ef;
+  --pl-line-2: #ebeff5;
+  --pl-head: #f1f4f9;
+  --pl-ink: #14202f;
+  --pl-brand: #288adb;
+  /* ตัวแปรไล่สีเดิม (ใช้กับจุด/แถบ/ป้ายหลายจุด) → สีทึบ ครอบคลุมทุกจุดที่เรียก var(--grad-*) */
+  --grad-brand: #288adb;
+  --grad-progress: #288adb;
+  --grad-ab: #d44023;
+  --grad-cr: #12975a;
+}
+
+/* พื้นหลังเรียบ ไม่มีแสงฟุ้งไล่สีมุมจอ */
+body {
+  background: var(--pl-bg);
+}
+.side {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+/* การ์ด: ขอบบาง ไม่มีเงา มุม 16 */
+.card {
+  background: #ffffff;
+  border: 1px solid var(--pl-line);
+  border-radius: 16px;
+  box-shadow: none;
+}
+.card > .hd {
+  border-bottom: 1px solid var(--pl-line-2);
+}
+.card > .hd h3 {
+  font-weight: 700;
+}
+/* จุดนำหน้าชื่อการ์ด: เดิมไล่สี+วงเงา → สี่เหลี่ยมมนสีเดียว */
+.card > .hd h3::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--pl-brand);
+  box-shadow: none;
+}
+.card.pending {
+  background: #eef6fd;
+  border-color: #cfe4f7;
+}
+.card > .ft {
+  border-top: 1px solid var(--pl-line-2);
+}
+
+/* ตาราง: หัวพื้นทึบ แถวมี hover ชัด */
+thead th {
+  background: var(--pl-head);
+  color: #5d6b80;
+  border-bottom: 1px solid var(--pl-line);
+}
+tbody td {
+  border-bottom: 1px solid var(--pl-line-2);
+}
+tbody tr.rw:hover {
+  background: #f6f9fd;
+}
+tbody tr.sel td {
+  background: #eaf3fc;
+}
+
+/* ป้ายสถานะ/แท็ก: พื้นสีอ่อนทึบ ไม่มีเส้นกรอบ ไม่มีเงา */
+.st,
+.tg {
+  border-color: transparent !important;
+  box-shadow: none;
+}
+.st.ok, .tg.ok { background: #e4f5ec; color: #0e7a47; }
+.st.wn, .tg.wn { background: #fff0d4; color: #a35c00; }
+.st.cr, .tg.cr { background: #fde7e5; color: #b42318; }
+.st.pr, .tg.pr { background: #ece9ff; color: #5b3fd0; }
+.st.mu, .tg.mu { background: #edf0f5; color: #5d6b80; }
+
+/* ปุ่ม: ไม่มีเงา ไม่ยกลอย — แยกกันด้วยสีกับเส้นขอบเท่านั้น */
+.btn {
+  border-color: #cdd6e2;
+  box-shadow: none;
+}
+.btn:hover:not(:disabled) {
+  background: #f2f6fb;
+  border-color: var(--pl-brand);
+  box-shadow: none;
+}
+.btn:active:not(:disabled) {
+  box-shadow: none;
+}
+.btn.pri {
+  background: var(--pl-brand);
+  box-shadow: none;
+}
+.btn.pri:hover:not(:disabled) {
+  background: #1f78c4;
+  box-shadow: none;
+}
+.btn.red {
+  box-shadow: none;
+}
+.btn.dgr {
+  color: #c62828;
+  border-color: #f0b8b4;
+  background: #ffffff;
+}
+.btn.dgr:hover:not(:disabled) {
+  background: #fdeceb;
+  border-color: #c62828;
+}
+.btn.ghost,
+.btn.ghost:hover:not(:disabled) {
+  box-shadow: none;
+}
+
+/* กล่องยืนยัน (modal): แถบหัวพื้นสีเดียว ไม่ไล่สี ไม่มีคลื่นขาว · ไอคอนวงกลมใช้ขอบแทนเงา */
+.modal-banner {
+  background: #e3f0fb;
+}
+.modal-banner::before {
+  display: block;
+  background: transparent;
+}
+.modal-ic {
+  box-shadow: none;
+  border: 1px solid var(--pl-line);
+}
+.modal-ic-badge {
+  background: #fff3e0;
+}
+.modal-ic-badge.brand {
+  background: #e3f0fb;
+}
+.modal-card {
+  box-shadow: 0 24px 60px -24px rgba(20, 32, 47, 0.45);
+}
+/* ปุ่ม "ลบ" ในกล่องยืนยัน: ไอคอนเดิมเป็นสีขาวบนปุ่มพื้นขาว มองไม่เห็น (เห็นเป็นจุดขาว) → ใช้สีแดงตามปุ่ม */
+.modal-ft .btn.dgr svg {
+  color: currentColor;
+}
+
+/* แถบความคืบหน้า/ตัวเลขไล่สี → สีทึบ */
+.bar span {
+  background: var(--pl-brand);
+}
+.subsum .ssbar .fill {
+  background: #16a34a;
+}
+.kpi.w::before { background: #d97706; }
+.kpi.g::before { background: #16a34a; }
+.kpi.c::before { background: #dc2626; }
+.kpi.a::before { background: var(--pl-brand); }
+.kpi.a { background: #eef6fd; }
+.kpi.a .kv {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: #0a5490;
+  -webkit-text-fill-color: currentColor;
+}
+.po-badge .num {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--pl-brand);
+  -webkit-text-fill-color: currentColor;
+}
+.empty .ic {
+  background: #e3f0fb;
+}
+.rd.ab.on,
+.rd.cr.on {
+  background-image: none;
+}
+.rd.ab.on { background-color: var(--ab-tint); }
+.rd.cr.on { background-color: var(--cr-tint); }
+.rdpanel.ab .phead { background: var(--ab-tint); }
+.rdpanel.cr .phead { background: var(--cr-tint); }
+.crfields .fr.open { background: #f1f7fd; }
+.mypg-row.action { background: #fff6e6; }
+/* โครงกระดูกตอนโหลด: เดิมแถบไล่สีวิ่ง → สีเรียบกะพริบเบาๆ */
+.skel-bar {
+  background: #e9eef5;
+  background-size: auto;
+  animation: pl-skel 1.4s ease-in-out infinite;
+}
+@keyframes pl-skel {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}

@@ -4,6 +4,7 @@ import IconSprite from '../components/IconSprite';
 import { OverlayProvider } from '../components/Overlays';
 import { LanguageProvider } from '../lib/language';
 import './globals.css';
+import './polish.css';
 
 /** ฟอนต์หลักของทั้งระบบ — เจ้าของระบบสั่ง 22 ก.ย. 69 ให้เปลี่ยนจาก system-font stack เดิม (ที่พึ่งฟอนต์
  * ไทยของ OS แต่ละเครื่อง เช่น Sukhumvit Set/Leelawadee UI) มาเป็น Noto Sans Thai ตัวเดียวกันทุกเครื่อง
