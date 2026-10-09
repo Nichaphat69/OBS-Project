@@ -89,7 +89,7 @@ function money(n: number) {
 }
 
 export default function DashboardClient({ data, nameTh }: { data: DashboardData; nameTh: string }) {
-  const { tx, lang, formatPeriod } = useLang();
+  const { tx, lang, formatPeriod, formatDate } = useLang();
   const { contracts: scopeContracts } = useScope();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [cycleFilter, setCycleFilter] = useState('');
@@ -163,7 +163,8 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         actions={
           <span className="datelabel">
             <Icon name="cal" className="sm" />
-            {tx('ข้อมูล ณ')} {data.today}
+            <span className="dl-k">{tx('ข้อมูล ณ')}</span>
+            <b>{formatDate(data.today)}</b>
           </span>
         }
       />

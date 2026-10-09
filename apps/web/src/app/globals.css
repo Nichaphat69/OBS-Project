@@ -2032,16 +2032,35 @@ td.sub {
 
 /* ═══ ป้ายวันที่แบบอ่านอย่างเดียว (ไม่ใช่ปุ่ม) ═══ */
 .datelabel {
+  /* ป้ายวันที่ดีไซน์ใหม่ 9 ต.ค. 69 — สีทึบ ไม่ไล่สี: แคปซูลขาวขอบฟ้าอ่อน ไอคอนวงกลมสี #288adb วันที่ตัวหนา (อ่านอย่างเดียว ไม่ใช่ปุ่ม จึงไม่มี hover) */
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--mut);
-  background: var(--sunk);
-  border-radius: var(--r-ctl);
-  padding: 7px 14px;
+  gap: 9px;
+  font-size: 13.5px;
+  color: #14202f;
+  background: #ffffff;
+  border: 1.5px solid #d9e8f6;
+  border-radius: 999px;
+  padding: 5px 18px 5px 5px;
   white-space: nowrap;
+  cursor: default;
+}
+.datelabel > svg.i.sm {
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 50%;
+  background: #288adb;
+  color: #ffffff;
+  flex: none;
+}
+.datelabel .dl-k {
+  font-weight: 500;
+  color: #77839a;
+}
+.datelabel b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ═══ หน้า "การแจ้งเตือน" — ported verbatim from public/styles.css ═══ */
