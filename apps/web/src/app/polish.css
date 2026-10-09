@@ -139,6 +139,11 @@ tbody tr.sel td {
 }
 .modal-ic-badge {
   background: #fff3e0;
+  /* เดิมเป็นสี่เหลี่ยมมนซ้อนอยู่ในวงกลมขาว (เจ้าของระบบชี้ 9 ต.ค. 69 ว่าเห็นเป็นกรอบเหลี่ยมซ้อนกัน)
+     → ให้พื้นสีเต็มวงกลมเดียว ไม่มีรูปทรงซ้อน */
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
 }
 .modal-ic-badge.brand {
   background: #e3f0fb;
