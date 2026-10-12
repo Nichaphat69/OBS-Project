@@ -237,3 +237,112 @@ thead th {
   letter-spacing: 0.02em;
   font-weight: 700;
 }
+
+/* ═══ รอบ 12 ต.ค. 69: ไล่ปรับหน้าที่มีสไตล์เฉพาะของตัวเองให้เข้าชุดเดียวกัน ("แก้ทุกหน้า")
+   หลักเดียวกับหน้าบันทึกระบบ: การ์ดขาวขอบบางไม่มีเงา · กล่องไอคอนพื้นสีอ่อน+ไอคอนสีเข้ม (ไม่ใช่พื้นสีจัด+ไอคอนขาว)
+   · แถบสีด้านซ้ายบอกสถานะ · ปุ่มเพิ่ม = ฟ้า ไม่ใช่แดง — เฉพาะสี/เส้น/เงา ไม่ย้ายอะไร
+   ใช้ class ซ้อนสองชั้น (.x.x) เพราะ kpi.css/emp.css โหลดทีหลัง polish.css ต้องชนะด้วย specificity */
+:root {
+  --m3-elev-1: none;
+}
+
+/* แดชบอร์ด: การ์ดตัวเลขสรุป — ไม่ยกลอย ไม่มีเงา ไม่มีไอคอนลายน้ำ · กล่องไอคอนพื้นอ่อน */
+.kx.kx {
+  box-shadow: none;
+  border: 1px solid var(--pl-line);
+  border-radius: 16px;
+  transition: border-color 0.18s ease;
+}
+.kx.kx:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--a);
+}
+.kx .kx-wm {
+  display: none;
+}
+.kx .kx-ic {
+  background: color-mix(in srgb, var(--a) 13%, #ffffff);
+  color: var(--a);
+  box-shadow: none;
+}
+.kx .kx-ic svg {
+  color: var(--a);
+}
+.taskrow .ic {
+  background: color-mix(in srgb, currentColor 0%, #fff);
+}
+.taskrow.critical .ic { background: #fde8e6; color: #dc2626; }
+.taskrow.warn .ic { background: #fdf1dc; color: #d97706; }
+.taskrow.info .ic { background: #e8f3fc; color: #288adb; }
+.taskrow {
+  background: #ffffff;
+}
+.bc-item.open {
+  box-shadow: none;
+}
+.bc-emps {
+  background: var(--pl-head);
+}
+
+/* ข้อมูลหลัก: ช่องยอดเงินหลักจากพื้นฟ้าทึบตัวหนังสือขาว → พื้นฟ้าอ่อนตัวหนังสือเข้ม */
+.ct-card {
+  box-shadow: none;
+}
+.ct-stat.main {
+  background: #e8f3fc;
+  border-color: #cfe3f6;
+}
+.ct-stat.main .l,
+.ct-stat.main .v small {
+  color: #5d6b80;
+}
+.ct-stat.main .v {
+  color: #1f78c4;
+}
+.ct-stat {
+  background: #f6f8fb;
+}
+
+/* การแจ้งเตือน: แถวที่ยังไม่อ่านเป็นการ์ดขาวมีแถบฟ้าด้านซ้าย แทนพื้นฟ้าเต็มแถว */
+.bp-list button.unread {
+  background: #ffffff;
+  border-color: #cfe3f6;
+  box-shadow: inset 3px 0 0 #288adb;
+}
+.bp-list button.unread:hover {
+  background: #f1f7fd;
+}
+
+/* ตัวอ่าน Timesheet: แผง/การ์ดตัวอ่านพื้นขาว ไม่มีเงา ไม่มีพื้นสีอ่อนเต็มแผง · ปุ่มเพิ่ม Skill เป็นฟ้า */
+.rd.ab.on,
+.rd.cr.on {
+  box-shadow: none;
+  background-color: #ffffff;
+}
+.rdpanel.ab .phead,
+.rdpanel.cr .phead {
+  background: #ffffff;
+}
+.rdpick .rd:hover {
+  box-shadow: none;
+}
+.rd .mark,
+.rdpick .rd .mark {
+  box-shadow: none;
+}
+.sk-add .btn.red {
+  background: #288adb;
+}
+.sk-add .btn.red:hover:not(:disabled) {
+  background: #1f78c4;
+}
+
+/* บันทึกการส่ง: การ์ดย่อยพื้นอ่อนเรียบ */
+.sl-mini {
+  background: #f6f8fb;
+}
+.sl-sum.sl-donut {
+  border-color: var(--pl-line);
+  box-shadow: none;
+}
