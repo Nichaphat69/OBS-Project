@@ -346,3 +346,52 @@ thead th {
   border-color: var(--pl-line);
   box-shadow: none;
 }
+
+/* ═══ มาตรฐานเดียวทั้งระบบ — 12 ต.ค. 69 เจ้าของระบบสั่งเช็คให้ กรอบฟิลด์/ตาราง/ฟอนต์/ขนาด/น้ำหนัก เหมือนกันหมด
+   ผลตรวจ (วัดจริงด้วย computed style ทุกหน้า): ฟอนต์ตระกูลเดียวกันอยู่แล้ว (Noto Sans Thai) แต่ขนาด/สูง/น้ำหนักต่างกันเป็นจุดๆ
+   มาตรฐานที่ตั้ง: ช่องกรอก/dropdown สูง 40px ตัวอักษร 13.5px น้ำหนัก 400 · ตัวกรอง (chip) สูง 40px ตัวอักษร 13.5px
+   น้ำหนัก 500 · หัวตาราง 12px/700 สีเดียว padding 14×20 · เซลล์ตาราง 14px · ป้ายสถานะ 11.5px/600
+   · ปุ่มปกติ 40px/13.5px · ปุ่มเล็ก (.sm) 34px/12.5px */
+body input:is([type='text'], [type='search'], [type='number'], [type='email'], [type='password'], [type='tel'], [type='url'], :not([type])),
+body select:not(.role-sel),
+.sk-add input {
+  height: 40px;
+  font-size: 13.5px;
+  font-weight: 400;
+}
+.selectchip {
+  height: 40px;
+}
+.selectchip select,
+.selectchip.grow select {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--pl-ink);
+}
+.selectchip svg.i {
+  color: #77839a;
+}
+.sk-add .btn {
+  min-height: 40px;
+  height: 40px;
+}
+body table thead th {
+  padding: 14px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5d6b80;
+  line-height: 1.5;
+}
+body table tbody td {
+  font-size: 14px;
+}
+.st,
+.tg {
+  font-size: 11.5px;
+  padding: 5px 11px;
+}
+/* หัวตารางบางหน้า (บันทึกการส่ง/ตัวอ่าน) มีกฎเฉพาะของตัวเองที่ specificity สูงกว่า → บังคับสีกับ padding ให้เท่ากันทุกตาราง */
+body table thead th {
+  color: #5d6b80 !important;
+  padding: 14px 20px !important;
+}
