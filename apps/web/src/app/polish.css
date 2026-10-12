@@ -9,12 +9,27 @@
 
 :root {
   --pl-bg: #ffffff;
-  --pl-line: #e1e7ef;
-  --pl-line-2: #ebeff5;
-  --pl-head: #f1f4f9;
+  --pl-line: #e6e9ef;
+  --pl-line-2: #eef1f5;
+  --pl-head: #f6f8fb;
   --pl-ink: #14202f;
   --pl-brand: #288adb;
   /* ตัวแปรไล่สีเดิม (ใช้กับจุด/แถบ/ป้ายหลายจุด) → สีทึบ ครอบคลุมทุกจุดที่เรียก var(--grad-*) */
+  /* พาเลตเดียวกับหน้าบันทึกระบบ/API Activity Log (admin-log.css) ใช้ทั้งระบบ — 12 ต.ค. 69 เจ้าของระบบชอบสไตล์นี้และสั่งให้ใช้ทุกที่ */
+  --brand: #288adb;
+  --brand-h: #1f78c4;
+  --brand-d: #1f78c4;
+  --tint: #e8f3fc;
+  --ok: #12975a;
+  --okb: #e6f6ee;
+  --wn: #d97706;
+  --wnb: #fdf1dc;
+  --cr: #dc2626;
+  --crb: #fde8e6;
+  --pr: #6d4fd3;
+  --prb: #efeafc;
+  --rule: #e6e9ef;
+  --hair: #eef1f5;
   --grad-brand: #288adb;
   --grad-progress: #288adb;
   --grad-ab: #d44023;
@@ -81,11 +96,11 @@ tbody tr.sel td {
   border-color: transparent !important;
   box-shadow: none;
 }
-.st.ok, .tg.ok { background: #e4f5ec; color: #0e7a47; }
-.st.wn, .tg.wn { background: #fff0d4; color: #a35c00; }
-.st.cr, .tg.cr { background: #fde7e5; color: #b42318; }
-.st.pr, .tg.pr { background: #ece9ff; color: #5b3fd0; }
-.st.mu, .tg.mu { background: #edf0f5; color: #5d6b80; }
+.st.ok, .tg.ok { background: #e6f6ee; color: #0f7a4c; }
+.st.wn, .tg.wn { background: #fdf1dc; color: #b45309; }
+.st.cr, .tg.cr { background: #fde8e6; color: #b42318; }
+.st.pr, .tg.pr { background: #efeafc; color: #5538b0; }
+.st.mu, .tg.mu { background: #eef1f5; color: #667085; }
 
 /* ปุ่ม: ไม่มีเงา ไม่ยกลอย — แยกกันด้วยสีกับเส้นขอบเท่านั้น */
 .btn {
@@ -204,4 +219,21 @@ tbody tr.sel td {
 @keyframes pl-skel {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+
+/* แท็บเส้นใต้: ชี้แล้วเป็นแคปซูลเทาอ่อน (เหมือน segmented ของหน้าบันทึกระบบ) — เปลี่ยนเฉพาะสี ไม่ย้ายตำแหน่ง */
+.tab:hover,
+.tabstrip button:hover {
+  background: #f1f4f9;
+  border-radius: 10px 10px 0 0;
+}
+/* ป้ายตัวเลขบนปุ่ม/แท็บ และชิป: โทนอ่อนเหมือนกัน */
+.fmenu-n {
+  background: var(--pl-brand);
+}
+/* ตัวอักษรหัวคอลัมน์: เล็ก เว้นระยะ ดูเป็นตารางข้อมูล */
+thead th {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  font-weight: 700;
 }
