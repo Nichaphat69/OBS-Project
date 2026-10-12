@@ -155,25 +155,45 @@ function AppShellInner({
 
   // SSE — เซิร์ฟเวอร์บอกเองว่ามีอะไรเปลี่ยน หน้าปัจจุบันตามให้ทันโดยไม่ต้องกดรีเฟรช
   //
-  // ต่อตรงไปที่ apps/api เอง (คนละ origin จากเว็บ ไม่ผ่านพร็อกซี Next.js เหมือน fetch อื่นทั้งหมด) —
-  // ทดสอบแล้วพบว่า Next.js route handler พร็อกซี stream ที่ไม่มีวันจบแบบนี้ไม่ได้ (buffer ทั้งก้อนรอ
-  // จนกว่า stream จะปิดก่อนถึงส่งออก ซึ่ง SSE ไม่มีวันปิดเอง) จึงต้องเปิดข้อยกเว้นทางสถาปัตยกรรมเฉพาะ
-  // จุดนี้จุดเดียว — พอร์ต 4301 มาจาก docker-compose's API_PORT (ผูกกับ host เดียวกับเว็บเสมอในดีพลอย
-  // แบบนี้) ฝั่ง apps/api เปิด CORS + credentials ไว้รับคุกกี้ session ข้าม origin ให้แล้ว
+  // ต่อผ่านเว็บ origin เดียวกัน (/api/stream → พร็อกซีไป apps/api — ดู app/api/stream/route.ts) เดิมต่อตรงพอร์ต 4301 ซึ่งปิดจากภายนอก
+  // บน UAT/dev ทำให้ไม่เคยต่อติด ป้ายตัวเลขเมนู/ฟีดแจ้งเตือนเลยไม่อัปเดตหลังกดตีกลับ/ยืนยัน ฯลฯ จนกว่าจะรีเฟรช (12 ต.ค. 69)
+  const nudge = useCallback(() => {
+    if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
+    nudgeTimer.current = setTimeout(() => {
+      loadPulse();
+      reloadOptions();
+      router.refresh();
+    }, 200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
-    const apiOrigin = `${window.location.protocol}//${window.location.hostname}:4301`;
-    const stream = new EventSource(`${apiOrigin}/api/stream`, { withCredentials: true });
-    function nudge() {
-      if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
-      nudgeTimer.current = setTimeout(() => {
-        loadPulse();
-        reloadOptions();
-        router.refresh();
-      }, 200);
-    }
+    const stream = new EventSource('/api/stream', { withCredentials: true });
     stream.addEventListener('change', nudge);
     stream.addEventListener('open', () => loadPulse());
     return () => stream.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ไม่พึ่ง SSE อย่างเดียว: คำขอเขียนข้อมูล (POST/PATCH/PUT/DELETE ไปที่ /api/*) จากหน้าไหนก็ตามที่สำเร็จ = ข้อมูลเปลี่ยนแน่ๆ → รีเฟรชป้ายตัวเลข
+  // รายการตัวกรอง และข้อมูลของหน้าที่เปิดอยู่ทันที (SSE ต่อไม่ติดหลัง proxy/ถูกตัด เกิดขึ้นได้จริง) ครอบคลุมทุกปุ่มทั้งระบบในจุดเดียว
+  // ไม่ต้องไล่เติมทีละหน้า — ถอดตัวครอบออกตอนออกจากเลย์เอาต์
+  useEffect(() => {
+    const original = window.fetch;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await original(input, init);
+      try {
+        const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+        if (response.ok && method !== 'GET' && method !== 'HEAD' && /\/api\//.test(url) && !/\/api\/auth\//.test(url)) nudge();
+      } catch {
+        /* ตัวครอบนี้ต้องไม่ทำให้คำขอจริงพังไม่ว่ากรณีใด */
+      }
+      return response;
+    };
+    return () => {
+      window.fetch = original;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -103,6 +103,10 @@ export async function requestScope(req: Request, opts: { allowAll?: boolean } = 
     return { filters, contractIds: null };
   }
   const active = await getActiveContract();
+  // ไม่ได้เลือกอะไร + ไม่มีสัญญาไหนเปิดอยู่เลย: แถบบนแสดงว่า "ทุก PO" (ดู ScopeProvider ฝั่งเว็บ: ไม่มีสัญญาที่เปิดอยู่ = ไม่มีตัวกรอง)
+  // ฝั่งข้อมูลต้องตรงกัน — เดิมคืนรายการว่างทั้งที่แถบบอกว่าดูทุก PO ทำให้หน้าข้อมูลหลัก/พนักงานว่างเปล่าทั้งที่มีสัญญาอยู่ (12 ต.ค. 69)
+  // เฉพาะ admin/บัญชีที่เลือกดูทุก PO เองได้อยู่แล้ว role อื่นยังได้รายการว่างเหมือนเดิม
+  if (!active && (req.user?.role === 'admin' || req.user?.role === 'accounting')) return { filters, contractIds: null };
   return { filters, contractIds: active ? [active.id] : [] };
 }
 
