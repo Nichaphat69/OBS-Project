@@ -88,6 +88,12 @@ interface FlowAccountCompany {
   discountAmount?: number | null;
   grandTotal?: number | null;
   employees: FlowAccountEmployee[];
+  // ฟิลด์ระดับเอกสาร/ทุกรายการที่เหลือของใบเสนอราคา (12 ต.ค. 69) — แสดงอ่านอย่างเดียว ดู FlowAccountQuotationExtra ฝั่ง apps/api
+  quotationExtra?: Record<string, string | null>;
+  quotationItems?: Array<Record<string, string | null>>;
+  // เทียบกับข้อมูลในระบบ (12 ต.ค. 69): บริษัทนี้มีอยู่แล้ว → เพิ่มเป็นสัญญาใหม่ให้บริษัทเดิม · ใบเสนอราคานี้นำเข้าเป็นสัญญาแล้ว
+  existingCustomerId?: string | null;
+  alreadyImported?: boolean;
 }
 
 /** ปุ่มเชื่อมต่อ FlowAccount — ย้ายมาจากแถบบน (topbar) เดิม เพราะเป็นสวิตช์ที่คุมข้อมูลบริษัท/สัญญาที่
@@ -527,6 +533,35 @@ export default function CustomersContractsTab() {
   );
 }
 
+/** ฟิลด์ระดับเอกสารที่เหลือของใบเสนอราคา FlowAccount (อ่านอย่างเดียว) — คีย์ตรงกับ quotationExtra ฝั่ง API · true = เป็นจำนวนเงิน */
+const FA_EXTRA_FIELDS: Array<[string, string, boolean]> = [
+  ['status', 'สถานะเอกสาร', false],
+  ['contactCode', 'รหัสลูกค้า', false],
+  ['contactGroup', 'กลุ่มลูกค้า', false],
+  ['creditType', 'เงื่อนไขการชำระเงิน', false],
+  ['dueDate', 'วันครบกำหนด', false],
+  ['saleChannel', 'ช่องทางการขาย', false],
+  ['externalDocumentId', 'เลขที่เอกสารภายนอก', false],
+  ['discountType', 'ประเภทส่วนลด', false],
+  ['discountPercentage', 'ส่วนลด (%)', false],
+  ['totalAfterDiscount', 'ยอดหลังหักส่วนลด', true],
+  ['totalWithoutVat', 'ยอดก่อนภาษี', true],
+  ['exemptAmount', 'ยอดยกเว้นภาษี', true],
+  ['vatableAmount', 'ยอดที่คิดภาษี', true],
+  ['vatAmount', 'ภาษีมูลค่าเพิ่ม', true],
+  ['isVat', 'คิดภาษีมูลค่าเพิ่ม', false],
+  ['showWithholdingTax', 'แสดงหัก ณ ที่จ่าย', false],
+  ['withholdingAmount', 'ยอดหัก ณ ที่จ่าย', true],
+  ['deductionType', 'ประเภทการหักเงิน', false],
+  ['deductionAmount', 'ยอดหักเงิน', true],
+];
+
+function faShow(v: string | null | undefined, money = false): string {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  return money && Number.isFinite(n) ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v;
+}
+
 /** ฟอร์ม "เพิ่มบริษัทใหม่" — สร้างบริษัท + สัญญาแรกในคราวเดียว เพราะบริษัทที่ไม่มีสัญญาเลยใช้งานอะไร
  * ไม่ได้ (ไม่มีอัตราจ้าง ไม่มีรอบบิล) */
 function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => void }) {
@@ -576,8 +611,12 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
   const [remarks, setRemarks] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [faTotals, setFaTotals] = useState<{ sub: number | null; disc: number | null; grand: number | null }>({ sub: null, disc: null, grand: null });
-  // เติมช่องไหนให้จากใบเสนอราคาแล้วบ้าง — ไว้ขึ้นข้อความเตือนให้ตรวจก่อนบันทึก (โดยเฉพาะเลข PO ที่เดามาจากเลขที่อ้างอิง)
-  const [poFromRef, setPoFromRef] = useState(false);
+  // เลขที่เอกสาร + ฟิลด์ระดับเอกสารที่เหลือ + ทุกรายการของใบเสนอราคา (แสดงอ่านอย่างเดียว)
+  const [faDoc, setFaDoc] = useState<{ no: string | null; extra: Record<string, string | null>; items: Array<Record<string, string | null>> } | null>(null);
+  // โหมดดึงจาก FlowAccount (เลือกใบเสนอราคาแล้ว): เลขที่อ้างอิงช่องเดียวใช้เป็นเลข PO ของสัญญา · วันที่ใบเสนอราคาใช้เป็นวันเริ่มสัญญา
+  const faMode = faIndex !== '';
+  const faExistingCustomerId = faMode ? faCompanies[Number(faIndex)]?.existingCustomerId ?? null : null;
+  // ข้อความเตือนให้ตรวจก่อนบันทึก (เครดิต/หัก ณ ที่จ่าย 0, ราคารวมภาษี)
   const [faNotes, setFaNotes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Set<string>>(new Set());
@@ -596,6 +635,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
       // เลือกกลับเป็นช่องว่าง = ไม่ใช้ใบเสนอราคาแล้ว: ปลดล็อกทั้งหมดและเลิกผูก FlowAccount (ค่าที่เติมไว้ยังอยู่ให้แก้ต่อได้)
       setFaLocked(new Set());
       setFaContactId(null);
+      setFaDoc(null);
       return;
     }
     const has = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== '';
@@ -641,14 +681,9 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     setRemarks(c.remarks ?? '');
     setInternalNotes(c.internalNotes ?? '');
     setFaTotals({ sub: c.subTotal ?? null, disc: c.discountAmount ?? null, grand: c.grandTotal ?? null });
-    // เลข PO: "เลขที่อ้างอิง" ของ FlowAccount น่าจะเป็นเลข PO แต่มีค่าแค่บางใบและรูปแบบไม่เหมือนกัน — เติมให้เฉพาะตอนช่อง PO ยังว่าง
-    // แล้วขึ้นข้อความให้ตรวจเทียบกับใบว่าจ้างก่อนบันทึกเสมอ (PO ผิดแล้วเสียหายกว่าช่องว่าง)
-    if (c.reference && !poNo.trim()) {
-      setPoNo(c.reference);
-      setPoFromRef(true);
-    } else {
-      setPoFromRef(false);
-    }
+    // เลขที่อ้างอิงของ FlowAccount ช่องเดียวทำหน้าที่เป็นเลข PO ของสัญญาด้วย (12 ต.ค. 69 ตามที่สั่ง — เดิมมี 2 ช่องซ้ำกัน) ส่วนวันที่ใบเสนอราคา
+    // ใช้เป็นวันเริ่มสัญญา (วันเดียวกัน ตัดช่องวันเริ่มสัญญาออกในโหมดนี้) — ใบเสนอราคาที่ไม่มีเลขอ้างอิง/วันที่ ช่องนั้นจะเปิดให้กรอกเองแทน
+    setFaDoc({ no: c.quotationNo ?? null, extra: c.quotationExtra ?? {}, items: c.quotationItems ?? [] });
     // เครดิต/หัก ณ ที่จ่าย: FlowAccount ใส่ 0 เป็นค่าเริ่มต้นของใบเสนอราคาเกือบทุกใบ (ตรวจ 20 ใบ: เครดิต 0 อยู่ 13 ใบ, หัก ณ ที่จ่าย 0 ทั้ง 20 ใบ)
     // ซึ่งแปลว่า "ยังไม่ได้ตั้ง" มากกว่า "ไม่มีเครดิต/ไม่หัก" — ทับค่าเริ่มต้นของเราด้วย 0 จะทำให้วันครบกำหนด/ยอดหักผิดโดยไม่รู้ตัว
     // จึงเติมเฉพาะเมื่อมากกว่า 0 ส่วน 0 ใช้ค่าเริ่มต้นเดิมแล้วบอกให้รู้
@@ -672,7 +707,9 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
   async function save() {
     const nt = nameTh.trim();
     const ti = taxId.trim();
-    const po = poNo.trim();
+    // โหมด FlowAccount: เลขที่อ้างอิงช่องเดียวเป็นเลข PO · วันที่ใบเสนอราคาเป็นวันเริ่มสัญญา
+    const po = (faMode ? faReference : poNo).trim();
+    const sd = faMode && quotationDate ? quotationDate : startDate;
     const pn = projectName.trim();
     if (!nt || !ti) {
       setFieldErrors(new Set([!nt && 'nameTh', !ti && 'taxId'].filter(Boolean) as string[]));
@@ -682,40 +719,52 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
     // สัญญาไม่บังคับกรอกตอนสร้างบริษัทอีกต่อไป (createCustomer() เองก็ต้องการแค่ชื่อ+เลขผู้เสียภาษี
     // อยู่แล้ว) แต่ถ้าจะกรอกสัญญาด้วยก็ต้องครบทั้ง 4 ช่อง เพราะ createContract() ฝั่ง server ยัง
     // ต้องการครบเหมือนเดิม — ไม่แตะ validation นั้นเพราะมีเหตุผลของมันเอง (บิล/PO อ้างอิงฟิลด์พวกนี้)
-    const hasAnyContractField = Boolean(po || pn || startDate || endDate);
-    const hasAllContractFields = Boolean(po && pn && startDate && endDate);
+    const hasAnyContractField = Boolean(po || pn || sd || endDate);
+    const hasAllContractFields = Boolean(po && pn && sd && endDate);
     if (hasAnyContractField && !hasAllContractFields) {
       setFieldErrors(
-        new Set([!po && 'poNo', !pn && 'projectName', !startDate && 'startDate', !endDate && 'endDate'].filter(Boolean) as string[]),
+        new Set([!po && 'poNo', !pn && 'projectName', !sd && 'startDate', !endDate && 'endDate'].filter(Boolean) as string[]),
       );
       toast(tx('ถ้าจะเพิ่มสัญญาด้วยเลย ต้องกรอกเลขที่ใบว่าจ้าง ชื่อโครงการ และช่วงสัญญาให้ครบ — หรือเว้นว่างทั้งหมดไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้'), true);
+      return;
+    }
+    // บริษัทเดิมอยู่ในระบบแล้ว: ไม่สร้างบริษัทซ้ำ — ต้องมีสัญญาให้เพิ่มเสมอ (ไม่งั้นไม่มีอะไรให้ทำ)
+    if (faExistingCustomerId && !hasAllContractFields) {
+      setFieldErrors(new Set([!po && 'poNo', !pn && 'projectName', !sd && 'startDate', !endDate && 'endDate'].filter(Boolean) as string[]));
+      toast(tx('บริษัทนี้มีอยู่แล้ว — ต้องกรอกเลขที่อ้างอิง/PO ชื่อโครงการ และช่วงสัญญาให้ครบเพื่อเพิ่มสัญญาใหม่'), true);
       return;
     }
     setFieldErrors(new Set());
     setSaving(true);
     try {
-      const customerRes = await fetch('/api/customers', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          nameTh: nt,
-          taxId: ti,
-          branch: branch.trim() || undefined,
-          address: address.trim() || null,
-          zipCode: zipCode.trim() || null,
-          creditDays: Number.isFinite(Number(creditDays)) && creditDays.trim() !== '' ? Number(creditDays) : 30,
-          contactName: contactName.trim() || null,
-          contactPhone: contactPhone.trim() || null,
-          contactEmail: contactEmail.trim() || null,
-          billingPlace: billingPlace.trim() || null,
-          flowaccountContactId: faContactId || null,
-        }),
-      });
-      const customer = await customerRes.json();
-      if (!customerRes.ok) {
-        toast(customer?.error ?? tx('สร้างบริษัทไม่สำเร็จ'), true);
-        setSaving(false);
-        return;
+      // บริษัทเดิม (ตรงกับ FlowAccount contact หรือเลขผู้เสียภาษี+สาขา) ใช้ id เดิม ไม่สร้างซ้ำ — ใบเสนอราคาใหม่ของบริษัทเดียวกัน = สัญญาใหม่
+      let customer: any;
+      if (faExistingCustomerId) {
+        customer = { id: faExistingCustomerId };
+      } else {
+        const customerRes = await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            nameTh: nt,
+            taxId: ti,
+            branch: branch.trim() || undefined,
+            address: address.trim() || null,
+            zipCode: zipCode.trim() || null,
+            creditDays: Number.isFinite(Number(creditDays)) && creditDays.trim() !== '' ? Number(creditDays) : 30,
+            contactName: contactName.trim() || null,
+            contactPhone: contactPhone.trim() || null,
+            contactEmail: contactEmail.trim() || null,
+            billingPlace: billingPlace.trim() || null,
+            flowaccountContactId: faContactId || null,
+          }),
+        });
+        customer = await customerRes.json();
+        if (!customerRes.ok) {
+          toast(customer?.error ?? tx('สร้างบริษัทไม่สำเร็จ'), true);
+          setSaving(false);
+          return;
+        }
       }
 
       if (!hasAllContractFields) {
@@ -736,7 +785,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           contractNo: contractNo.trim() || null,
           divisorMode,
           divisorValue: Number(divisorValue) || 20,
-          startDate,
+          startDate: sd,
           endDate,
           // เครดิตเดิมไม่เคยส่งไปกับสัญญาเลย (ใช้ค่าเริ่มต้น 30 ของฝั่ง server เสมอ) — ส่งค่าเดียวกับที่โชว์ในฟอร์ม
           creditDays: Number.isFinite(Number(creditDays)) && creditDays.trim() !== '' ? Number(creditDays) : 30,
@@ -776,7 +825,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
                 nameTh: emp.nameTh,
                 invoicePosition: emp.invoicePosition,
                 monthlyRate: emp.monthlyRate,
-                startDate,
+                startDate: sd,
                 endDate,
                 quotationNo: faCompany.quotationNo || null,
                 quantity: emp.quantity ?? null,
@@ -827,14 +876,23 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
               <select value={faIndex} onChange={(e) => onFromFaChange(e.target.value)}>
                 <option value="">— {tx('เลือกบริษัทจากใบเสนอราคาที่มีอยู่แล้ว')} —</option>
                 {faCompanies.map((c, i) => (
-                  <option key={c.flowaccountContactId} value={i}>
-                    {c.nameTh} ({c.quotationNo ?? '—'})
+                  // หนึ่งรายการ = หนึ่งใบเสนอราคา (หนึ่งสัญญา/PO) — บริษัทเดียวกันมีหลายรายการได้ · ที่นำเข้าเป็นสัญญาแล้วเลือกซ้ำไม่ได้
+                  <option key={`${c.quotationNo ?? c.flowaccountContactId}-${i}`} value={i} disabled={Boolean(c.alreadyImported)}>
+                    {c.nameTh} · {c.quotationNo ?? '—'}
+                    {c.reference ? ` · PO ${c.reference}` : ''}
+                    {c.quotationDate ? ` · ${c.quotationDate}` : ''}
+                    {c.alreadyImported ? ` · ${tx('นำเข้าแล้ว')}` : ''}
                   </option>
                 ))}
               </select>
             </span>
           </label>
           <small className="fhint">{faHint}</small>
+          {faExistingCustomerId && (
+            <small className="fhint" style={{ color: 'var(--wn)' }}>
+              {tx('บริษัทนี้มีอยู่ในระบบแล้ว — การบันทึกจะเพิ่มเป็น "สัญญาใหม่" ให้บริษัทเดิม ไม่สร้างบริษัทซ้ำ')}
+            </small>
+          )}
         </div>
       )}
 
@@ -902,16 +960,30 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('ไม่บังคับ — เว้นว่างไว้ก่อนแล้วเพิ่มสัญญาทีหลังก็ได้')}</span>
         </div>
         <div className="frm">
-          <label>
-            {tx('เลขที่ใบว่าจ้าง (PO)')}
-            <input
-              className={fieldErrors.has('poNo') ? 'err' : undefined}
-              value={poNo}
-              placeholder={tx('เช่น 26/B0200')}
-              onChange={(e) => { setPoNo(e.target.value); setPoFromRef(false); }}
-            />
-            {poFromRef && <small className="fhint" style={{ color: 'var(--wn)' }}>{tx('เติมจาก "เลขที่อ้างอิง" ของ FlowAccount — ตรวจให้ตรงกับใบว่าจ้างก่อนบันทึก')}</small>}
-          </label>
+          {faMode ? (
+            <label>
+              {tx('เลขที่อ้างอิง')}
+              <input
+                className={fieldErrors.has('poNo') ? 'err' : undefined}
+                value={faReference}
+                onChange={(e) => setFaReference(e.target.value)}
+                readOnly={locked('faReference')}
+                placeholder={tx('เช่น 26/B0200')}
+              />
+              {lockNote('faReference')}
+              <small className="fhint">{tx('ใช้เป็นเลขที่ PO ของสัญญานี้')}</small>
+            </label>
+          ) : (
+            <label>
+              {tx('เลขที่ใบว่าจ้าง (PO)')}
+              <input
+                className={fieldErrors.has('poNo') ? 'err' : undefined}
+                value={poNo}
+                placeholder={tx('เช่น 26/B0200')}
+                onChange={(e) => setPoNo(e.target.value)}
+              />
+            </label>
+          )}
           <label>
             {tx('เลขที่สัญญา')}
             <input value={contractNo} onChange={(e) => setContractNo(e.target.value)} />
@@ -934,14 +1006,16 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
             {tx('จำนวนวัน (ถ้าคงที่)')}
             <input type="number" min={1} value={divisorValue} onChange={(e) => setDivisorValue(e.target.value)} />
           </label>
-          <label>
-            {tx('วันเริ่มสัญญา')}
-            <DatePicker
-              value={startDate}
-              onChange={setStartDate}
-              className={fieldErrors.has('startDate') ? 'err' : undefined}
-              />
-          </label>
+          {!(faMode && quotationDate) && (
+            <label>
+              {tx('วันเริ่มสัญญา')}
+              <DatePicker
+                value={startDate}
+                onChange={setStartDate}
+                className={fieldErrors.has('startDate') ? 'err' : undefined}
+                />
+            </label>
+          )}
           <label>
             {tx('วันสิ้นสุดสัญญา')}
             <DatePicker
@@ -978,14 +1052,14 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           )}
           <div className="frm">
             <label>
-              {tx('เลขที่อ้างอิง')}
-              <input value={faReference} onChange={(e) => setFaReference(e.target.value)} readOnly={locked('faReference')} />
-              {lockNote('faReference')}
+              {tx('เลขที่เอกสาร')}
+              <input value={faDoc?.no ?? '—'} readOnly />
             </label>
             <label>
               {tx('วันที่ใบเสนอราคา')}
               <DatePicker value={quotationDate} onChange={setQuotationDate} disabled={locked('quotationDate')} />
               {lockNote('quotationDate')}
+              <small className="fhint">{tx('ใช้เป็นวันเริ่มสัญญา')}</small>
             </label>
             <label>
               {tx('ราคา')}
@@ -1021,6 +1095,73 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
               <input value={faTotals.grand != null ? faTotals.grand.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'} readOnly />
             </label>
           </div>
+
+          {faDoc && (
+            <>
+              <div className="fsec-h" style={{ marginTop: 18 }}>
+                <b>{tx('รายละเอียดอื่นๆ ในใบเสนอราคา')}</b>
+                <span style={{ fontSize: 12, color: 'var(--mut)' }}>{tx('อ่านอย่างเดียว — แสดงครบตามที่มีใน FlowAccount')}</span>
+              </div>
+              <div className="frm">
+                <label>
+                  {tx('ส่วนลดรวม (บาท)')}
+                  <input value={faShow(faTotals.disc != null ? String(faTotals.disc) : null, true)} readOnly />
+                </label>
+                {FA_EXTRA_FIELDS.map(([key, label, isMoney]) => (
+                  <label key={key}>
+                    {tx(label)}
+                    <input value={faShow(faDoc.extra[key], isMoney)} readOnly />
+                  </label>
+                ))}
+              </div>
+
+              <div className="fsec-h" style={{ marginTop: 18 }}>
+                <b>{tx('รายการในใบเสนอราคา')}</b>
+                <span style={{ fontSize: 12, color: 'var(--mut)' }}>{faDoc.items.length} {tx('รายการ')}</span>
+              </div>
+              <div className="tw">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>{tx('ชื่อรายการ')}</th>
+                      <th>{tx('รายละเอียด')}</th>
+                      <th className="r">{tx('จำนวน')}</th>
+                      <th>{tx('หน่วย')}</th>
+                      <th className="r">{tx('ราคาต่อหน่วย')}</th>
+                      <th className="r">{tx('ส่วนลด')}</th>
+                      <th className="r">VAT (%)</th>
+                      <th className="r">{tx('หัก ณ ที่จ่าย (ต่อรายการ)')}</th>
+                      <th className="r">{tx('จำนวนเงิน')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {faDoc.items.length === 0 && (
+                      <tr>
+                        <td colSpan={10} style={{ textAlign: 'center', color: 'var(--mut)' }}>
+                          {tx('ใบเสนอราคานี้ไม่มีรายการ')}
+                        </td>
+                      </tr>
+                    )}
+                    {faDoc.items.map((it, i) => (
+                      <tr key={i}>
+                        <td className="sub">{i + 1}</td>
+                        <td>{faShow(it.name)}</td>
+                        <td>{faShow(it.description)}</td>
+                        <td className="r n">{faShow(it.quantity)}</td>
+                        <td>{faShow(it.unitName)}</td>
+                        <td className="r n">{faShow(it.pricePerUnit, true)}</td>
+                        <td className="r n">{faShow(it.discountAmount, true)}</td>
+                        <td className="r n">{faShow(it.vatRate)}</td>
+                        <td className="r n">{it.withHeldPerItem && it.withHeldPerItem !== 'None' ? `${faShow(it.withHeldPerItem)}${it.withHeldPerItemValue ? ` (${faShow(it.withHeldPerItemValue, true)})` : ''}` : '—'}</td>
+                        <td className="r n">{faShow(it.total, true)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 

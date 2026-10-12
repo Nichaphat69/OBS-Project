@@ -219,6 +219,50 @@ export interface FlowAccountCompany {
   discountAmount: number | null;
   grandTotal: number | null;
   employees: FlowAccountEmployeeLine[];
+  /** ฟิลด์ระดับเอกสารที่เหลือของใบเสนอราคา (12 ต.ค. 69 เจ้าของระบบสั่ง "ทุกฟิลด์ต้องมีตามใน FlowAccount") — แสดงอ่านอย่างเดียว
+   * ในฟอร์มเพิ่มบริษัท ค่าส่งผ่านตามที่ FlowAccount ตอบมา (ส่วนมากเป็นข้อความตัวเลข) ไม่แปลง/ไม่คำนวณใหม่ */
+  quotationExtra: FlowAccountQuotationExtra;
+  /** บริษัทนี้มีอยู่ในระบบแล้วไหม (ตรงด้วย FlowAccount contact หรือเลขผู้เสียภาษี+สาขา) — ถ้ามี การเลือกใบเสนอราคานี้จะเพิ่ม "สัญญาใหม่ให้บริษัทเดิม" ไม่สร้างบริษัทซ้ำ */
+  existingCustomerId: string | null;
+  /** ใบเสนอราคานี้เคยนำเข้าเป็นสัญญาแล้วหรือยัง (มีสัญญาเลข PO = เลขที่อ้างอิง หรือมีอัตราจ้างที่อ้างเลขใบเสนอราคานี้) */
+  alreadyImported: boolean;
+  /** "ทุกรายการ" ในใบเสนอราคา (ต่างจาก employees ที่กรองเฉพาะบรรทัดที่เป็นคน) — ไว้แสดงหัวข้อรายการให้ครบเหมือนใน FlowAccount */
+  quotationItems: FlowAccountQuotationItem[];
+}
+
+export interface FlowAccountQuotationExtra {
+  status: string | null;
+  contactCode: string | null;
+  contactGroup: string | null;
+  creditType: string | null;
+  dueDate: string | null;
+  saleChannel: string | null;
+  externalDocumentId: string | null;
+  isVat: string | null;
+  discountType: string | null;
+  discountPercentage: string | null;
+  totalAfterDiscount: string | null;
+  totalWithoutVat: string | null;
+  exemptAmount: string | null;
+  vatableAmount: string | null;
+  vatAmount: string | null;
+  showWithholdingTax: string | null;
+  withholdingAmount: string | null;
+  deductionType: string | null;
+  deductionAmount: string | null;
+}
+
+export interface FlowAccountQuotationItem {
+  name: string | null;
+  description: string | null;
+  quantity: string | null;
+  unitName: string | null;
+  pricePerUnit: string | null;
+  discountAmount: string | null;
+  vatRate: string | null;
+  withHeldPerItem: string | null;
+  withHeldPerItemValue: string | null;
+  total: string | null;
 }
 
 const numOrNull = (v: unknown): number | null => {
@@ -269,29 +313,78 @@ export function mapQuotationToCompany(q: any): FlowAccountCompany {
         discountAmount: numOrNull(item.discountAmount),
         vatRate: numOrNull(item.vatRate),
       })),
+    existingCustomerId: null,
+    alreadyImported: false,
+    quotationExtra: {
+      status: textOrNull(q.statusString ?? q.status),
+      contactCode: textOrNull(q.contactCode),
+      contactGroup: textOrNull(q.contactGroup),
+      creditType: textOrNull(q.creditType),
+      dueDate: textOrNull(q.dueDate),
+      saleChannel: textOrNull(q.saleAndPurchaseChannel),
+      externalDocumentId: textOrNull(q.externalDocumentId),
+      isVat: textOrNull(q.isVat),
+      discountType: textOrNull(q.discountType),
+      discountPercentage: textOrNull(q.discountPercentage),
+      totalAfterDiscount: textOrNull(q.totalAfterDiscount),
+      totalWithoutVat: textOrNull(q.totalWithoutVat),
+      exemptAmount: textOrNull(q.exemptAmount),
+      vatableAmount: textOrNull(q.vatableAmount),
+      vatAmount: textOrNull(q.vatAmount),
+      showWithholdingTax: textOrNull(q.documentShowWithholdingTax),
+      withholdingAmount: textOrNull(q.documentWithholdingTaxAmount),
+      deductionType: textOrNull(q.documentDeductionType),
+      deductionAmount: textOrNull(q.documentDeductionAmount),
+    },
+    // ทุกบรรทัดตามลำดับใน FlowAccount (รวมหัวข้อ/บรรทัดที่ราคา 0 ที่ employees กรองทิ้ง)
+    quotationItems: items.map((item: any) => ({
+      name: textOrNull(item.name),
+      description: textOrNull(item.description),
+      quantity: textOrNull(item.quantity),
+      unitName: textOrNull(item.unitName),
+      pricePerUnit: textOrNull(item.pricePerUnit),
+      discountAmount: textOrNull(item.discountAmount),
+      vatRate: textOrNull(item.vatRate),
+      withHeldPerItem: textOrNull(item.withHeldPerItem),
+      withHeldPerItemValue: textOrNull(item.withHeldPerItemValue),
+      total: textOrNull(item.total),
+    })),
   };
 }
 
-/** ported from service.js listFlowAccountCompanies() — reads existing quotations from
- * FlowAccount to autofill "เพิ่มลูกค้าใหม่" (name/tax id/contact/project + a ready-made employee
- * list from the quotation's line items). Read-only external call, no audit entry (matches
- * original). Dedupes by contactId keeping the most recently published quotation per company. */
+/** อ่านใบเสนอราคาจาก FlowAccount มาช่วยกรอกฟอร์ม "เพิ่มบริษัทใหม่" — read-only external call ไม่มี audit entry
+ *
+ * 12 ต.ค. 69 ตามที่สั่ง: คืน "ทุกใบเสนอราคา" ไม่ใช่หนึ่งใบต่อบริษัทอีกต่อไป — บริษัทเดียวกันมีหลายสัญญา/หลาย PO พร้อมกันได้
+ * (เช่น นาย A เริ่ม ม.ค. PO 202601 กับนาง B เริ่ม ก.พ. PO 202602 ของบริษัทเดียวกัน) แต่ละใบเสนอราคา = หนึ่งสัญญา
+ * เดิมเก็บแค่ใบล่าสุดของแต่ละบริษัท ทำให้ใบอื่นของบริษัทเดียวกันเลือกไม่ได้เลย */
 export async function listFlowAccountCompanies(): Promise<FlowAccountCompany[]> {
   const client = await newFlowAccountClient();
   const result = await client.listDocuments({ type: 'quotations' });
-  const rows: any[] = (result as any).data?.list ?? [];
+  const rows: any[] = ((result as any).data?.list ?? []).filter((q: any) => q.contactId && q.isDelete !== true);
 
-  const byContact = new Map<string, any>();
-  for (const q of rows) {
-    if (!q.contactId) continue;
-    const existing = byContact.get(q.contactId);
-    if (existing && existing.publishedOn >= q.publishedOn) continue;
-    byContact.set(q.contactId, q);
-  }
+  rows.sort(
+    (a, b) =>
+      (a.contactName ?? '').localeCompare(b.contactName ?? '') || String(b.publishedOn ?? '').localeCompare(String(a.publishedOn ?? '')),
+  );
+  return enrichFlowAccountCompanies(rows.map(mapQuotationToCompany));
+}
 
-  return [...byContact.values()]
-    .sort((a, b) => (a.contactName ?? '').localeCompare(b.contactName ?? ''))
-    .map(mapQuotationToCompany);
+/** เติมสถานะเทียบกับข้อมูลในระบบเรา: บริษัทนี้มีอยู่แล้วไหม + ใบเสนอราคานี้นำเข้าแล้วหรือยัง */
+export async function enrichFlowAccountCompanies(companies: FlowAccountCompany[]): Promise<FlowAccountCompany[]> {
+  if (companies.length === 0) return companies;
+  const customers = await prisma.customer.findMany({ select: { id: true, taxId: true, branch: true, flowaccountContactId: true } });
+  const poNos = new Set((await prisma.contract.findMany({ select: { poNo: true } })).map((c) => c.poNo.trim()));
+  const quotedNos = new Set(
+    (await prisma.assignment.findMany({ where: { quotationNo: { not: null } }, select: { quotationNo: true } })).map((a) => String(a.quotationNo)),
+  );
+  return companies.map((c) => {
+    const norm = (v: string | null | undefined) => (v ?? '').trim();
+    const customer =
+      customers.find((x) => x.flowaccountContactId && x.flowaccountContactId === c.flowaccountContactId) ??
+      customers.find((x) => norm(x.taxId) === norm(c.taxId) && norm(x.branch || 'สำนักงานใหญ่') === (norm(c.branch) || 'สำนักงานใหญ่'));
+    const imported = (c.reference ? poNos.has(norm(c.reference)) : false) || (c.quotationNo ? quotedNos.has(c.quotationNo) : false);
+    return { ...c, existingCustomerId: customer?.id ?? null, alreadyImported: imported };
+  });
 }
 
 /** ported from abbyySkillsService.ts's nextSkillId() pattern */
