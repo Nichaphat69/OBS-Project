@@ -79,6 +79,16 @@ export default function MandayClient() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  // เปิดช่องตีกลับของใบไหนก็เริ่มจากช่องว่างเสมอ และกดยกเลิกต้องล้างข้อความที่พิมพ์ไว้ด้วย — เดิมข้อความค้างอยู่
+  // (ทั้งตอนกลับมากดตีกลับใบเดิม และตอนไปกดตีกลับใบอื่น เพราะ state เหตุผลใช้ร่วมกันทุกใบ)
+  function openReject(id: string) {
+    setRejectReason('');
+    setRejectingId(id);
+  }
+  function cancelReject() {
+    setRejectReason('');
+    setRejectingId(null);
+  }
   const readModelNames = useReadModelNameMap();
 
   /**
@@ -287,7 +297,7 @@ export default function MandayClient() {
                     <button className="btn dgr sm" disabled={busyId === item.id} onClick={() => doReject(item.id)}>
                       {tx('ยืนยันตีกลับ')}
                     </button>
-                    <button className="btn ghost sm" onClick={() => setRejectingId(null)}>
+                    <button className="btn ghost sm" onClick={cancelReject}>
                       {tx('ยกเลิก')}
                     </button>
                   </>
@@ -296,7 +306,7 @@ export default function MandayClient() {
                     <Link href={`/manday/${item.id}`} className="btn pri sm">
                       {tx('เปิดตรวจ')}
                     </Link>
-                    <button className="btn dgr sm" onClick={() => setRejectingId(item.id)}>
+                    <button className="btn dgr sm" onClick={() => openReject(item.id)}>
                       {tx('ตีกลับ')}
                     </button>
                   </>

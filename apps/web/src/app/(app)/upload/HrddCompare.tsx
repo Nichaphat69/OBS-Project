@@ -256,6 +256,16 @@ function RowGroup({
   const [reason, setReason] = useState('');
   const [invalid, setInvalid] = useState(false);
 
+  // ช่องแก้ไขของแถวนี้ถูกปิดด้วยเหตุใดก็ตาม (ยกเลิก / กด "แก้ไข" ซ้ำ / ไปเปิดแถววันอื่น) ต้องล้างตัวเลือกและเหตุผลที่พิมพ์ค้างไว้
+  // — RowGroup ไม่ได้ถูก unmount ตอนปิด state จึงค้างอยู่ เดิมกลับมาเปิดแถวเดิมแล้วเห็นเหตุผลเก่า
+  useEffect(() => {
+    if (open) return;
+    setChoice('use-hrdd');
+    setCustomType('other');
+    setReason('');
+    setInvalid(false);
+  }, [open]);
+
   const isResolved = Boolean(resolvedNote);
 
   function save() {

@@ -44,7 +44,12 @@ export function ScopeFilterBar() {
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      // ปิดด้วยการคลิกนอกกล่องก็ต้องล้างคำค้น/ตำแหน่งที่เลือกค้างไว้ด้วย (เหมือนปุ่มปิด/เลือก) ไม่งั้นเปิดครั้งหน้ายังเห็นคำที่พิมพ์ทิ้งไว้
+      if (!ref.current?.contains(e.target as Node)) {
+        setOpen(false);
+        setQ('');
+        setHi(0);
+      }
     }
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);

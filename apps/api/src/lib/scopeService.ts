@@ -116,6 +116,8 @@ export interface FilterOptionContract {
   startDate: string;
   endDate: string;
   status: string;
+  /** true = บริษัทของสัญญานี้ผูกกับ FlowAccount (ดึงมาจากใบเสนอราคา) — เพิ่ม/ลบพนักงานเองไม่ได้ · false = สัญญาที่กรอกเองในระบบ เพิ่มพนักงานได้ */
+  flowaccountLinked: boolean;
   employees: Array<{ id: string; nameTh: string; position: string }>;
 }
 
@@ -136,6 +138,7 @@ export async function listFilterOptions(): Promise<{ contracts: FilterOptionCont
     startDate: c.startDate,
     endDate: c.endDate,
     status: c.status,
+    flowaccountLinked: Boolean(c.customer.flowaccountContactId),
     employees: c.assignments.map((a) => ({ id: a.employeeId, nameTh: a.employee.nameTh, position: a.employee.invoicePosition })),
   }));
   return { contracts, activeContractId: rows.find((c) => c.status === 'active')?.id ?? null };

@@ -6,6 +6,7 @@ import { Icon } from '../../../components/Icon';
 import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang } from '../../../lib/language';
+import { useScope } from '../../../lib/scope';
 
 interface Alias {
   alias: string;
@@ -50,9 +51,11 @@ export default function EmployeesTab() {
   const confirm = useConfirm();
   const toast = useToast();
   const { tx } = useLang();
+  const { contracts: scopeContracts, filters: scopeFilters } = useScope();
 
   const [employees, setEmployees] = useState<EmployeeRow[] | null>(null);
   const [editRowKey, setEditRowKey] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const [aliasEdit, setAliasEdit] = useState<AliasEditState>(null);
   const [aliasValue, setAliasValue] = useState('');
@@ -76,6 +79,11 @@ export default function EmployeesTab() {
   }
 
   useEffect(load, []);
+
+  // เปลี่ยน PO บนแถบบนระหว่างกรอกฟอร์มเพิ่มพนักงาน ต้องปิดฟอร์มและล้างค่าที่พิมพ์ไว้ (ฟอร์มนี้ผูกกับสัญญาที่เลือกอยู่)
+  useEffect(() => {
+    setAdding(false);
+  }, [scopeFilters.contractId]);
 
   async function saveAlias() {
     if (!aliasEdit) return;
@@ -251,16 +259,40 @@ export default function EmployeesTab() {
     );
 
   const editingEmployee = employees.find((e) => (e.assignmentId ?? e.id) === editRowKey) ?? null;
+  // ปุ่ม "เพิ่มพนักงาน" แสดงเฉพาะเมื่อ PO ที่เลือกอยู่บนแถบบนเป็นสัญญาที่ "กรอกเองในระบบ" (ไม่ได้ดึงจาก FlowAccount)
+  // สัญญาที่ดึงจาก FlowAccount ยังเพิ่ม/ลบพนักงานเองไม่ได้เหมือนเดิม (ฝั่ง API ก็กันไว้อีกชั้น)
+  const scopeContract = scopeContracts.find((c) => c.id === scopeFilters.contractId) ?? null;
+  const canAdd = Boolean(scopeContract) && scopeContract!.flowaccountLinked === false;
 
   return (
     <>
-      {/* ไม่มีปุ่มเพิ่ม/ผูกพนักงานแล้วโดยตั้งใจ (เจ้าของระบบยืนยัน 18 ก.ย. 69) — พนักงานเข้าระบบได้ทาง
-          เดียวคือผ่านการเพิ่มสัญญา/PO ที่ดึงจาก FlowAccount เท่านั้น ห้ามเพิ่มมือระหว่างสัญญา
-          ("มันต้องอิงจากสัญญาใบว่าจ้าง PO ที่เพิ่มใน FlowAccount เท่านั้น ไม่ควรเพิ่มเองได้") หน้านี้
-          จึงเหลือแค่แก้ไข/นำออกพนักงานที่มีอยู่แล้วในตารางด้านล่าง */}
+      {/* สัญญาที่ดึงจาก FlowAccount: ไม่มีปุ่มเพิ่ม/ผูกพนักงานโดยตั้งใจ (เจ้าของระบบยืนยัน 18 ก.ย. 69) — พนักงานเข้าระบบ
+          ทางเดียวคือผ่านใบเสนอราคา/PO ที่ดึงจาก FlowAccount ("ไม่ควรเพิ่มเองได้") ส่วนสัญญาที่ "กรอกเองในระบบ" ไม่ได้ดึงจาก
+          FlowAccount เจ้าของระบบสั่ง 12 ต.ค. 69 ให้เพิ่มพนักงานเองได้ — จึงมีปุ่มเฉพาะกรณีนั้น (canAdd ด้านบน) */}
+      {canAdd && !adding && !editingEmployee && (
+        <div className="metabar" style={{ justifyContent: 'flex-end' }}>
+          <button className="btn pri sm" onClick={() => setAdding(true)}>
+            <Icon name="users" className="sm" /> {tx('เพิ่มพนักงาน')}
+          </button>
+        </div>
+      )}
+
+      {canAdd && adding && !editingEmployee && scopeContract && (
+        <EmployeeForm
+          key={scopeContract.id}
+          mode="add"
+          activeContract={{ id: scopeContract.id, customerName: scopeContract.customerName, projectName: scopeContract.projectName, endDate: scopeContract.endDate }}
+          onCancel={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            load();
+          }}
+        />
+      )}
 
       {editingEmployee && (
         <EmployeeForm
+          key={editRowKey}
           mode="edit"
           employee={editingEmployee}
           onCancel={() => setEditRowKey(null)}

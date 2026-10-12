@@ -73,6 +73,18 @@ export default function UsersTab({ currentUsername }: { currentUsername: string 
   // ฟอร์มเพิ่มผู้ใช้พับเก็บไว้เป็นค่าเริ่มต้น (5 ต.ค. 69 ปรับ UX ตามที่ขอ) — เดิมเป็นแถวช่องกรอก 7 ช่องเรียง
   // ยาวค้างอยู่บนตารางตลอด ทั้งที่เพิ่มผู้ใช้นานๆ ครั้ง งานหลักของหน้านี้คือดู/แก้สิทธิ์คนที่มีอยู่แล้ว
   const [showAdd, setShowAdd] = useState(false);
+  // ฟอร์ม "เพิ่มผู้ใช้" ปิดทางไหนก็ตาม (ปุ่มยกเลิก, ปุ่ม "ปิดฟอร์ม" ที่หัวการ์ด, หรือบันทึกสำเร็จ) ต้องล้างค่าที่พิมพ์ค้างไว้ทุกช่อง
+  // รวมรหัสผ่านด้วย — เดิมกดยกเลิกแล้วเปิดใหม่ ข้อมูลเก่ายังอยู่ในฟอร์ม
+  useEffect(() => {
+    if (showAdd) return;
+    setUsername('');
+    setNameTh('');
+    setNameEn('');
+    setPassword('');
+    setShowPassword(false);
+    setRole('user');
+    setEmployeeId('');
+  }, [showAdd]);
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 

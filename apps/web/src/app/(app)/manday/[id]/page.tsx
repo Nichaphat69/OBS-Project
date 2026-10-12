@@ -936,7 +936,7 @@ export default function ManadyDetailPage() {
         </span>
         <div className="gap" />
         {!rejecting ? (
-          <button className="btn dgr" onClick={() => setRejecting(true)}>
+          <button className="btn dgr" onClick={() => { setReason(''); setRejecting(true); }}>
             {tx('ตีกลับให้แก้ Timesheet')}
           </button>
         ) : (
@@ -947,7 +947,7 @@ export default function ManadyDetailPage() {
               placeholder={tx('เหตุผลที่ตีกลับ (ไม่บังคับ)')}
               style={{ flex: 1, height: 40, borderRadius: 'var(--r-ctl)', border: '1px solid var(--rule)', padding: '0 14px' }}
             />
-            <button className="btn ghost" onClick={() => setRejecting(false)}>
+            <button className="btn ghost" onClick={() => { setReason(''); setRejecting(false); }}>
               {tx('ยกเลิก')}
             </button>
             <button className="btn dgr" disabled={busy} onClick={doReject}>

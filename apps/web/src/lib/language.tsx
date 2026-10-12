@@ -24,6 +24,7 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  'อ่านไฟล์ด้วย ABBYY OCR หรือดึงจาก Gmail แล้วบันทึกเข้าระบบ': 'Read files with ABBYY OCR or fetch from Gmail, then save to the system',
   // ── หน้าบันทึกระบบ / API Activity Log ดีไซน์ใหม่ (8 ต.ค. 69) ──
   'ใครเรียกใคร และผลเป็นอย่างไร': 'Who called whom, and what happened',
   'Expose = ระบบอื่นเรียกเข้ามาหา OBS · Consume = OBS เรียกออกไปหาระบบอื่น — กดแถวเพื่อดูรายละเอียด': 'Expose = other systems calling OBS · Consume = OBS calling other systems — click a row for details',
@@ -1319,8 +1320,6 @@ const TX: Record<string, string> = {
   'เหตุผลที่ตีกลับ (ไม่บังคับ)': 'Reason for sending back (optional)',
   'วันหยุดนักขัตฤกษ์': 'Public holiday',
   'สำนักงานใหญ่': 'Head office',
-  'เช่น บริษัท ทดสอบ จำกัด': 'e.g. Test Company Co., Ltd.',
-  'เช่น 26/B0200': 'e.g. 26/B0200',
   'สัญญาบริษัท': 'Company contracts',
   'ผูกบัญชี LINE ส่วนตัวเพื่อรับแจ้งเตือนเมื่อระบบมีปัญหา/error': 'Link your personal LINE account to get notified when the system has errors',
   'ผูกบัญชี LINE ส่วนตัวเพื่อรับแจ้งเตือนคำขออนุมัติวางบิล/ตั๋วแจ้งปัญหา': 'Link your personal LINE account to get billing approval requests and issue tickets',

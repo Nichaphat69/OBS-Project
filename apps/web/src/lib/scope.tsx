@@ -29,6 +29,8 @@ export interface FilterContract {
   startDate: string;
   endDate: string;
   status: string;
+  /** true = สัญญาที่ดึงจาก FlowAccount (เพิ่มพนักงานเองไม่ได้) · false = สัญญาที่กรอกเองในระบบ */
+  flowaccountLinked?: boolean;
   employees: Array<{ id: string; nameTh: string; position: string }>;
 }
 

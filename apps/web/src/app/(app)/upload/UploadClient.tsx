@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, TabStrip } from '../../../components/ui';
 import UploadFileTab from './UploadFileTab';
-import ManualEntryTab from './ManualEntryTab';
 import GmailTab from './GmailTab';
 import HistoryTab from './HistoryTab';
 import EmployeeSubmissionsTab, { type EmployeeSubmissionItem } from './EmployeeSubmissionsTab';
@@ -13,7 +12,6 @@ const TABS = [
   { key: 'employee', label: 'ส่งผ่านระบบ' },
   { key: 'upload', label: 'อัปโหลดไฟล์' },
   { key: 'gmail', label: 'ดึงจาก Gmail' },
-  { key: 'manual', label: 'กรอกเอง' },
   { key: 'history', label: 'ประวัติ' },
 ] as const;
 
@@ -59,7 +57,7 @@ export default function UploadClient({ role }: { role: string }) {
 
   return (
     <>
-      <PageHeader eyebrow={tx('ขั้นตอน 1 · อัปโหลด Timesheet')} title={tx('อัปโหลด Timesheet')} subtitle={tx('อ่านไฟล์ด้วย ABBYY OCR, ดึงจาก Gmail หรือกรอกเองแล้วบันทึกเข้าระบบ')} />
+      <PageHeader eyebrow={tx('ขั้นตอน 1 · อัปโหลด Timesheet')} title={tx('อัปโหลด Timesheet')} subtitle={tx('อ่านไฟล์ด้วย ABBYY OCR หรือดึงจาก Gmail แล้วบันทึกเข้าระบบ')} />
 
       <TabStrip
         tabs={TABS}
@@ -70,7 +68,6 @@ export default function UploadClient({ role }: { role: string }) {
       {tab === 'employee' && <EmployeeSubmissionsTab items={pending} onReload={loadPending} />}
       {tab === 'upload' && <UploadFileTab />}
       {tab === 'gmail' && <GmailTab />}
-      {tab === 'manual' && <ManualEntryTab />}
       {tab === 'history' && <HistoryTab />}
     </>
   );
