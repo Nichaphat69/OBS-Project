@@ -395,3 +395,286 @@ body table thead th {
   color: #5d6b80 !important;
   padding: 14px 20px !important;
 }
+
+/* ═══ รอบ 14 ต.ค. 69: แก้ตามผลตรวจ "No UI slop" (ภาพ 5 หน้าจอ) — เฉพาะสี/เส้น/เงา/มุม/ขนาดตัวอักษร ไม่ย้ายปุ่ม ไม่เพิ่ม/ลดฟีเจอร์ ═══ */
+
+/* 3) เงา → เส้นขอบ 1px: header, แถบปุ่มล่าง, วงแสงรอบขั้นปัจจุบัน, รูปโปรไฟล์ */
+.topbar {
+  box-shadow: none;
+  backdrop-filter: none;
+  background: #ffffff;
+}
+.fbar {
+  box-shadow: none;
+  backdrop-filter: none;
+  background: #ffffff;
+  border-top: 1px solid var(--pl-line);
+}
+.prog {
+  box-shadow: none;
+  border-radius: 12px;
+}
+.pstep.cu .cir {
+  box-shadow: none;
+}
+.topbar .ucir,
+.topbar [class*='avatar'],
+.topbar button .av {
+  box-shadow: none;
+}
+
+/* 2) แถบขั้นตอน: เส้นเชื่อมความหนาเท่ากัน ต่างกันที่สี · ป้ายทุกขั้นอยู่ระดับเดียวกัน */
+.prog .pline,
+.prog [class*='line'],
+.prog .pbar {
+  height: 3px;
+}
+.pstep .nm,
+.pstep .lb,
+.pstep span:last-child {
+  min-height: 2.9em;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* 2) แถบปุ่มล่างไม่ทับเนื้อหา: เว้นที่ท้ายหน้าเท่าความสูงแถบ */
+main .fbar {
+  margin-bottom: -28px;
+}
+main:has(.fbar) {
+  padding-bottom: 96px;
+}
+
+/* 4) สีหลุดชุด: ป้ายม่วง → เทา · แถบสวิตช์ FlowAccount ไม่ใช้เหลือง · KPI/สถิติพื้นเดียวกัน */
+.tg.pr,
+.st.pr,
+.bc-pill.pr {
+  background: #eef1f5;
+  color: #475467;
+}
+.env.dry {
+  background: #ffffff;
+  border-color: var(--pl-line);
+  color: #475467;
+}
+.env.dry .sw {
+  background: #cdd6e2;
+}
+.kx .kx-ic {
+  background: #f1f4f9;
+  color: #667085;
+}
+.kx .kx-ic svg {
+  color: #667085;
+}
+.kx.kx {
+  --a: #288adb;
+}
+.kx .kx-l,
+.kx .kx-v {
+  color: var(--pl-ink);
+}
+.kx.kx:nth-child(3),
+.kx.kx.kx-a,
+.kx-a {
+  background: #ffffff;
+}
+.ct-stat.main {
+  background: #f6f8fb;
+  border-color: transparent;
+}
+.ct-stat.main .v {
+  color: var(--pl-ink);
+}
+.ct-stat.main .l,
+.ct-stat.main .v small {
+  color: #5d6b80;
+}
+.taskrow.critical .ic,
+.taskrow.warn .ic,
+.taskrow.info .ic {
+  background: #f1f4f9;
+  color: #667085;
+}
+
+/* 5) ตัดจุดนำหน้าทุกอย่าง: หัวการ์ด · ป้ายสถานะ · ชื่อบนการ์ด */
+.card > .hd h3::before,
+.st::before,
+.tg::before,
+.bc-pill i,
+.bc-chip i,
+.dn-lg i {
+  display: none;
+}
+.mdcard > .hd::before,
+.mdc .nm::before,
+.rq-name::before {
+  display: none;
+}
+.card > .hd h3 {
+  gap: 0;
+}
+
+/* 7) แถบสีด้านซ้ายที่เป็นแค่ตกแต่ง → เส้นขอบปกติ */
+.ct-card.live::before {
+  display: none;
+}
+.ct-card.live {
+  border-color: #cfe3f6;
+}
+.taskrow,
+.taskrow.critical,
+.taskrow.warn,
+.taskrow.info {
+  border-left: 1px solid var(--hair);
+}
+.bc-item::before {
+  display: none;
+}
+
+/* 8) ลดทรงแคปซูล: ปุ่ม/ช่องกรอก/ตัวเลือกใช้มุม 8px · การ์ดมุม 12px · แคปซูลเหลือเฉพาะป้ายสถานะ */
+.btn,
+.btn.sm,
+.btn.lg,
+.scopebar,
+.selectchip,
+.fmenu .btn,
+.metabar .btn,
+.fab,
+body select,
+body input:is([type='text'], [type='search'], [type='number'], [type='email'], [type='password'], [type='tel'], [type='url'], :not([type])),
+.sl-search,
+.cx-find,
+.dpk-trigger,
+.env,
+.langsw,
+.topbar .lang,
+.bc-chip,
+.dn-more {
+  border-radius: 8px;
+}
+.btn.icon,
+.btn.sm.icon {
+  border-radius: 8px;
+}
+.card,
+.ct-card,
+.kx.kx,
+.rdpanel,
+.rd,
+.sl-sum.sl-donut,
+.bc-item,
+.pg-detail {
+  border-radius: 12px;
+}
+.modal-card {
+  border-radius: 14px;
+}
+@media (max-width: 600px) {
+  .card,
+  .kx.kx,
+  .ct-card {
+    border-radius: 12px;
+  }
+}
+
+/* 11) ข้อความเล็กสีเทาอ่อน → เข้มขึ้นและใหญ่ขึ้นอย่างน้อย 12px (คอนทราสต์ ≥ 4.5:1 บนพื้นขาว) */
+:root {
+  --mut: #5d6b80;
+  --fnt: #667085;
+}
+.sub,
+.lbl,
+.side .grp,
+.side .sect,
+.kx-cap,
+.ct-stat .l,
+.ct-kv dt,
+.nav-sec,
+.phd .ey {
+  color: #5d6b80;
+}
+.sub {
+  font-size: 12px;
+}
+.side .grp,
+.side .sect,
+.nav-sec {
+  font-size: 12px;
+}
+
+/* 12) รายละเอียดเล็ก: ตัวเลือก PO ใช้เส้นทึบ · เมนูที่เลือก = พื้นอ่อนอย่างเดียว · เส้นคั่นบนมือถือเป็นเส้นทึบ */
+.scopebar,
+.scopebar.all {
+  border-style: solid;
+}
+.side a.on .ic,
+.side .nav-item.on .ic {
+  background: transparent;
+  color: var(--pl-brand);
+}
+.ep-step:not(:first-child) {
+  border-top-style: solid;
+}
+.back {
+  text-decoration: none;
+}
+.back:hover {
+  text-decoration: underline;
+}
+
+/* ต่อจากรอบก่อน: จุดในป้าย KPI · เส้นประ · มุมโค้งของหน้าพนักงาน/มือถือ · header มือถือ (ใช้ selector ซ้อนเพื่อชนะ kpi.css/emp.css/scope-filter.css ที่โหลดทีหลัง) */
+.kx .kx-cap i {
+  display: none;
+}
+.kx .kx-cap {
+  background: transparent;
+  padding-left: 0;
+  color: #5d6b80;
+}
+.scopebar.scopebar,
+.scopebar.all.scopebar {
+  border-style: solid;
+}
+.ep .ep-step:not(:first-child) {
+  border-top-style: solid;
+}
+.ep .ep-panel,
+.ep .ep-sum,
+.ep .ep-done,
+.ep .ep-tip {
+  border-radius: 12px;
+}
+.ep .ep-opt,
+.ep .ep-file,
+.ep .ep-drop,
+.ep .ri-ta,
+.ep .ri-th,
+.ep .ri-add {
+  border-radius: 10px;
+}
+.ep .mp-card,
+.ep .mp-lead,
+.ep .mp-stat,
+.ep .ms-row {
+  border-radius: 12px;
+}
+.ep .ep-opt .ic,
+.ep .ep-num {
+  border-radius: 8px;
+}
+.ep .ep-opt {
+  align-items: center;
+}
+@media (max-width: 600px) {
+  .topbar {
+    gap: 8px;
+    padding-right: 10px;
+  }
+  .topbar .brand {
+    width: auto;
+    min-width: 0;
+    padding: 0 8px;
+  }
+}

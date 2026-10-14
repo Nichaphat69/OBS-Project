@@ -224,6 +224,7 @@ const TX: Record<string, string> = {
   เดือน: 'months',
   เปิด: 'Open',
   สวัสดีต้อนรับ: 'Welcome',
+  ยินดีต้อนรับ: 'Welcome',
   'แดชบอร์ด OBS': 'OBS Dashboard',
   'ข้อมูล ณ': 'as of',
   รอตรวจสอบ: 'Awaiting review',

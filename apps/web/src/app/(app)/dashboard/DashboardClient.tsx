@@ -157,7 +157,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
   return (
     <>
       <PageHeader
-        eyebrow={tx('สวัสดีต้อนรับ')}
+        eyebrow={tx('ยินดีต้อนรับ')}
         title={tx('แดชบอร์ด OBS')}
         subtitle={nameTh}
         actions={
