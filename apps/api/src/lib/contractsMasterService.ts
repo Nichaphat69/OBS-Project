@@ -282,7 +282,7 @@ export function mapQuotationToCompany(q: any): FlowAccountCompany {
     flowaccountContactId: String(q.contactId),
     nameTh: q.contactName || '',
     taxId: q.contactTaxId || '',
-    branch: q.contactBranch || 'สำนักงานใหญ่',
+    branch: q.contactBranch || '',
     address: q.contactAddress || null,
     zipCode: textOrNull(q.contactZipCode),
     contactName: q.contactPerson || null,

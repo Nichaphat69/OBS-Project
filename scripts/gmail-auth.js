@@ -89,9 +89,17 @@ const server = createServer(async (req, res) => {
       <h2>${title}</h2><p>${detail}</p></body>`);
   };
 
-  if (error || !code) {
-    reply('เชื่อมต่อไม่สำเร็จ', `Google ตอบกลับมาว่า: ${error ?? 'ไม่มี code'}`);
-    console.error(`\nไม่สำเร็จ — ${error ?? 'ไม่ได้รับ code จาก Google'}`);
+  // คำขอที่ไม่มีทั้ง code และ error ไม่ใช่คำตอบจาก Google (เช่น เบราว์เซอร์รีโหลดแท็บเก่า/เติมลิงก์จากประวัติ/พรีเฟตช์)
+  // — เดิมสคริปต์ออกทันทีทำให้ทั้งรอบพัง ตอนนี้ข้ามแล้วรอต่อ พร้อมแสดงว่าใครเรียกมา
+  if (!error && !code) {
+    console.warn(`\n(ข้ามคำขอที่ไม่มี code: ${req.method} ${req.url} · ${req.headers['user-agent'] ?? 'ไม่ทราบ client'} — ยังรอ Google อยู่)`);
+    reply('ยังรอการยินยอมจาก Google', 'กลับไปที่แท็บ Google แล้วกดอนุญาต — หน้านี้ไม่ใช่ผลลัพธ์');
+    return;
+  }
+
+  if (error) {
+    reply('เชื่อมต่อไม่สำเร็จ', `Google ตอบกลับมาว่า: ${error}`);
+    console.error(`\nไม่สำเร็จ — ${error}`);
     server.close(() => process.exit(1));
     return;
   }

@@ -1,0 +1,129 @@
+{
+  "name": "OBS — ดึงอีเมล Timesheet ย้อนหลัง (รันมือครั้งเดียว)",
+  "nodes": [
+    {
+      "id": "bf-manual",
+      "name": "กดรันเอง",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        300
+      ],
+      "notes": "workflow นี้รันมืออย่างเดียว ไม่มี schedule — ดึงเมลย้อนหลังตามตัวกรองด้านล่างเข้า OBS ครั้งเดียว"
+    },
+    {
+      "id": "bf-gmail",
+      "name": "ดึงอีเมลย้อนหลัง 30 วัน (สูงสุด 50 ฉบับ)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -100,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 50,
+        "simple": false,
+        "filters": {
+          "q": "subject:(timesheet OR timesheets OR \"time sheet\" OR \"time-sheet\" OR ตารางเข้างาน OR บันทึกเวลา) has:attachment newer_than:30d (filename:pdf OR filename:xlsx OR filename:xls OR filename:csv OR filename:jpg OR filename:jpeg OR filename:png OR filename:tif OR filename:tiff OR filename:webp)"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "notes": "ต้องเลือก credential Gmail เดิมหลัง import · แก้ newer_than:30d / limit ได้ตามต้องการ"
+    },
+    {
+      "id": "bf-code",
+      "name": "เตรียมไฟล์ส่งเข้า OBS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ส่งไฟล์แนบของอีเมล Timesheet เข้า OBS (ไม่อ่านเอง — คนกดอ่านในแท็บ \"ดึงจาก Gmail\" ของ OBS)\nconst ALLOWED = ['pdf', 'xlsx', 'xls', 'csv', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'webp'];\nconst IMAGES = ['jpg', 'jpeg', 'png', 'tif', 'tiff', 'webp'];\nconst MIN_IMAGE_BYTES = 40 * 1024;\n\nfunction toIso(j) {\n  if (j.date) return new Date(j.date).toISOString();\n  if (j.internalDate) return new Date(Number(j.internalDate)).toISOString();\n  return new Date().toISOString();\n}\n\nfunction fromText(j) {\n  const raw = j.from ?? j.From ?? null;\n  if (!raw) return null;\n  if (typeof raw === 'string') return raw;\n  return raw.text ?? null;\n}\n\nfunction subjectOf(j) {\n  return j.subject ?? j.Subject ?? '';\n}\n\nfunction bodyOf(j) {\n  return j.text ?? j.snippet ?? '';\n}\n\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json;\n  const binary = items[i].binary ?? {};\n  for (const key of Object.keys(binary)) {\n    const fileName = binary[key].fileName ?? '';\n    const m = fileName.toLowerCase().match(/\\.([a-z0-9]+)$/);\n    const ext = m ? m[1] : '';\n    if (!ALLOWED.includes(ext)) continue;\n    const file = await this.helpers.getBinaryDataBuffer(i, key);\n    if (IMAGES.includes(ext) && file.length < MIN_IMAGE_BYTES) continue;\n    out.push({\n      json: {\n        sourceEmailId: j.id,\n        fileName: fileName,\n        fileBase64: file.toString('base64'),\n        subject: subjectOf(j),\n        from: fromText(j),\n        bodyText: bodyOf(j),\n        receivedAt: toIso(j),\n      },\n    });\n  }\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "bf-ingest",
+      "name": "ส่งไฟล์เข้า OBS (เก็บไว้รอกดอ่าน)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://api:4301/api/timesheets/receive-email",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-secret",
+              "value": "ใส่ค่า N8N_SHARED_SECRET ที่นี่หลัง import (ห้ามเขียนลงไฟล์นี้)"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "OBS ข้ามไฟล์ที่เคยรับแล้ว (sourceEmailId + fileName ซ้ำ) จึงรันซ้ำได้ปลอดภัย"
+    }
+  ],
+  "connections": {
+    "กดรันเอง": {
+      "main": [
+        [
+          {
+            "node": "ดึงอีเมลย้อนหลัง 30 วัน (สูงสุด 50 ฉบับ)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ดึงอีเมลย้อนหลัง 30 วัน (สูงสุด 50 ฉบับ)": {
+      "main": [
+        [
+          {
+            "node": "เตรียมไฟล์ส่งเข้า OBS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "เตรียมไฟล์ส่งเข้า OBS": {
+      "main": [
+        [
+          {
+            "node": "ส่งไฟล์เข้า OBS (เก็บไว้รอกดอ่าน)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
