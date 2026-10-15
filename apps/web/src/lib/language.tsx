@@ -24,6 +24,8 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  'เลขที่ QT / PO': 'QT / PO no.',
+  'พิมพ์เลข QT / PO / ชื่อบริษัท เพื่อค้นหา…': 'Type a QT / PO number or company name to search…',
   'นำเข้าแล้ว': 'Already imported',
   'บริษัทนี้มีอยู่ในระบบแล้ว — การบันทึกจะเพิ่มเป็น "สัญญาใหม่" ให้บริษัทเดิม ไม่สร้างบริษัทซ้ำ': 'This company already exists — saving adds a NEW contract to the existing company (no duplicate company is created)',
   'บริษัทนี้มีอยู่แล้ว — ต้องกรอกเลขที่อ้างอิง/PO ชื่อโครงการ และช่วงสัญญาให้ครบเพื่อเพิ่มสัญญาใหม่': 'This company already exists — fill in the reference/PO, project name and contract period to add a new contract',

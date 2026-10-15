@@ -15,6 +15,9 @@ function monthYear(iso: string, lang: Lang) {
 }
 export const contractRange = (c: Pick<FilterContract, 'startDate' | 'endDate'>, lang: Lang) => `${monthYear(c.startDate, lang)} – ${monthYear(c.endDate, lang)}`;
 
+/** ชื่อเรียกสัญญาในตัวกรอง: เลขใบเสนอราคา FlowAccount (QT…) ถ้ามี (12 ต.ค. 69 ตามที่สั่ง) ไม่งั้นใช้เลข PO ของสัญญาที่กรอกเอง */
+export const contractRef = (c: Pick<FilterContract, 'poNo' | 'quotationNo'>) => c.quotationNo || `PO ${c.poNo}`;
+
 /** ไฮไลต์ส่วนที่ตรงกับที่พิมพ์ในเลข PO — ให้เห็นว่ารายการแนะนำตรงกับตัวอักษรไหน */
 function Highlight({ text, q }: { text: string; q: string }) {
   const needle = q.trim();
@@ -59,9 +62,13 @@ export function ScopeFilterBar() {
   const options = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const list = contracts.filter(
-      (c) => !needle || `${c.poNo} ${c.customerName} ${c.projectName} ${c.contractNo ?? ''}`.toLowerCase().includes(needle),
+      (c) => !needle || `${c.quotationNo ?? ''} ${c.poNo} ${c.customerName} ${c.projectName} ${c.contractNo ?? ''}`.toLowerCase().includes(needle),
     );
-    const rank = (c: FilterContract) => (!needle ? 0 : c.poNo.toLowerCase().startsWith(needle) ? 0 : c.poNo.toLowerCase().includes(needle) ? 1 : 2);
+    const rank = (c: FilterContract) => {
+      if (!needle) return 0;
+      const keys = [c.quotationNo ?? '', c.poNo].map((k) => k.toLowerCase());
+      return keys.some((k) => k.startsWith(needle)) ? 0 : keys.some((k) => k.includes(needle)) ? 1 : 2;
+    };
     return [...list].sort((a, b) => rank(a) - rank(b));
   }, [contracts, q]);
 
@@ -103,7 +110,7 @@ export function ScopeFilterBar() {
         className={`ctxbtn scopef-btn${current ? ' set' : ''}${current && isDefault ? ' dflt' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={current ? `PO ${current.poNo} · ${current.customerName}` : tx('ทุก PO')}
+        title={current ? `${contractRef(current)} · ${current.customerName}` : tx('ทุก PO')}
         onClick={() => {
           if (open) return close();
           setOpen(true);
@@ -112,13 +119,13 @@ export function ScopeFilterBar() {
       >
         <Icon name="search" className="sm" />
         <span className="ctx-label">
-          <small>{tx('เลขที่ PO')}</small>
-          <b>{current ? `PO ${current.poNo} · ${current.customerName}` : tx('ทุก PO')}</b>
+          <small>{tx('เลขที่ QT / PO')}</small>
+          <b>{current ? `${contractRef(current)} · ${current.customerName}` : tx('ทุก PO')}</b>
         </span>
         <Icon name="cd" className="sm cv" />
       </button>
       {open && (
-        <div className="scopef-panel" role="dialog" aria-label={tx('เลขที่ PO')}>
+        <div className="scopef-panel" role="dialog" aria-label={tx('เลขที่ QT / PO')}>
           <div className="scopef-head">
             <input
               ref={inputRef}
@@ -129,7 +136,7 @@ export function ScopeFilterBar() {
                 setHi(0);
               }}
               onKeyDown={onKey}
-              placeholder={tx('พิมพ์เลข PO / ชื่อบริษัท เพื่อค้นหา…')}
+              placeholder={tx('พิมพ์เลข QT / PO / ชื่อบริษัท เพื่อค้นหา…')}
               inputMode="search"
               autoComplete="off"
               role="combobox"
@@ -160,7 +167,7 @@ export function ScopeFilterBar() {
                   <span className="chk">{on && <Icon name="chk" className="sm" />}</span>
                   <span className="tx">
                     <b>
-                      PO <Highlight text={c.poNo} q={q} />
+                      {c.quotationNo ? <Highlight text={c.quotationNo} q={q} /> : <>PO <Highlight text={c.poNo} q={q} /></>}
                     </b>
                     <span>
                       <Highlight text={c.customerName} q={q} /> · {contractRange(c, lang)}
@@ -196,7 +203,7 @@ export function ScopeSummary() {
           <b>{tx('กำลังดูข้ามทุกบริษัท')}</b>
         ) : (
           <>
-            {tx('กำลังดู')} <b>PO {po!.poNo}</b>
+            {tx('กำลังดู')} <b>{contractRef(po!)}</b>
             {' · '}
             <b>{po!.customerName}</b>
             <span style={{ opacity: 0.75 }}> ({contractRange(po!, lang)})</span>

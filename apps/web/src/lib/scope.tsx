@@ -31,6 +31,8 @@ export interface FilterContract {
   status: string;
   /** true = สัญญาที่ดึงจาก FlowAccount (เพิ่มพนักงานเองไม่ได้) · false = สัญญาที่กรอกเองในระบบ */
   flowaccountLinked?: boolean;
+  /** เลขใบเสนอราคา FlowAccount (QT…) · null/ว่าง = สัญญาที่กรอกเอง ใช้เลข PO แทน */
+  quotationNo?: string | null;
   employees: Array<{ id: string; nameTh: string; position: string }>;
 }
 

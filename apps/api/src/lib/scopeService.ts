@@ -122,7 +122,21 @@ export interface FilterOptionContract {
   status: string;
   /** true = บริษัทของสัญญานี้ผูกกับ FlowAccount (ดึงมาจากใบเสนอราคา) — เพิ่ม/ลบพนักงานเองไม่ได้ · false = สัญญาที่กรอกเองในระบบ เพิ่มพนักงานได้ */
   flowaccountLinked: boolean;
+  /** เลขใบเสนอราคา FlowAccount (QT…) ของสัญญานี้ — มาจากอัตราจ้างของสัญญา (ทุกคนในสัญญาอ้างใบเดียวกัน) · null = สัญญาที่กรอกเอง */
+  quotationNo: string | null;
   employees: Array<{ id: string; nameTh: string; position: string }>;
+}
+
+/** เลขใบเสนอราคาที่พบบ่อยที่สุดในอัตราจ้างของสัญญา (ว่างถ้าไม่มี) */
+export function contractQuotationNo(assignments: Array<{ quotationNo: string | null }>): string | null {
+  const count = new Map<string, number>();
+  for (const a of assignments) {
+    const q = (a.quotationNo ?? '').trim();
+    if (q) count.set(q, (count.get(q) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  for (const [q, n] of count) if (best === null || n > (count.get(best) ?? 0)) best = q;
+  return best;
 }
 
 /** ตัวเลือกของตัวกรองทั้งสามช่อง ในก้อนเดียว — ให้หน้าเว็บทำ cascading (เลือกช่องหนึ่งแล้วอีกสองช่องเหลือเฉพาะที่
@@ -143,6 +157,7 @@ export async function listFilterOptions(): Promise<{ contracts: FilterOptionCont
     endDate: c.endDate,
     status: c.status,
     flowaccountLinked: Boolean(c.customer.flowaccountContactId),
+    quotationNo: contractQuotationNo(c.assignments),
     employees: c.assignments.map((a) => ({ id: a.employeeId, nameTh: a.employee.nameTh, position: a.employee.invoicePosition })),
   }));
   return { contracts, activeContractId: rows.find((c) => c.status === 'active')?.id ?? null };
