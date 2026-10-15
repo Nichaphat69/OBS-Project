@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, EmptyState, Kpi, Loading, PageHeader, PoTag, StatusPill, Tag, TaskList, type TaskLink } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang, formatDateTime } from '../../../lib/language';
-import { useScope } from '../../../lib/scope';
+import { useScope, useContractRef } from '../../../lib/scope';
 import { contractRange } from '../../../components/ScopeFilterBar';
 
 interface PeriodEmployee {
@@ -90,6 +90,7 @@ function money(n: number) {
 
 export default function DashboardClient({ data, nameTh }: { data: DashboardData; nameTh: string }) {
   const { tx, lang, formatPeriod, formatDate } = useLang();
+  const refOf = useContractRef();
   const { contracts: scopeContracts } = useScope();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [cycleFilter, setCycleFilter] = useState('');
@@ -179,8 +180,8 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
               return (
               <div key={c.id} className="constrip">
                 <div className="cf">
-                  <span className="lbl">{tx('เลขที่ PO')}</span>
-                  <PoTag>{c.poNo}</PoTag>
+                  <span className="lbl">{tx('เลขที่ QT / PO')}</span>
+                  <PoTag label={refOf(c).label}>{refOf(c).value}</PoTag>
                 </div>
                 <div className="cf">
                   <span className="lbl">{tx('บริษัท')}</span>
@@ -201,12 +202,11 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                       : `${c.headcount} ${tx('คน')}`}
                   </span>
                 </div>
-                {opt && (
-                  <div className="cf">
-                    <span className="lbl">{tx('ช่วงสัญญา')}</span>
-                    <span>{contractRange(opt, lang)}</span>
-                  </div>
-                )}
+                {/* ช่องนี้ต้องมีเสมอ (แม้ไม่มีข้อมูลช่วงสัญญา) ไม่งั้นช่อง "มูลค่าคงเหลือ" ในตารางคอลัมน์เลื่อนมาผิดที่ */}
+                <div className="cf">
+                  <span className="lbl">{tx('ช่วงสัญญา')}</span>
+                  <span>{opt ? contractRange(opt, lang) : '—'}</span>
+                </div>
                 <div className="cf end">
                   <span className="lbl">{tx('มูลค่าคงเหลือ')}</span>
                   <b className="n cv">{money(c.remainingValue)}</b>
@@ -324,7 +324,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                       .map((r) => (
                         <li key={r.c.id}>
                           <div className="pg-pt">
-                            <b>{r.c.poNo}</b>
+                            <b>{refOf(r.c).text}</b>
                             <span className="sub">{r.c.customerName}</span>
                             <em>{r[selDetail.key]} / {r.c.monthsTotal} {tx('เดือน')}</em>
                           </div>

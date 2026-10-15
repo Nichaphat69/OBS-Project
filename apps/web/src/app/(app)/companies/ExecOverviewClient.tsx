@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, ErrorState, Kpi, Loading, PageHeader, ProgressCell } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
+import { useContractRef } from '../../../lib/scope';
 import { isEmptyScope, useScope } from '../../../lib/scope';
 import { ScopeSummary, contractRange } from '../../../components/ScopeFilterBar';
 
@@ -34,6 +35,7 @@ function money(n: number) {
 export default function ExecOverviewClient() {
   const router = useRouter();
   const { tx, lang } = useLang();
+  const refOf = useContractRef();
   const { filters } = useScope();
   const [contracts, setContracts] = useState<ContractCycles[] | null>(null);
   const [employees, setEmployees] = useState<EmployeeRow[] | null>(null);
@@ -102,7 +104,7 @@ export default function ExecOverviewClient() {
             <thead>
               <tr>
                 <th>{tx('บริษัท')}</th>
-                <th>{tx('เลขที่ PO')}</th>
+                <th>{tx('เลขที่ QT / PO')}</th>
                 <th>{tx('โครงการ')}</th>
                 <th>{tx('พนักงาน')}</th>
                 <th className="r">{tx('มูลค่าสัญญา')}</th>
@@ -114,7 +116,7 @@ export default function ExecOverviewClient() {
               {contracts.map((c) => (
                 <tr key={c.id} className="rw" onClick={() => router.push(`/companies/${encodeURIComponent(c.id)}`)}>
                   <td>{c.customerName}</td>
-                  <td className="n">{c.poNo}</td>
+                  <td className="n">{refOf(c).value}</td>
                   <td>
                     {c.projectName}
                     {c.startDate && c.endDate && <div className="sub">{contractRange({ startDate: c.startDate, endDate: c.endDate }, lang)}</div>}

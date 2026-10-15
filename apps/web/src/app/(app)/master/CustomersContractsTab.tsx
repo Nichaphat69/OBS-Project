@@ -7,7 +7,7 @@ import { DatePicker } from '../../../components/DatePicker';
 import { useConfirm, useToast } from '../../../components/Overlays';
 import { useLang, formatDate } from '../../../lib/language';
 import { SETTINGS_CHANGED_EVENT } from '../../../lib/settingsChanged';
-import { useScope } from '../../../lib/scope';
+import { useScope, useContractRef } from '../../../lib/scope';
 
 interface ContractRow {
   id: string;
@@ -184,6 +184,7 @@ export default function CustomersContractsTab() {
   const confirm = useConfirm();
   const toast = useToast();
   const { tx, lang } = useLang();
+  const refOf = useContractRef();
 
   const [contracts, setContracts] = useState<ContractRow[] | null>(null);
   const [orphanCustomers, setOrphanCustomers] = useState<CustomerWithoutContract[]>([]);
@@ -255,7 +256,7 @@ export default function CustomersContractsTab() {
     const ok = await confirm({
       iconName: 'rf',
       title: tx('ซิงก์พนักงานจาก FlowAccount?'),
-      message: `"${contract.poNo} — ${contract.projectName}" ${tx('จะเพิ่ม/ปรับเรท/ปิดสถานะพนักงานในสัญญานี้ให้ตรงกับใบเสนอราคาล่าสุดของบริษัทนี้ใน FlowAccount')}`,
+      message: `"${refOf(contract).value} — ${contract.projectName}" ${tx('จะเพิ่ม/ปรับเรท/ปิดสถานะพนักงานในสัญญานี้ให้ตรงกับใบเสนอราคาล่าสุดของบริษัทนี้ใน FlowAccount')}`,
       confirmLabel: tx('ซิงก์'),
     });
     if (!ok) return;
@@ -283,7 +284,7 @@ export default function CustomersContractsTab() {
       iconName: 'trash-solid',
       danger: true,
       title: tx('ลบสัญญานี้?'),
-      message: `"${contract.poNo} — ${contract.projectName}" ${tx('และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้ (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยวางบิลไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)')}`,
+      message: `"${refOf(contract).value} — ${contract.projectName}" ${tx('และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้ (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยวางบิลไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)')}`,
       confirmLabel: tx('ลบ'),
     });
     if (!ok) return;
@@ -418,7 +419,7 @@ export default function CustomersContractsTab() {
             className={`ct-card${c.status === 'active' ? ' live' : ''}`}>
             {/* หัวการ์ด (6 ต.ค. 69 จัดใหม่): ป้ายเลข PO สีฟ้า + ชื่อโครงการ + ชื่อบริษัทใต้ชื่อ · ปุ่มจัดการอยู่ขวาสุดแถวเดียวกัน */}
             <header className="ct-hd">
-              <span className="ct-po">{c.poNo}</span>
+              <span className="ct-po">{refOf(c).value}</span>
               <div className="ct-ttl">
                 <h3>{c.projectName}</h3>
                 <span className="sub">{c.customerName}</span>
@@ -879,7 +880,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
                   // หนึ่งรายการ = หนึ่งใบเสนอราคา (หนึ่งสัญญา/PO) — บริษัทเดียวกันมีหลายรายการได้ · ที่นำเข้าเป็นสัญญาแล้วเลือกซ้ำไม่ได้
                   <option key={`${c.quotationNo ?? c.flowaccountContactId}-${i}`} value={i} disabled={Boolean(c.alreadyImported)}>
                     {c.nameTh} · {c.quotationNo ?? '—'}
-                    {c.reference ? ` · PO ${c.reference}` : ''}
+                    {c.reference ? ` · อ้างอิง ${c.reference}` : ''}
                     {c.quotationDate ? ` · ${c.quotationDate}` : ''}
                     {c.alreadyImported ? ` · ${tx('นำเข้าแล้ว')}` : ''}
                   </option>
@@ -1310,6 +1311,7 @@ function AddContractForm({ customer, onCancel, onSaved }: { customer: CustomerWi
 function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractRow; onCancel: () => void; onSaved: () => void }) {
   const toast = useToast();
   const { tx } = useLang();
+  const refOf = useContractRef();
   const [customerNameTh, setCustomerNameTh] = useState(contract.customerName);
   const [taxId, setTaxId] = useState(contract.taxId);
   const [contactName, setContactName] = useState(contract.contactName ?? '');
@@ -1398,7 +1400,7 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
       title={tx('แก้ไขข้อมูลสัญญา')}
       right={
         <span className="rt">
-          {contract.poNo} — {contract.projectName}
+          {refOf(contract).value} — {contract.projectName}
         </span>
       }
       footer={

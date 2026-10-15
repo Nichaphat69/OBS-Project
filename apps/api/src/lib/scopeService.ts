@@ -162,3 +162,26 @@ export async function listFilterOptions(): Promise<{ contracts: FilterOptionCont
   }));
   return { contracts, activeContractId: rows.find((c) => c.status === 'active')?.id ?? null };
 }
+
+/**
+ * ชื่อเรียกสัญญาในข้อความที่ระบบสร้างเอง (งานที่ต้องทำ, ฟีดกิจกรรม ฯลฯ): เลขใบเสนอราคา FlowAccount (QT…) ถ้าสัญญานั้นมี ไม่งั้น "PO เลขที่"
+ * (12 ต.ค. 69 เจ้าของระบบสั่ง "ทุกอย่างที่แสดงเป็น PO เปลี่ยนเป็น QT") — โหลดข้อมูลครั้งเดียวต่อการเรียก แล้วค้นด้วยเลข PO + ชื่อบริษัท
+ * (หรือเลข PO อย่างเดียวถ้าไม่ทราบชื่อบริษัท)
+ */
+export async function quotationRefLookup(): Promise<(poNo: string | null | undefined, customerName?: string | null) => string> {
+  const rows = await prisma.contract.findMany({
+    select: { poNo: true, customer: { select: { nameTh: true } }, assignments: { select: { quotationNo: true } } },
+  });
+  const byBoth = new Map<string, string | null>();
+  const byPo = new Map<string, string | null>();
+  for (const c of rows) {
+    const qt = contractQuotationNo(c.assignments);
+    byBoth.set(`${c.customer.nameTh}\u0000${c.poNo}`, qt);
+    if (!byPo.has(c.poNo)) byPo.set(c.poNo, qt);
+  }
+  return (poNo, customerName) => {
+    if (!poNo) return '';
+    const qt = (customerName ? byBoth.get(`${customerName}\u0000${poNo}`) : undefined) ?? byPo.get(poNo);
+    return qt || `PO ${poNo}`;
+  };
+}

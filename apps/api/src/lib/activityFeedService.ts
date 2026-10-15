@@ -3,6 +3,7 @@
  * employeeTimesheetFeed(). Backs both the bell badge (via pulse()) and the full "การแจ้งเตือน"
  * page (Phase 5.5.2).
  */
+import { quotationRefLookup } from './scopeService.js';
 import { prisma } from '@obs/db';
 import { thaiMonth, money } from '@obs/domain';
 import { STATUS_LABEL } from './dashboardService.js';
@@ -26,7 +27,7 @@ export const SUBMISSION_METHOD_LABEL: Record<string, string> = {
 };
 const viaMethod = (d: any) => (d?.submissionMethod && SUBMISSION_METHOD_LABEL[d.submissionMethod] ? ` · ${SUBMISSION_METHOD_LABEL[d.submissionMethod]}` : '');
 
-type FeedShapeFn = (detail: any, entityId: string | null, sheet?: any) => { level: string; title: string; detail: string; link: unknown };
+type FeedShapeFn = (detail: any, entityId: string | null, sheet?: any, refOf?: (poNo: string | null | undefined, customerName?: string | null) => string) => { level: string; title: string; detail: string; link: unknown };
 
 const FEED_SHAPE: Record<string, FeedShapeFn> = {
   extract_timesheet: (d, id) => ({
@@ -101,10 +102,10 @@ const FEED_SHAPE: Record<string, FeedShapeFn> = {
     detail: `${id}${d?.message ? ` · ${d.message}` : ''}`,
     link: null,
   }),
-  create_contract: (d) => ({
+  create_contract: (d, _id, _sheet, refOf) => ({
     level: 'ok',
     title: 'เพิ่มสัญญา/บริษัทใหม่',
-    detail: `${d?.customerId ?? ''} · ${d?.projectName ?? '—'}${d?.poNo ? ` · PO ${d.poNo}` : ''}`,
+    detail: `${d?.customerId ?? ''} · ${d?.projectName ?? '—'}${d?.poNo ? ` · ${refOf ? refOf(d.poNo) : `PO ${d.poNo}`}` : ''}`,
     link: { view: 'master' },
   }),
   create_employee: (d) => ({
@@ -163,9 +164,10 @@ export async function activityFeed({ limit = 30, contractId = null, contractIds 
     : candidates;
   const trimmed = filtered.slice(0, limit);
 
+  const refOf = await quotationRefLookup();
   const items: FeedItem[] = trimmed.map((r) => {
     const sheet = r.entityId ? sheetInfo.get(r.entityId) : undefined;
-    const base = FEED_SHAPE[r.action](r.detail, r.entityId, sheet);
+    const base = FEED_SHAPE[r.action](r.detail, r.entityId, sheet, refOf);
     return { ...base, id: r.id, at: r.at, by: ACTOR_LABEL[r.actor] ?? r.actor };
   });
 

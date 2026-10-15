@@ -24,6 +24,9 @@ const LANG_KEY = 'obs.lang';
  * ที่มีอยู่แล้วในต้นฉบับ ส่วนที่ต้นฉบับเองก็ไม่เคยแปลไว้ (เช่น "เชื่อมต่อ LINE"/"ออกจากระบบ" ที่เพิ่มเข้ามา
  * หลังฟีเจอร์สลับภาษา) เติมคำแปลที่สมเหตุสมผลเองแทน */
 const TX: Record<string, string> = {
+  'ใบเสนอราคา / ใบว่าจ้าง': 'Quotation / PO',
+  'ค้นหาชื่อพนักงาน / เลข QT / PO / สัญญา / รอบบิล': 'Search employee name / QT / PO / contract / billing cycle',
+  'ทุกใบเสนอราคา': 'All Quotations',
   'เลขที่ QT / PO': 'QT / PO no.',
   'พิมพ์เลข QT / PO / ชื่อบริษัท เพื่อค้นหา…': 'Type a QT / PO number or company name to search…',
   'นำเข้าแล้ว': 'Already imported',
@@ -1339,7 +1342,7 @@ const TX: Record<string, string> = {
   'ทุก PO': 'All POs',
   'พิมพ์เลข PO / ชื่อบริษัท เพื่อค้นหา…': 'Type PO number / company name to search…',
   'ล้าง': 'Clear',
-  'ไม่พบ PO ที่ตรงกับ': 'No PO matches',
+  'ไม่พบใบเสนอราคาที่ตรงกับ': 'No quotation matches',
   'บันทึกระบบ': 'System log',
   'เช่น thailife.com': 'e.g. thailife.com',
   'ระบบมีปัญหา (error) · แจ้งปัญหา/feedback จากพนักงาน': 'System errors · issue reports/feedback from employees',

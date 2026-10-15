@@ -7,6 +7,7 @@ import { useReadModelNameMap } from '../../../components/readModelNames';
 import { Icon } from '../../../components/Icon';
 import { ScopeSummary } from '../../../components/ScopeFilterBar';
 import { useLang, formatDate, formatYear } from '../../../lib/language';
+import { useContractRef } from '../../../lib/scope';
 
 interface TimesheetListItem {
   id: string;
@@ -72,6 +73,7 @@ function matchesTab(item: TimesheetListItem, tab: string): boolean {
 
 export default function MandayClient() {
   const { tx, lang, formatPeriodLabel } = useLang();
+  const refOf = useContractRef();
   const [data, setData] = useState<ListResult | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('needsReview');
   const [search, setSearch] = useState('');
@@ -227,7 +229,7 @@ export default function MandayClient() {
             <div className="bd">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
                 <Tag tone="pr">{tx('รอบ')} {formatPeriodLabel(item.periodLabel)}</Tag>
-                <Tag tone="mu">PO {item.contract.poNo}</Tag>
+                <Tag tone="mu">{refOf(item.contract).text}</Tag>
                 <Tag tone="mu">{tx('เลขที่')} {item.id}</Tag>
                 {/* กล่องข้อความแยกทีละวัน ไม่รวมเป็นบรรทัดเดียวคั่นจุลภาค — เดือนที่ลาหลายวันจะได้ไม่ต้อง
                     ไล่อ่านทีละคำ (18 ก.ย. 69 ตามที่เจ้าของระบบขอ) */}
@@ -239,7 +241,7 @@ export default function MandayClient() {
                 <ReadModelTag model={item.readModel} nameMap={readModelNames} />
               </div>
               <div className="sub" style={{ marginBottom: 14 }}>
-                {tx('รับเมื่อ')} {formatDate(item.receivedAt, lang)} · <b>{item.contract.customerName}</b> · PO {item.contract.poNo} · {item.contract.projectName}
+                {tx('รับเมื่อ')} {formatDate(item.receivedAt, lang)} · <b>{item.contract.customerName}</b> · {refOf(item.contract).text} · {item.contract.projectName}
               </div>
 
               <table style={{ minWidth: 0 }}>

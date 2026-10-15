@@ -200,3 +200,33 @@ export function useScope(): ScopeCtx {
   if (!v) throw new Error('useScope ต้องอยู่ใต้ <ScopeProvider>');
   return v;
 }
+
+export interface ContractRefInfo {
+  /** ป้ายนำหน้า: 'PO' เมื่อเป็นเลข PO · ว่างเมื่อเป็นเลขใบเสนอราคา (เลข QT… มีตัวนำหน้าในตัวอยู่แล้ว) */
+  label: string;
+  value: string;
+  /** ข้อความพร้อมแสดง: "QT2026090003" หรือ "PO 202650" */
+  text: string;
+}
+
+/**
+ * ชื่อเรียกสัญญาที่แสดงในระบบ (12 ต.ค. 69 เจ้าของระบบสั่ง "ทุกอย่างที่แสดงเป็น PO เปลี่ยนเป็น QT"): ใช้เลขใบเสนอราคา FlowAccount (QT…)
+ * ถ้าสัญญานั้นมี ไม่งั้น (สัญญาที่กรอกเองในระบบ) ใช้เลข PO เหมือนเดิม — หาสัญญาจากรหัส (id) ก่อน ไม่มีค่อยหาจากเลข PO + ชื่อบริษัท
+ * ข้อมูลมาจากรายการสัญญาของตัวกรองบนแถบบน (ScopeProvider) จึงใช้ได้ทุกหน้าโดยไม่ต้องแก้ API ทีละเส้น
+ */
+export function useContractRef(): (c: { id?: string | null; poNo?: string | null; customerName?: string | null }) => ContractRefInfo {
+  const { contracts } = useScope();
+  return useCallback(
+    (c) => {
+      const found =
+        (c.id ? contracts.find((x) => x.id === c.id) : undefined) ??
+        (c.poNo ? contracts.find((x) => x.poNo === c.poNo && (!c.customerName || x.customerName === c.customerName)) : undefined) ??
+        (c.poNo ? contracts.find((x) => x.poNo === c.poNo) : undefined);
+      const qt = found?.quotationNo?.trim();
+      if (qt) return { label: '', value: qt, text: qt };
+      const po = c.poNo ?? found?.poNo ?? '';
+      return { label: 'PO', value: po, text: po ? `PO ${po}` : '' };
+    },
+    [contracts],
+  );
+}

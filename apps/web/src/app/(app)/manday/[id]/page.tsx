@@ -7,6 +7,7 @@ import { Card, Loading, PageHeader, PoTag, StatusPill, Tag, parseReadModel } fro
 import { Icon } from '../../../../components/Icon';
 import { usePdfPreview, fileBadge } from '../../../../components/Overlays';
 import { useLang } from '../../../../lib/language';
+import { useContractRef } from '../../../../lib/scope';
 
 interface CalendarDay {
   date: string;
@@ -259,6 +260,7 @@ function dedupeRepeatedText(text: string | null | undefined): string {
 
 export default function ManadyDetailPage() {
   const { tx, lang, formatDate, formatDateTime, formatPeriodLabel } = useLang();
+  const refOf = useContractRef();
   const openPdfPreview = usePdfPreview();
   const params = useParams<{ id: string }>();
   const [sheet, setSheet] = useState<TimesheetDetail | null>(null);
@@ -445,7 +447,7 @@ export default function ManadyDetailPage() {
           {/* ไม่โชว์ว่าอ่านไฟล์ด้วยตัวไหน (ABBYY/Clear Read) ในหน้านี้แล้ว — เป็นข้อมูลเบื้องหลังของระบบ
               ที่คนตรวจ Manday ไม่ได้ใช้ตัดสินใจอะไร ดูได้ที่หน้าแรก (อัปโหลด/ประวัติ) พอ (25 ก.ย. 69) */}
           <p>
-            {sheet.contract.customerName} · {tx('โครงการ')} {sheet.contract.projectName} · <PoTag>{sheet.contract.poNo}</PoTag> · {tx('สัญญา')} {sheet.contract.contractNo ?? '—'}
+            {sheet.contract.customerName} · {tx('โครงการ')} {sheet.contract.projectName} · <PoTag label={refOf(sheet.contract).label}>{refOf(sheet.contract).value}</PoTag> · {tx('สัญญา')} {sheet.contract.contractNo ?? '—'}
           </p>
         </div>
       </div>
@@ -594,8 +596,8 @@ export default function ManadyDetailPage() {
                   <dd>{sheet.contract.customerName}</dd>
                   <dt>{tx('เลขผู้เสียภาษี')}</dt>
                   <dd className="n">{sheet.contractDetail.taxId ?? '—'}</dd>
-                  <dt>{tx('ใบว่าจ้าง')}</dt>
-                  <dd className="n"><PoTag>{sheet.contract.poNo}</PoTag></dd>
+                  <dt>{tx('ใบเสนอราคา / ใบว่าจ้าง')}</dt>
+                  <dd className="n"><PoTag label={refOf(sheet.contract).label}>{refOf(sheet.contract).value}</PoTag></dd>
                   <dt>{tx('สัญญา')}</dt>
                   <dd className="n">{sheet.contract.contractNo ?? '—'}</dd>
                   <dt>{tx('ใบเสนอราคา')}</dt>

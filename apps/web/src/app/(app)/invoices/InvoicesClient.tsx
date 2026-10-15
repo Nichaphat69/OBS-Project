@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, ErrorState, Loading, PageHeader, PoTag, StatusPill } from '../../../components/ui';
 import { useLang } from '../../../lib/language';
+import { useContractRef } from '../../../lib/scope';
 import { ScopeSummary } from '../../../components/ScopeFilterBar';
 
 interface InvoiceRow {
@@ -35,6 +36,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function InvoicesClient() {
   const { tx, formatPeriodLabel } = useLang();
+  const refOf = useContractRef();
   const [rows, setRows] = useState<InvoiceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +73,7 @@ export default function InvoicesClient() {
             <thead>
               <tr>
                 <th>{tx('เลขที่เอกสาร')}</th>
-                <th>{tx('เลขที่สัญญา/PO')}</th>
+                <th>{tx('เลขที่ QT / PO')}</th>
                 <th>{tx('บริษัท')}</th>
                 <th>{tx('รอบบิล')}</th>
                 <th>{tx('วันที่วางบิล')}</th>
@@ -92,7 +94,7 @@ export default function InvoicesClient() {
                     )}
                   </td>
                   <td>
-                    <PoTag>{r.poNo}</PoTag>
+                    <PoTag label={refOf(r).label}>{refOf(r).value}</PoTag>
                   </td>
                   <td className="nm">{r.customerName}</td>
                   <td>{formatPeriodLabel(r.periodLabel)}</td>

@@ -110,7 +110,7 @@ export function ScopeFilterBar() {
         className={`ctxbtn scopef-btn${current ? ' set' : ''}${current && isDefault ? ' dflt' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={current ? `${contractRef(current)} · ${current.customerName}` : tx('ทุก PO')}
+        title={current ? `${contractRef(current)} · ${current.customerName}` : tx('ทุกใบเสนอราคา')}
         onClick={() => {
           if (open) return close();
           setOpen(true);
@@ -120,7 +120,7 @@ export function ScopeFilterBar() {
         <Icon name="search" className="sm" />
         <span className="ctx-label">
           <small>{tx('เลขที่ QT / PO')}</small>
-          <b>{current ? `${contractRef(current)} · ${current.customerName}` : tx('ทุก PO')}</b>
+          <b>{current ? `${contractRef(current)} · ${current.customerName}` : tx('ทุกใบเสนอราคา')}</b>
         </span>
         <Icon name="cd" className="sm cv" />
       </button>
@@ -154,7 +154,7 @@ export function ScopeFilterBar() {
               <button type="button" className={`ctx-item${hi === 0 ? ' hi' : ''}${!current ? ' on' : ''}`} role="option" aria-selected={!current} onMouseEnter={() => setHi(0)} onClick={() => choose(null)}>
                 <span className="chk">{!current && <Icon name="chk" className="sm" />}</span>
                 <span className="tx">
-                  <b>{tx('ทุก PO')}</b>
+                  <b>{tx('ทุกใบเสนอราคา')}</b>
                   <span>{tx('ดูข้อมูลของทุกบริษัท')}</span>
                 </span>
               </button>
@@ -179,7 +179,7 @@ export function ScopeFilterBar() {
                 </button>
               );
             })}
-            {options.length === 0 && <div className="scope-empty">{tx('ไม่พบ PO ที่ตรงกับ')} “{q}”</div>}
+            {options.length === 0 && <div className="scope-empty">{tx('ไม่พบใบเสนอราคาที่ตรงกับ')} “{q}”</div>}
           </div>
         </div>
       )}

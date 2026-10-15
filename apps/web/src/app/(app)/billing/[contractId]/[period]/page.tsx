@@ -7,6 +7,7 @@ import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../../../compo
 import { Icon } from '../../../../../components/Icon';
 import { usePdfPreview, fileBadge } from '../../../../../components/Overlays';
 import { useLang } from '../../../../../lib/language';
+import { useContractRef } from '../../../../../lib/scope';
 
 interface InvoiceItem {
   seq: number;
@@ -114,6 +115,7 @@ function initials(name: string) {
 
 export default function CycleDetailPage() {
   const { tx, formatDate, formatPeriodLabel } = useLang();
+  const refOf = useContractRef();
   const openPdfPreview = usePdfPreview();
   const params = useParams<{ contractId: string; period: string }>();
   const [data, setData] = useState<CyclePreview | null>(null);
@@ -204,7 +206,7 @@ export default function CycleDetailPage() {
   return (
     <>
       <PageHeader
-        eyebrow={`${data.contract.poNo} · ${formatPeriodLabel(data.periodLabel)}`}
+        eyebrow={`${refOf(data.contract).value} · ${formatPeriodLabel(data.periodLabel)}`}
         title={data.contract.customerName}
         subtitle={data.contract.projectName}
       />

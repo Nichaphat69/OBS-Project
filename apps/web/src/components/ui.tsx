@@ -171,10 +171,10 @@ export function Tag({ tone, children, title }: { tone: PillTone; children: React
 
 /** เลข PO/ใบว่าจ้าง — ป้ายไล่สีให้เด่นกว่า plain text ธรรมดา ใช้ตรงหัวข้อหน้าที่โชว์เลขใบว่าจ้างของสัญญา
  * (หนึ่งบริษัทมีได้หลายสัญญา/หลาย PO อยู่แล้วที่ระดับข้อมูล — คอมโพเนนต์นี้แค่ให้แต่ละ PO เด่นขึ้น) */
-export function PoTag({ children }: { children: React.ReactNode }) {
+export function PoTag({ children, label = 'PO' }: { children: React.ReactNode; label?: string }) {
   return (
     <span className="po-badge">
-      <span className="lbl">PO</span>
+      {label && <span className="lbl">{label}</span>}
       <b className="num">{children}</b>
     </span>
   );

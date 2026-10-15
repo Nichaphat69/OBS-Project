@@ -156,7 +156,7 @@ export default function NotificationsClient({ role }: { role: string }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={tx('ค้นหาชื่อพนักงาน / เลข PO / สัญญา / รอบบิล')}
+            placeholder={tx('ค้นหาชื่อพนักงาน / เลข QT / PO / สัญญา / รอบบิล')}
             style={{ flex: '1 1 280px', maxWidth: 420 }}
           />
           <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}>

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, EmptyState, ErrorState, Kpi, Loading, PageHeader, PoTag, StatusPill } from '../../../../components/ui';
 import { useLang } from '../../../../lib/language';
+import { useContractRef } from '../../../../lib/scope';
 
 interface CyclePeriod {
   period: string;
@@ -59,6 +60,7 @@ export default function CompanyDetailClient({ contractId }: { contractId: string
   const searchParams = useSearchParams();
   const periodParam = searchParams.get('period');
   const { tx, formatPeriodLabel } = useLang();
+  const refOf = useContractRef();
 
   const [contract, setContract] = useState<ContractCycles | null | undefined>(undefined);
   const [employees, setEmployees] = useState<PeriodEmployee[] | null>(null);
@@ -158,7 +160,7 @@ export default function CompanyDetailClient({ contractId }: { contractId: string
             {contract.poNo && (
               <>
                 {' '}
-                · <PoTag>{contract.poNo}</PoTag>
+                · <PoTag label={refOf(contract).label}>{refOf(contract).value}</PoTag>
               </>
             )}
           </>

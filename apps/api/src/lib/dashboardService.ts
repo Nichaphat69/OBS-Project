@@ -8,6 +8,7 @@
  * service.js (timesheet ingestion, billing cycle actions, LINE/Gmail/FlowAccount/HRDD/ABBYY
  * integrations) stays in src/service.js for now, per MIGRATION_PLAN.md.
  */
+import { quotationRefLookup } from './scopeService.js';
 import { prisma } from '@obs/db';
 import { round2, thaiMonth, money, nextPeriod } from '@obs/domain';
 import { SUBMISSION_METHOD_LABEL } from './activityFeedService.js';
@@ -785,6 +786,7 @@ export async function dashboard(scope?: string | string[] | null): Promise<Dashb
      รอบในอนาคตด้วย (ก.ย. ยังไม่จบก็ทวง ต.ค.–ธ.ค. แล้ว) จนงานจริงจมหายอยู่ท้ายรายการ ตอนนี้ทวงเฉพาะรอบที่ถึง
      เดือนแล้ว และย้ายไปท้ายสุด ล่าสุดขึ้นก่อน */
   const currentPeriod = today.slice(0, 7);
+  const refOf = await quotationRefLookup(); // ชื่อเรียกสัญญาในงานที่ต้องทำ: QT… ถ้ามี ไม่งั้น PO
   const tasks = [
     ...employeeFileTasks,
     ...sheets
@@ -792,13 +794,13 @@ export async function dashboard(scope?: string | string[] | null): Promise<Dashb
       .map((s) => ({
         step: 2, level: 'critical',
         title: 'Timesheet ตรวจไม่ผ่าน',
-        detail: `${s.employeeName} · ${s.customerName} · PO ${s.poNo} · รอบ ${s.periodLabel} — ${s.statusReason ?? 'ข้อมูลไม่ตรงปฏิทิน'}`,
+        detail: `${s.employeeName} · ${s.customerName} · ${refOf(s.poNo, s.customerName)} · รอบ ${s.periodLabel} — ${s.statusReason ?? 'ข้อมูลไม่ตรงปฏิทิน'}`,
         link: { view: 'detail', id: s.id },
       })),
     ...waitingCheck.map((s) => ({
       step: 2, level: 'warn',
       title: 'รอตรวจ Manday',
-      detail: `${s.employeeName} · ${s.customerName} · PO ${s.poNo} · รอบ ${s.periodLabel} — ${money(s.lineAmount ?? 0)} บาท`,
+      detail: `${s.employeeName} · ${s.customerName} · ${refOf(s.poNo, s.customerName)} · รอบ ${s.periodLabel} — ${money(s.lineAmount ?? 0)} บาท`,
       link: { view: 'detail', id: s.id },
     })),
     ...allPeriods
@@ -807,7 +809,7 @@ export async function dashboard(scope?: string | string[] | null): Promise<Dashb
       .map((p) => ({
         step: 3, level: 'info',
         title: 'รออนุมัติวางบิล',
-        detail: `${p.customerName} · PO ${p.poNo} · รอบ ${p.periodLabel} — ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
+        detail: `${p.customerName} · ${refOf(p.poNo, p.customerName)} · รอบ ${p.periodLabel} — ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
         link: { view: 'cycle', contractId: p.contractId, period: p.period },
       })),
     // รอ Timesheet — บอกจำนวน (ส่งแล้ว/ทั้งหมด) + รายชื่อคนที่ยังไม่ส่งตรงๆ (เจ้าของระบบสั่ง 24 ก.ย. 69)
@@ -819,7 +821,7 @@ export async function dashboard(scope?: string | string[] | null): Promise<Dashb
       .map((p) => ({
         step: 1, level: 'warn',
         title: 'รอ Timesheet',
-        detail: `${p.customerName} · PO ${p.poNo} · รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
+        detail: `${p.customerName} · ${refOf(p.poNo, p.customerName)} · รอบ ${p.periodLabel} — ส่งแล้ว ${p.received}/${p.expected} คน${p.missing.length ? ` · ยังไม่ส่ง: ${p.missing.join(', ')}` : ''}`,
         link: null,
       })),
   ];

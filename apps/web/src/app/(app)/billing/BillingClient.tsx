@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Card, Loading, PageHeader, StatusPill, Tag } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useLang } from '../../../lib/language';
+import { useContractRef } from '../../../lib/scope';
 import { ScopeSummary, contractRange } from '../../../components/ScopeFilterBar';
 
 interface CyclePeriod {
@@ -80,6 +81,7 @@ const STATE_TONE: Record<string, 'ok' | 'wn' | 'cr' | 'mu' | 'pr'> = {
 
 export default function BillingClient() {
   const { tx, lang, formatPeriodLabel } = useLang();
+  const refOf = useContractRef();
   const [data, setData] = useState<CyclesResult | null>(null);
   // แถวรอบบิลไหนกำลังกางดูรายชื่อพนักงานอยู่ — คีย์ "contractId:period" (24 ก.ย. 69 ตามที่ขอ: "รอบบิล
   // ที่มีพนักงานหลายคน ต้องคลิกแล้วมี dropdown แสดงชื่อ+สถานะ Timesheet แต่ละคนได้") ใช้ endpoint
@@ -156,7 +158,7 @@ export default function BillingClient() {
       {data.contracts.map((contract) => (
         <Card
           key={contract.id}
-          title={`PO ${contract.poNo} — ${contract.customerName}`}
+          title={`${refOf(contract).text} — ${contract.customerName}`}
           right={<span>{contract.projectName}{contract.startDate && contract.endDate ? ` · ${contractRange({ startDate: contract.startDate, endDate: contract.endDate }, lang)}` : ''}</span>}
           flush
         >
