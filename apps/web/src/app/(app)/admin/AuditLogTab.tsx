@@ -67,7 +67,7 @@ const ACTION_TH: Record<string, string> = {
   approve_cycle: 'อนุมัติรอบบิล',
   approve_line: 'อนุมัติผ่าน LINE',
   delete_invoice: 'ลบใบแจ้งหนี้',
-  gmail_draft_created: 'สร้างร่างอีเมลวางบิล',
+  gmail_draft_created: 'สร้างร่างอีเมล INV',
   dismiss_gmail_message: 'ซ่อนอีเมลจากรายการ',
   discard_ai_read: 'ทิ้งผลการอ่าน',
   create_support_ticket: 'แจ้งปัญหา',

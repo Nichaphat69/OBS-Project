@@ -23,7 +23,7 @@ function employeeStatusTone(status: string): 'mu' | 'ok' | 'wn' {
   if (status === 'billed') return 'ok';
   return 'wn';
 }
-/** สีของพนักงานรายคนให้อยู่ในชุดสีเดียวกับสถานะรอบบิล: ยังไม่ส่ง=เทา · วางบิลแล้ว=เขียว · รอวางบิล(ตรวจผ่าน)=ฟ้า · อื่นๆ=ส้ม */
+/** สีของพนักงานรายคนให้อยู่ในชุดสีเดียวกับสถานะรอบบิล: ยังไม่ส่ง=เทา · ออก INV แล้ว=เขียว · รอออก INV(ตรวจผ่าน)=ฟ้า · อื่นๆ=ส้ม */
 function employeeStateClass(status: string): string {
   if (status === 'not_submitted') return 's-awaiting';
   if (status === 'billed') return 's-billed';
@@ -31,7 +31,7 @@ function employeeStateClass(status: string): string {
   return 's-checking';
 }
 function employeeStatusLabel(e: { status: string; statusLabel: string }): string {
-  return e.status === 'verified' ? 'รอวางบิล' : e.statusLabel;
+  return e.status === 'verified' ? 'รอออก INV' : e.statusLabel;
 }
 
 interface DashboardData {
@@ -124,7 +124,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
     }
     return [...m.values()];
   })();
-  // ความคืบหน้าสัญญา: นับเป็น "เดือน" ของสัญญา — วางบิลแล้ว (monthsBilled) · อยู่ระหว่างดำเนินการ (รอบที่ส่ง/ตรวจแล้วแต่ยังไม่วางบิล)
+  // ความคืบหน้าสัญญา: นับเป็น "เดือน" ของสัญญา — ออก INV แล้ว (monthsBilled) · อยู่ระหว่างดำเนินการ (รอบที่ส่ง/ตรวจแล้วแต่ยังไม่ออก INV)
   // · ยังไม่ถึงรอบ (ที่เหลือ) · มูลค่าของสองส่วนหลังเป็นค่าประมาณจากยอดต่อเดือน
   const progPer = data.contracts.map((c) => {
     const started = data.cycles.filter((x) => x.contractId === c.id && x.state !== 'billed' && x.state !== 'awaiting').length;
@@ -135,7 +135,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
   });
   const progTotal = progPer.reduce((n, r) => n + r.c.monthsTotal, 0);
   const progSegsRaw = [
-    { key: 'billed' as const, label: 'วางบิลแล้ว', count: progPer.reduce((n, r) => n + r.billed, 0), value: progPer.reduce((n, r) => n + r.c.billedValue, 0) },
+    { key: 'billed' as const, label: 'ออก INV แล้ว', count: progPer.reduce((n, r) => n + r.billed, 0), value: progPer.reduce((n, r) => n + r.c.billedValue, 0) },
     { key: 'doing' as const, label: 'อยู่ระหว่างดำเนินการ', count: progPer.reduce((n, r) => n + r.doing, 0), value: progPer.reduce((n, r) => n + r.doingValue, 0) },
     { key: 'left' as const, label: 'ยังไม่ถึงรอบ', count: progPer.reduce((n, r) => n + r.left, 0), value: progPer.reduce((n, r) => n + r.leftValue, 0) },
   ];
@@ -228,14 +228,14 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
         />
         <Kpi
           icon="doc"
-          label={tx('พร้อมวางบิล')}
+          label={tx('พร้อมออก INV')}
           value={data.counts.readyToBill}
           caption={`${tx('มูลค่า')} ${money(data.readyValue)} ${tx('บาท')}`}
           tone="g"
         />
         <Kpi
           icon="money"
-          label={tx('ยอดวางบิลแล้ว')}
+          label={tx('ยอดออก INV แล้ว')}
           value={money(data.billedAmount)}
           caption={`${data.invoiceCount} ${tx('ใบ')}`}
           tone="a"
@@ -258,7 +258,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
           )}
         </Card>
 
-        {/* ความคืบหน้าสัญญา (6 ต.ค. 69 เปลี่ยนจากโดนัทสถานะรอบบิล): แบ่งเดือนทั้งหมดของสัญญาเป็น วางบิลแล้ว / อยู่ระหว่างดำเนินการ /
+        {/* ความคืบหน้าสัญญา (6 ต.ค. 69 เปลี่ยนจากโดนัทสถานะรอบบิล): แบ่งเดือนทั้งหมดของสัญญาเป็น ออก INV แล้ว / อยู่ระหว่างดำเนินการ /
             ยังไม่ถึงรอบ — กดส่วนไหนของกราฟ (หรือรายการข้างล่าง) แล้วแสดงรายละเอียดของส่วนนั้นใต้กราฟ แยกตามสัญญา
             สีทึบโทนฟ้า #288adb ไล่ความเข้มตามความคืบหน้า */}
         <Card title={tx('ความคืบหน้าสัญญา')}>
@@ -287,7 +287,7 @@ export default function DashboardClient({ data, nameTh }: { data: DashboardData;
                   </svg>
                   <div className="dn-center">
                     <b>{progPct}%</b>
-                    <span>{tx('วางบิลแล้ว')}</span>
+                    <span>{tx('ออก INV แล้ว')}</span>
                   </div>
                 </div>
                 <ul className="dn-legend">

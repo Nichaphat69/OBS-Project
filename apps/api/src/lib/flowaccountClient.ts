@@ -27,17 +27,29 @@ export function pointsAtLiveFlowAccount(mode: string, baseUrl: string): boolean 
   if (mode === MODE.LIVE) return true;
   return !/\/test\/?$/i.test(baseUrl.trim());
 }
-export type FlowAccountDocumentType = 'billing-note' | 'tax-invoice';
+export type FlowAccountDocumentType = 'invoice' | 'billing-note' | 'tax-invoice';
+
+/**
+ * ชนิดเอกสารที่ OBS ออกให้ลูกค้าคือ "ใบแจ้งหนี้ (INV)" (เจ้าของระบบสั่ง 15 ต.ค. 69: เลิกใบวางบิล) — ค่าที่เคยบันทึกไว้ใน
+ * settings เป็น 'billing-note' (ค่าเริ่มต้นเก่า) หรือไม่มีค่า จึงถูกอ่านเป็น invoice ทั้งหมด เหลือเฉพาะ 'tax-invoice'
+ * ที่ตั้งใจเลือกเองไว้ — ตัว client ยังรู้จัก 'billing-note' อยู่เพื่อลบ/ขอลิงก์เอกสารเก่าที่ออกไปแล้ว
+ */
+export function resolveDocumentType(stored: unknown): FlowAccountDocumentType {
+  return stored === 'tax-invoice' ? 'tax-invoice' : 'invoice';
+}
 
 const DOCUMENT_PATHS: Record<FlowAccountDocumentType, string> = {
+  invoice: '/invoices/inline',
   'billing-note': '/billing-notes/inline',
   'tax-invoice': '/tax-invoices/inline',
 };
 const SHARE_PATHS: Record<FlowAccountDocumentType, string> = {
+  invoice: '/invoices/sharedocument',
   'billing-note': '/billing-notes/sharedocument',
   'tax-invoice': '/tax-invoices/sharedocument',
 };
 const DELETE_PATHS: Record<FlowAccountDocumentType, string> = {
+  invoice: '/invoices',
   'billing-note': '/billing-notes',
   'tax-invoice': '/tax-invoices',
 };
@@ -78,7 +90,7 @@ export class FlowAccountClient {
     mode = process.env.FLOWACCOUNT_MODE ?? MODE.DRY_RUN,
     clientId = process.env.FLOWACCOUNT_CLIENT_ID,
     clientSecret = process.env.FLOWACCOUNT_CLIENT_SECRET,
-    documentType = 'billing-note' as FlowAccountDocumentType,
+    documentType = 'invoice' as FlowAccountDocumentType,
   }: { mode?: string; clientId?: string; clientSecret?: string; documentType?: FlowAccountDocumentType } = {}) {
     this.mode = mode;
     this.clientId = clientId;

@@ -1,5 +1,5 @@
 /**
- * ทดสอบอีเมลวางบิล — createGmailDraft() / syncEmailSent() (17 ก.ย. 69)
+ * ทดสอบอีเมล INV — createGmailDraft() / syncEmailSent() (17 ก.ย. 69)
  *
  * Ported from test/gmail-draft.test.js (assertions ตั้งแต่บรรทัด 111 เก็บความหมายไว้ครบ) ต่างจาก
  * ต้นฉบับตรงที่ใช้ฐานข้อมูลเทสต์ Postgres + fixture จาก helpers/testDb.ts แทน SQLite ชั่วคราว และใช้
@@ -32,7 +32,7 @@ class FakeGmailClient {
   /** ถ้าเส้นทางไหนเผลอเรียกตัวนี้ = ผิดกติกาทันที */
   async sendMessage() {
     this.sendCalls += 1;
-    throw new Error('เส้นทางวางบิลห้ามส่งอีเมลจริง — ต้องเป็นร่างเท่านั้น');
+    throw new Error('เส้นทางออก INV ห้ามส่งอีเมลจริง — ต้องเป็นร่างเท่านั้น');
   }
 
   async findSentMessage() {
@@ -55,7 +55,7 @@ async function giveTimesheetFiles(ids: string[]) {
   }
 }
 
-test('createGmailDraft ปฏิเสธถ้ารอบบิลนี้ยังไม่มีรายการที่วางบิลได้', async () => {
+test('createGmailDraft ปฏิเสธถ้ารอบบิลนี้ยังไม่มีรายการที่ออก INV ได้', async () => {
   await seedFixtures();
   const gmail = new FakeGmailClient();
   await assert.rejects(
@@ -101,7 +101,7 @@ test('แนบไฟล์ Timesheet ที่มีจริงให้คร
   const gmail = new FakeGmailClient();
   const result: any = await createGmailDraft(CONTRACT.id, PERIOD, { actor: 'ทดสอบ', client: gmail as any });
 
-  // ยังไม่ได้อนุมัติรอบนี้ จึงยังไม่มีใบวางบิลให้แนบ — ได้แค่ Timesheet ของทั้งสองคน
+  // ยังไม่ได้อนุมัติรอบนี้ จึงยังไม่มีINV ให้แนบ — ได้แค่ Timesheet ของทั้งสองคน
   const attachments = gmail.created[0].attachments;
   assert.equal(attachments.length, 2, 'ต้องแนบ Timesheet ของทั้งสองคน');
   for (const a of attachments) {

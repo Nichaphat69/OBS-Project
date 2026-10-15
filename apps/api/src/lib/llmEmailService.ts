@@ -1,5 +1,5 @@
 /**
- * ร่างอีเมลวางบิล + อ่านอีเมลแจ้งอนุมัติ ด้วยโมเดลภาษาที่รันในเครื่อง (LM Studio/Ollama) — ported from
+ * ร่างอีเมล INV + อ่านอีเมลแจ้งอนุมัติ ด้วยโมเดลภาษาที่รันในเครื่อง (LM Studio/Ollama) — ported from
  * src/llm/email.js.
  *
  * ทำไมต้องใช้โมเดลตรงนี้ ทั้งที่มี template อยู่แล้ว — template เขียนได้แค่สิ่งที่เดาไว้ล่วงหน้า ส่วน
@@ -18,7 +18,7 @@ import { callLocalJSON, localTextModel } from './localLlmClient.js';
 const EMAIL_SCHEMA = {
   type: 'object',
   properties: {
-    subject: { type: 'string', description: 'หัวข้ออีเมลภาษาไทย สั้น ระบุโครงการและเดือนที่วางบิล' },
+    subject: { type: 'string', description: 'หัวข้ออีเมลภาษาไทย สั้น ระบุโครงการและเดือนที่ออก INV' },
     body: {
       type: 'string',
       description:
@@ -35,7 +35,7 @@ const EMAIL_SCHEMA = {
   additionalProperties: false,
 };
 
-const SYSTEM_PROMPT = `คุณเป็นเจ้าหน้าที่บัญชีของบริษัทไทยที่ร่างอีเมลวางบิลให้ลูกค้าองค์กร
+const SYSTEM_PROMPT = `คุณเป็นเจ้าหน้าที่บัญชีของบริษัทไทยที่ร่างอีเมล INV ให้ลูกค้าองค์กร
 
 กฎที่ห้ามฝ่าฝืน
 1. ใช้ตัวเลขจาก JSON ที่ได้รับเท่านั้น ห้ามบวกลบคูณหารเอง ห้ามปัดเศษใหม่ ห้ามเดาตัวเลขที่ไม่มีให้
@@ -122,7 +122,7 @@ export async function draftBillingEmail(facts: Record<string, unknown>, { fetchI
   const { data, model, usage } = await callLocalJSON({
     model: localTextModel(),
     system: SYSTEM_PROMPT,
-    userContent: 'ร่างอีเมลวางบิลจากข้อมูลชุดนี้\n\n```json\n' + `${JSON.stringify(facts, null, 2)}\n` + '```',
+    userContent: 'ร่างอีเมล INV จากข้อมูลชุดนี้\n\n```json\n' + `${JSON.stringify(facts, null, 2)}\n` + '```',
     schema: EMAIL_SCHEMA,
     maxTokens: 4000,
     fetchImpl,

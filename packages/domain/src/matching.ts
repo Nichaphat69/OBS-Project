@@ -148,7 +148,7 @@ export function matchEmployee(
       return {
         match: MATCH.NONE,
         employee: null,
-        reason: `"${rawName}" มีชื่อสองคนปนกัน (${byThai.nameTh ?? byThai.id} กับ ${byLatin.nameEn ?? byLatin.id}) — ต้องให้คนเลือกเองก่อนวางบิล`,
+        reason: `"${rawName}" มีชื่อสองคนปนกัน (${byThai.nameTh ?? byThai.id} กับ ${byLatin.nameEn ?? byLatin.id}) — ต้องให้คนเลือกเองก่อนออก INV`,
       };
     }
     const both = byThai ?? byLatin;
@@ -203,7 +203,7 @@ export function matchEmployee(
   return {
     match: MATCH.NONE,
     employee: null,
-    reason: `ไม่พบ "${rawName}" ในฐานข้อมูลพนักงาน — เพิ่มพนักงานหรือเพิ่มชื่อพ้องก่อนวางบิล`,
+    reason: `ไม่พบ "${rawName}" ในฐานข้อมูลพนักงาน — เพิ่มพนักงานหรือเพิ่มชื่อพ้องก่อนออก INV`,
   };
 }
 

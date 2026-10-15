@@ -43,7 +43,7 @@ test("role อื่นยังถามแทนพนักงานคนอ
 /**
  * `requireAdminIfSession` — endpoint ที่เรียกได้ทั้งจาก n8n และจากคนที่ล็อกอิน (POST
  * /api/cycles/:contractId/:period/request-approval) เดิมปล่อยผ่านทุก role ที่ล็อกอิน ทั้งที่ต้นฉบับใน
- * server.js ทำ `if (session) requireAdmin(session)` ไว้ — พนักงานทั่วไปจึงสั่งส่งคำขออนุมัติวางบิลเข้า
+ * server.js ทำ `if (session) requireAdmin(session)` ไว้ — พนักงานทั่วไปจึงสั่งส่งคำขออนุมัติออก INV เข้า
  * LINE ของผู้อนุมัติได้ทุกสัญญา/ทุกรอบ
  */
 function runGuard(user: unknown) {

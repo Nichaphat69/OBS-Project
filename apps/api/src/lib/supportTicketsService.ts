@@ -125,7 +125,7 @@ export async function startSupportTicket(employeeId: string, category: string) {
  * ⚠️ เดิมแจ้งไปที่ lineApproverTargets() (ฝ่ายบัญชี) แต่คนที่มีสิทธิ์เปิดดู/ปิดตั๋วจริงในหน้า "จัดการ
  * ระบบ" มีแค่ admin เท่านั้น (requireSuperAdmin ที่ routes/supportTickets.ts) บัญชีเห็นแจ้งเตือนแต่ทำ
  * อะไรกับมันไม่ได้เลย — แก้ให้ตรงกับ role จริงที่รับผิดชอบ (เจ้าของระบบยืนยัน 25 ก.ย. 69: admin รับ
- * แจ้งปัญหา/help/feedback, บัญชีรับแค่ตรวจ Manday/ขออนุมัติวางบิล ไม่ปนกัน)
+ * แจ้งปัญหา/help/feedback, บัญชีรับแค่ตรวจ Manday/ขออนุมัติออก INV ไม่ปนกัน)
  *
  * `attachments`/`pageContext`/`actor` เพิ่มทีหลัง (24 ก.ย. 69 — แจ้งปัญหาจากหน้าเว็บ แนบรูปได้ ต่างจาก
  * ทาง LINE เดิมที่พิมพ์ข้อความล้วนๆ) เว้นว่างได้ทั้งหมด ไม่กระทบเส้น LINE เดิมที่ไม่เคยส่งพวกนี้มาเลย —

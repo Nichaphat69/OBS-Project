@@ -43,7 +43,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: '/upload', label: 'อัปโหลด Timesheet', icon: 'up', roles: ['admin', 'accounting', 'user'] },
       { href: '/manday', label: 'ตรวจ Manday', icon: 'list-chk', badgeKey: 'queue', roles: ['admin', 'accounting'] },
-      { href: '/billing', label: 'วางบิล & ร่างอีเมล', icon: 'mail', badgeKey: 'cycle', roles: ['admin', 'accounting'] },
+      { href: '/billing', label: 'ออก INV & ร่างอีเมล', icon: 'mail', badgeKey: 'cycle', roles: ['admin', 'accounting'] },
     ],
   },
   {

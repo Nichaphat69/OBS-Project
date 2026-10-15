@@ -34,7 +34,7 @@ export async function pulse({
   employeeId = null,
   contractIds = null,
 }: { actor?: string; role?: string | null; employeeId?: string | null; contractIds?: string[] | null } = {}): Promise<Pulse> {
-  /* ป้ายบนเมนู/กระดิ่งต้องนับตามขอบเขตที่ผู้ใช้เลือกไว้บนแถบบน (PO / ทุกบริษัท) ให้ตรงกับที่หน้า "ตรวจ Manday"/"วางบิล"
+  /* ป้ายบนเมนู/กระดิ่งต้องนับตามขอบเขตที่ผู้ใช้เลือกไว้บนแถบบน (PO / ทุกบริษัท) ให้ตรงกับที่หน้า "ตรวจ Manday"/"ออก INV"
      เองกรองอยู่ — เดิมใช้ธง "สัญญากำลังดำเนินการ" ของทั้งระบบ ซึ่งไม่ตรงกับ PO ที่เลือก (บั๊ก 6 ต.ค. 69)
      contractIds = null แปลว่าทุกสัญญา (route เป็นคนตัดสินตามสิทธิ์) */
   const { items: scoped } = await listTimesheets({ contractIds });

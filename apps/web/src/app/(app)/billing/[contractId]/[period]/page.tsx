@@ -100,11 +100,11 @@ function money(n: number | null | undefined) {
 /**
  * ป้ายสถานะ Timesheet เฉพาะหน้ารายละเอียดรอบบิลนี้เท่านั้น — เจ้าของระบบชี้ 18 ก.ย. 69 ว่า "ตรวจผ่าน"
  * (มาจาก statusLabel ฝั่งเซิร์ฟเวอร์ ใช้คำเดียวกับหน้าตรวจ Manday) ไม่สื่อความในบริบทนี้ เพราะมาถึง
- * หน้านี้แล้วแปลว่าผ่านการตรวจมาแล้วเสมอ สิ่งที่ยังไม่รู้คือ "วางบิลหรือยัง" จึงเขียนทับเฉพาะสถานะ
- * 'verified' เป็น "รอวางบิล" — สถานะอื่น (เช่น billed) ยังใช้คำจากเซิร์ฟเวอร์เหมือนเดิม
+ * หน้านี้แล้วแปลว่าผ่านการตรวจมาแล้วเสมอ สิ่งที่ยังไม่รู้คือ "ออก INV หรือยัง" จึงเขียนทับเฉพาะสถานะ
+ * 'verified' เป็น "รอออก INV" — สถานะอื่น (เช่น billed) ยังใช้คำจากเซิร์ฟเวอร์เหมือนเดิม
  */
 function cycleStatusLabel(e: { status: string; statusLabel: string }): string {
-  return e.status === 'verified' ? 'รอวางบิล' : e.statusLabel;
+  return e.status === 'verified' ? 'รอออก INV' : e.statusLabel;
 }
 
 function initials(name: string) {
@@ -189,7 +189,7 @@ export default function CycleDetailPage() {
   if (!data) {
     return (
       <>
-        <PageHeader eyebrow={tx('วางบิล & ร่างอีเมล')} title={tx('กำลังโหลด…')} />
+        <PageHeader eyebrow={tx('ออก INV & ร่างอีเมล')} title={tx('กำลังโหลด…')} />
         <Loading variant="cards" rows={3} />
         <div style={{ marginTop: 22 }}>
           <Card>
@@ -282,12 +282,12 @@ export default function CycleDetailPage() {
 
       {!inv ? (
         <div className="card">
-          <div className="empty">{tx('ยังไม่มีรายการที่วางบิลได้ในรอบนี้')}</div>
+          <div className="empty">{tx('ยังไม่มีรายการที่ออก INV ได้ในรอบนี้')}</div>
         </div>
       ) : (
         <>
           <div className="split2">
-            {/* ซ้าย: รายการในรอบบิล — แยกตามพนักงาน + ร่างอีเมลวางบิล */}
+            {/* ซ้าย: รายการในรอบบิล — แยกตามพนักงาน + ร่างอีเมล INV */}
             <div>
               <Card title={tx('รายการในรอบบิล')} flush>
                 <div className="cardgrid" style={{ gridTemplateColumns: '1fr' }}>
@@ -363,7 +363,7 @@ export default function CycleDetailPage() {
 
               <div className="tp on">
                 {data.emailDraft && (
-                  <Card title={tx('ร่างอีเมลวางบิล')}>
+                  <Card title={tx('ร่างอีเมล INV')}>
                     <div className="mailacts">
                       <button className="btn sm pri" disabled={creatingGmailDraft} onClick={doCreateGmailDraft}>
                         <Icon name="mail" className="sm" /> {creatingGmailDraft ? tx('กำลังสร้างร่าง…') : tx('สร้างร่างใน Gmail')}

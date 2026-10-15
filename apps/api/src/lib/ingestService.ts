@@ -406,7 +406,7 @@ export async function ingestTimesheet({
       timesheetId: documentNo,
       created: false,
       nextAction: NEXT_ACTION.ALREADY_BILLED,
-      reason: `เอกสาร ${documentNo} วางบิลไปแล้ว ไม่เขียนทับ`,
+      reason: `เอกสาร ${documentNo} ออก INV ไปแล้ว ไม่เขียนทับ`,
     };
   }
 
@@ -426,7 +426,7 @@ export async function ingestTimesheet({
       created: false,
       nextAction: NEXT_ACTION.ALREADY_BILLED,
       reason:
-        `${employee.nameTh} รอบ ${period} วางบิลไปแล้ว (เลขที่ ${billedOther.id}) — ` +
+        `${employee.nameTh} รอบ ${period} ออก INV ไปแล้ว (เลขที่ ${billedOther.id}) — ` +
         'ต้องลบใบแจ้งหนี้เดิมที่หน้า "ใบแจ้งหนี้" ก่อน ถึงจะส่ง Timesheet รอบนี้เข้ามาใหม่ได้',
       extraction: data,
       verification,
@@ -551,9 +551,9 @@ export async function ingestTimesheet({
     }
 
     // ⚠️ 1 ต.ค. 69 — พนักงาน 1 คน + สัญญา 1 ใบ + รอบเดือน 1 รอบ มี Timesheet ที่ใช้งานได้ "ใบเดียว" เท่านั้น
-    // เดิมอัปโหลดไฟล์เดิมซ้ำ (ได้เลขเอกสารใหม่ทุกครั้ง) จะเกิด Timesheet คู่ แล้วขั้นวางบิลหยิบมาทั้งคู่ ใบแจ้งหนี้
-    // ได้บรรทัดของคนเดียวกันสองบรรทัด ใบใหม่แทนที่ใบเก่าที่ยังไม่วางบิล โดยตั้งใบเก่าเป็น "ตีกลับ" พร้อมเหตุผล
-    // (ไม่ลบทิ้ง จึงยังย้อนดูได้ และไม่ส่ง LINE ถึงพนักงานเพราะไม่ใช่การตีกลับจริง) ใบที่วางบิลแล้วไม่แตะ —
+    // เดิมอัปโหลดไฟล์เดิมซ้ำ (ได้เลขเอกสารใหม่ทุกครั้ง) จะเกิด Timesheet คู่ แล้วขั้นออก INV หยิบมาทั้งคู่ ใบแจ้งหนี้
+    // ได้บรรทัดของคนเดียวกันสองบรรทัด ใบใหม่แทนที่ใบเก่าที่ยังไม่ออก INV โดยตั้งใบเก่าเป็น "ตีกลับ" พร้อมเหตุผล
+    // (ไม่ลบทิ้ง จึงยังย้อนดูได้ และไม่ส่ง LINE ถึงพนักงานเพราะไม่ใช่การตีกลับจริง) ใบที่ออก INV แล้วไม่แตะ —
     // ถูกกันไปตั้งแต่ด้านบนด้วย ALREADY_BILLED
     superseded = await tx.timesheet.findMany({
       where: {

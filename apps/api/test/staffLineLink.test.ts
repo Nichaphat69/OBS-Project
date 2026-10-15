@@ -119,7 +119,7 @@ test('พิมพ์รหัสของบัญชี accounting → บอ�
 
     assert.equal(result.results[0].outcome, 'staff_linked');
     assert.equal(result.results[0].role, 'accounting');
-    assert.match(line.replies[0].text, /ขออนุมัติวางบิลและตั๋วแจ้งปัญหา/);
+    assert.match(line.replies[0].text, /ขออนุมัติออก INV และตั๋วแจ้งปัญหา/);
 
     assert.deepEqual(await lineApproverTargets(), ['Uwebhook-acct-test']);
   } finally {

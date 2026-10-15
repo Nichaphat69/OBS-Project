@@ -9,7 +9,7 @@
  * `readTimesheetFromEmail()` อ่านเฉพาะตัวไฟล์ PDF ที่เก็บไว้ (ABBYY/Clear Read ตามที่คนเลือก) — **ไม่ให้โมเดลอ่านเนื้ออีเมล
  * ซ้ำ** เพื่อตรวจสถานะ "อนุมัติ"/เดือนอีกแล้ว เพราะ n8n คัดเฉพาะเมล Timesheet มาให้ และคนตรวจผลก่อนยืนยันอยู่แล้ว
  *
- * ฟีเจอร์ร่างอีเมลวางบิลยังใช้ Gmail API ผ่าน gmailClient.ts แยกต่างหาก ไม่เกี่ยวกับไฟล์นี้
+ * ฟีเจอร์ร่างอีเมล INV ยังใช้ Gmail API ผ่าน gmailClient.ts แยกต่างหาก ไม่เกี่ยวกับไฟล์นี้
  */
 import { prisma } from '@obs/db';
 import { thaiMonth } from '@obs/domain';

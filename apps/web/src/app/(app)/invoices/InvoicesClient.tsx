@@ -30,7 +30,7 @@ const STATUS_TONE: Record<string, 'ok' | 'wn' | 'mu'> = {
 // เดิมตารางนี้โชว์ค่า enum ดิบจากฐานข้อมูล (เช่น "sent_to_flowaccount") ตรงๆ — บั๊กจริงที่เจ้าของระบบ
 // ชี้มา 18 ก.ย. 69 ไม่ใช่แค่ปรับคำ ค่าที่เป็นไปได้มีแค่สองค่าจริงๆ (ดู flowaccountClient.ts/cyclesService.ts)
 const STATUS_LABEL: Record<string, string> = {
-  sent_to_flowaccount: 'วางบิลแล้ว',
+  sent_to_flowaccount: 'ออก INV แล้ว',
   draft: 'ร่าง',
 };
 
@@ -76,7 +76,7 @@ export default function InvoicesClient() {
                 <th>{tx('เลขที่ QT / PO')}</th>
                 <th>{tx('บริษัท')}</th>
                 <th>{tx('รอบบิล')}</th>
-                <th>{tx('วันที่วางบิล')}</th>
+                <th>{tx('วันที่ออก INV')}</th>
                 <th className="r">{tx('ยอดรับชำระ')}</th>
                 <th>{tx('สถานะ')}</th>
               </tr>

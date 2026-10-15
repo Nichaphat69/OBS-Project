@@ -244,7 +244,7 @@ export async function sendPasswordResetCodeEmail(email: string, code: string, { 
   const gmail = client ?? new GmailClient();
   await gmail.sendMessage({
     to: email,
-    subject: 'รหัสยืนยันตั้งรหัสผ่านใหม่ — ระบบวางบิล Outsource (OBS)',
+    subject: 'รหัสยืนยันตั้งรหัสผ่านใหม่ — ระบบออก INV Outsource (OBS)',
     body: [
       `รหัสยืนยัน 6 หลักของคุณคือ: ${code}`,
       '',

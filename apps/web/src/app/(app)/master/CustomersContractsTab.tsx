@@ -125,7 +125,7 @@ function FlowAccountToggle() {
       title: tx(turningOn ? 'เชื่อมต่อ FlowAccount?' : 'ปิดการเชื่อมต่อ FlowAccount?'),
       message: tx(
         turningOn
-          ? 'ระบบจะเริ่มเชื่อมต่อกับ FlowAccount จริง ดึงข้อมูลบริษัท/พนักงานได้ และใช้ยิงเอกสารตอนกดอนุมัติวางบิล'
+          ? 'ระบบจะเริ่มเชื่อมต่อกับ FlowAccount จริง ดึงข้อมูลบริษัท/พนักงานได้ และใช้ยิงเอกสารตอนกดอนุมัติออก INV'
           : 'ทุกคำขอจะกลายเป็น dry-run (ข้อมูลจำลอง) ทั้งระบบ ไม่เชื่อมต่อกับ FlowAccount จริงอีก จนกว่าจะเปิดใหม่',
       ),
       confirmLabel: tx(turningOn ? 'เชื่อมต่อ' : 'ปิดการเชื่อมต่อ'),
@@ -284,7 +284,7 @@ export default function CustomersContractsTab() {
       iconName: 'trash-solid',
       danger: true,
       title: tx('ลบสัญญานี้?'),
-      message: `"${refOf(contract).value} — ${contract.projectName}" ${tx('และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้ (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยวางบิลไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)')}`,
+      message: `"${refOf(contract).value} — ${contract.projectName}" ${tx('และพนักงาน/Timesheet ทั้งหมดของสัญญานี้จะหายไปถาวร — กู้คืนไม่ได้ (ลบได้เฉพาะสัญญาที่ยังไม่เคยออกใบแจ้งหนี้เลยเท่านั้น ถ้าเคยออก INV ไปแล้วแม้แต่ใบเดียว ระบบจะปฏิเสธการลบทั้งหมด)')}`,
       confirmLabel: tx('ลบ'),
     });
     if (!ok) return;
@@ -482,7 +482,7 @@ export default function CustomersContractsTab() {
                   <dd>{c.contactName || c.contactPhone ? `${c.contactName ?? ''} ${c.contactPhone ?? ''}`.trim() : '—'}</dd>
                   {c.billingPlace && (
                     <>
-                      <dt>{tx('สถานที่วางบิล')}</dt>
+                      <dt>{tx('สถานที่ส่งใบแจ้งหนี้')}</dt>
                       <dd>{c.billingPlace}</dd>
                     </>
                   )}
@@ -950,7 +950,7 @@ function CustomerAddForm({ onCancel, onSaved }: { onCancel: () => void; onSaved:
           {lockNote('contactEmail')}
         </label>
         <label>
-          {tx('สถานที่วางบิล')}
+          {tx('สถานที่ส่งใบแจ้งหนี้')}
           <input value={billingPlace} onChange={(e) => setBillingPlace(e.target.value)} />
         </label>
       </div>
@@ -1436,7 +1436,7 @@ function ContractEditForm({ contract, onCancel, onSaved }: { contract: ContractR
           {lockNote('contactPhone')}
         </label>
         <label>
-          {tx('สถานที่วางบิล')}
+          {tx('สถานที่ส่งใบแจ้งหนี้')}
           <input value={billingPlace} onChange={(e) => setBillingPlace(e.target.value)} />
         </label>
       </div>

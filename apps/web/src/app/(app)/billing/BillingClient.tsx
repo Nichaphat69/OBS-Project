@@ -38,9 +38,9 @@ function employeeStatusTone(status: string): 'mu' | 'ok' | 'wn' {
 }
 
 /** "ตรวจผ่าน" (statusLabel ดิบ) ไม่สื่อความในหน้านี้ — มาถึงตรงนี้แปลว่าผ่านตรวจแล้วเสมอ สิ่งที่ยังไม่รู้
- * คือ "วางบิลหรือยัง" — เขียนทับเฉพาะ 'verified' เหมือนที่หน้ารายละเอียดรอบบิลทำไว้แล้ว (18 ก.ย. 69) */
+ * คือ "ออก INV หรือยัง" — เขียนทับเฉพาะ 'verified' เหมือนที่หน้ารายละเอียดรอบบิลทำไว้แล้ว (18 ก.ย. 69) */
 function employeeStatusLabel(e: { status: string; statusLabel: string }): string {
-  return e.status === 'verified' ? 'รอวางบิล' : e.statusLabel;
+  return e.status === 'verified' ? 'รอออก INV' : e.statusLabel;
 }
 
 interface ContractCycles {
@@ -130,7 +130,7 @@ export default function BillingClient() {
   if (!data) {
     return (
       <>
-        <PageHeader eyebrow={tx('ขั้นตอน 3 · วางบิล & ร่างอีเมล')} title={tx('วางบิล & ร่างอีเมล')} />
+        <PageHeader eyebrow={tx('ขั้นตอน 3 · ออก INV & ร่างอีเมล')} title={tx('ออก INV & ร่างอีเมล')} />
         <Card>
           {loadError ? (
             <div style={{ padding: 24 }}>
@@ -148,8 +148,8 @@ export default function BillingClient() {
   return (
     <>
       <PageHeader
-        eyebrow={tx('ขั้นตอน 3 · วางบิล & ร่างอีเมล')}
-        title={tx('วางบิล & ร่างอีเมล')}
+        eyebrow={tx('ขั้นตอน 3 · ออก INV & ร่างอีเมล')}
+        title={tx('ออก INV & ร่างอีเมล')}
         subtitle={tx('ดูสถานะแต่ละรอบบิล เปิดพรีวิวใบแจ้งหนี้และร่างอีเมลก่อนอนุมัติ')}
       />
 
@@ -164,7 +164,7 @@ export default function BillingClient() {
         >
           <div style={{ display: 'flex', gap: 32, padding: '18px 24px', borderBottom: '1px solid var(--hair)', flexWrap: 'wrap' }}>
             <Stat label={tx('มูลค่าสัญญา')} value={`${money(contract.contractValue)} ${tx('บาท')}`} />
-            <Stat label={tx('วางบิลแล้ว')} value={`${money(contract.billedValue)} ${tx('บาท')}`} />
+            <Stat label={tx('ออก INV แล้ว')} value={`${money(contract.billedValue)} ${tx('บาท')}`} />
             <Stat label={tx('คงเหลือ')} value={`${money(contract.remainingValue)} ${tx('บาท')}`} />
             <Stat label={tx('รอบบิล')} value={`${contract.monthsBilled} / ${contract.monthsTotal}`} />
             <Stat

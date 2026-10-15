@@ -17,7 +17,7 @@ export default async function BillingPage() {
   if (user.role !== 'admin' && user.role !== 'accounting') {
     return (
       <>
-        <TxPageHeader eyebrow="ขั้นตอน 3" title="วางบิล & ร่างอีเมล" />
+        <TxPageHeader eyebrow="ขั้นตอน 3" title="ออก INV & ร่างอีเมล" />
         <Card>
           <TxEmptyState label="ต้องเป็น admin หรือแผนกบัญชีเท่านั้นถึงจะเข้าหน้านี้ได้" />
         </Card>

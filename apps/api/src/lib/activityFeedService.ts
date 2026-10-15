@@ -51,13 +51,13 @@ const FEED_SHAPE: Record<string, FeedShapeFn> = {
   human_checked: (d, id, sheet) => ({
     level: 'ok',
     title: 'คนยืนยันผลตรวจแล้ว',
-    detail: `${who(sheet)}เลขที่ ${id}${sheetPeriod(d, sheet)} · วางบิลได้ ${d?.payableDays ?? '—'} วัน · ${money(d?.lineAmount ?? 0)} บาท`,
+    detail: `${who(sheet)}เลขที่ ${id}${sheetPeriod(d, sheet)} · ออก INV ได้ ${d?.payableDays ?? '—'} วัน · ${money(d?.lineAmount ?? 0)} บาท`,
     link: { view: 'detail', id },
   }),
   recompute_manday: (d, id, sheet) => ({
     level: 'info',
     title: 'คำนวณ Manday ใหม่',
-    detail: `${who(sheet)}เลขที่ ${id}${sheetPeriod(d, sheet)} · วางบิลได้ ${d?.payableDays ?? '—'} วัน${d?.discount ? ` · ส่วนลด ${money(d.discount)} บาท` : ''}`,
+    detail: `${who(sheet)}เลขที่ ${id}${sheetPeriod(d, sheet)} · ออก INV ได้ ${d?.payableDays ?? '—'} วัน${d?.discount ? ` · ส่วนลด ${money(d.discount)} บาท` : ''}`,
     link: { view: 'detail', id },
   }),
   reject_timesheet: (d, id, sheet) => ({
@@ -74,13 +74,13 @@ const FEED_SHAPE: Record<string, FeedShapeFn> = {
   }),
   draft_email_llm: (d) => ({
     level: 'info',
-    title: 'ระบบร่างอีเมลวางบิล',
+    title: 'ระบบร่างอีเมล INV',
     detail: `รอบ ${d?.period ? thaiMonth(d.period) : '—'} · ยังไม่ส่ง รออ่านทวนก่อนคัดลอก`,
     link: null,
   }),
   invoice_email_sent: (d, id) => ({
     level: 'ok',
-    title: 'ปิดงาน — ส่งเมลวางบิลแล้ว',
+    title: 'ปิดงาน — ส่งเมล INV แล้ว',
     detail: `${d?.documentNo ?? id}`,
     link: null,
   }),

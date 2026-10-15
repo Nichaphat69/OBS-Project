@@ -50,7 +50,7 @@ const SUBMIT_METHODS: Array<{ value: SubmitMethod; label: string; hint: string }
 const METHOD_SHORT: Record<string, string> = { self_obs: 'ส่งผ่านระบบ OBS', self_email: 'ส่งผ่าน Email', proxy_email: 'ให้ผู้ดูแลเป็นคนส่ง' };
 
 /** กติกาเดียวกับกลุ่ม "ต้องลงมือ" (bucketOf() ใน my-progress/MyProgressClient.tsx) และเดียวกับที่
- * เซิร์ฟเวอร์เช็คซ้ำ (submittablePeriodFor() ใน timesheetSubmissionService.ts) — ถึงรอบแล้ว ยังไม่วางบิล
+ * เซิร์ฟเวอร์เช็คซ้ำ (submittablePeriodFor() ใน timesheetSubmissionService.ts) — ถึงรอบแล้ว ยังไม่ออก INV
  * และยังไม่ส่ง หรือถูกตีกลับ เรียงเก่า→ใหม่ให้รอบที่ค้างนานสุดขึ้นก่อน */
 function submitOptionsFrom(progress: any, submissions: any[]): SubmitOption[] {
   const current: string = progress?.currentPeriod ?? '';
@@ -612,7 +612,7 @@ export default function UploadFileTab({ submitOnly = false }: { submitOnly?: boo
               </div>
               <div className="ep-tip">
                 <b>{tx('ส่งแล้วเกิดอะไรขึ้น')}</b>
-                {tx('ผู้ดูแลจะตรวจ Manday จากไฟล์ของคุณ แล้วอนุมัติวางบิลต่อ ดูสถานะได้ที่หน้า "ความคืบหน้าของฉัน"')}
+                {tx('ผู้ดูแลจะตรวจ Manday จากไฟล์ของคุณ แล้วอนุมัติออก INV ต่อ ดูสถานะได้ที่หน้า "ความคืบหน้าของฉัน"')}
               </div>
             </aside>
           </div>

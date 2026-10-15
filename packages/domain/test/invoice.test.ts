@@ -500,3 +500,27 @@ test('ยอดใน PO 6 เดือนตรงกับเรทราย�
   assert.equal(monthlyTotal, 176363.93);
   assert.equal(round2(monthlyTotal * 6), 1058183.58, 'ราคารวมก่อนภาษีในใบว่าจ้าง 26/B0113');
 });
+
+test('ใบแจ้งหนี้ใช้หน่วยจากใบเสนอราคา และ payload ส่งเลขอ้างอิง (PO) กับชื่อโครงการไป', () => {
+  const employee = { ...PM, unitName: 'Man-Month' };
+  const invoice = buildInvoice({
+    period: '2026-01',
+    documentDate: '2026-02-02',
+    customer: { name: 'บริษัท ไทยประกันชีวิต จำกัด (มหาชน)', taxId: '0107555000104' },
+    entries: [
+      {
+        employee,
+        manday: calculateManday({ period: '2026-01', monthlyRate: employee.monthlyRate, reportedWorkDays: 20, leaveDays: [], holidays: HOLIDAYS_JAN_2026 }),
+      },
+    ],
+  });
+  assert.equal(invoice.items[0].unitName, 'Man-Month');
+
+  const withRef = toFlowAccountPayload(invoice, { reference: 'PO-123', projectName: 'โครงการ A' }) as any;
+  assert.equal(withRef.reference, 'PO-123');
+  assert.equal(withRef.projectName, 'โครงการ A');
+
+  const bare = toFlowAccountPayload(invoice) as any;
+  assert.equal(bare.projectName, undefined, 'ไม่ระบุโครงการก็ไม่ส่งฟิลด์');
+  assert.equal(buildInvoice({ period: '2026-01', documentDate: '2026-02-02', customer: { name: 'x', taxId: '1' }, entries: [{ employee: PM, manday: calculateManday({ period: '2026-01', monthlyRate: PM.monthlyRate, reportedWorkDays: 20, leaveDays: [], holidays: HOLIDAYS_JAN_2026 }) }] }).items[0].unitName, 'Months', 'ไม่มีหน่วยในใบเสนอราคาใช้ Months');
+});

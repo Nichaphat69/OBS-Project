@@ -18,7 +18,7 @@ const notoSansThai = Noto_Sans_Thai({
 });
 
 export const metadata: Metadata = {
-  title: 'OBS — ระบบวางบิล Outsource (new stack)',
+  title: 'OBS — ระบบออก INV Outsource (new stack)',
   description: 'Next.js + Express + Prisma migration — design matches the legacy OBS UI.',
 };
 

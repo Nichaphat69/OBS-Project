@@ -2,8 +2,8 @@
  * รับ webhook จาก LINE — ported from service.js's processLineWebhook/handleEmployeeLineMessage/
  * handleTicketPostback/handleTimesheetMethodPostback, narrowed to LINE account linking, แจ้งปัญหา
  * (support tickets), เลือกช่องทางส่ง Timesheet (submission method), (5.5.4) the "สถานะ"/
- * "สถานะการวางบิล" employee status commands ที่ตอนนี้พอร์ต employeeProgress() มาแล้ว, and (5.6)
- * the billing-approval postback (`approve`/`reject:...`) กดจากการ์ดขออนุมัติวางบิลใน LINE โดยตรง
+ * "สถานะการออก INV" employee status commands ที่ตอนนี้พอร์ต employeeProgress() มาแล้ว, and (5.6)
+ * the billing-approval postback (`approve`/`reject:...`) กดจากการ์ดขออนุมัติออก INV ใน LINE โดยตรง
  */
 import { thaiMonth, thaiDate, thaiDateShort } from '@obs/domain';
 import { prisma } from '@obs/db';
@@ -62,7 +62,7 @@ function buildEmployeeStatusFlexInput(progress: EmployeeProgress) {
 
     let currentStatusDetail: string | null = null;
     if (current?.billed) {
-      currentStatusDetail = `วางบิลแล้ว (เลขที่ ${current.invoiceNo}) เมื่อ ${thaiDate(current.billedAt!)}`;
+      currentStatusDetail = `ออก INV แล้ว (เลขที่ ${current.invoiceNo}) เมื่อ ${thaiDate(current.billedAt!)}`;
     } else if (current?.emailSentAt) {
       currentStatusDetail = `ส่งเอกสารให้ลูกค้าแล้วเมื่อ ${thaiDate(current.emailSentAt)}`;
     } else if (current?.checkedAt) {
@@ -73,7 +73,7 @@ function buildEmployeeStatusFlexInput(progress: EmployeeProgress) {
 
     const recentPeriods = c.periods.slice(0, 5).map((p) => ({
       periodLabel: p.periodLabel,
-      badge: p.billed ? 'วางบิลแล้ว' : p.timesheetStatus === 'not_submitted' ? 'ยังไม่ส่ง' : 'รอดำเนินการ',
+      badge: p.billed ? 'ออก INV แล้ว' : p.timesheetStatus === 'not_submitted' ? 'ยังไม่ส่ง' : 'รอดำเนินการ',
     }));
 
     return {
@@ -90,9 +90,9 @@ function buildEmployeeStatusFlexInput(progress: EmployeeProgress) {
 }
 
 /**
- * แปลง employeeProgress() เป็น input ให้ buildBillingCycleFlex() (บับเบิลตอบคำสั่ง "สถานะการวางบิล")
+ * แปลง employeeProgress() เป็น input ให้ buildBillingCycleFlex() (บับเบิลตอบคำสั่ง "สถานะการออก INV")
  * — ported from service.js buildBillingCycleFlexInput() โชว์ 5 ขั้นของรอบบิลปัจจุบัน: Timesheet →
- * ตรวจ Manday → ออกใบแจ้งหนี้ (FlowAccount) → วางบิลส่งลูกค้า → รับชำระเงิน
+ * ตรวจ Manday → ออกใบแจ้งหนี้ (FlowAccount) → ส่ง INV ให้ลูกค้า → รับชำระเงิน
  *
  * ⚠️ ห้ามใส่ยอดเงินเช่นเดียวกับ buildEmployeeStatusFlexInput — ขั้น "รับชำระเงิน" ใช้แค่ due_date เป็น
  * วันที่คาดการณ์ ไม่มีช่องใดในระบบยืนยันว่าลูกค้าโอนเงินจริงหรือยัง จึงไม่มีทาง mark ขั้นนี้ว่า "เสร็จ" ได้เลย
@@ -126,7 +126,7 @@ function buildBillingCycleFlexInput(progress: EmployeeProgress) {
         done: hasInvoice,
       },
       {
-        label: 'วางบิลส่งลูกค้า',
+        label: 'ส่ง INV ให้ลูกค้า',
         sub: sentToCustomer ? 'ส่งลูกค้าแล้ว' : 'รอส่งลูกค้า (ร่างอีเมลและเอกสารแนบ)',
         dateLabel: sentToCustomer ? thaiDateShort(current!.emailSentAt!) : current?.dueDate ? `กำหนดส่ง: ${thaiDate(current.dueDate)}` : null,
         done: sentToCustomer,
@@ -281,7 +281,7 @@ async function handleEmployeeLineMessage({
       pendingStaff.role === 'admin'
         ? 'คุณจะได้รับแจ้งเตือนเมื่อระบบมีปัญหา (error) ในฐานะผู้ดูแลระบบ'
         : pendingStaff.role === 'accounting'
-          ? 'คุณจะได้รับแจ้งเตือนคำขออนุมัติวางบิลและตั๋วแจ้งปัญหาใหม่ ในฐานะฝ่ายบัญชี'
+          ? 'คุณจะได้รับแจ้งเตือนคำขออนุมัติออก INV และตั๋วแจ้งปัญหาใหม่ ในฐานะฝ่ายบัญชี'
           : 'เชื่อมต่อบัญชีเรียบร้อยแล้ว';
     if (replyToken) {
       try {
@@ -341,9 +341,9 @@ async function handleEmployeeLineMessage({
     return { userId, outcome: 'submission_prompt', employeeId: linked.id };
   }
 
-  /* ปุ่มลัด "สถานะ"/"สรุปรอบวางบิล" เป็นคำพ้องความหมายเดียวกัน ต้องเช็คก่อน "แจ้งปัญหา"/"help"
-     "สถานะการวางบิล" แยกออกไปเป็นคนละการ์ด (flow 5 ขั้นของรอบบิล) ดูบล็อกถัดไป ไม่ใช่คำพ้องอีกต่อไป */
-  if (linked && /^(สถานะ|status|สรุปรอบวางบิล)$/i.test(trimmed)) {
+  /* ปุ่มลัด "สถานะ"/"สรุปรอบ INV" เป็นคำพ้องความหมายเดียวกัน ต้องเช็คก่อน "แจ้งปัญหา"/"help"
+     "สถานะการออก INV" แยกออกไปเป็นคนละการ์ด (flow 5 ขั้นของรอบบิล) ดูบล็อกถัดไป ไม่ใช่คำพ้องอีกต่อไป */
+  if (linked && /^(สถานะ|status|สรุปรอบ INV|สรุปรอบวางบิล)$/i.test(trimmed)) {
     if (replyToken) {
       /* ลอง Flex การ์ดสวยๆก่อน พังได้ก็แค่ตกกลับไปใช้ข้อความ text ธรรมดาแบบเดิม ไม่ควรทำให้คำสั่ง
          "สถานะ" เงียบไปเฉยๆถ้าการ์ดใหม่มี bug */
@@ -367,14 +367,14 @@ async function handleEmployeeLineMessage({
     return { userId, outcome: 'status', employeeId: linked.id };
   }
 
-  /* "สถานะการวางบิล" — การ์ด flow 5 ขั้นของรอบบิลปัจจุบัน ไม่มียอดเงินเช่นเดียวกับ "สถานะ" ข้างบน */
-  if (linked && /^สถานะการวางบิล$/i.test(trimmed)) {
+  /* "สถานะการออก INV" — การ์ด flow 5 ขั้นของรอบบิลปัจจุบัน ไม่มียอดเงินเช่นเดียวกับ "สถานะ" ข้างบน */
+  if (linked && /^(สถานะการออก INV|สถานะการวางบิล)$/i.test(trimmed)) {
     if (replyToken) {
       try {
         const progress = await employeeProgress(linked.id);
         if (progress?.contracts.length) {
           const flex = buildBillingCycleFlex(buildBillingCycleFlexInput(progress));
-          await line.replyFlex(replyToken, `สถานะการวางบิลของคุณ${linked.nameTh}`, flex, EMPLOYEE_QUICK_REPLY);
+          await line.replyFlex(replyToken, `สถานะการออก INV ของคุณ${linked.nameTh}`, flex, EMPLOYEE_QUICK_REPLY);
         } else {
           await line.reply(replyToken, buildEmployeeStatusText(linked.nameTh, progress), EMPLOYEE_QUICK_REPLY);
         }
@@ -488,7 +488,7 @@ async function handleTicketPostback({
     return { outcome: 'category_selected', employeeId: linked.id, category: value };
   }
 
-  /* resolve — เฉพาะคนในรายชื่อผู้อนุมัติเดียวกับที่กดอนุมัติวางบิลได้เท่านั้น (กันพนักงานกดแก้ตั๋วตัวเอง) */
+  /* resolve — เฉพาะคนในรายชื่อผู้อนุมัติเดียวกับที่กดอนุมัติออก INV ได้เท่านั้น (กันพนักงานกดแก้ตั๋วตัวเอง) */
   if (!isAuthorizedApprover(userId)) {
     await logAudit({ actor: `line:${userId ?? 'unknown'}`, action: 'ticket_resolve_denied', entityType: 'support_ticket', entityId: value, detail: {} });
     return { outcome: 'denied' };

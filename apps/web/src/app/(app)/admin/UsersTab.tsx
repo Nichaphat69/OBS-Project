@@ -28,7 +28,7 @@ const ROLE_ORDER = ['admin', 'accounting', 'user', 'executive'];
 /** หน้าที่หลักของแต่ละ role — ขึ้นบนการ์ด role และในฟอร์มเพิ่มผู้ใช้ ให้คนกำหนดสิทธิ์เห็นว่าเลือกแล้วได้อะไร */
 const ROLE_DESC: Record<string, string> = {
   admin: 'ทุกอย่าง รวมตั้งค่าระบบและจัดการผู้ใช้',
-  accounting: 'อัปโหลด/ตรวจ Timesheet, ตรวจ Manday, วางบิล',
+  accounting: 'อัปโหลด/ตรวจ Timesheet, ตรวจ Manday, ออก INV',
   user: 'ส่ง Timesheet และดูความคืบหน้าของตัวเอง',
   executive: 'ดูภาพรวมข้ามบริษัทอย่างเดียว',
 };
@@ -39,7 +39,7 @@ const ROLE_LABEL: Record<string, string> = { admin: 'admin', accounting: 'บั
  * ย้ายมารับแจ้งปัญหา/feedback จากพนักงานด้วย (เดิมไปที่บัญชีผิดที่ — บัญชีไม่มีสิทธิ์ปิดตั๋วเลย) */
 const ROLE_NOTIFY_LABEL: Record<string, string> = {
   admin: 'ระบบมีปัญหา (error) · แจ้งปัญหา/feedback จากพนักงาน',
-  accounting: 'ตรวจ Manday · ขออนุมัติวางบิล',
+  accounting: 'ตรวจ Manday · ขออนุมัติออก INV',
   user: 'เช็คสถานะ/ส่ง Timesheet ผ่านแชทบอท LINE',
   executive: '—',
 };

@@ -26,7 +26,7 @@ cyclesRouter.get('/ready', logExposedRequest('n8n'), requireN8nSecret, async (_r
 
 /** ⚠️ `requireAuthOrN8nSecret` ปล่อยผ่านทุก role ที่ล็อกอิน — ต้นฉบับใน server.js ทำ
  * `if (session) requireAdmin(session)` ไว้ด้วย แต่ตกหล่นตอนพอร์ต ทำให้พนักงานทั่วไปสั่งส่งคำขออนุมัติ
- * วางบิลเข้า LINE ของผู้อนุมัติได้ทุกสัญญา/ทุกรอบ (18 ก.ย. 69) — `requireAdminIfSession` เอาพฤติกรรม
+ * ออก INV เข้า LINE ของผู้อนุมัติได้ทุกสัญญา/ทุกรอบ (18 ก.ย. 69) — `requireAdminIfSession` เอาพฤติกรรม
  * เดิมกลับมา โดยไม่กระทบเส้น n8n ที่ไม่มี session แต่ผ่าน shared secret มา */
 cyclesRouter.post(
   '/:contractId/:period/request-approval',
@@ -54,7 +54,7 @@ cyclesRouter.use(requireAuth);
 // `/` กับ `/:contractId/:period/employees` ใช้ requireNotUser เพราะหน้า "ภาพรวมทุกบริษัท" ของ role
 // 'executive' ต้องเรียกสองตัวนี้ด้วย (ดู companies/ExecOverviewClient.tsx) — ส่วน `/:contractId/:period`
 // (พรีวิวใบแจ้งหนี้เต็มรูปแบบ) กับ `/approval` ใช้ requireAdmin เพราะเป็นรายละเอียดการเงินเต็มของหน้า
-// "วางบิล & ร่างอีเมล" ที่ nav จำกัดแค่ admin/accounting เท่านั้น ไม่รวม executive ด้วย
+// "ออก INV & ร่างอีเมล" ที่ nav จำกัดแค่ admin/accounting เท่านั้น ไม่รวม executive ด้วย
 // เพิ่ม requireExecutiveWhenUnscoped (15 ก.ย. 69 รอบสอง) — `/` ไม่ระบุ contractId = ข้อมูลรวมทุกบริษัท
 // เดิม admin/accounting เรียกแบบนี้ได้ผ่านหน้า /billing แต่หน้านั้นแก้ให้ส่ง contractId เสมอแล้ว (ฝั่ง
 // frontend) เหลือแค่ role 'executive' เท่านั้นที่ควรขอแบบไม่ระบุได้จริงตาม policy ใหม่
@@ -87,7 +87,7 @@ cyclesRouter.get('/:contractId/:period/approval', requireAdmin, async (req, res)
   res.json(await getCycleApproval(req.params.contractId, req.params.period));
 });
 
-// ⚠️ เดิมไม่มี role check เลย (มีแค่ requireAuth ของ router) — user role ธรรมดากดอนุมัติวางบิลได้เอง
+// ⚠️ เดิมไม่มี role check เลย (มีแค่ requireAuth ของ router) — user role ธรรมดากดอนุมัติออก INV ได้เอง
 // สร้างเอกสารจริงใน FlowAccount ได้โดยไม่ต้องเป็น admin/บัญชี (เจอจริง 15 ก.ย. 69 ตอนไล่ตรวจ audit
 // ทั้งระบบ) endpoint แก้ข้อมูลการเงิน/สัญญาอื่นทุกตัวมี requireAdmin ครบอยู่แล้ว ตัวนี้หลุดจุดเดียว
 cyclesRouter.post('/:contractId/:period/approve', requireAdmin, async (req, res) => {

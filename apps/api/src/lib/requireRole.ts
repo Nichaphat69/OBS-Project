@@ -47,13 +47,13 @@ export class ForbiddenEmployeeScope extends Error {
  *
  * ต้นฉบับใน server.js ทำ `if (session) requireAdmin(session)` ไว้ (คอมเมนต์ใน n8nAuth.ts เขียนถึงเอง)
  * แต่ตอนพอร์ตมา `requireAuthOrN8nSecret` เหลือแค่ "มี session ก็ผ่าน" — role ไหนก็ได้ ทำให้พนักงานทั่วไป
- * สั่งส่งคำขออนุมัติวางบิลของสัญญา/รอบไหนก็ได้เข้า LINE ของผู้อนุมัติได้ ทั้งที่เป็นงานของฝ่ายบัญชี
+ * สั่งส่งคำขออนุมัติออก INV ของสัญญา/รอบไหนก็ได้เข้า LINE ของผู้อนุมัติได้ ทั้งที่เป็นงานของฝ่ายบัญชี
  *
  * ไม่มี session = มาจาก n8n ที่ผ่าน shared secret มาแล้ว ปล่อยผ่านตามเดิม
  */
 export function requireAdminIfSession(req: Request, res: Response, next: NextFunction) {
   if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounting') {
-    return res.status(403).json({ error: 'ต้องเป็น admin หรือแผนกบัญชีเท่านั้นถึงจะส่งคำขออนุมัติวางบิลได้' });
+    return res.status(403).json({ error: 'ต้องเป็น admin หรือแผนกบัญชีเท่านั้นถึงจะส่งคำขออนุมัติออก INV ได้' });
   }
   next();
 }

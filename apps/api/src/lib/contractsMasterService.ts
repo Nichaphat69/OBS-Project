@@ -7,7 +7,7 @@
 import { prisma, Prisma } from '@obs/db';
 import { round2 } from '@obs/domain';
 import { getActiveContract, getSetting, listContracts, type ContractSummary } from './dashboardService.js';
-import { FlowAccountClient } from './flowaccountClient.js';
+import { FlowAccountClient, resolveDocumentType } from './flowaccountClient.js';
 import { logAudit } from './audit.js';
 import {
   FA_FIELD_LABELS,
@@ -170,9 +170,9 @@ export async function syncAssignmentsFromFlowAccount(
 async function newFlowAccountClient(): Promise<FlowAccountClient> {
   const settings = await getSetting('flowaccount', {
     mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
-    documentType: 'billing-note' as const,
+    documentType: 'invoice' as const,
   });
-  return new FlowAccountClient({ mode: (settings as any).mode, documentType: (settings as any).documentType });
+  return new FlowAccountClient({ mode: (settings as any).mode, documentType: resolveDocumentType((settings as any).documentType) });
 }
 
 export interface FlowAccountEmployeeLine {
@@ -623,7 +623,7 @@ export async function updateContract(input: UpdateContractInput): Promise<Contra
   return (await listContracts()).find((c) => c.id === contractId);
 }
 
-/** ported from service.js deleteContract() — กันลบทับประวัติวางบิลจริงโดยเผลอ: ถ้าสัญญานี้เคยออก
+/** ported from service.js deleteContract() — กันลบทับประวัติออก INV จริงโดยเผลอ: ถ้าสัญญานี้เคยออก
  * ใบแจ้งหนี้ไปแล้วแม้แต่ใบเดียว ห้ามลบทั้งหมด (ไม่ใช่ลบได้บางส่วน) พนักงานที่ผูกกับสัญญานี้เพียง
  * อย่างเดียวลบทิ้งไปด้วย แต่ถ้ามีอัตราจ้างกับสัญญาอื่นด้วย เก็บไว้ */
 export async function deleteContract(contractId: string, { actor }: { actor: string }): Promise<{ deleted: true; contractId: string }> {

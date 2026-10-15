@@ -7,7 +7,7 @@ import UploadClient from './UploadClient';
  * (ดูเหตุผลใน UploadClient.tsx)
  *
  * role 'executive' ไม่มีเมนูนี้ แต่เดิมพิมพ์ /upload ตรงๆ แล้วเห็นหน้าเต็มรวมถึงแท็บ "ดึงจาก Gmail" (API ปฏิเสธทุกคำขอ
- * ข้อมูลไม่รั่ว แต่หน้าจอโชว์ของที่ใช้ไม่ได้ — QA GMAILBOX-012, 1 ต.ค. 69) จึงกันที่ตัวหน้าเหมือนหน้าวางบิล:
+ * ข้อมูลไม่รั่ว แต่หน้าจอโชว์ของที่ใช้ไม่ได้ — QA GMAILBOX-012, 1 ต.ค. 69) จึงกันที่ตัวหน้าเหมือนหน้าออก INV:
  * ด่านจริงยังอยู่ฝั่ง API ตรงนี้เป็นเรื่องความเรียบร้อยของหน้าจอ */
 export default async function UploadPage() {
   const { user } = await requireUser();

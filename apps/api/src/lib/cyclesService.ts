@@ -1,5 +1,5 @@
 /**
- * วางบิล & ร่างอีเมล — ported from src/service.js (`billingCycles`, `contractPeriodEmployees`,
+ * ออก INV & ร่างอีเมล — ported from src/service.js (`billingCycles`, `contractPeriodEmployees`,
  * `previewCycleInvoice`, `buildEmailDraft`, `listInvoices`, `approveCycle`, `saveInvoice`,
  * `deleteInvoice`, `requestCycleApproval`/`decideCycleApproval`, `draftEmailWithAi`), rewritten
  * against Prisma.
@@ -27,7 +27,7 @@ import {
   pickOnePerEmployee,
 } from './dashboardService.js';
 import { getTimesheet } from './timesheetsService.js';
-import { FlowAccountClient, type FlowAccountDocumentType } from './flowaccountClient.js';
+import { FlowAccountClient, resolveDocumentType, type FlowAccountDocumentType } from './flowaccountClient.js';
 import { logAudit } from './audit.js';
 import { LineClient } from './lineClient.js';
 import { lineApproverTargets } from './notificationRecipientsService.js';
@@ -123,12 +123,12 @@ async function buildEmailDraft({ contract, invoice, documentNo = null, shareLink
 
   const body = [
     `เรียน ${contract.customerName}`,
-    `${companyName} ขอส่งเอกสารประกอบการวางบิล สำหรับการให้บริการประจำเดือน${monthLabel} เพื่อโปรดตรวจสอบและดำเนินการตามขั้นตอนของบริษัท`,
-    'รายละเอียดการวางบิล',
+    `${companyName} ขอส่งเอกสารประกอบการออก INV สำหรับการให้บริการประจำเดือน${monthLabel} เพื่อโปรดตรวจสอบและดำเนินการตามขั้นตอนของบริษัท`,
+    'รายละเอียดการออก INV',
     '',
     `* รอบการให้บริการ: ${monthLabel}`,
     `* จำนวนพนักงาน: ${employeeCount} คน`,
-    `* เลขที่ใบวางบิล: ${documentNo ?? '—'}`,
+    `* เลขที่ INV: ${documentNo ?? '—'}`,
     `* ยอดรวมสุทธิ: ${money(t.paymentAmount)} บาท`,
     '',
     '',
@@ -142,7 +142,7 @@ async function buildEmailDraft({ contract, invoice, documentNo = null, shareLink
 
   const attachments: Array<{ label: string; invoiceId: string | null; timesheetId: string | null }> = [
     {
-      label: documentNo ? `ใบวางบิล ${documentNo}.pdf` : 'ใบวางบิล (รอเลขจาก FlowAccount).pdf',
+      label: documentNo ? `INV ${documentNo}.pdf` : 'INV (รอเลขจาก FlowAccount).pdf',
       invoiceId,
       timesheetId: null,
     },
@@ -170,7 +170,7 @@ async function buildEmailDraft({ contract, invoice, documentNo = null, shareLink
         ? `${contract.customer.contactName} — ผู้ประสานงาน (${contract.customerName}) · ยังไม่มีอีเมลในระบบ`
         : contract.customerName,
     cc: company.email ?? 'accounting@ipassion.co.th',
-    subject: `วางบิลค่าบริการ ${contract.projectName} ประจำเดือน${monthLabel}` + (documentNo ? ` (${documentNo})` : ''),
+    subject: `INV ค่าบริการ ${contract.projectName} ประจำเดือน${monthLabel}` + (documentNo ? ` (${documentNo})` : ''),
     body,
     invoiceLink: shareLink,
     attachments,
@@ -253,6 +253,7 @@ export async function previewCycleInvoice(contractId: string, period: string): P
         nameTh: sheet.employee.nameTh,
         invoicePosition: sheet.employee.invoicePosition,
         quotationNo: sheet.employee.quotationNo,
+        unitName: sheet.employee.unitName,
       },
       manday: sheet.manday,
       check: sheet.check,
@@ -282,7 +283,7 @@ export async function previewCycleInvoice(contractId: string, period: string): P
     // 'billed' (the statuses fetched above) it always has an employee. Guard rather than cast.
     entries: entries
       .filter((e) => e.employee.id !== null)
-      .map((e) => ({ employee: e.employee as { id: string; nameTh: string; invoicePosition: string; quotationNo: string | null }, manday: e.manday })),
+      .map((e) => ({ employee: e.employee as { id: string; nameTh: string; invoicePosition: string; quotationNo: string | null; unitName: string | null }, manday: e.manday })),
     vatRate: contract.vatRate,
     whtRate: contract.whtRate,
   });
@@ -317,7 +318,7 @@ export async function previewCycleInvoice(contractId: string, period: string): P
       id: 'duplicate_timesheet',
       severity: SEVERITY.WARN,
       title: 'พบ Timesheet ซ้ำของคนเดียวกันในรอบนี้',
-      detail: `ใช้ฉบับ ${kept.id} วางบิล ไม่นับฉบับ ${dup.id}`,
+      detail: `ใช้ฉบับ ${kept.id} ออก INV ไม่นับฉบับ ${dup.id}`,
     });
   }
 
@@ -331,7 +332,7 @@ export async function previewCycleInvoice(contractId: string, period: string): P
     period,
     periodLabel,
     cycle,
-    invoice: { ...invoice, payload: toFlowAccountPayload(invoice) },
+    invoice: { ...invoice, payload: toFlowAccountPayload(invoice, { reference: contract.poNo, projectName: contract.projectName }) },
     entries,
     blockers,
     warnings,
@@ -350,7 +351,7 @@ export async function previewCycleInvoice(contractId: string, period: string): P
  */
 export async function draftEmailWithAi(contractId: string, period: string, { actor }: { actor: string }) {
   const preview = await previewCycleInvoice(contractId, period);
-  if (!preview.invoice) throw new CycleActionError('ยังไม่มีรายการที่วางบิลได้ในรอบนี้', 400);
+  if (!preview.invoice) throw new CycleActionError('ยังไม่มีรายการที่ออก INV ได้ในรอบนี้', 400);
 
   const inv = preview.invoice;
   const t = inv.totals;
@@ -366,9 +367,9 @@ export async function draftEmailWithAi(contractId: string, period: string, { act
     ลูกค้า: preview.contract.customerName,
     ผู้ประสานงาน: preview.contract.customer.contactName ?? null,
     โครงการ: preview.contract.projectName,
-    เดือนที่วางบิล: preview.periodLabel,
+    'เดือนที่ออก INV': preview.periodLabel,
     ใบว่าจ้าง: preview.contract.poNo,
-    สถานที่วางบิล: preview.contract.customer.billingPlace ?? null,
+    สถานที่ส่งใบแจ้งหนี้: preview.contract.customer.billingPlace ?? null,
     วันที่เอกสาร: thaiDate(inv.documentDate),
     เครดิต: `${inv.creditDays} วัน`,
     ครบกำหนดชำระ: thaiDate(inv.dueDate),
@@ -485,9 +486,9 @@ export class CycleActionError extends Error {
 async function newFlowAccountClient(): Promise<FlowAccountClient> {
   const settings = await getSetting('flowaccount', {
     mode: process.env.FLOWACCOUNT_MODE ?? 'dry-run',
-    documentType: 'billing-note' as FlowAccountDocumentType,
+    documentType: 'invoice' as FlowAccountDocumentType,
   });
-  return new FlowAccountClient({ mode: (settings as any).mode, documentType: (settings as any).documentType });
+  return new FlowAccountClient({ mode: (settings as any).mode, documentType: resolveDocumentType((settings as any).documentType) });
 }
 
 /** ported from service.js saveInvoice() */
@@ -585,7 +586,7 @@ async function saveInvoice({
   });
 }
 
-/** ported from service.js approveCycle() — creates the real billing-note draft via FlowAccount
+/** ported from service.js approveCycle() — creates the real invoice (INV) draft via FlowAccount
  * (sandbox, per current .env), persists it, and marks the cycle's timesheets 'billed'. */
 /** รอบบิลที่กำลังอนุมัติอยู่ตอนนี้ — กดยืนยันซ้ำ/สองคนกดพร้อมกันต้องไม่สร้างเอกสารใน FlowAccount สองใบ (API รันตัวเดียว
  * ล็อกในหน่วยความจำจึงพอ) ด่านเช็ก existing ด้านล่างกันได้เฉพาะกรณีที่ใบแรกบันทึกเสร็จแล้ว */
@@ -594,7 +595,7 @@ const approvingNow = new Set<string>();
 export async function approveCycle(contractId: string, period: string, { actor }: { actor: string }) {
   const lockKey = `${contractId}:${period}`;
   if (approvingNow.has(lockKey)) {
-    throw new CycleActionError('รอบบิลนี้กำลังถูกยืนยันวางบิลอยู่ — รอสักครู่แล้วรีเฟรชดูผล ไม่ต้องกดซ้ำ', 409);
+    throw new CycleActionError('รอบบิลนี้กำลังถูกยืนยันออก INV อยู่ — รอสักครู่แล้วรีเฟรชดูผล ไม่ต้องกดซ้ำ', 409);
   }
   approvingNow.add(lockKey);
   try {
@@ -608,10 +609,10 @@ async function approveCycleUnlocked(contractId: string, period: string, { actor 
   const preview = await previewCycleInvoice(contractId, period);
 
   if (!preview.invoice) {
-    throw new CycleActionError('ยังไม่มีรายการที่วางบิลได้ในรอบนี้', 400);
+    throw new CycleActionError('ยังไม่มีรายการที่ออก INV ได้ในรอบนี้', 400);
   }
   if (preview.blockers.length > 0) {
-    throw new CycleActionError(`ยังวางบิลไม่ได้: ${preview.blockers.join(' · ')}`, 409, preview.blockers);
+    throw new CycleActionError(`ยังออก INV ไม่ได้: ${preview.blockers.join(' · ')}`, 409, preview.blockers);
   }
   if (preview.existing && preview.existing.status === 'sent_to_flowaccount') {
     throw new CycleActionError(`รอบบิลนี้สร้างเอกสารไปแล้ว (${preview.existing.documentNo})`, 409);
@@ -619,7 +620,7 @@ async function approveCycleUnlocked(contractId: string, period: string, { actor 
 
   const client = await newFlowAccountClient();
   // FlowAccount ตัวจริงอ่านอย่างเดียว — บล็อกตั้งแต่ตรงนี้ ก่อนบันทึกอะไรลงฐานข้อมูล (ดู assertWritable)
-  client.assertWritable('การวางบิล');
+  client.assertWritable('การออก INV');
   const invoiceId = `INV-${contractId}-${period}`;
   const invoiceCount = await prisma.invoice.count();
   const sequence = invoiceCount + 6; // ใบจริงของรอบแรกคือ ...0006
@@ -742,10 +743,10 @@ async function approveCycleUnlocked(contractId: string, period: string, { actor 
 }
 
 /**
- * ลบใบแจ้งหนี้ทิ้ง — ทั้งเอกสารจริงใน FlowAccount และแถวในระบบเรา ใช้ตอนวางบิลผิดรอบ/ผิดคน แล้วต้อง
+ * ลบใบแจ้งหนี้ทิ้ง — ทั้งเอกสารจริงใน FlowAccount และแถวในระบบเรา ใช้ตอนออก INV ผิดรอบ/ผิดคน แล้วต้อง
  * เปิดทางให้ส่ง Timesheet รอบเดือนนั้นเข้าระบบใหม่ได้อีกครั้ง (ingestTimesheet บล็อกไว้ถ้ารอบนั้นมี
  * ใบแจ้งหนี้ค้างอยู่แล้ว) Timesheet ทุกใบที่เคยผูกกับใบนี้ถูกดึงกลับไปสถานะ "ตรวจผ่านแล้ว" (verified)
- * เหมือนก่อนวางบิล ไม่ใช่ลบ Timesheet ทิ้งไปด้วย — ported from service.js deleteInvoice()
+ * เหมือนก่อนออก INV ไม่ใช่ลบ Timesheet ทิ้งไปด้วย — ported from service.js deleteInvoice()
  */
 export async function deleteInvoice(invoiceId: string, { actor, client }: { actor: string; client?: FlowAccountClient }): Promise<{ deleted: true; invoiceId: string; timesheetIds: string[] }> {
   const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
@@ -795,7 +796,7 @@ export function documentLink(documentNo: string): string | null {
   return base ? `${base}/manday/${encodeURIComponent(documentNo)}` : null;
 }
 
-/** ลิงก์กดเข้าหน้า "วางบิล & ร่างอีเมล" ของรอบบิลนั้นโดยตรง — ใช้กับปุ่มในคำขออนุมัติ — ported from
+/** ลิงก์กดเข้าหน้า "ออก INV & ร่างอีเมล" ของรอบบิลนั้นโดยตรง — ใช้กับปุ่มในคำขออนุมัติ — ported from
  * service.js cycleLink() */
 export function cycleLink(contractId: string, period: string): string | null {
   const base = webBase();
@@ -828,7 +829,7 @@ export async function getCycleApproval(contractId: string, period: string): Prom
  */
 export async function requestCycleApproval(contractId: string, period: string, { actor, client }: { actor: string; client?: LineClient }): Promise<CycleApprovalRow> {
   const preview = await previewCycleInvoice(contractId, period);
-  if (!preview.invoice) throw new CycleActionError('ยังไม่มีรายการที่วางบิลได้ในรอบนี้', 400);
+  if (!preview.invoice) throw new CycleActionError('ยังไม่มีรายการที่ออก INV ได้ในรอบนี้', 400);
   if (preview.blockers.length > 0) throw new CycleActionError(`ยังส่งขออนุมัติไม่ได้: ${preview.blockers.join(' · ')}`, 409, preview.blockers);
   if (preview.existing && preview.existing.status === 'sent_to_flowaccount') {
     throw new CycleActionError(`รอบบิลนี้สร้างเอกสารไปแล้ว (${preview.existing.documentNo})`, 409);
@@ -935,7 +936,7 @@ export interface ReadyCycle {
   canApprove: boolean;
 }
 
-/** รอบบิลที่พร้อมวางบิล — ให้ n8n ตัวตั้งเวลาถามว่า "วันนี้ต้องวางบิลอะไร" แทนที่จะให้ n8n ไปคำนวณ
+/** รอบบิลที่พร้อมออก INV — ให้ n8n ตัวตั้งเวลาถามว่า "วันนี้ต้องออก INV อะไร" แทนที่จะให้ n8n ไปคำนวณ
  * เงื่อนไขเอง — ported from service.js readyCycles() */
 export async function readyCycles(): Promise<{ today: string; count: number; cycles: ReadyCycle[] }> {
   const today = isoToday();

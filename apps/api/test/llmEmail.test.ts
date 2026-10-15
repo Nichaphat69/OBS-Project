@@ -26,14 +26,14 @@ function fakeFetch(content: unknown) {
 
 test('draftBillingEmail เรียกโมเดลข้อความในเครื่อง แล้ว parse ผลได้', async () => {
   const fetchImpl = fakeFetch({
-    subject: 'วางบิลเดือนมกราคม',
+    subject: 'ออก INV เดือนมกราคม',
     body: 'เรียน ... ยอดรวม 10,000 บาท',
     highlights: ['ยอดเท่าเดือนก่อน'],
   });
 
   const result = await draftBillingEmail({ total: 10000 }, { fetchImpl });
 
-  assert.equal(result.subject, 'วางบิลเดือนมกราคม');
+  assert.equal(result.subject, 'ออก INV เดือนมกราคม');
   assert.match(result.model, /^local:/);
   assert.ok(result.usage);
 });

@@ -47,7 +47,7 @@ function toOption(type: string | null | undefined): string {
 }
 
 function mismatchNote(r: HrddRow, tx: (th: string) => string): string {
-  if (r.status === 'warn') return `${tx('Timesheet ระบุ')} "${r.tsType}" ${tx('แต่ HRDD บันทึกเป็น')} "${r.hrddType}" — ${tx('ควรยืนยันประเภทวันลาที่ถูกต้องกับพนักงานก่อนวางบิล')}`;
+  if (r.status === 'warn') return `${tx('Timesheet ระบุ')} "${r.tsType}" ${tx('แต่ HRDD บันทึกเป็น')} "${r.hrddType}" — ${tx('ควรยืนยันประเภทวันลาที่ถูกต้องกับพนักงานก่อนออก INV')}`;
   if (r.status === 'info') return tx('พบวันลาที่อนุมัติแล้วใน HRDD แต่ไม่ถูกระบุในตาราง Timesheet — จำนวนวันทำงานที่คำนวณได้อาจไม่ถูกต้อง');
   if (r.status === 'bad') return tx('พนักงานระบุว่าลาในตาราง Timesheet แต่ไม่พบการอนุมัติใน HRDD — อาจยังไม่ได้ยื่นคำขอลาในระบบเช็คชื่อ');
   return '';
@@ -169,7 +169,7 @@ export default function HrddCompare({
           ) : (
             <>
               {result.summary.mismatched > 0 ? (
-                <StatusPill tone="wn">{tx('พบความไม่ตรงกัน')} {result.summary.mismatched} {tx('รายการ — กรุณาตรวจสอบก่อนวางบิล')}</StatusPill>
+                <StatusPill tone="wn">{tx('พบความไม่ตรงกัน')} {result.summary.mismatched} {tx('รายการ — กรุณาตรวจสอบก่อนออก INV')}</StatusPill>
               ) : (
                 <StatusPill tone="ok">{tx('ข้อมูลวันลาตรงกันทั้งหมด')} ({result.summary.counts.ok}/{result.summary.total})</StatusPill>
               )}

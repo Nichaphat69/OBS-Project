@@ -34,7 +34,7 @@ export const CYCLE_STATE_LABEL: Record<CycleState, string> = {
   // แหล่งเดียวของคำนั้น หน้าจอทุกจุดดึงไปแสดง (การ์ดรอบบิล ตัวกรอง ป้ายสถานะ หน้ารอบบิล แดชบอร์ด)
   checking: 'ตรวจ Manday',
   ready: 'รออนุมัติ',
-  billed: 'วางบิลแล้ว',
+  billed: 'ออก INV แล้ว',
 };
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -43,7 +43,7 @@ export const STATUS_LABEL: Record<string, string> = {
   verified: 'ตรวจผ่าน',
   mismatch: 'ข้อมูลไม่ตรง',
   approved: 'อนุมัติแล้ว',
-  billed: 'วางบิลแล้ว',
+  billed: 'ออก INV แล้ว',
   rejected: 'ตีกลับให้แก้ไข',
 };
 
@@ -235,7 +235,7 @@ function assignmentCoversPeriod(a: { startDate: string; endDate: string }, perio
  * ตอนนี้ โดยไม่ดู `assignments.start_date/end_date` เลย ทั้งที่แต่ละคนเข้า-ออกโครงการคนละเดือนกันได้
  * คนที่เพิ่งเข้าเดือน มี.ค. จึงถูกนับว่า "ยังไม่ส่ง Timesheet" ของเดือน ม.ค.-ก.พ. ที่เขายังไม่ได้ทำงานด้วยซ้ำ
  * → `complete` เป็น false ตลอดกาล → ติด blocker "ยังได้ Timesheet ไม่ครบ" ใน previewCycleInvoice()
- * ทำให้วางบิลรอบเก่าไม่ได้เลยทั้งที่ข้อมูลครบแล้วจริง และรายชื่อ `missing` ก็ทวงผิดคน
+ * ทำให้ออก INV รอบเก่าไม่ได้เลยทั้งที่ข้อมูลครบแล้วจริง และรายชื่อ `missing` ก็ทวงผิดคน
  *
  * อีกสองจุดที่ถามคำถามเดียวกัน (`overdueTimesheets()` กับหน้า "บันทึกการส่ง") ดูช่วงวันที่อยู่แล้วผ่าน
  * `enumeratePeriods(a.startDate, a.endDate)` — จุดนี้เป็นจุดเดียวที่ตอบไม่ตรงกับอีกสองจุด
@@ -293,7 +293,7 @@ export async function checkStamp(timesheetId: string, computed: any): Promise<Ch
 
 /**
  * เลือก Timesheet ที่ "ใช้งานจริง" หนึ่งใบต่อพนักงานในรอบหนึ่ง — ใบที่ตีกลับ (rejected) ไม่นับเลย และถ้าคนเดียวกันมีหลายใบ
- * (เช่นอัปโหลดซ้ำ ก่อนมีกฎแทนที่ตอนรับเข้า) เอาใบที่วางบิลแล้วก่อน ไม่งั้นใบที่รับล่าสุด
+ * (เช่นอัปโหลดซ้ำ ก่อนมีกฎแทนที่ตอนรับเข้า) เอาใบที่ออก INV แล้วก่อน ไม่งั้นใบที่รับล่าสุด
  *
  * ใช้ร่วมกันทุกจุดที่รวมยอด/นับสถานะของรอบบิล (หน้ารอบบิล · แดชบอร์ด · ใบแจ้งหนี้) เพื่อให้ตัวเลขตรงกันหมด — เดิมแต่ละจุดหยิบ
  * ทุกใบมารวมกัน ยอดเลยเบิ้ลและรอบบิลค้าง "กำลังตรวจ" เพราะใบตีกลับไม่มีวันถูกกดยืนยัน (QA BILLING-001, 2 ต.ค. 69)
@@ -454,9 +454,9 @@ export interface EmployeeProgress {
 /**
  * ความคืบหน้าของ "ตัวเอง" สำหรับบัญชี role 'user' (พนักงาน) — ported from service.js
  * employeeProgress(). ไม่ใช่ตัวเลขเงิน role นี้ดูได้แค่ progress ของตัวเอง ไม่เห็นยอดเงิน/ของคนอื่นใน
- * สัญญาเดียวกัน เห็นทุกรอบบิลของสัญญาตลอดอายุสัญญา (รวมเดือนที่วางบิลไปแล้วด้วย) แต่ละรอบมีวันที่/เวลา
+ * สัญญาเดียวกัน เห็นทุกรอบบิลของสัญญาตลอดอายุสัญญา (รวมเดือนที่ออก INV ไปแล้วด้วย) แต่ละรอบมีวันที่/เวลา
  * + ชื่อคนอนุมัติสองขั้น: ตรวจ Manday (จาก audit_log action 'human_checked' ผ่าน checkStamp()) และ
- * วางบิล (จาก invoices.approvedBy/approvedAt)
+ * ออก INV (จาก invoices.approvedBy/approvedAt)
  */
 export async function employeeProgress(employeeId: string): Promise<EmployeeProgress | null> {
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
@@ -782,7 +782,7 @@ export async function dashboard(scope?: string | string[] | null): Promise<Dashb
 
   /* "งานที่ต้องทำ" = งานที่ลงมือได้เลยตอนนี้ เรียงตามลำดับขั้น แต่ละแถวกดเปิดเข้าไปทำต่อได้ (25 ก.ย. 69 ตามที่ขอ
      "แสดงเฉพาะงานที่ต้องทำล่าสุด เช่น พนักงานคนนี้ส่ง Timesheet มาแล้ว เข้าไปเปิดตรวจ, พนักงานคนนี้ รอบบิลนี้
-     รอตรวจ Manday หรือรออนุมัติวางบิล สามารถกดเข้าไปตรวจได้เลย") — เดิม "รอ Timesheet" ขึ้นก่อนและนับรวม
+     รอตรวจ Manday หรือรออนุมัติออก INV สามารถกดเข้าไปตรวจได้เลย") — เดิม "รอ Timesheet" ขึ้นก่อนและนับรวม
      รอบในอนาคตด้วย (ก.ย. ยังไม่จบก็ทวง ต.ค.–ธ.ค. แล้ว) จนงานจริงจมหายอยู่ท้ายรายการ ตอนนี้ทวงเฉพาะรอบที่ถึง
      เดือนแล้ว และย้ายไปท้ายสุด ล่าสุดขึ้นก่อน */
   const currentPeriod = today.slice(0, 7);
@@ -808,7 +808,7 @@ export async function dashboard(scope?: string | string[] | null): Promise<Dashb
       .sort((a, b) => b.period.localeCompare(a.period))
       .map((p) => ({
         step: 3, level: 'info',
-        title: 'รออนุมัติวางบิล',
+        title: 'รออนุมัติออก INV',
         detail: `${p.customerName} · ${refOf(p.poNo, p.customerName)} · รอบ ${p.periodLabel} — ตรวจและยืนยันครบ ${p.received}/${p.expected} คนแล้ว`,
         link: { view: 'cycle', contractId: p.contractId, period: p.period },
       })),

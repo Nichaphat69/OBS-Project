@@ -51,7 +51,7 @@ timesheetRemindersRouter.post('/ingest', logExposedRequest('n8n'), requireN8nSec
 /**
  * รับไฟล์ Timesheet จาก n8n "เก็บไว้รอคนกดอ่าน" (30 ก.ย. 69) — ไม่เรียกโมเดล ไม่ตั้งสถานะอะไร
  * แค่เก็บไฟล์กับหัวเรื่อง/ผู้ส่ง/เนื้ออีเมลไว้ให้โผล่ในแท็บ "ดึงจาก Gmail" · ส่งซ้ำได้ (คืน duplicate: true)
- * การอ่านเกิดตอนคนกดปุ่มเท่านั้น และการขออนุมัติวางบิลเข้า LINE ต้องรอหลังขั้น "ตรวจ Manday" จึงไม่ใช่
+ * การอ่านเกิดตอนคนกดปุ่มเท่านั้น และการขออนุมัติออก INV เข้า LINE ต้องรอหลังขั้น "ตรวจ Manday" จึงไม่ใช่
  * หน้าที่ของ workflow สายนี้ */
 timesheetRemindersRouter.post('/receive-email', logExposedRequest('n8n'), requireN8nSecret, async (req, res) => {
   try {

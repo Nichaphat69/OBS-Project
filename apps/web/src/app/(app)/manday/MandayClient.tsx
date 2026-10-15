@@ -47,7 +47,7 @@ const TABS = [
   { key: 'needsReview', label: 'ต้องตรวจ' },
   { key: 'checked', label: 'ยืนยันแล้ว' },
   { key: 'all', label: 'ทั้งหมด' },
-  { key: 'billed', label: 'วางบิลแล้ว' },
+  { key: 'billed', label: 'ออก INV แล้ว' },
   { key: 'rejected', label: 'ตีกลับ' },
 ] as const;
 
@@ -254,7 +254,7 @@ export default function MandayClient() {
                   </tr>
                   <tr>
                     <td style={{ padding: '8px 0', border: 'none' }}>
-                      {tx('วันทำงานที่วางบิลได้')}
+                      {tx('วันทำงานที่ออก INV ได้')}
                       <span className="sub">{tx('ตาม Timesheet')} {item.reportedWorkDays ?? '—'} {tx('วัน')}</span>
                     </td>
                     <td className="r n" style={{ padding: '8px 0', border: 'none' }}>
@@ -274,7 +274,7 @@ export default function MandayClient() {
             </div>
             <div className="ft" style={{ justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 10 }}>
               <div>
-                <div className="sub">{tx('ยอดที่วางบิลได้')}</div>
+                <div className="sub">{tx('ยอดที่ออก INV ได้')}</div>
                 <div className="amt" style={{ fontSize: 20 }}>
                   {money(item.lineAmount)}
                 </div>

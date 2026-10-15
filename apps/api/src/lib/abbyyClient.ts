@@ -202,7 +202,7 @@ function parsePeriodFromYearField(value: unknown): string | null {
 
   // ทางเดิม: ชื่อเดือนอังกฤษเต็ม + ปี 4 หลัก ("May 2026") — ต่างจากเดิมตรงที่ปีต้องผ่าน normalizeYear
   // ด้วย ไม่งั้นเอกสารที่พิมพ์ปี พ.ศ. ("May 2569") จะได้รอบเดือน "2569-05" ที่ไม่มีอยู่จริงแบบเงียบๆ
-  // (ไม่ error ไม่ขึ้นโน้ต) แล้วไหลต่อไปถึงรอบวางบิล — แย่กว่าอ่านไม่ออกไปเลย
+  // (ไม่ error ไม่ขึ้นโน้ต) แล้วไหลต่อไปถึงรอบ INV — แย่กว่าอ่านไม่ออกไปเลย
   const strict = text.match(/([A-Za-z]+)\s+(\d{4})/);
   if (strict) {
     const month = EN_MONTH[strict[1].toLowerCase()];

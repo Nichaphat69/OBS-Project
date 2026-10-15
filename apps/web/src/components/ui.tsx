@@ -201,7 +201,7 @@ export interface TaskLink {
 }
 
 /** สร้าง URL จาก task.link ที่ backend ส่งมา (ดู dashboardService.ts's tasks) — 'detail' คือ Timesheet
- * ที่ต้องแก้/ยืนยัน (หน้าตรวจ Manday), 'cycle' คือรอบบิลที่พร้อมอนุมัติ (หน้าวางบิล & ร่างอีเมล) */
+ * ที่ต้องแก้/ยืนยัน (หน้าตรวจ Manday), 'cycle' คือรอบบิลที่พร้อมอนุมัติ (หน้าออก INV & ร่างอีเมล) */
 function taskHref(link?: TaskLink | null): string | null {
   if (!link) return null;
   if (link.view === 'detail' && link.id) return `/manday/${link.id}`;
@@ -322,7 +322,7 @@ export function ComingSoon({ title, eyebrow }: { title: string; eyebrow: string 
  * `<engine>[:<skill/template>][ · คนยืนยัน]` เช่น "abbyy", "abbyy:Timesheet · คนยืนยัน",
  * "local:google/gemma-4-e4b (ชั้นข้อความ)", "manual"
  *
- * โชว์ชื่อเครื่องอ่านเป็นตัวหลัก ส่วน skill/template id ยาวๆ ซ่อนไว้ใน tooltip — คนที่ดูใบวางบิล
+ * โชว์ชื่อเครื่องอ่านเป็นตัวหลัก ส่วน skill/template id ยาวๆ ซ่อนไว้ใน tooltip — คนที่ดูINV
  * อยากรู้ว่า "เจ้าไหนอ่าน" ส่วน id เอาไว้ตอนไล่ปัญหา ไม่ใช่ข้อมูลที่ต้องอ่านทุกครั้ง */
 const READ_ENGINE_LABEL: Record<string, string> = {
   abbyy: 'ABBYY',

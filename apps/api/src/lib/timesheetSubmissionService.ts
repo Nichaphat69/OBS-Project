@@ -94,7 +94,7 @@ export async function pendingSubmissionFor(employeeId: string): Promise<PendingS
  * รอบบิลที่พนักงานเลือกเองจากหน้าอัปโหลด ส่งได้จริงไหม — กติกาเดียวกับกลุ่ม "ต้องลงมือ" ในหน้า
  * "ความคืบหน้าของฉัน" (bucketOf() ใน MyProgressClient.tsx) ให้สองหน้าบอกตรงกัน (25 ก.ย. 69 ตามที่ขอ
  * "role พนักงาน ต้องมีการเลือกเดือนหรือรอบบิลก่อน ถึงจะส่ง Timesheet ได้ ให้สอดคล้องกับหน้าความคืบหน้าของฉัน"):
- * ต้องเป็นสัญญาที่ตัวเองถูกมอบหมายอยู่ รอบอยู่ในอายุสัญญา ไม่ใช่เดือนในอนาคต ยังไม่วางบิล และยังไม่มี
+ * ต้องเป็นสัญญาที่ตัวเองถูกมอบหมายอยู่ รอบอยู่ในอายุสัญญา ไม่ใช่เดือนในอนาคต ยังไม่ออก INV และยังไม่มี
  * Timesheet เข้าระบบ (หรือมีแต่ถูกตีกลับ)
  */
 export async function submittablePeriodFor(employeeId: string, contractId: string, period: string): Promise<PendingSubmission> {
@@ -109,7 +109,7 @@ export async function submittablePeriodFor(employeeId: string, contractId: strin
   if (period > isoToday().slice(0, 7)) throw new SubmitOwnFileError('รอบบิลนี้ยังไม่ถึงกำหนดส่ง', 400);
 
   const invoice = await prisma.invoice.findUnique({ where: { contractId_period: { contractId, period } } });
-  if (invoice?.status === 'sent_to_flowaccount') throw new SubmitOwnFileError('รอบบิลนี้วางบิลไปแล้ว ส่งเพิ่มไม่ได้', 409);
+  if (invoice?.status === 'sent_to_flowaccount') throw new SubmitOwnFileError('รอบบิลนี้ออก INV ไปแล้ว ส่งเพิ่มไม่ได้', 409);
   const sheet = await prisma.timesheet.findFirst({ where: { contractId, employeeId, period }, select: { status: true } });
   if (sheet && sheet.status !== 'rejected') throw new SubmitOwnFileError('รอบบิลนี้มี Timesheet เข้าระบบแล้ว', 409);
 

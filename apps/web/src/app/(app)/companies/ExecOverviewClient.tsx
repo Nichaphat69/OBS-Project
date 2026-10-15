@@ -95,7 +95,7 @@ export default function ExecOverviewClient() {
       <div className="kpis">
         <Kpi icon="building" label={tx('บริษัททั้งหมด')} value={contracts.length} />
         <Kpi icon="users" label={tx('พนักงานทั้งหมด')} value={employeeCount} />
-        <Kpi icon="money" label={tx('มูลค่าสัญญารวม')} value={money(totalValue)} caption={`${tx('วางบิลแล้ว')} ${money(totalBilled)} ${tx('บาท')}`} tone="a" />
+        <Kpi icon="money" label={tx('มูลค่าสัญญารวม')} value={money(totalValue)} caption={`${tx('ออก INV แล้ว')} ${money(totalBilled)} ${tx('บาท')}`} tone="a" />
       </div>
 
       <Card flush>
@@ -108,7 +108,7 @@ export default function ExecOverviewClient() {
                 <th>{tx('โครงการ')}</th>
                 <th>{tx('พนักงาน')}</th>
                 <th className="r">{tx('มูลค่าสัญญา')}</th>
-                <th className="r">{tx('วางบิลแล้ว')}</th>
+                <th className="r">{tx('ออก INV แล้ว')}</th>
                 <th>{tx('ความคืบหน้า')}</th>
               </tr>
             </thead>

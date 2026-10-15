@@ -53,8 +53,8 @@ interface Settings {
  * - `future`  = ยังไม่ถึงรอบ (เดือนยังไม่จบ/ยังมาไม่ถึง) — ส่งไม่ได้ ไม่ควรขึ้นว่า "ยังไม่ได้ส่ง" ปนกับ
  *               รอบที่ค้างจริง เพราะอ่านแล้วเหมือนตัวเองค้างงานทั้งที่ยังไม่ถึงกำหนด
  * - `action`  = ถึงกำหนดแล้วแต่ยังไม่ส่ง หรือถูกตีกลับให้แก้ — **กลุ่มเดียวที่พนักงานทำอะไรได้**
- * - `waiting` = ส่งแล้ว รอฝ่ายบัญชีตรวจ/วางบิล — ไม่มีอะไรต้องทำ แค่ติดตาม
- * - `done`    = วางบิลแล้ว จบรอบ
+ * - `waiting` = ส่งแล้ว รอฝ่ายบัญชีตรวจ/ออก INV — ไม่มีอะไรต้องทำ แค่ติดตาม
+ * - `done`    = ออก INV แล้ว จบรอบ
  */
 type Bucket = 'action' | 'waiting' | 'done' | 'future';
 
@@ -85,7 +85,7 @@ function sortPeriods(periods: EmployeeProgressPeriod[], currentPeriod: string): 
 
 type StepState = 'dn' | 'cu' | 'wn' | '';
 
-/** สามขั้นของรอบบิลตามลำดับจริง (ส่ง → ตรวจ → วางบิล) — เดิมวาดเป็นสามแถวเท่ากันหมดเหมือนตาราง
+/** สามขั้นของรอบบิลตามลำดับจริง (ส่ง → ตรวจ → ออก INV) — เดิมวาดเป็นสามแถวเท่ากันหมดเหมือนตาราง
  * ทั้งที่มันเป็นลำดับขั้น อ่านแล้วไม่รู้ว่าตอนนี้ค้างอยู่ตรงไหน */
 function stepsOf(p: EmployeeProgressPeriod): Array<{ key: string; label: string; icon: string; state: StepState; at: string | null }> {
   // p.timesheetId ยังเป็น null ได้ทั้งที่ส่งไปแล้วจริง — พนักงานส่งไฟล์ผ่าน "ส่งผ่านระบบ" สร้างแค่คิวอ่าน
@@ -113,7 +113,7 @@ function stepsOf(p: EmployeeProgressPeriod): Array<{ key: string; label: string;
     },
     {
       key: 'bill',
-      label: 'อนุมัติวางบิล',
+      label: 'อนุมัติออก INV',
       icon: 'invoice',
       state: p.billed ? 'dn' : checked ? 'cu' : '',
       at: p.billedAt,
@@ -129,7 +129,7 @@ function PeriodRow({ p, bucket, contractId }: { p: EmployeeProgressPeriod; bucke
   const lastDone = [...steps].reverse().find((s) => s.state === 'dn' && s.at) ?? null;
   const chip =
     bucket === 'done'
-      ? tx('วางบิลแล้ว')
+      ? tx('ออก INV แล้ว')
       : bucket === 'future'
         ? tx('ยังไม่ถึงรอบ')
         : bucket === 'action'
@@ -154,7 +154,7 @@ function PeriodRow({ p, bucket, contractId }: { p: EmployeeProgressPeriod; bucke
         <span className="mp-chip">{chip}</span>
       </div>
 
-      {/* เส้นความคืบหน้าสามช่อง (ส่ง → ตรวจ → วางบิล) สีทึบ — ช่องที่ค้างอยู่ใช้สีของกลุ่ม */}
+      {/* เส้นความคืบหน้าสามช่อง (ส่ง → ตรวจ → ออก INV) สีทึบ — ช่องที่ค้างอยู่ใช้สีของกลุ่ม */}
       <div className="mp-bar" aria-hidden={bucket === 'future'}>
         {steps.map((s) => (
           <div key={s.key} className={`mp-seg${bucket === 'future' ? '' : ` s-${s.state}`}`} title={`${tx(s.label)}${s.at ? ` · ${dt(s.at)}` : ''}`}>
@@ -313,8 +313,8 @@ export default function MyProgressClient() {
           </div>
           <div className="mp-stats">
             <div className="mp-stat a"><i /><b>{counts.action}</b><span>{tx('ต้องส่ง')}</span></div>
-            <div className="mp-stat w"><i /><b>{counts.waiting}</b><span>{tx('รอตรวจ/วางบิล')}</span></div>
-            <div className="mp-stat d"><i /><b>{counts.done}</b><span>{tx('วางบิลแล้ว')}</span></div>
+            <div className="mp-stat w"><i /><b>{counts.waiting}</b><span>{tx('รอตรวจ/ออก INV')}</span></div>
+            <div className="mp-stat d"><i /><b>{counts.done}</b><span>{tx('ออก INV แล้ว')}</span></div>
           </div>
         </div>
       )}

@@ -118,9 +118,9 @@ function sumHours(days: TimesheetDetail['dayLabels'], key: 'normalHours' | 'otHo
 /* ── ประวัติการดำเนินการ ──
    เดิมโชว์ชื่อ action ดิบ ("notify line needs check") + actor ดิบ ("llm"/"system") เวลาเป็น UTC — อ่านไม่ออก
    (24 ก.ย. 69 ตามที่ขอ "ขอแบบเข้าใจง่าย แสดงที่มา ใครเป็นคนส่ง วิธีการใด วันเวลา มันจะเป็น process ของ
-   Manday ใบวางบิล รอบบิลชุดนี้") แปลงเป็นข้อความไทย + แท็กขั้นตอน ครอบทั้งเหตุการณ์ของใบนี้และของรอบบิล */
+   Manday INV รอบบิลชุดนี้") แปลงเป็นข้อความไทย + แท็กขั้นตอน ครอบทั้งเหตุการณ์ของใบนี้และของรอบบิล */
 type HistoryStage = 'timesheet' | 'manday' | 'billing';
-const HISTORY_STAGE_LABEL: Record<HistoryStage, string> = { timesheet: 'Timesheet', manday: 'Manday', billing: 'วางบิล' };
+const HISTORY_STAGE_LABEL: Record<HistoryStage, string> = { timesheet: 'Timesheet', manday: 'Manday', billing: 'ออก INV' };
 const HISTORY_STAGE_TONE: Record<HistoryStage, 'pr' | 'wn' | 'ok'> = { timesheet: 'pr', manday: 'wn', billing: 'ok' };
 
 /** ชุดเดียวกับ SUBMISSION_METHOD_LABEL ใน apps/api activityFeedService.ts */
@@ -161,7 +161,7 @@ const HISTORY_EVENT: Record<string, (d: any) => HistoryEventShape> = {
   recompute_manday: (d) => ({
     label: 'คำนวณ Manday',
     stage: 'manday',
-    extra: [d?.payableDays != null ? `วางบิลได้ ${d.payableDays} วัน` : null, d?.discount ? `ส่วนลดวันลา ${money(d.discount)} บาท` : null]
+    extra: [d?.payableDays != null ? `ออก INV ได้ ${d.payableDays} วัน` : null, d?.discount ? `ส่วนลดวันลา ${money(d.discount)} บาท` : null]
       .filter(Boolean)
       .join(' · ') || undefined,
   }),
@@ -172,21 +172,21 @@ const HISTORY_EVENT: Record<string, (d: any) => HistoryEventShape> = {
   human_checked: (d) => ({
     label: 'ยืนยันผลตรวจ Manday แล้ว',
     stage: 'manday',
-    extra: [d?.payableDays != null ? `วางบิลได้ ${d.payableDays} วัน` : null, d?.lineAmount != null ? `${money(d.lineAmount)} บาท` : null]
+    extra: [d?.payableDays != null ? `ออก INV ได้ ${d.payableDays} วัน` : null, d?.lineAmount != null ? `${money(d.lineAmount)} บาท` : null]
       .filter(Boolean)
       .join(' · ') || undefined,
   }),
   reject_timesheet: (d) => ({ label: 'ตีกลับให้แก้ Timesheet', stage: 'manday', error: true, extra: d?.reason ?? undefined }),
   request_line_approval: (d) => ({
-    label: 'ส่งขออนุมัติวางบิลทาง LINE',
+    label: 'ส่งขออนุมัติออก INV ทาง LINE',
     stage: 'billing',
     extra: [d?.headcount ? `${d.headcount} คน` : null, d?.paymentAmount != null ? `${money(d.paymentAmount)} บาท` : null]
       .filter(Boolean)
       .join(' · ') || undefined,
   }),
-  request_line_approval_error: (d) => ({ label: 'ส่งขออนุมัติวางบิลทาง LINE ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
-  approve_line: (d) => ({ label: 'อนุมัติวางบิลทาง LINE', stage: 'billing', extra: d?.documentNo }),
-  reject_line: () => ({ label: 'ไม่อนุมัติวางบิล (LINE)', stage: 'billing', error: true }),
+  request_line_approval_error: (d) => ({ label: 'ส่งขออนุมัติออก INV ทาง LINE ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  approve_line: (d) => ({ label: 'อนุมัติออก INV ทาง LINE', stage: 'billing', extra: d?.documentNo }),
+  reject_line: () => ({ label: 'ไม่อนุมัติออก INV (LINE)', stage: 'billing', error: true }),
   line_approval_denied: () => ({ label: 'มีคนกดอนุมัติทาง LINE แต่ไม่มีสิทธิ์', stage: 'billing', error: true }),
   approve_cycle: (d) => ({
     label: 'สร้างใบแจ้งหนี้ใน FlowAccount',
@@ -199,10 +199,10 @@ const HISTORY_EVENT: Record<string, (d: any) => HistoryEventShape> = {
   flowaccount_share_link_failed: (d) => ({ label: 'ดึงลิงก์ใบแจ้งหนี้จาก FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
   flowaccount_pdf_cache_failed: (d) => ({ label: 'ดึงไฟล์ใบแจ้งหนี้จาก FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
   flowaccount_pdf_fetch_failed: (d) => ({ label: 'ดึงไฟล์ใบแจ้งหนี้จาก FlowAccount ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
-  draft_email_llm: () => ({ label: 'ระบบร่างอีเมลวางบิล', stage: 'billing' }),
-  gmail_draft_created: (d) => ({ label: 'สร้างร่างอีเมลวางบิลใน Gmail', stage: 'billing', extra: d?.to }),
-  email_sent_detected: (d) => ({ label: 'ส่งอีเมลวางบิลแล้ว', stage: 'billing', extra: d?.documentNo }),
-  email_sent_check_failed: (d) => ({ label: 'ตรวจสถานะการส่งอีเมลวางบิลไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
+  draft_email_llm: () => ({ label: 'ระบบร่างอีเมล INV', stage: 'billing' }),
+  gmail_draft_created: (d) => ({ label: 'สร้างร่างอีเมล INV ใน Gmail', stage: 'billing', extra: d?.to }),
+  email_sent_detected: (d) => ({ label: 'ส่งอีเมล INV แล้ว', stage: 'billing', extra: d?.documentNo }),
+  email_sent_check_failed: (d) => ({ label: 'ตรวจสถานะการส่งอีเมล INV ไม่สำเร็จ', stage: 'billing', error: true, extra: d?.message }),
   delete_invoice: (d) => ({ label: 'ลบใบแจ้งหนี้', stage: 'billing', error: true, extra: d?.documentNo }),
 };
 
@@ -213,7 +213,7 @@ function localizeExtra(text: string, tx: (th: string) => string): string {
     .map((part) => {
       let m: RegExpExecArray | null;
       if ((m = /^พบจุดต้องตรวจ (\d+) จุด$/.exec(part))) return `${tx('พบจุดต้องตรวจ')} ${m[1]}`;
-      if ((m = /^วางบิลได้ (.+) วัน$/.exec(part))) return `${tx('วางบิลได้')} ${m[1]} ${tx('วัน')}`;
+      if ((m = /^ออก INV ได้ (.+) วัน$/.exec(part))) return `${tx('ออก INV ได้')} ${m[1]} ${tx('วัน')}`;
       if ((m = /^ส่วนลดวันลา (.+) บาท$/.exec(part))) return `${tx('ส่วนลดวันลา')} ${m[1]} ${tx('บาท')}`;
       if ((m = /^(.+) บาท$/.exec(part))) return `${m[1]} ${tx('บาท')}`;
       if ((m = /^(\d+) คน$/.exec(part))) return `${m[1]} ${tx('คน')}`;
@@ -473,7 +473,7 @@ export default function ManadyDetailPage() {
           <span className="cir">
             <Icon name="money" />
           </span>
-          <span className="pl">{tx('วางบิล FlowAccount')}</span>
+          <span className="pl">{tx('ออก INV FlowAccount')}</span>
         </div>
         <div className={`pline ${step > 3 ? 'dn' : ''}`} />
         <div className={`pstep ${step === 4 ? 'cu' : ''}`}>
@@ -506,7 +506,7 @@ export default function ManadyDetailPage() {
           <div>
             <div className="card">
               <div className="hd">
-                <h3>{tx('สรุปรายการที่จะวางบิล')}</h3>
+                <h3>{tx('สรุปรายการที่จะออก INV')}</h3>
               </div>
               <div className="bd flush">
                 <table className="ldg">
@@ -924,7 +924,7 @@ export default function ManadyDetailPage() {
             </>
           ) : sheet.status === 'billed' ? (
             <>
-              <b>{tx('วางบิลแล้ว')}</b> — {sheet.invoiceNo ?? ''}
+              <b>{tx('ออก INV แล้ว')}</b> — {sheet.invoiceNo ?? ''}
             </>
           ) : sheet.check?.checked ? (
             <>
@@ -960,7 +960,7 @@ export default function ManadyDetailPage() {
         {!rejecting &&
           (sheet.status === 'billed' || sheet.check?.checked ? (
             <Link href={`/billing/${sheet.contract.id}/${sheet.period}`} className="btn pri">
-              <Icon name="send" /> {tx('ไปขั้น 3 วางบิล')}
+              <Icon name="send" /> {tx('ไปขั้น 3 ออก INV')}
             </Link>
           ) : (
             <button className="btn pri" disabled={busy || failures.length > 0} onClick={doCheck}>

@@ -130,7 +130,7 @@ function signedWebhookBody(events: unknown[], secret = 'test-secret') {
   return { raw, signature };
 }
 
-test('กดยืนยันใบสุดท้ายที่ทำให้รอบครบ → ยิงขออนุมัติวางบิลเข้า LINE ทันทีในตัว ไม่ต้องรอ n8n', async () => {
+test('กดยืนยันใบสุดท้ายที่ทำให้รอบครบ → ยิงขออนุมัติออก INV เข้า LINE ทันทีในตัว ไม่ต้องรอ n8n', async () => {
   const period = '2026-05';
   const docNoA = '2026050201';
   const docNoB = '2026050200';
@@ -160,7 +160,7 @@ test('กดยืนยันใบสุดท้ายที่ทำให�
   const lastCheck = new FakeLineClient();
   await markTimesheetChecked(docNoB, { actor: 'ผู้ตรวจทดสอบ', client: lastCheck } as any);
 
-  assert.equal(lastCheck.sent.length, 1, 'กดยืนยันใบสุดท้ายแล้วต้องยิงขออนุมัติวางบิลเข้า LINE ทันที');
+  assert.equal(lastCheck.sent.length, 1, 'กดยืนยันใบสุดท้ายแล้วต้องยิงขออนุมัติออก INV เข้า LINE ทันที');
   assert.equal(lastCheck.sent[0].contractId, 'CT-26B0113');
   assert.equal(lastCheck.sent[0].headcount, 2);
 
@@ -173,7 +173,7 @@ test('เตรียมรอบบิล ก.พ. 2026 ให้พร้อ�
   await ingestAndCheckBothEmployees('2026-02', '2026020201', '2026020200');
 
   const ready = (await readyCycles()).cycles.find((c) => c.period === '2026-02');
-  assert.ok(ready, 'รอบ ก.พ. 2026 ต้องพร้อมวางบิลก่อนจะทดสอบขั้นถัดไปได้');
+  assert.ok(ready, 'รอบ ก.พ. 2026 ต้องพร้อมออก INV ก่อนจะทดสอบขั้นถัดไปได้');
 });
 
 test('requestCycleApproval ส่งเข้า LINE แต่ยังไม่สร้างเอกสารใดๆ', async () => {
@@ -324,14 +324,14 @@ const FLEX_INPUT = {
   paymentAmount: 180665.4,
 };
 
-test('มี URL ของระบบ → ปุ่มเดียว "อนุมัติวางบิล" พาเข้าหน้าวางบิลของรอบนั้นโดยตรง', () => {
+test('มี URL ของระบบ → ปุ่มเดียว "อนุมัติออก INV" พาเข้าหน้าออก INV ของรอบนั้นโดยตรง', () => {
   const url = 'https://obs.example.com/billing/CT-26B0113/2026-02';
   const flex: any = buildApprovalFlex({ ...FLEX_INPUT, approveUrl: url });
 
-  assert.equal(flex.header.contents[0].text, 'ขออนุมัติวางบิล');
+  assert.equal(flex.header.contents[0].text, 'ขออนุมัติออก INV');
   assert.equal(flex.footer.contents.length, 1, 'ปุ่มเดียวพอ — ไปตัดสินใจต่อในระบบ');
   assert.deepEqual(flex.footer.contents[0].action, {
-    type: 'uri', label: 'อนุมัติวางบิล', uri: url,
+    type: 'uri', label: 'อนุมัติออก INV', uri: url,
   });
 });
 
@@ -361,7 +361,7 @@ test('บับเบิลสองเรื่องต้องคนละ�
   // หัวการ์ดเป็นไล่สี (background: linearGradient) แล้ว ไม่ใช่สีทึบเดี่ยวๆ แบบเดิม (8 ก.ย. 69 ตามที่ขอ
   // "ไล่สีอ่อนสีเข้มสวยๆ") — เช็คที่ endColor แทน backgroundColor เดิม
   assert.equal(approval.header.background.type, 'linearGradient');
-  assert.equal(approval.header.background.endColor, '#0078D4', 'เรื่องเงิน/วางบิลใช้สีน้ำเงินตามเว็บ');
+  assert.equal(approval.header.background.endColor, '#0078D4', 'เรื่องเงิน/ออก INV ใช้สีน้ำเงินตามเว็บ');
   assert.equal(needsCheck.header.background.endColor, '#1B998B', 'เรื่องตรวจสอบใช้เขียวเข้ม');
   assert.notEqual(approval.header.background.endColor, needsCheck.header.background.endColor);
 
@@ -496,29 +496,29 @@ test('พนักงานที่ผูกบัญชีแล้วพิ�
     assert.equal(quickReply.items.length, 4, 'ต้องมีปุ่มลัด 4 ปุ่มแนบมาด้วยตามที่ขอ');
     assert.deepEqual(
       quickReply.items.map((i: any) => i.action.label),
-      ['ส่ง Timesheet', 'สรุปรอบวางบิล', 'สถานะการวางบิล', 'Help'],
+      ['ส่ง Timesheet', 'สรุปรอบ INV', 'สถานะการออก INV', 'Help'],
     );
   });
 });
 
-test('ปุ่มลัด "สรุปรอบวางบิล" เป็นคำพ้องของ "สถานะ" — ตอบการ์ดเดียวกัน ไม่มียอดเงิน', async () => {
+test('ปุ่มลัด "สรุปรอบ INV" เป็นคำพ้องของ "สถานะ" — ตอบการ์ดเดียวกัน ไม่มียอดเงิน', async () => {
   await withLinkedEmployee('Uemployee-status-alias-test', async () => {
     const line = new FakeLineClient();
     const { raw, signature } = signedWebhookBody([
       {
-        type: 'message', message: { type: 'text', text: 'สรุปรอบวางบิล' },
+        type: 'message', message: { type: 'text', text: 'สรุปรอบ INV' },
         replyToken: 'reply-alias-summary', source: { userId: 'Uemployee-status-alias-test' },
       },
     ]);
     const result: any = await processLineWebhook(raw, signature, { channelSecret: 'test-secret', client: line as any });
 
-    assert.equal(result.results[0].outcome, 'status', '"สรุปรอบวางบิล" ต้องเข้าเงื่อนไขเดียวกับ "สถานะ"');
+    assert.equal(result.results[0].outcome, 'status', '"สรุปรอบ INV" ต้องเข้าเงื่อนไขเดียวกับ "สถานะ"');
     assert.equal(line.flexReplies.length, 1);
     assert.ok(!JSON.stringify(line.flexReplies[0].contents).includes('บาท'));
   });
 });
 
-/* ── "สถานะการวางบิล" — flow 5 ขั้นของรอบบิล (8 ก.ย. 69 ตามที่ขอ แบบ mockup) ────────────────────── */
+/* ── "สถานะการออก INV" — flow 5 ขั้นของรอบบิล (8 ก.ย. 69 ตามที่ขอ แบบ mockup) ────────────────────── */
 
 test('buildBillingCycleFlex เรียงลำดับ done/current/future ถูกต้อง และไม่มียอดเงินหลุดออกมา', () => {
   const input = {
@@ -529,7 +529,7 @@ test('buildBillingCycleFlex เรียงลำดับ done/current/future �
         { label: 'Timesheet ประจำเดือน', sub: 'พนักงานส่งเองทางอีเมล', dateLabel: '25 ก.ย. 69', done: true, state: 'done' },
         { label: 'ตรวจ Manday', sub: 'ตรวจแล้ว', dateLabel: '26 ก.ย. 69', done: true, state: 'done' },
         { label: 'ออกใบแจ้งหนี้ (FlowAccount)', sub: 'Drafted', dateLabel: '26 ก.ย. 69', done: true, state: 'done' },
-        { label: 'วางบิลส่งลูกค้า', sub: 'รอส่งลูกค้า (ร่างอีเมลและเอกสารแนบ)', dateLabel: 'กำหนดส่ง: 30 กันยายน 2569', done: false, state: 'current' },
+        { label: 'ส่ง INV ให้ลูกค้า', sub: 'รอส่งลูกค้า (ร่างอีเมลและเอกสารแนบ)', dateLabel: 'กำหนดส่ง: 30 กันยายน 2569', done: false, state: 'current' },
         { label: 'การรับชำระเงิน', sub: 'รอรับชำระ (คาดการณ์รับเงิน 30 ตุลาคม 2569)', dateLabel: 'Term 30 วัน', done: false, state: 'future' },
       ],
     }],
@@ -539,18 +539,18 @@ test('buildBillingCycleFlex เรียงลำดับ done/current/future �
   const asText = JSON.stringify(flex);
 
   assert.ok(!asText.includes('บาท'), 'ห้ามมียอดเงิน/หน่วยเงินหลุดออกมาในการ์ดของพนักงาน');
-  assert.ok(asText.includes('กันยายน 2569'), 'ต้องบอกรอบวางบิล');
-  for (const label of ['Timesheet ประจำเดือน', 'ตรวจ Manday', 'ออกใบแจ้งหนี้', 'วางบิลส่งลูกค้า', 'การรับชำระเงิน']) {
+  assert.ok(asText.includes('กันยายน 2569'), 'ต้องบอกรอบ INV');
+  for (const label of ['Timesheet ประจำเดือน', 'ตรวจ Manday', 'ออกใบแจ้งหนี้', 'ส่ง INV ให้ลูกค้า', 'การรับชำระเงิน']) {
     assert.ok(asText.includes(label), `ต้องมีขั้น "${label}"`);
   }
 });
 
-test('พนักงานที่ผูกบัญชีแล้วพิมพ์ "สถานะการวางบิล" → ได้การ์ด flow คนละแบบกับ "สถานะ" ไม่มียอดเงิน', async () => {
+test('พนักงานที่ผูกบัญชีแล้วพิมพ์ "สถานะการออก INV" → ได้การ์ด flow คนละแบบกับ "สถานะ" ไม่มียอดเงิน', async () => {
   await withLinkedEmployee('Uemployee-billingcycle-test', async () => {
     const line = new FakeLineClient();
     const { raw, signature } = signedWebhookBody([
       {
-        type: 'message', message: { type: 'text', text: 'สถานะการวางบิล' },
+        type: 'message', message: { type: 'text', text: 'สถานะการออก INV' },
         replyToken: 'reply-billingcycle-1', source: { userId: 'Uemployee-billingcycle-test' },
       },
     ]);
@@ -563,7 +563,7 @@ test('พนักงานที่ผูกบัญชีแล้วพิ�
     const asText = JSON.stringify(line.flexReplies[0].contents);
     assert.ok(!asText.includes('บาท'), 'ห้ามมียอดเงิน/หน่วยเงินหลุดออกมาในการ์ดของพนักงาน');
     assert.ok(asText.includes('ไทยประกันชีวิต'), 'ต้องมีชื่อลูกค้าของสัญญาที่ผูกอยู่');
-    assert.ok(asText.includes('ออกใบแจ้งหนี้'), 'ต้องเป็นการ์ด flow วางบิล ไม่ใช่การ์ดสถานะแบบเดิม');
+    assert.ok(asText.includes('ออกใบแจ้งหนี้'), 'ต้องเป็นการ์ด flow ออก INV ไม่ใช่การ์ดสถานะแบบเดิม');
   });
 });
 

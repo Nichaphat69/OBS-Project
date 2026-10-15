@@ -328,7 +328,7 @@ function runChecks({
       title: 'ตัวหารคงที่ต่างจากวันทำงานจริงของเดือน',
       detail:
         `ระบบใช้ตัวหารคงที่ ${divisorValue} แต่เดือนนี้มีวันทำงานจริง ${standardWorkingDays} วัน ` +
-        'อัตราต่อวันจะต่างจากการหารด้วยวันทำงานจริง — ยืนยันเงื่อนไขในสัญญาก่อนวางบิล',
+        'อัตราต่อวันจะต่างจากการหารด้วยวันทำงานจริง — ยืนยันเงื่อนไขในสัญญาก่อนออก INV',
     });
   }
 
@@ -336,7 +336,7 @@ function runChecks({
     checks.push({
       id: 'payable_negative',
       severity: SEVERITY.FAIL,
-      title: 'วันที่วางบิลได้ติดลบ',
+      title: 'วันที่ออก INV ได้ติดลบ',
       detail: `วันลา ${leaveCount} วัน มากกว่าวันทำงานของเดือน ${standardWorkingDays} วัน`,
     });
   }

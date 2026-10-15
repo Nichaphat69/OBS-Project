@@ -1,5 +1,5 @@
 /**
- * อีเมลวางบิล — สร้าง "ร่าง" ในกล่อง Drafts พร้อมไฟล์แนบ แล้วตามดูว่าถูกกดส่งหรือยัง
+ * อีเมล INV — สร้าง "ร่าง" ในกล่อง Drafts พร้อมไฟล์แนบ แล้วตามดูว่าถูกกดส่งหรือยัง
  *
  * ported from src/service.js's `createGmailDraft()` / `syncEmailSent()` / `cacheInvoicePdf()` /
  * `getInvoiceFile()` / `getTimesheetFile()` / `invoiceFileName()`
@@ -27,7 +27,7 @@ export class InvoiceEmailError extends Error {
 
 /** ported from service.js invoiceFileName() */
 function invoiceFileName({ documentNo, id }: { documentNo: string | null; id: string }): string {
-  return `ใบวางบิล ${documentNo || id}.pdf`;
+  return `INV ${documentNo || id}.pdf`;
 }
 
 export interface AttachmentFile {
@@ -36,7 +36,7 @@ export interface AttachmentFile {
 }
 
 /**
- * ดึงไฟล์ใบวางบิลจากหน้า share ของ FlowAccount มาเก็บไว้ในฐานข้อมูล — ported from cacheInvoicePdf()
+ * ดึงไฟล์INV จากหน้า share ของ FlowAccount มาเก็บไว้ในฐานข้อมูล — ported from cacheInvoicePdf()
  *
  * ปกติไฟล์ถูกเก็บไว้ตั้งแต่ตอนอนุมัติรอบบิลแล้ว (ดู approveCycle) ทางนี้เป็นตาข่ายรับสำหรับใบที่อนุมัติ
  * ไปก่อนจะมีฟีเจอร์เก็บไฟล์ หรือใบที่ตอนนั้นดึงไม่สำเร็จ — ล้มเหลวแล้วคืน null เฉยๆ ไม่ throw เพราะ
@@ -96,8 +96,8 @@ export async function getTimesheetFile(id: string): Promise<AttachmentFile | nul
   return { filename: row.sourceFile || `${row.id}.pdf`, bytes };
 }
 
-/** เติมใบวางบิลเข้าไปในรายการไฟล์แนบของร่างที่บันทึกไว้ก่อนหน้า — ported from withInvoiceAttachment()
- * ร่างที่บันทึกตอนยังไม่อนุมัติจะไม่มีใบวางบิลอยู่ในรายการ พออนุมัติแล้วต้องมีให้แนบด้วย */
+/** เติมINV เข้าไปในรายการไฟล์แนบของร่างที่บันทึกไว้ก่อนหน้า — ported from withInvoiceAttachment()
+ * ร่างที่บันทึกตอนยังไม่อนุมัติจะไม่มีINV อยู่ในรายการ พออนุมัติแล้วต้องมีให้แนบด้วย */
 function withInvoiceAttachment(draft: any, existing: { id: string; documentNo: string | null } | null): any {
   if (!draft || !existing?.id) return draft;
   const attachments = draft.attachments ?? [];
@@ -113,9 +113,9 @@ function withInvoiceAttachment(draft: any, existing: { id: string; documentNo: s
 }
 
 /**
- * สร้างร่างอีเมลวางบิลในกล่อง Drafts — ported from service.js createGmailDraft()
+ * สร้างร่างอีเมล INV ในกล่อง Drafts — ported from service.js createGmailDraft()
  *
- * แนบไฟล์ให้ครบตามรายการที่โชว์อยู่บนหน้าเว็บ ทั้งใบวางบิล (ดึงจากหน้า share ของ FlowAccount) และ
+ * แนบไฟล์ให้ครบตามรายการที่โชว์อยู่บนหน้าเว็บ ทั้งINV (ดึงจากหน้า share ของ FlowAccount) และ
  * Timesheet ของพนักงานทุกคนในรอบ — **ใบไหนหาไฟล์ไม่เจอให้ข้ามไป ไม่ทำให้ทั้งฉบับล้ม** แต่บอกไว้ใน
  * note ว่าขาดกี่ใบ เพราะคนที่กดส่งต้องรู้ว่าต้องแนบเองเพิ่มก่อนกดส่งหรือเปล่า
  */
@@ -126,7 +126,7 @@ export async function createGmailDraft(
 ) {
   const preview = await previewCycleInvoice(contractId, period);
   if (!preview.invoice) {
-    throw new InvoiceEmailError('ยังไม่มีรายการที่วางบิลได้ในรอบนี้', 400);
+    throw new InvoiceEmailError('ยังไม่มีรายการที่ออก INV ได้ในรอบนี้', 400);
   }
 
   const to = preview.contract.customer.contactEmail;

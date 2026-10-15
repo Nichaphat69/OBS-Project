@@ -21,7 +21,7 @@ const STATUS_LABEL: Record<string, string> = {
   verified: 'ตรวจผ่าน',
   mismatch: 'ข้อมูลไม่ตรง',
   approved: 'อนุมัติแล้ว',
-  billed: 'วางบิลแล้ว',
+  billed: 'ออก INV แล้ว',
   rejected: 'ตีกลับให้แก้ไข',
 };
 
@@ -48,6 +48,8 @@ export interface TimesheetListItem {
     invoicePosition: string | null;
     monthlyRate: number | null;
     quotationNo: string | null;
+    /** หน่วยของบรรทัดในใบเสนอราคา FlowAccount (เช่น Months/Man-Month) — ใช้เป็นหน่วยบนใบแจ้งหนี้ */
+    unitName: string | null;
   };
   rawEmployeeName: string | null;
   rawPosition: string | null;
@@ -103,6 +105,7 @@ async function shapeTimesheetRow(row: any): Promise<TimesheetListItem> {
       invoicePosition: row.employee?.invoicePosition ?? null,
       monthlyRate: assignment?.monthlyRate ?? null,
       quotationNo: assignment?.quotationNo ?? null,
+      unitName: assignment?.unitName ?? null,
     },
     rawEmployeeName: row.rawEmployeeName,
     rawPosition: row.rawPosition,
@@ -233,7 +236,7 @@ export interface TimesheetDetail extends TimesheetListItem {
   };
   submissionMethod: string | null;
   /** เรียงจากล่าสุดไปเก่าสุด (id มากก่อน) — รวมเหตุการณ์ของใบนี้เอง + ของรอบบิลที่ใบนี้อยู่ (ขออนุมัติ
-   * ทางไลน์/สร้างใบแจ้งหนี้/ร่างและส่งเมลวางบิล) ให้เห็น process ตั้งแต่รับเข้าจนวางบิลในที่เดียว */
+   * ทางไลน์/สร้างใบแจ้งหนี้/ร่างและส่งเมล INV) ให้เห็น process ตั้งแต่รับเข้าจนออก INV ในที่เดียว */
   audit: Array<{ id: number; at: string; actor: string; action: string; entityType: string | null; detail: any }>;
 }
 

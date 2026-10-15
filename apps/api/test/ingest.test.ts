@@ -128,13 +128,13 @@ test('รับ Timesheet คนแรกของรอบ → บันทึ�
   assert.equal(
     result.nextAction,
     NEXT_ACTION.WAIT_FOR_OTHERS,
-    'ยังได้แค่ 1 จาก 2 คน จึงยังวางบิลไม่ได้',
+    'ยังได้แค่ 1 จาก 2 คน จึงยังออก INV ไม่ได้',
   );
   assert.equal(f(result.cycle).received, 1);
   assert.equal(f(result.cycle).expected, 2);
 });
 
-test('รับคนที่สองครบรอบ → บอกให้ n8n วางบิลได้', async () => {
+test('รับคนที่สองครบรอบ → บอกให้ n8n ออก INV ได้', async () => {
   const data = fakeFebruary({
     employeeName: 'Sunee Maneekasemsuk',
     position: 'Senior Project Manager',
@@ -153,9 +153,9 @@ test('รับคนที่สองครบรอบ → บอกให้
   assert.equal(result.nextAction, NEXT_ACTION.APPROVE_CYCLE);
   assert.equal(f(result.cycle).complete, true);
 
-  /* ตรงนี้ ingestTimesheet() ลองขออนุมัติวางบิลให้เองทันทีที่รอบครบ แล้วต้องติด blocker เสมอ เพราะใบที่
+  /* ตรงนี้ ingestTimesheet() ลองขออนุมัติออก INV ให้เองทันทีที่รอบครบ แล้วต้องติด blocker เสมอ เพราะใบที่
      เพิ่งเข้ามายังไม่มีใครกดยืนยันผลตรวจ — เป็นลำดับงานปกติ ไม่ใช่ความล้มเหลว ห้ามบันทึกเป็น error
-     (เจ้าของระบบชี้ 27 ก.ย. 69: ประวัติการดำเนินการขึ้นบรรทัดแดง "ส่งขออนุมัติวางบิลทาง LINE ไม่สำเร็จ"
+     (เจ้าของระบบชี้ 27 ก.ย. 69: ประวัติการดำเนินการขึ้นบรรทัดแดง "ส่งขออนุมัติออก INV ทาง LINE ไม่สำเร็จ"
      ทุกใบทั้งที่ไม่มีอะไรผิด) ความล้มเหลวจริง เช่น ส่ง LINE ไม่ออก ยังต้องบันทึกอยู่ */
   const approvalErrors = await prisma.auditLog.count({
     where: { action: 'request_line_approval_error', entityId: 'CT-26B0113-2026-02' },
@@ -164,10 +164,10 @@ test('รับคนที่สองครบรอบ → บอกให้
 });
 
 /**
- * ประตูของโหมด manual — เครื่องตรวจผ่านอย่างเดียวยังวางบิลไม่ได้
+ * ประตูของโหมด manual — เครื่องตรวจผ่านอย่างเดียวยังออก INV ไม่ได้
  * ต้องมีคนเปิดใบนั้นดูแล้วกดยืนยันก่อน (billing_rules.requireHumanCheck)
  */
-test('ครบทุกคนแต่ยังไม่มีคนกดยืนยัน → ยังวางบิลไม่ได้', async () => {
+test('ครบทุกคนแต่ยังไม่มีคนกดยืนยัน → ยังออก INV ไม่ได้', async () => {
   const preview = await previewCycleInvoice('CT-26B0113', '2026-02');
 
   assert.equal(preview.cycle.complete, true, 'ได้ Timesheet ครบทั้ง 2 คนแล้ว');
@@ -188,7 +188,7 @@ test('ครบทุกคนแต่ยังไม่มีคนกดย�
   );
 });
 
-test('คนกดยืนยันครบทุกใบ → รอบบิลพร้อมวางบิล', async () => {
+test('คนกดยืนยันครบทุกใบ → รอบบิลพร้อมออก INV', async () => {
   for (const id of ['2026020101', '2026020100']) {
     const result = (await markTimesheetChecked(id, { actor: 'ผู้ตรวจทดสอบ' }))!;
     assert.equal(result.check.checked, true);
@@ -198,7 +198,7 @@ test('คนกดยืนยันครบทุกใบ → รอบบิ
   const ready = await readyCycles();
   const feb = ready.cycles.find((c) => c.period === '2026-02');
 
-  assert.ok(feb, 'รอบ ก.พ. 2026 ต้องพร้อมวางบิล');
+  assert.ok(feb, 'รอบ ก.พ. 2026 ต้องพร้อมออก INV');
   assert.equal(feb.canApprove, true);
   assert.equal(feb.headcount, 2);
   // 52,943.93 − 2,647.20 + 123,420.00 = 173,716.73 → +VAT −WHT
@@ -405,10 +405,10 @@ test('ไม่ตั้ง WEB_BASE_URL → บับเบิลยังส�
   }
 });
 
-test('เอกสารที่วางบิลแล้ว → ไม่เขียนทับ', async () => {
+test('เอกสารที่ออก INV แล้ว → ไม่เขียนทับ', async () => {
   const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
 
-  // รอบ ม.ค. ในข้อมูลตั้งต้นยังไม่ได้วางบิล จึงจำลองว่าวางบิลแล้ว
+  // รอบ ม.ค. ในข้อมูลตั้งต้นยังไม่ได้ออก INV จึงจำลองว่าออก INV แล้ว
   await prisma.timesheet.update({ where: { id: '2026010091' }, data: { status: 'billed' } });
 
   const result = await ingestTimesheet({
@@ -421,10 +421,10 @@ test('เอกสารที่วางบิลแล้ว → ไม่เ
   assert.equal(result.created, false);
 });
 
-test('รอบที่วางบิลแล้ว ส่งใบใหม่มาด้วยเลขที่เอกสารคนละเลข → ต้องปฏิเสธเหมือนกัน ไม่ใช่แค่กันเขียนทับเลขเดิม', async () => {
+test('รอบที่ออก INV แล้ว ส่งใบใหม่มาด้วยเลขที่เอกสารคนละเลข → ต้องปฏิเสธเหมือนกัน ไม่ใช่แค่กันเขียนทับเลขเดิม', async () => {
   const data = fakeFebruary({ employeeName: 'Pongpun Mamak', position: 'Developer' });
 
-  // ใบ 2026020101 (รอบ ก.พ. ของพนักงานคนเดียวกัน สร้างไว้แล้วในเทสต์ก่อนหน้า) จำลองว่าวางบิลไปแล้ว
+  // ใบ 2026020101 (รอบ ก.พ. ของพนักงานคนเดียวกัน สร้างไว้แล้วในเทสต์ก่อนหน้า) จำลองว่าออก INV ไปแล้ว
   await prisma.timesheet.update({ where: { id: '2026020101' }, data: { status: 'billed' } });
 
   const before = await timesheetCount();
@@ -476,7 +476,7 @@ test('listBillingCycles() ส่งฟิลด์ครบตามที่ห
       assert.equal(typeof ct[field], 'number', `${field} ต้องเป็นตัวเลข ไม่ใช่ undefined`);
     }
     assert.equal(ct.remainingValue, ct.contractValue - ct.billedValue,
-      'คงเหลือต้องเท่ากับมูลค่าสัญญาหักที่วางบิลแล้ว');
+      'คงเหลือต้องเท่ากับมูลค่าสัญญาหักที่ออก INV แล้ว');
   }
 
   assert.ok(data.cycles.length > 0, 'ต้องมีรอบบิล');
@@ -582,7 +582,7 @@ test('ลาเต็มวัน (ไม่ส่ง hours) ตอน ingest �
   assert.equal(rows[0].hours, null);
 });
 
-test('อัปโหลด Timesheet ของคนเดิม+รอบเดิมซ้ำ → ใบเก่าที่ยังไม่วางบิลถูกแทนที่ ใช้งานได้ใบเดียว (1 ต.ค. 69)', async () => {
+test('อัปโหลด Timesheet ของคนเดิม+รอบเดิมซ้ำ → ใบเก่าที่ยังไม่ออก INV ถูกแทนที่ ใช้งานได้ใบเดียว (1 ต.ค. 69)', async () => {
   const run = (documentNo: string) =>
     ingestTimesheet({
       documentNo,

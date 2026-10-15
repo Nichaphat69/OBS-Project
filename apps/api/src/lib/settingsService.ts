@@ -1,5 +1,5 @@
 /**
- * ภาพรวมการเชื่อมต่อ/เงื่อนไขวางบิล — ported from service.js's settingsSnapshot()/
+ * ภาพรวมการเชื่อมต่อ/เงื่อนไขออก INV — ported from service.js's settingsSnapshot()/
  * setFlowAccountConnected(). Backs the "จัดการระบบ → ภาพรวม" tab and the FlowAccount env chip
  * on the top bar.
  *
@@ -147,7 +147,7 @@ export async function setActiveClearReadTemplate(
 /**
  * เปิด/ปิดสวิตช์เชื่อมต่อ FlowAccount จากแถบบนของเว็บ — ปิด = dry-run (ไม่ยิงออกไปหา FlowAccount จริง
  * เลยสักคำขอ) เปิด = ใช้โหมดจริงตามที่ตั้งไว้ใน .env (FLOWACCOUNT_MODE เช่น sandbox/live) ตัวแปรเดียวกับ
- * ที่ newFlowAccountClient() ใช้อยู่แล้ว จึงมีผลทันทีกับทั้งการดึงข้อมูลและตอนกดอนุมัติวางบิลจริง
+ * ที่ newFlowAccountClient() ใช้อยู่แล้ว จึงมีผลทันทีกับทั้งการดึงข้อมูลและตอนกดอนุมัติออก INV จริง
  */
 export async function setFlowAccountConnected(enabled: boolean, { actor }: { actor: string }): Promise<{ mode: string }> {
   const hasCredentials = Boolean(process.env.FLOWACCOUNT_CLIENT_ID && process.env.FLOWACCOUNT_CLIENT_SECRET);
@@ -155,7 +155,7 @@ export async function setFlowAccountConnected(enabled: boolean, { actor }: { act
   if (enabled && (!hasCredentials || realMode === 'dry-run')) {
     throw new SettingsError('เชื่อมต่อไม่ได้ — ยังไม่ได้ตั้ง FLOWACCOUNT_CLIENT_ID/SECRET/MODE (sandbox หรือ live) ใน .env');
   }
-  const current = await getSetting<{ documentType?: string }>('flowaccount', { documentType: 'billing-note' });
+  const current = await getSetting<{ documentType?: string }>('flowaccount', { documentType: 'invoice' });
   const mode = enabled ? realMode : 'dry-run';
   await setSetting('flowaccount', { ...current, mode });
   await logAudit({ actor, action: 'set_flowaccount_connected', entityType: 'settings', entityId: 'flowaccount', detail: { mode } });

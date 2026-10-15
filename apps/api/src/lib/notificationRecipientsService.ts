@@ -38,7 +38,7 @@ export async function listNotificationRecipients(): Promise<NotificationRecipien
 }
 
 /** ported from service.js lineApproverTargets() — ปลายทาง LINE ทุกคนที่จะได้รับแจ้งเตือน (ขออนุมัติ
- * วางบิล/ตั๋วแจ้งปัญหาใหม่ ฯลฯ) — เรื่องของฝ่ายบัญชี
+ * ออก INV/ตั๋วแจ้งปัญหาใหม่ ฯลฯ) — เรื่องของฝ่ายบัญชี
  *
  * ลำดับการหาปลายทาง (24 ก.ย. 69 ตามที่ขอ "เชื่อมต่อ LINE ครั้งแรกแล้วรู้ว่าเป็น role อะไร"):
  *  1. บัญชี role 'accounting' ที่ผูกไลน์ส่วนตัวไว้แล้ว (User.lineUserId) — วิธีที่ถูกต้อง/แนะนำให้ใช้

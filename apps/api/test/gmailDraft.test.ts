@@ -1,5 +1,5 @@
 /**
- * ร่างอีเมลวางบิล — ฝั่ง GmailClient
+ * ร่างอีเมล INV — ฝั่ง GmailClient
  *
  * Ported from test/gmail-draft.test.js (เฉพาะส่วนที่เป็นของ client ล้วนๆ: createDraft, buildMime,
  * findSentMessage) ส่วนที่เหลือของไฟล์ต้นฉบับทดสอบ createGmailDraft()/syncEmailSent() ใน service
@@ -43,7 +43,7 @@ test('createDraft สร้างร่างอย่างเดียว — 
   });
 
   const result = await withFetch(impl, () =>
-    new GmailClient(CREDS).createDraft({ to: 'a@b.com', subject: 'วางบิล มี.ค. 2026', body: 'เรียนคุณลูกค้า' }),
+    new GmailClient(CREDS).createDraft({ to: 'a@b.com', subject: 'ออก INV มี.ค. 2026', body: 'เรียนคุณลูกค้า' }),
   );
 
   const sendCalls = calls.filter((c) => c.url.includes('/messages/send'));
@@ -93,7 +93,7 @@ test('แนบไฟล์ครบทุกใบ — นับจำนวน
   });
 
   const attachments = [
-    { filename: 'ใบวางบิล.pdf', mimeType: 'application/pdf', content: Buffer.from('INVOICE-BYTES') },
+    { filename: 'INV.pdf', mimeType: 'application/pdf', content: Buffer.from('INVOICE-BYTES') },
     { filename: 'timesheet-a.pdf', mimeType: 'application/pdf', content: Buffer.from('TS-A') },
     { filename: 'timesheet-b.pdf', mimeType: 'application/pdf', content: Buffer.from('TS-B') },
   ];
@@ -128,9 +128,9 @@ test('buildMime: ไม่มีไฟล์แนบได้ text/plain ล้
 });
 
 test('หัวข้อภาษาไทยเข้ารหัสตาม RFC 2047 ไม่งั้นตัวอักษรเพี้ยนในเมลไคลเอนต์', () => {
-  const mime = buildMime({ to: 'a@b.com', subject: 'วางบิล มี.ค. 2026', body: 'x' }).toString('utf8');
+  const mime = buildMime({ to: 'a@b.com', subject: 'ออก INV มี.ค. 2026', body: 'x' }).toString('utf8');
   assert.match(mime, /Subject: =\?UTF-8\?B\?/);
-  assert.doesNotMatch(mime, /Subject: วางบิล/);
+  assert.doesNotMatch(mime, /Subject: ออก INV/);
 });
 
 test('หัวข้อภาษาอังกฤษล้วนไม่ต้องเข้ารหัส — อ่านออกตรงๆ ในอีเมลดิบ', () => {
@@ -152,7 +152,7 @@ test('findSentMessage อ่าน label SENT + เวลา + ผู้รั�
           id: 'm2',
           labelIds: ['SENT', 'INBOX'],
           internalDate: '1775444100000',
-          payload: { headers: [{ name: 'To', value: 'thanwarat@tli.example.com' }, { name: 'Subject', value: 'วางบิล' }] },
+          payload: { headers: [{ name: 'To', value: 'thanwarat@tli.example.com' }, { name: 'Subject', value: 'ออก INV' }] },
         },
       ],
     },
@@ -161,7 +161,7 @@ test('findSentMessage อ่าน label SENT + เวลา + ผู้รั�
   const sent = await withFetch(impl, () => new GmailClient(CREDS).findSentMessage('thread-1'));
   assert.equal(sent!.messageId, 'm2', 'ต้องหยิบฉบับที่มี label SENT ไม่ใช่ฉบับร่าง');
   assert.equal(sent!.to, 'thanwarat@tli.example.com');
-  assert.equal(sent!.subject, 'วางบิล');
+  assert.equal(sent!.subject, 'ออก INV');
   assert.equal(sent!.sentAt, new Date(1775444100000).toISOString());
 });
 

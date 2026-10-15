@@ -10,7 +10,7 @@ activityRouter.use(requireAuth);
 /** role 'executive' เห็นภาพรวมทุกบริษัทพร้อมกันอยู่แล้ว (ไม่มีตัวสลับบริษัทให้ด้วย) จึงไม่กรองตาม
  * บริษัท active ให้ — role อื่น (admin/accounting) กรองด้วยบริษัทที่ active อยู่ตอนนี้เสมอ */
 /** ⚠️ เดิมไม่มี role check เลย — role 'user' ดึงฟีดรวมทั้งบริษัทได้ ซึ่งมีชื่อเพื่อนร่วมงาน จำนวนวันที่
- * วางบิลได้ ยอดเงินรายบรรทัด เลขที่ใบแจ้งหนี้ และยอดรับชำระ (18 ก.ย. 69) หน้าเว็บส่ง role 'user' ไปที่
+ * ออก INV ได้ ยอดเงินรายบรรทัด เลขที่ใบแจ้งหนี้ และยอดรับชำระ (18 ก.ย. 69) หน้าเว็บส่ง role 'user' ไปที่
  * /api/my-notifications อยู่แล้ว (NotificationsClient.tsx) ฟีดรวมนี้จึงไม่เคยถูกใช้โดย role นั้นเลย */
 activityRouter.get('/', requireNotUser, async (req, res) => {
   const limit = req.query.limit ? Number(req.query.limit) : 30;

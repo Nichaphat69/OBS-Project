@@ -71,7 +71,7 @@ export function verifyLineSignature(rawBody: Buffer | null | undefined, signatur
 }
 
 /** ข้อมูลที่ฝังไว้ในปุ่ม "อนุมัติ"/"ตีกลับ" — ตอนกดจะย้อนกลับมาที่ postback.data ของ webhook event
- * (ประตูอนุมัติวางบิลผ่าน LINE — ขั้น 4.2, ported from src/integrations/line.js) */
+ * (ประตูอนุมัติออก INV ผ่าน LINE — ขั้น 4.2, ported from src/integrations/line.js) */
 const APPROVAL_POSTBACK_RE = /^(approve|reject):(.+):(\d{4}-\d{2})$/;
 
 export function buildApprovalPostback(action: 'approve' | 'reject', contractId: string, period: string): string {
@@ -84,7 +84,7 @@ export function parseApprovalPostback(data: string | null | undefined): { decisi
   return { decision: m[1] === 'approve' ? 'approved' : 'rejected', contractId: m[2], period: m[3] };
 }
 
-/* คนละ prefix กับ postback อนุมัติวางบิล/เลือกวิธีส่ง Timesheet — ขึ้นต้น "ticket:" เสมอ
+/* คนละ prefix กับ postback อนุมัติออก INV/เลือกวิธีส่ง Timesheet — ขึ้นต้น "ticket:" เสมอ
    action: 'start' (เลือกหมวดปัญหา, value = category) หรือ 'resolve' (value = ticket id) */
 const TICKET_POSTBACK_RE = /^ticket:(start|resolve):(.+)$/;
 
@@ -240,11 +240,11 @@ export class LineClient {
   }): Promise<{ sentTo: string[]; failed: Array<{ to: string; error: string }> }> {
     const list = this.resolveTargets(targets, 'ยังไม่มีปลายทาง LINE ให้ส่งขออนุมัติ — เพิ่มผู้รับแจ้งเตือนช่องทาง LINE ไว้ที่หน้าจัดการระบบก่อน');
     const flex = buildApprovalFlex({ contractId, period, customerName, projectName, periodLabel, headcount, paymentAmount, approveUrl });
-    const messages = [{ type: 'flex', altText: `ขออนุมัติวางบิล ${customerName} รอบ ${periodLabel}`, contents: flex }];
+    const messages = [{ type: 'flex', altText: `ขออนุมัติออก INV ${customerName} รอบ ${periodLabel}`, contents: flex }];
     return this.pushToAll(list, messages);
   }
 
-  /** แจ้งว่ามี Timesheet รออยู่ในคิว "ตรวจ Manday" — บับเบิลหน้าตาเดียวกับคำขออนุมัติวางบิล มีปุ่มกดเข้า
+  /** แจ้งว่ามี Timesheet รออยู่ในคิว "ตรวจ Manday" — บับเบิลหน้าตาเดียวกับคำขออนุมัติออก INV มีปุ่มกดเข้า
    * หน้าตรวจได้เลย รับมาเป็นหลายบับเบิล (กลุ่มละลูกค้า) เกินหนึ่งจะส่งเป็น carousel เลื่อนดูได้ในฟองเดียว */
   async pushNeedsCheck({ bubbles, altText, targets }: { bubbles: unknown[]; altText: string; targets?: string[] }): Promise<{ sentTo: string[]; failed: Array<{ to: string; error: string }> }> {
     if (!bubbles?.length) return { sentTo: [], failed: [] };
@@ -383,8 +383,8 @@ function gradientLinkButton(label: string, uri: string, gradient: Gradient = GRA
   return gradientButton(label, { type: 'uri', label, uri }, gradient);
 }
 
-/** ประตูอนุมัติวางบิลผ่าน LINE (ขั้น 4.2) — ported from src/integrations/line.js buildApprovalFlex().
- * มี APP_BASE_URL ตั้งไว้ → ปุ่มเดียวพาเข้าหน้า "วางบิล & ร่างอีเมล" ของรอบนั้นเลย ให้คนเห็นตัวเลขเต็มๆ
+/** ประตูอนุมัติออก INV ผ่าน LINE (ขั้น 4.2) — ported from src/integrations/line.js buildApprovalFlex().
+ * มี APP_BASE_URL ตั้งไว้ → ปุ่มเดียวพาเข้าหน้า "ออก INV & ร่างอีเมล" ของรอบนั้นเลย ให้คนเห็นตัวเลขเต็มๆ
  * กับร่างอีเมลก่อนตัดสินใจ ไม่ใช่กดอนุมัติจากในแชทโดยเห็นแค่ยอดรวม — ไม่ได้ตั้งไว้ → ตกกลับไปใช้ปุ่ม
  * อนุมัติ/ตีกลับ postback ในแชทแบบเดิม (ฝั่งรับ postback ยังอยู่ครบ ดู parseApprovalPostback) */
 export function buildApprovalFlex({
@@ -407,7 +407,7 @@ export function buildApprovalFlex({
   approveUrl?: string | null;
 }) {
   const buttons = approveUrl
-    ? [gradientLinkButton('อนุมัติวางบิล', approveUrl, GRADIENT.blue)]
+    ? [gradientLinkButton('อนุมัติออก INV', approveUrl, GRADIENT.blue)]
     : [
         gradientButton('อนุมัติ', { type: 'postback', label: 'อนุมัติ', data: buildApprovalPostback('approve', contractId, period) }, GRADIENT.green),
         {
@@ -419,7 +419,7 @@ export function buildApprovalFlex({
       ];
 
   return bubble({
-    title: 'ขออนุมัติวางบิล',
+    title: 'ขออนุมัติออก INV',
     customerName,
     projectName,
     headerGradient: GRADIENT.blue,
@@ -556,8 +556,8 @@ function choiceRow({ icon, label, iconBg, action }: { icon: string; label: strin
 export const EMPLOYEE_QUICK_REPLY: QuickReply = {
   items: [
     { type: 'action', action: { type: 'message', label: 'ส่ง Timesheet', text: 'ส่ง Timesheet' } },
-    { type: 'action', action: { type: 'message', label: 'สรุปรอบวางบิล', text: 'สรุปรอบวางบิล' } },
-    { type: 'action', action: { type: 'message', label: 'สถานะการวางบิล', text: 'สถานะการวางบิล' } },
+    { type: 'action', action: { type: 'message', label: 'สรุปรอบ INV', text: 'สรุปรอบ INV' } },
+    { type: 'action', action: { type: 'message', label: 'สถานะการออก INV', text: 'สถานะการออก INV' } },
     { type: 'action', action: { type: 'message', label: 'Help', text: 'Help' } },
   ],
 };
@@ -675,7 +675,7 @@ export function buildOverdueReminderFlex({
   });
 }
 
-/** บับเบิลตอบคำสั่ง "สถานะ"/"สรุปรอบวางบิล" — ported from src/integrations/line.js buildEmployeeStatusFlex().
+/** บับเบิลตอบคำสั่ง "สถานะ"/"สรุปรอบ INV" — ported from src/integrations/line.js buildEmployeeStatusFlex().
  * รับ input สำเร็จรูปจาก myProgressService.ts's buildEmployeeStatusFlexInput() ⚠️ ห้ามมียอดเงินติดมา
  * ด้วยเด็ดขาด (ดูคอมเมนต์ต้นทาง) — ไฟล์นี้แค่ต่อ Flex JSON เฉยๆ ไม่ตรวจ/กรองอะไรเพิ่ม */
 export function buildEmployeeStatusFlex({
@@ -725,7 +725,7 @@ interface BillingStep {
   state: 'done' | 'current' | 'future';
 }
 
-/** แถวหนึ่งขั้นตอนของ timeline วางบิล — วงกลมไอคอน + เส้นเชื่อมลงขั้นถัดไป (ไม่มีเส้นในขั้นสุดท้าย) */
+/** แถวหนึ่งขั้นตอนของ timeline ออก INV — วงกลมไอคอน + เส้นเชื่อมลงขั้นถัดไป (ไม่มีเส้นในขั้นสุดท้าย) */
 function billingStepRow(step: BillingStep, index: number, isLast: boolean) {
   const style = BILLING_STEP_STYLE[step.state];
   const circle = style.gradient
@@ -786,12 +786,12 @@ function billingCycleBubble({ customerName, projectName, periodLabel, progressPe
     ],
   };
   return bubble({
-    title: 'สถานะการวางบิลของฉัน',
+    title: 'สถานะการออก INV ของฉัน',
     customerName,
     projectName,
     headerGradient: GRADIENT.teal,
     rows: [
-      summaryRow('รอบวางบิล', periodLabel),
+      summaryRow('รอบ INV', periodLabel),
       bar,
       { type: 'separator', margin: 'md' },
       ...steps.map((step, i) => billingStepRow(step, i, i === steps.length - 1)),
@@ -801,9 +801,9 @@ function billingCycleBubble({ customerName, projectName, periodLabel, progressPe
 }
 
 /**
- * บับเบิลตอบคำสั่ง "สถานะการวางบิล" — ported from src/integrations/line.js buildBillingCycleFlex().
+ * บับเบิลตอบคำสั่ง "สถานะการออก INV" — ported from src/integrations/line.js buildBillingCycleFlex().
  * แยกจาก "สถานะ" ปกติ โชว์เป็น flow 5 ขั้นของรอบบิลปัจจุบัน (Timesheet → ตรวจ Manday → ออกใบแจ้งหนี้ →
- * วางบิลส่งลูกค้า → รับชำระเงิน) พร้อม progress bar ⚠️ ไม่มียอดเงินเช่นเดียวกับ buildEmployeeStatusFlex
+ * ส่ง INV ให้ลูกค้า → รับชำระเงิน) พร้อม progress bar ⚠️ ไม่มียอดเงินเช่นเดียวกับ buildEmployeeStatusFlex
  */
 export function buildBillingCycleFlex({ contracts }: { contracts: BillingCycleContract[] }) {
   const bubbles = contracts.map(billingCycleBubble);

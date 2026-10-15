@@ -28,6 +28,8 @@ export interface InvoiceEmployee {
   nameTh: string;
   invoicePosition: string;
   quotationNo?: string | null;
+  /** หน่วยในใบเสนอราคา FlowAccount — ไม่มีก็ใช้ Months */
+  unitName?: string | null;
 }
 
 export interface InvoiceEntry {
@@ -142,7 +144,7 @@ export function buildInvoice({
       employeeId: entry.employee.id,
       employeeName: entry.employee.nameTh,
       quantity: 1,
-      unitName: 'Months',
+      unitName: entry.employee.unitName || 'Months',
       pricePerUnit: round2(entry.manday.monthlyRate),
       discount: round2(entry.manday.discount),
       amount: round2(entry.manday.monthlyRate - entry.manday.discount),
@@ -235,7 +237,7 @@ export function buildInvoice({
  */
 export function toFlowAccountPayload(
   invoice: Invoice,
-  { reference = null }: { reference?: string | null } = {},
+  { reference = null, projectName = null }: { reference?: string | null; projectName?: string | null } = {},
 ): Record<string, unknown> {
   const { totals } = invoice;
   const contactFields = invoice.customer.flowAccountContactId
@@ -253,7 +255,8 @@ export function toFlowAccountPayload(
     creditType: 1,                         // 1 = เครดิตเป็นจำนวนวัน
     creditDays: invoice.creditDays,
     dueDate: invoice.dueDate,
-    reference,                             // ใบจริง INV2026020006 เว้นว่าง
+    reference,                             // เลขที่อ้างอิง = เลข PO ของสัญญา
+    ...(projectName ? { projectName } : {}), // ชื่อโครงการ
     isVatInclusive: false,
     useReceiptDeduction: false,
     subTotal: totals.total,

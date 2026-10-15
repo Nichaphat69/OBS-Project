@@ -23,7 +23,7 @@ const LEGACY_KEYS = ['employeeName', 'position', 'monthYear', 'month', 'year', '
 /** ฝั่ง API normalize รูปเก่าให้เป็นรูปกลางตั้งแต่ตอนอ่านแล้ว แต่ web กับ api คนละ image กัน จึงมีจังหวะ
  * ที่ web ใหม่คุยกับ api เก่าได้ ถ้าปล่อยให้รูปเก่าหลุดเข้าฟอร์มนี้ ฟอร์มจะวาดเป็นช่องว่างทั้งหมดทั้งที่
  * ของจริงมีค่าอยู่ พอกดบันทึกจะทับค่าที่ใช้งานอยู่หายทั้งชุด (Big-C มี 7 คีย์ รวม totalWorkDays ที่เป็น
- * ตัวตั้งจำนวนวันทำงานสำหรับวางบิล) — กันไว้ดีกว่าเขียนทับเงียบๆ */
+ * ตัวตั้งจำนวนวันทำงานสำหรับออก INV) — กันไว้ดีกว่าเขียนทับเงียบๆ */
 function isLegacyShape(map: TimesheetFieldMap | null): boolean {
   if (!map || typeof map !== 'object') return false;
   return LEGACY_KEYS.some((k) => k in map);

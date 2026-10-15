@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FlowAccountClient, FlowAccountError, pointsAtLiveFlowAccount } from '../src/lib/flowaccountClient.js';
+import { FlowAccountClient, FlowAccountError, pointsAtLiveFlowAccount, resolveDocumentType } from '../src/lib/flowaccountClient.js';
 import { respondByPath, withFetch, type FakeFetch } from './helpers/fakeFetch.js';
 
 const VALID_PAYLOAD = { documentStructureType: 'InlineDocument', items: [] };
@@ -124,7 +124,7 @@ function htmlFetch(body: string, { ok = true, status = 200 } = {}): FakeFetch {
 }
 
 test('fetchSharedPdf ตัด base64 ที่ฝังในหน้า share ออกมาเป็นไฟล์ PDF ได้', async () => {
-  const pdf = Buffer.from('%PDF-1.4\nไฟล์ใบวางบิลจำลอง\n%%EOF');
+  const pdf = Buffer.from('%PDF-1.4\nไฟล์INV จำลอง\n%%EOF');
   const result = await withFetch(htmlFetch(sharePage(pdf.toString('base64'))), () =>
     htmlClient().fetchSharedPdf(SHARE_LINK),
   );
@@ -239,4 +239,24 @@ test('pointsAtLiveFlowAccount: ตัดสินจากทั้งโหม�
   assert.equal(pointsAtLiveFlowAccount('sandbox', 'https://openapi.flowaccount.com/test/'), false);
   assert.equal(pointsAtLiveFlowAccount('sandbox', 'https://openapi.flowaccount.com/v1'), true, 'sandbox แต่ URL จริง = ตัวจริง');
   assert.equal(pointsAtLiveFlowAccount('whatever', 'https://openapi.flowaccount.com/v1'), true);
+});
+
+test('ชนิดเอกสาร invoice ยิงไป /invoices/inline และขอลิงก์ที่ /invoices/sharedocument', async () => {
+  const c = new FlowAccountClient({ mode: 'sandbox', clientId: 'id', clientSecret: 'secret', documentType: 'invoice' });
+  const created = await withFetch(
+    respondByPath({ '/token': { access_token: 'tok', expires_in: 3600 }, '/invoices/inline': REAL_CREATE_RESPONSE }),
+    () => c.createDraftDocument(VALID_PAYLOAD),
+  );
+  assert.equal(created.documentType, 'invoice');
+  const shared = await withFetch(
+    respondByPath({ '/token': { access_token: 'tok', expires_in: 3600 }, '/invoices/sharedocument': REAL_SHARE_RESPONSE }),
+    () => c.getShareLink(200154),
+  );
+  assert.equal(shared.link, REAL_SHARE_RESPONSE.data.link);
+});
+
+test('resolveDocumentType: ค่าเก่า billing-note/ว่าง → invoice เหลือ tax-invoice ที่เลือกเอง', () => {
+  assert.equal(resolveDocumentType('billing-note'), 'invoice');
+  assert.equal(resolveDocumentType(undefined), 'invoice');
+  assert.equal(resolveDocumentType('tax-invoice'), 'tax-invoice');
 });

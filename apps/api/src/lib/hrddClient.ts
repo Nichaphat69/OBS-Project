@@ -1,6 +1,6 @@
 /**
  * ตัวเชื่อม HRDD (WorkDD) — ported from src/integrations/hrdd.js — ใช้ "ดูอย่างเดียว" เพื่อเทียบวันลา
- * ที่ Timesheet รายงานกับวันลาที่อนุมัติจริงใน HRDD ก่อนวางบิล
+ * ที่ Timesheet รายงานกับวันลาที่อนุมัติจริงใน HRDD ก่อนออก INV
  *
  * ⚠️ ห้ามมีโค้ดเขียน/แก้/ลบข้อมูลฝั่ง HRDD เด็ดขาด — ไฟล์นี้เรียกได้แค่ POST /auth/login (ล็อกอิน) และ
  * POST /leavetransaction/findByCompany (อ่านวันลาทั้งบริษัท) ทั้งสองเส้นเป็น GET ทางความหมาย (ไม่มีผล
